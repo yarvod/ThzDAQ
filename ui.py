@@ -1,4 +1,3 @@
-from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import *
 import sys
 
@@ -29,19 +28,13 @@ class TabsWidget(QWidget):
 
         # Initialize tab screen
         self.tabs = QTabWidget()
-        self.tab1 = QWidget()
-        self.tab2 = QWidget()
+        self.tab_setup = SetupTabWidget()
+        self.tab_block = QWidget()
         self.tabs.resize(300, 200)
 
         # Add tabs
-        self.tabs.addTab(self.tab1, "Set Up")
-        self.tabs.addTab(self.tab2, "SIS Block")
-
-        # Create first tab
-        self.tab1.layout = QVBoxLayout(self)
-        self.pushButton1 = QPushButton("PyQt5 button")
-        self.tab1.layout.addWidget(self.pushButton1)
-        self.tab1.setLayout(self.tab1.layout)
+        self.tabs.addTab(self.tab_setup, "Set Up")
+        self.tabs.addTab(self.tab_block, "SIS Block")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)
@@ -53,7 +46,18 @@ class SetupTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setLayout(self.layout)
+
+        self.blockIPLabel = QLabel(self)
+        self.blockIPLabel.setText('Block IP:')
+        self.block_ip = QLineEdit(self)
+
+        self.block_ip.move(80, 20)
+        self.block_ip.resize(200, 32)
+        self.blockIPLabel.move(20, 20)
+
         self.pushButton1 = QPushButton("PyQt5 button")
+        self.layout.addWidget(self.pushButton1)
 
 
 if __name__ == '__main__':

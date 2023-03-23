@@ -1,1 +1,4 @@
 .idea
+venv
+
+*__pacache__
