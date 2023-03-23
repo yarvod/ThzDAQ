@@ -27,7 +27,7 @@ class UI(Frame, BaseMixin):
         nb.enable_traversal()
         nb.pack(fill=BOTH, expand=Y, padx=2, pady=2)
         self._create_setup_tab(nb)
-        # self._create_ctrl_tab(nb)
+        self._create_block_tab(nb)
 
     def _create_setup_tab(self, nb):
         frame = Frame(nb, name='setup')
@@ -43,6 +43,42 @@ class UI(Frame, BaseMixin):
         frame.columnconfigure((0, 1), weight=1, uniform=1)
 
         nb.add(frame, text='SetUp', underline=0, padding=2)
+
+    def _create_block_tab(self, nb):
+        frame = Frame(nb, name='sis block')
+
+        block_frame = Frame(frame)
+        block_frame.pack()
+
+        self.iv_point_num = StringVar()
+        Label(block_frame, text='Point num:').grid(row=0, column=0, padx=5, pady=5)
+        Entry(block_frame, textvariable=self.iv_point_num).grid(row=0, column=1, padx=5, pady=5)
+
+        self.bias_volt = StringVar()
+        Label(block_frame, text='Bias Volt, V:').grid(row=0, column=2, padx=5, pady=5)
+        Entry(block_frame, textvariable=self.bias_volt).grid(row=0, column=3, padx=5, pady=5)
+
+        self.bias_curr = StringVar()
+        Label(block_frame, text='Bias Curr, A').grid(row=0, column=4, padx=5, pady=5)
+        Entry(block_frame, textvariable=self.bias_curr).grid(row=0, column=5, padx=5, pady=5)
+
+        Button(block_frame, text='Measure curve', command=lambda: self.meas_iv_new(save=True)) \
+            .grid(row=1, column=0, padx=5, pady=5)
+
+
+        self.use_offset = BooleanVar()
+        Checkbutton(block_frame, text='Use offset', var=self.use_offset).grid(row=2, column=0, padx=5, pady=5)
+
+        Button(block_frame, text='Calculate offset', command=lambda: self.calc_offset()) \
+            .grid(row=2, column=1, padx=5, pady=5)
+
+        Button(block_frame, text='set 0', command=lambda: self.niblock.set_zero()) \
+            .grid(row=3, column=0, padx=5, pady=5)
+
+        Button(block_frame, text='update params', command=lambda: self.niblock.update_params()) \
+            .grid(row=3, column=1, padx=5, pady=5)
+
+        nb.add(frame, text='SIS block', underline=0, padding=2)
 
 
 if __name__ == '__main__':
