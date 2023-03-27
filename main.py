@@ -4,6 +4,11 @@ import sys
 from block import Block
 from config import BLOCK_ADDRESS, BLOCK_PORT
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 def update_block(block_ip, block_port):
     block = Block(block_ip, block_port)
@@ -12,13 +17,17 @@ def update_block(block_ip, block_port):
 
 
 class UtilsMixin:
-
     @property
     def block(self):
-        return Block()
+        return Block(BLOCK_ADDRESS, BLOCK_PORT)
 
     def set_voltage(self):
-        self.block.set_voltage(float(self.voltage_s.text()))
+        try:
+            voltage_to_set = float(self.voltage_s.text().replace(",", "."))
+        except ValueError:
+            logger.warning(f"Value {self.voltage_s.text()} is not correct float")
+            return
+        self.block.set_voltage(voltage_to_set)
         current = self.block.get_current()
         self.current_g.setText(current)
         voltage = self.block.get_voltage()
@@ -32,10 +41,9 @@ class UtilsMixin:
 
 
 class App(QMainWindow):
-
     def __init__(self):
         super().__init__()
-        self.title = 'CL manager'
+        self.title = "CL manager"
         self.left = 0
         self.top = 0
         self.width = 400
@@ -50,7 +58,6 @@ class App(QMainWindow):
 
 
 class TabsWidget(QWidget):
-
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
@@ -71,14 +78,13 @@ class TabsWidget(QWidget):
 
 
 class SetUpTabWidget(QWidget):
-
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.setLayout(self.layout)
 
         self.blockIPLabel = QLabel(self)
-        self.blockIPLabel.setText('Block IP:')
+        self.blockIPLabel.setText("Block IP:")
         self.block_ip = QLineEdit(self)
         self.block_ip.setText(BLOCK_ADDRESS)
 
@@ -87,7 +93,7 @@ class SetUpTabWidget(QWidget):
         self.blockIPLabel.move(20, 20)
 
         self.blockPortLabel = QLabel(self)
-        self.blockPortLabel.setText('Block Port:')
+        self.blockPortLabel.setText("Block Port:")
         self.block_port = QLineEdit(self)
         self.block_port.setText(BLOCK_PORT)
 
@@ -99,32 +105,32 @@ class SetUpTabWidget(QWidget):
 
         self.btn_update = QPushButton("Update")
         self.layout.addWidget(self.btn_update)
+        self.btn_update.adjustSize()
         self.btn_update.clicked.connect(
             lambda: update_block(self.block_ip.text(), self.block_port.text())
         )
 
 
 class BlockTabWidget(QWidget, UtilsMixin):
-
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.setLayout(self.layout)
 
         self.voltGLabel = QLabel(self)
-        self.voltGLabel.setText('V Bias, V:')
+        self.voltGLabel.setText("V Bias, V:")
         self.voltGLabel.move(20, 20)
         self.voltage_g = QLabel(self)
         self.voltage_g.move(80, 20)
 
         self.currGLabel = QLabel(self)
-        self.currGLabel.setText('I, A:')
+        self.currGLabel.setText("I, A:")
         self.currGLabel.move(160, 20)
         self.current_g = QLabel(self)
         self.current_g.move(200, 20)
 
         self.voltGLabel = QLabel(self)
-        self.voltGLabel.setText('V Bias, V:')
+        self.voltGLabel.setText("V Bias, V:")
         self.voltGLabel.move(20, 80)
         self.voltage_s = QDoubleSpinBox(self)
         self.voltage_s.move(80, 80)
@@ -137,7 +143,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         # self.get_voltage_current()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     ex = App()
     sys.exit(app.exec())
