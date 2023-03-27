@@ -1,4 +1,8 @@
 .idea
 venv
-
+build
+dist/*
+!dist/CL-manager-*.exe
 *__pacache__
+
+*.spec
