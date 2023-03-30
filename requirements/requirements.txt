@@ -6,3 +6,6 @@ PyQt6==6.4.2
 PyQt6-Qt6==6.4.3
 PyQt6-sip==13.4.1
 pyqtgraph==0.13.2
+RsInstrument==1.53.0
+PyVisa==1.13.0
+pyvisa-py==0.6.3
