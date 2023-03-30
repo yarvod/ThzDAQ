@@ -6,6 +6,7 @@ import numpy as np
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_BIAS_DEV, BLOCK_CTRL_DEV
 from utils import Singleton
+from vna import VNABlock
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,62 @@ class Block(metaclass=Singleton):
                 results["ctrl_i_get"].append(self.get_ctrl_current(s) * 1e3)
                 results["bias_i"].append(self.get_bias_current(s) * 1e6)
             self.set_ctrl_current(initial_ctrl_i, s)
+        return results
+
+    def scan_bias(
+        self,
+        v_from: float,
+        v_to: float,
+        points_num: int = 300,
+    ) -> dict:
+        results = {
+            "i_get": [],
+            "v_set": [],
+            "v_get": [],
+        }
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            initial_v = self.get_bias_voltage(s)
+            v_range = np.linspace(v_from, v_to, points_num)
+            for v_set in v_range:
+                self.set_bias_voltage(v_set, s)
+                v_get = self.get_bias_voltage(s)
+                i_get = self.get_bias_current(s)
+                results["v_get"].append(v_get)
+                results["v_set"].append(v_set)
+                results["i_get"].append(i_get)
+            self.set_bias_voltage(initial_v, s)
+
+        return results
+
+    def scan_reflection(
+        self,
+        v_from: float,
+        v_to: float,
+        points_num: int = 300,
+    ) -> dict:
+        results = {
+            "i_get": [],
+            "v_set": [],
+            "v_get": [],
+            "refl": [],
+        }
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.host, self.port))
+            initial_v = self.get_bias_voltage(s)
+            v_range = np.linspace(v_from, v_to, points_num)
+            vna = VNABlock()
+            for v_set in v_range:
+                self.set_bias_voltage(v_set, s)
+                v_get = self.get_bias_voltage(s)
+                i_get = self.get_bias_current(s)
+                refl = vna.get_data()
+                results["v_get"].append(v_get)
+                results["v_set"].append(v_set)
+                results["i_get"].append(i_get)
+                results["refl"].append(refl)
+            self.set_bias_voltage(initial_v, s)
+
         return results
 
 
