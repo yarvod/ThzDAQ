@@ -5,18 +5,9 @@ from collections import defaultdict
 import numpy as np
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_BIAS_DEV, BLOCK_CTRL_DEV
-
+from utils import Singleton
 
 logger = logging.getLogger(__name__)
-
-
-class Singleton(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
 
 
 class Block(metaclass=Singleton):
