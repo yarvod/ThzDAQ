@@ -5,8 +5,8 @@ from collections import defaultdict
 import numpy as np
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_BIAS_DEV, BLOCK_CTRL_DEV
-from utils import Singleton
-from vna import VNABlock
+from interactors.vna import VNABlock
+from utils.classes import Singleton
 
 logger = logging.getLogger(__name__)
 
