@@ -172,8 +172,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.setLayout(self.layout)
 
     def show_graph_window(self, x: list, y: list):
-        if self.graphWindow is None:
-            self.graphWindow = GraphWindow(x=x, y=y)
+        self.graphWindow = GraphWindow(x=x, y=y)
         self.graphWindow.show()
 
     def createGroupValuesGet(self):
