@@ -1,4 +1,6 @@
-from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS
+import numpy as np
+
+from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_FORMAT
 
 from RsInstrument import *
 
@@ -9,17 +11,36 @@ class Instrument(RsInstrument, metaclass=Singleton):
     ...
 
 
-class VNABlock:
-    def __init__(self, vna_ip: str = VNA_ADDRESS, param: str = VNA_SPARAM):
+class VNABlock(metaclass=Singleton):
+    def __init__(
+        self,
+        vna_ip: str = VNA_ADDRESS,
+        points: int = VNA_POINTS,
+        channel_format: str = VNA_CHANNEL_FORMAT,
+        power: float = VNA_POWER,
+        param: str = VNA_SPARAM,
+    ):
         self.vna_ip = vna_ip
         self.param = param
-        self.set_sweep()
-        self.set_channel_format()
-        self.set_power()
+        self.update(vna_ip, points, channel_format, power, param)
+
+    def update(
+        self,
+        vna_ip: str = VNA_ADDRESS,
+        points: int = VNA_POINTS,
+        channel_format: str = VNA_CHANNEL_FORMAT,
+        power: float = VNA_POWER,
+        param: str = VNA_SPARAM,
+    ):
+        self.vna_ip = vna_ip
+        self.param = param
+        self.set_sweep(points)
+        self.set_channel_format(channel_format)
+        self.set_power(power)
 
     @property
     def instr(self):
-        return Instrument(f"TCPIP::{VNA_ADDRESS}::INSTR", id_query=True, reset=False)
+        return Instrument(f"TCPIP::{self.vna_ip}::INSTR", id_query=True, reset=False)
 
     def name(self):
         return self.instr.query_str("*IDN?")
@@ -35,13 +56,13 @@ class VNABlock:
     def set_sweep(self, points: int = VNA_POINTS):
         self.instr.write_int("SWE:POIN", points)
 
-    def set_channel_format(self, form: str = "COMP"):
+    def set_channel_format(self, form: str = VNA_CHANNEL_FORMAT):
         self.instr.write(f"CALC:FORM {form}")
 
     def get_channel_format(self):
         return self.instr.query_str("CALC:FORM?")
 
-    def set_power(self, power: float = -30):
+    def set_power(self, power: float = VNA_POWER):
         self.instr.write(f"SOUR:POW {power}")
 
     def get_power(self):
@@ -59,11 +80,11 @@ class VNABlock:
     def set_stop_frequency(self, freq: float):
         self.instr.write_float("SENS:FREQ:STOP", freq)
 
-    def get_data(self) -> list:
+    def get_reflection(self) -> np.ndarray:
         resp = self.instr.query_bin_or_ascii_float_list("CALC:DATA? FDAT")
         real = resp[::2]
         imag = resp[1::2]
-        return [r + i * 1j for r, i in zip(real, imag)]
+        return np.array([r + i * 1j for r, i in zip(real, imag)])
 
 
 if __name__ == "__main__":
@@ -73,4 +94,4 @@ if __name__ == "__main__":
     print(vna.get_start_frequency())
     print(vna.set_stop_frequency(12e9))
     print(vna.get_stop_frequency())
-    print(len(vna.get_data()))
+    print(len(vna.get_reflection()))

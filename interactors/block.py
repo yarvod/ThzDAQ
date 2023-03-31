@@ -262,7 +262,7 @@ class Block(metaclass=Singleton):
                 self.set_bias_voltage(v_set, s)
                 v_get = self.get_bias_voltage(s)
                 i_get = self.get_bias_current(s)
-                refl = vna.get_data()
+                refl = vna.get_reflection()
                 results["v_get"].append(v_get)
                 results["v_set"].append(v_set)
                 results["i_get"].append(i_get)
