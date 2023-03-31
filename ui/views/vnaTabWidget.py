@@ -33,13 +33,13 @@ class UtilsMixin:
         return VNABlock()
 
     def vna_set_start_frequency(self):
-        self.vna.set_start_frequency(self.freqFrom.value())
+        self.vna.set_start_frequency(self.freqFrom.value() * 1e9)
 
     def vna_set_stop_frequency(self):
-        self.vna.set_stop_frequency(self.freqTo.value())
+        self.vna.set_stop_frequency(self.freqTo.value() * 1e9)
 
     def vna_set_sweep(self):
-        self.vna.set_sweep(self.vnaPoints.value())
+        self.vna.set_sweep(int(self.vnaPoints.value()))
 
     def vna_set_power(self):
         self.vna.set_power(self.vnaPower.value())
@@ -153,10 +153,11 @@ class VNATabWidget(QWidget, UtilsMixin):
 
     def plotReflection(self):
         freq_list = np.linspace(
-            self.freqFrom.value(), self.freqTo.value(), self.vnaPoints.value()
+            self.freqFrom.value(), self.freqTo.value(), int(self.vnaPoints.value())
         )
         reflection = self.get_reflection()
         if self.vnaGraphWindow is None:
             self.vnaGraphWindow = VNAGraphWindow(x=freq_list, y=reflection)
-            return
-        self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
+        else:
+            self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
+        self.vnaGraphWindow.show()

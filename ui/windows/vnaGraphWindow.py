@@ -26,8 +26,8 @@ class VNAGraphWindow(QWidget):
             "Reflection (Intermediate frequency)", color="#413C58", size="20pt"
         )
         styles = {"color": "#413C58", "font-size": "15px"}
-        self.graphWidget.setLabel("left", "BIAS Current, mkA", **styles)
-        self.graphWidget.setLabel("bottom", "CL Current, mA", **styles)
+        self.graphWidget.setLabel("left", "Reflection level, dB", **styles)
+        self.graphWidget.setLabel("bottom", "Intermediate frequency, GHz", **styles)
         self.graphWidget.addLegend()
         self.graphWidget.showGrid(x=True, y=True)
 
