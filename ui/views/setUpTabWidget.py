@@ -1,3 +1,5 @@
+import logging
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -9,7 +11,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_DEV, BLOCK_BIAS_DEV
-from utils.functions import update_block
+from interactors.block import Block
+
+
+logger = logging.getLogger(__name__)
 
 
 class SetUpTabWidget(QWidget):
@@ -44,9 +49,7 @@ class SetUpTabWidget(QWidget):
         self.biasDev.setText(BLOCK_BIAS_DEV)
 
         self.btnCheck = QPushButton("Check connection")
-        self.btnCheck.clicked.connect(
-            lambda: update_block(self.block_ip.text(), self.block_port.text())
-        )
+        self.btnCheck.clicked.connect(self.update_block)
 
         layout.addWidget(self.blockIPLabel, 1, 0)
         layout.addWidget(self.block_ip, 1, 1)
@@ -59,3 +62,9 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.btnCheck, 5, 0, 1, 2)
 
         self.gridGroupBox.setLayout(layout)
+
+    def update_block(self):
+        block = Block()
+        block.update(host=self.block_ip.text(), port=self.block_port.text())
+        result = block.get_bias_data()
+        logger.info(f"Health check SIS block {result}")

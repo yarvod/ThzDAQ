@@ -28,6 +28,19 @@ class Block(metaclass=Singleton):
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
         self.iv = defaultdict(list)
+        self.update()
+
+    def update(
+        self,
+        host: str = BLOCK_ADDRESS,
+        port: int = BLOCK_PORT,
+        bias_dev: str = BLOCK_BIAS_DEV,
+        ctrl_dev: str = BLOCK_CTRL_DEV,
+    ):
+        self.host = host
+        self.port = port
+        self.bias_dev = bias_dev
+        self.ctrl_dev = ctrl_dev
 
     def manipulate(self, cmd: str, s: socket.socket) -> str:
         """
