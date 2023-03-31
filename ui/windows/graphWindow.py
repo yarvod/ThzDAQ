@@ -28,9 +28,6 @@ class GraphWindow(QWidget):
         self.graphWidget.addLegend()
         # Add grid
         self.graphWidget.showGrid(x=True, y=True)
-        # Set Range
-        self.graphWidget.setXRange(0, 10)
-        self.graphWidget.setYRange(20, 55)
 
         pen = pg.mkPen(color="#303036")
         self.graphWidget.plot(

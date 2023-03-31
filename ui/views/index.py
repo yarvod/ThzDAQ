@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
-from ui.views.BlockTabWidget import BlockTabWidget
+from ui.views.blockTabWidget import BlockTabWidget
 from ui.views.setUpTabWidget import SetUpTabWidget
 
 
