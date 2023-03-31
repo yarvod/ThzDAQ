@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 
 from config import BLOCK_ADDRESS, BLOCK_PORT
 from interactors.block import Block
-from ui.windows.graphWindow import GraphWindow
+from ui.windows.clGraphWindow import CLGraphWindow
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.setLayout(self.layout)
 
     def show_graph_window(self, x: list, y: list):
-        self.graphWindow = GraphWindow(x=x, y=y)
+        if self.graphWindow is None:
+            self.graphWindow = CLGraphWindow(x=x, y=y)
+        else:
+            self.graphWindow.plotNew(x, y)
         self.graphWindow.show()
 
     def createGroupValuesGet(self):
