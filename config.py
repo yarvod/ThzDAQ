@@ -20,7 +20,9 @@ VNA_POINTS = 300
 VNA_POINTS_MAX = 2000
 VNA_FREQ_FROM = 2
 VNA_FREQ_TO = 12
-VNA_TEST_MAP = dict((
-    ("0", "Ok"),
-    ("1", "Error"),
-))
+VNA_TEST_MAP = dict(
+    (
+        ("0", "Ok"),
+        ("1", "Error"),
+    )
+)

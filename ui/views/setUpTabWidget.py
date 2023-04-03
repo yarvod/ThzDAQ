@@ -10,7 +10,14 @@ from PyQt6.QtWidgets import (
     QPushButton,
 )
 
-from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_DEV, BLOCK_BIAS_DEV, VNA_ADDRESS, VNA_TEST_MAP
+from config import (
+    BLOCK_ADDRESS,
+    BLOCK_PORT,
+    BLOCK_CTRL_DEV,
+    BLOCK_BIAS_DEV,
+    VNA_ADDRESS,
+    VNA_TEST_MAP,
+)
 from interactors.block import Block
 from interactors.vna import VNABlock
 
