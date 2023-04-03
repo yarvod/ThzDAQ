@@ -8,10 +8,9 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QDoubleSpinBox,
-    QLineEdit,
 )
 
-from config import BLOCK_ADDRESS, BLOCK_PORT
+from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS
 from interactors.block import Block
 from ui.windows.clGraphWindow import CLGraphWindow
 
@@ -33,9 +32,9 @@ class UtilsMixin:
 
     def set_voltage(self):
         try:
-            voltage_to_set = float(self.voltage_s.text().replace(",", ".")) * 1e-3
+            voltage_to_set = float(self.voltage_s.value()) * 1e-3
         except ValueError:
-            logger.warning(f"Value {self.voltage_s.text()} is not correct float")
+            logger.warning(f"Value {self.voltage_s.value()} is not correct float")
             return
         self.block.set_bias_voltage(voltage_to_set)
         current = self.block.get_bias_current()
@@ -45,9 +44,9 @@ class UtilsMixin:
 
     def set_ctrl_current(self):
         try:
-            ctrlCurrentSet = float(self.ctrlCurrentSet.text().replace(",", ".")) * 1e-3
+            ctrlCurrentSet = float(self.ctrlCurrentSet.value()) * 1e-3
         except ValueError:
-            logger.warning(f"Value {self.ctrlCurrentSet.text()} is not correct float")
+            logger.warning(f"Value {self.ctrlCurrentSet.value()} is not correct float")
             return
         self.block.set_ctrl_current(ctrlCurrentSet)
         ctrlCurrentGet = self.block.get_ctrl_current()
@@ -61,9 +60,9 @@ class UtilsMixin:
 
     def scan_ctrl_current(self):
         try:
-            ctrl_i_from = float(self.ctrlCurrentFrom.text().replace(",", ".")) * 1e-3
-            ctrl_i_to = float(self.ctrlCurrentTo.text().replace(",", ".")) * 1e-3
-            points_num = int(self.ctrlPoints.text())
+            ctrl_i_from = float(self.ctrlCurrentFrom.value()) * 1e-3
+            ctrl_i_to = float(self.ctrlCurrentTo.value()) * 1e-3
+            points_num = int(self.ctrlPoints.value())
         except ValueError:
             logger.warning(f"Range values is not correct floats/ints")
             return
@@ -159,8 +158,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentTo = QDoubleSpinBox(self)
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points num")
-        self.ctrlPoints = QLineEdit(self)
-        self.ctrlPoints.setText("50")
+        self.ctrlPoints = QDoubleSpinBox(self)
+        self.ctrlPoints.setDecimals(0)
+        self.ctrlPoints.setValue(BLOCK_CTRL_POINTS_MAX)
+        self.ctrlPoints.setValue(BLOCK_CTRL_POINTS)
         self.btnCTRLScan = QPushButton("Scan CL Current")
         self.btnCTRLScan.clicked.connect(lambda: self.scan_ctrl_current())
 
