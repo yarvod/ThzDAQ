@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 
 from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_FORMAT
@@ -5,6 +7,7 @@ from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_F
 from RsInstrument import *
 
 from utils.classes import Singleton
+from utils.functions import to_db
 
 
 class Instrument(RsInstrument, metaclass=Singleton):
@@ -80,11 +83,21 @@ class VNABlock(metaclass=Singleton):
     def set_stop_frequency(self, freq: float):
         self.instr.write_float("SENS:FREQ:STOP", freq)
 
-    def get_reflection(self) -> np.ndarray:
-        resp = self.instr.query_bin_or_ascii_float_list("CALC:DATA? FDAT")
-        real = resp[::2]
-        imag = resp[1::2]
-        return np.array([r + i * 1j for r, i in zip(real, imag)])
+    def get_reflection(self) -> np.ndarray[complex]:
+        """
+        Method to get reflection level from VNA
+        """
+        attempts = 5
+        attempt = 0
+        while attempt < attempts:
+            time.sleep(0.05)
+            attempt += 1
+            resp = self.instr.query_bin_or_ascii_float_list("CALC:DATA? FDAT")
+            if np.sum(np.abs(resp)) > 0:
+                real = resp[::2]
+                imag = resp[1::2]
+                return np.array([r + i * 1j for r, i in zip(real, imag)])
+        return np.array([])
 
 
 if __name__ == "__main__":
@@ -94,4 +107,4 @@ if __name__ == "__main__":
     print(vna.get_start_frequency())
     print(vna.set_stop_frequency(12e9))
     print(vna.get_stop_frequency())
-    print(len(vna.get_reflection()))
+    print(vna.get_reflection())
