@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class GraphWindow(QWidget):
-    datasets = []
     window_title = "Graph"
     graph_title = "Base Graph"
     y_label = "y label"
@@ -19,6 +18,7 @@ class GraphWindow(QWidget):
         super().__init__()
         self.setWindowTitle(self.window_title)
         layout = QVBoxLayout()
+        self.datasets = []
         self.graphWidget = pg.PlotWidget()
         layout.addWidget(self.graphWidget)
         self.prepare()

@@ -24,7 +24,7 @@ class Block(metaclass=Singleton):
         ctrl_dev: str = BLOCK_CTRL_DEV,
     ):
         self.host = host
-        self.port = port
+        self.port = int(port)
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
         self.iv = defaultdict(list)
@@ -38,7 +38,7 @@ class Block(metaclass=Singleton):
         ctrl_dev: str = BLOCK_CTRL_DEV,
     ):
         self.host = host
-        self.port = port
+        self.port = int(port)
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
 
