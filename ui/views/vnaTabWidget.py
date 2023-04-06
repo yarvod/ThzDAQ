@@ -61,9 +61,12 @@ class UtilsMixin:
             v_to=self.voltTo.value(),
             points_num=int(self.voltPoints.value()),
         )
-        filepath = QFileDialog.getSaveFileName()[0]
-        df = pd.DataFrame(data["refl"], index=freqs)
-        df.to_csv(filepath)
+        try:
+            filepath = QFileDialog.getSaveFileName()[0]
+            df = pd.DataFrame(data["refl"], index=freqs)
+            df.to_csv(filepath)
+        except IndexError:
+            pass
 
     def get_reflection(self):
         self.vna_update()
