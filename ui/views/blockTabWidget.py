@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QFileDialog,
 )
 
-from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS
+from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS, BLOCK_BIAS_VOLT_POINTS, \
+    BLOCK_BIAS_VOLT_POINTS_MAX
 from interactors.block import Block
 from ui.windows.biasGraphWindow import BiasGraphWindow
 from ui.windows.clGraphWindow import CLGraphWindow
@@ -189,7 +190,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlPointsLabel.setText("Points num")
         self.ctrlPoints = QDoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
-        self.ctrlPoints.setValue(BLOCK_CTRL_POINTS_MAX)
+        self.ctrlPoints.setMaximum(BLOCK_CTRL_POINTS_MAX)
         self.ctrlPoints.setValue(BLOCK_CTRL_POINTS)
         self.btnCTRLScan = QPushButton("Scan CL Current")
         self.btnCTRLScan.clicked.connect(lambda: self.scan_ctrl_current())
@@ -218,8 +219,8 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasPointsLabel.setText("Points num")
         self.biasPoints = QDoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
-        self.biasPoints.setValue(BLOCK_CTRL_POINTS_MAX)
-        self.biasPoints.setValue(BLOCK_CTRL_POINTS)
+        self.biasPoints.setMaximum(BLOCK_BIAS_VOLT_POINTS_MAX)
+        self.biasPoints.setValue(BLOCK_BIAS_VOLT_POINTS)
         self.btnBiasScan = QPushButton("Scan Bias IV")
         self.btnBiasScan.clicked.connect(lambda: self.scan_bias_iv())
 

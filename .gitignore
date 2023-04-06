@@ -4,5 +4,6 @@ build
 dist/*
 !dist/CL-manager-*.exe
 *__pacache__
+*.log
 
 *.spec
