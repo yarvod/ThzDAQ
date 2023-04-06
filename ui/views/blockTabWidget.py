@@ -1,5 +1,6 @@
 import logging
 
+import pandas as pd
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -7,7 +8,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QPushButton,
-    QDoubleSpinBox,
+    QDoubleSpinBox, QFileDialog,
 )
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS
@@ -80,6 +81,12 @@ class UtilsMixin:
             return
         results = self.block.scan_bias(bias_v_from, bias_v_to, points_num)
         self.show_bias_graph_window(x=results["v_get"], y=results["i_get"])
+        try:
+            filepath = QFileDialog.getSaveFileName()[0]
+            df = pd.DataFrame(dict(v_set=results["v_set"], v_get=results["v_get"], i_get=results["i_get"]))
+            df.to_csv(filepath)
+        except (IndexError, FileNotFoundError):
+            pass
 
 
 class BlockTabWidget(QWidget, UtilsMixin):

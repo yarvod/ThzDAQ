@@ -227,6 +227,7 @@ class Block(metaclass=Singleton):
             "i_get": [],
             "v_set": [],
             "v_get": [],
+            "time": [],
         }
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.host, self.port))
@@ -238,10 +239,11 @@ class Block(metaclass=Singleton):
                 self.set_bias_voltage(v_set, s)
                 v_get = self.get_bias_voltage(s)
                 i_get = self.get_bias_current(s)
-                results["v_get"].append(v_get)
-                results["v_set"].append(v_set)
-                results["i_get"].append(i_get)
+                results["v_get"].append(v_get * 1e3)
+                results["v_set"].append(v_set * 1e3)
+                results["i_get"].append(i_get * 1e6)
                 delta_t = datetime.now() - start_t
+                results["time"].append(delta_t)
                 print(f"Proc {proc} %; Time {delta_t}; V_set {v_set}")
             self.set_bias_voltage(initial_v, s)
 
@@ -258,6 +260,7 @@ class Block(metaclass=Singleton):
             "v_set": [],
             "v_get": [],
             "refl": defaultdict(np.ndarray),
+            "time": [],
         }
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.host, self.port))
@@ -276,6 +279,7 @@ class Block(metaclass=Singleton):
                 results["i_get"].append(i_get)
                 results["refl"][f"{v_set};{i_get}"] = refl
                 delta_t = datetime.now() - start_t
+                results["time"].append(delta_t)
                 print(f"Proc {proc} %; Time {delta_t}; V_set {v_set}")
             self.set_bias_voltage(initial_v, s)
 
