@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -6,7 +7,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QDoubleSpinBox,
-    QPushButton,
+    QPushButton, QFileDialog,
 )
 
 from config import (
@@ -22,6 +23,7 @@ from config import (
     VNA_POWER_MAX,
     VNA_POWER_MIN,
 )
+from interactors.block import Block
 from interactors.vna import VNABlock
 from ui.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
@@ -51,7 +53,17 @@ class UtilsMixin:
         self.vna_set_power()
 
     def scan_bias_refl(self):
-        ...
+        self.vna_update()
+        block = Block()
+        freqs = np.linspace(self.freqFrom.value() * 1e9, self.freqTo.value() * 1e9, int(self.vnaPoints.value()))
+        data = block.scan_reflection(
+            v_from=self.voltFrom.value(),
+            v_to=self.voltTo.value(),
+            points_num=self.voltPoints.value(),
+        )
+        filepath = QFileDialog.getSaveFileName()
+        df = pd.DataFrame(data["refl"], index=freqs)
+        df.to_csv(filepath)
 
     def get_reflection(self):
         self.vna_update()
