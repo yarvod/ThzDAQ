@@ -57,8 +57,8 @@ class SetUpTabWidget(QWidget):
         self.ctrlDev.setText(BLOCK_CTRL_DEV)
         self.biasDev.setText(BLOCK_BIAS_DEV)
 
-        self.btnCheckBlock = QPushButton("Check Block")
-        self.btnCheckBlock.clicked.connect(self.check_block)
+        self.btnInitBlock = QPushButton("Initialize Block")
+        self.btnInitBlock.clicked.connect(self.initialize_block)
 
         layout.addWidget(self.blockIPLabel, 1, 0)
         layout.addWidget(self.block_ip, 1, 1)
@@ -68,7 +68,7 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.ctrlDev, 3, 1)
         layout.addWidget(self.biasDevLabel, 4, 0)
         layout.addWidget(self.biasDev, 4, 1)
-        layout.addWidget(self.btnCheckBlock, 5, 0, 1, 2)
+        layout.addWidget(self.btnInitBlock, 5, 0, 1, 2)
 
         self.groupBlock.setLayout(layout)
 
@@ -86,24 +86,24 @@ class SetUpTabWidget(QWidget):
         self.vnaStatus = QLabel(self)
         self.vnaStatus.setText("VNA is not checked yet!")
 
-        self.btnCheckVna = QPushButton("Test VNA")
-        self.btnCheckVna.clicked.connect(self.check_vna)
+        self.btnInitVna = QPushButton("Initialize VNA")
+        self.btnInitVna.clicked.connect(self.initialize_vna)
 
         layout.addWidget(self.vnaIPLabel, 1, 0)
         layout.addWidget(self.vna_ip, 1, 1)
         layout.addWidget(self.vnaStatusLabel, 2, 0)
         layout.addWidget(self.vnaStatus, 2, 1)
-        layout.addWidget(self.btnCheckVna, 3, 0, 1, 2)
+        layout.addWidget(self.btnInitVna, 3, 0, 1, 2)
 
         self.groupVna.setLayout(layout)
 
-    def check_block(self):
+    def initialize_block(self):
         block = Block()
         block.update(host=self.block_ip.text(), port=self.block_port.text())
         result = block.get_bias_data()
         logger.info(f"Health check SIS block {result}")
 
-    def check_vna(self):
+    def initialize_vna(self):
         vna = VNABlock()
         result = vna.test()
         self.vnaStatus.setText(VNA_TEST_MAP.get(result, "Error"))
