@@ -67,7 +67,7 @@ class UtilsMixin:
             refl_df.to_csv(refl_filepath)
 
             iv_filepath = QFileDialog.getSaveFileName()[0]
-            iv_df = pd.DataFramedict(v_set=data["v_set"], v_get=data["v_get"], i_get=data["i_get"])
+            iv_df = pd.DataFrame(dict(v_set=data["v_set"], v_get=data["v_get"], i_get=data["i_get"]))
             iv_df.to_csv(iv_filepath)
         except (IndexError, FileNotFoundError):
             pass

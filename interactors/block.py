@@ -227,11 +227,17 @@ class Block(metaclass=Singleton):
             s.connect((self.host, self.port))
             ctrl_i_range = np.linspace(ctrl_i_from, ctrl_i_to, points_num)
             initial_ctrl_i = self.get_ctrl_current(s)
-            for ctrl_i in ctrl_i_range:
+            start_t = datetime.now()
+            for i, ctrl_i in enumerate(ctrl_i_range):
+                if i == 0:
+                    time.sleep(0.1)
+                proc = round((i / points_num) * 100, 2)
                 results["ctrl_i_set"].append(ctrl_i * 1e3)
                 self.set_ctrl_current(ctrl_i, s)
                 results["ctrl_i_get"].append(self.get_ctrl_current(s) * 1e3)
                 results["bias_i"].append(self.get_bias_current(s) * 1e6)
+                delta_t = datetime.now() - start_t
+                logger.info(f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}")
             self.set_ctrl_current(initial_ctrl_i, s)
         return results
 
