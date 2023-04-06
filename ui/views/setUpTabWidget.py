@@ -38,10 +38,10 @@ class SetUpTabWidget(QWidget):
         self.groupBlock = QGroupBox("Block config")
         layout = QGridLayout()
 
-        self.vnaIPLabel = QLabel(self)
-        self.vnaIPLabel.setText("Block IP:")
-        self.vna_ip = QLineEdit(self)
-        self.vna_ip.setText(BLOCK_ADDRESS)
+        self.blockIPLabel = QLabel(self)
+        self.blockIPLabel.setText("Block IP:")
+        self.block_ip = QLineEdit(self)
+        self.block_ip.setText(BLOCK_ADDRESS)
 
         self.blockPortLabel = QLabel(self)
         self.blockPortLabel.setText("Block Port:")
@@ -60,8 +60,8 @@ class SetUpTabWidget(QWidget):
         self.btnCheckBlock = QPushButton("Check Block")
         self.btnCheckBlock.clicked.connect(self.check_block)
 
-        layout.addWidget(self.vnaIPLabel, 1, 0)
-        layout.addWidget(self.vna_ip, 1, 1)
+        layout.addWidget(self.blockIPLabel, 1, 0)
+        layout.addWidget(self.block_ip, 1, 1)
         layout.addWidget(self.blockPortLabel, 2, 0)
         layout.addWidget(self.block_port, 2, 1)
         layout.addWidget(self.ctrlDevLabel, 3, 0)
@@ -99,7 +99,7 @@ class SetUpTabWidget(QWidget):
 
     def check_block(self):
         block = Block()
-        block.update(host=self.vna_ip.text(), port=self.block_port.text())
+        block.update(host=self.block_ip.text(), port=self.block_port.text())
         result = block.get_bias_data()
         logger.info(f"Health check SIS block {result}")
 

@@ -59,9 +59,9 @@ class UtilsMixin:
         data = block.scan_reflection(
             v_from=self.voltFrom.value(),
             v_to=self.voltTo.value(),
-            points_num=self.voltPoints.value(),
+            points_num=int(self.voltPoints.value()),
         )
-        filepath = QFileDialog.getSaveFileName()
+        filepath = QFileDialog.getSaveFileName()[0]
         df = pd.DataFrame(data["refl"], index=freqs)
         df.to_csv(filepath)
 
@@ -82,10 +82,6 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.layout.addWidget(self.groupVNAParameters)
         self.layout.addWidget(self.groupBiasReflScan)
         self.setLayout(self.layout)
-
-    # def show_graph_window(self, x: list, y: list):
-    #     self.graphWindow = GraphWindow(x=x, y=y)
-    #     self.graphWindow.show()
 
     def createGroupVNAParameters(self):
         self.groupVNAParameters = QGroupBox("VNA parameters")
