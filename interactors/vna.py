@@ -7,7 +7,6 @@ from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_F
 from RsInstrument import *
 
 from utils.classes import Singleton
-from utils.functions import to_db
 
 
 class Instrument(RsInstrument, metaclass=Singleton):
