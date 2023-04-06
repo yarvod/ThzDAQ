@@ -255,13 +255,13 @@ class Block(metaclass=Singleton):
             v_get = self.get_bias_voltage()
             i_get = self.get_bias_current()
             refl = vna.get_reflection()
-            results["v_get"].append(v_get)
-            results["v_set"].append(v_set)
-            results["i_get"].append(i_get)
-            results["refl"][f"{v_set};{i_get}"] = refl
+            results["v_get"].append(v_get * 1e3)
+            results["v_set"].append(v_set * 1e3)
+            results["i_get"].append(i_get * 1e6)
+            results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t)
-            logger.info(f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set}")
+            logger.info(f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}")
         self.set_bias_voltage(initial_v)
 
         return results

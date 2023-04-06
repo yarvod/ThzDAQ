@@ -57,8 +57,8 @@ class UtilsMixin:
         block = Block()
         freqs = np.linspace(self.freqFrom.value() * 1e9, self.freqTo.value() * 1e9, int(self.vnaPoints.value()))
         data = block.scan_reflection(
-            v_from=self.voltFrom.value(),
-            v_to=self.voltTo.value(),
+            v_from=self.voltFrom.value() * 1e-3,
+            v_to=self.voltTo.value() * 1e-3,
             points_num=int(self.voltPoints.value()),
         )
         try:
