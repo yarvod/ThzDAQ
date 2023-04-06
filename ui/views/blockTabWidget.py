@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import (
 )
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS, BLOCK_BIAS_VOLT_POINTS, \
-    BLOCK_BIAS_VOLT_POINTS_MAX
+    BLOCK_BIAS_VOLT_POINTS_MAX, BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE, BLOCK_CTRL_CURR_MAX_VALUE, \
+    BLOCK_CTRL_CURR_MIN_VALUE
 from interactors.block import Block
 from ui.windows.biasGraphWindow import BiasGraphWindow
 from ui.windows.clGraphWindow import CLGraphWindow
@@ -156,6 +157,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.voltSLabel = QLabel(self)
         self.voltSLabel.setText("BIAS voltage, mV:")
         self.voltage_s = QDoubleSpinBox(self)
+        self.voltage_s.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
 
         self.btn_set_voltage = QPushButton("Set BIAS voltage")
         self.btn_set_voltage.clicked.connect(lambda: self.set_voltage())
@@ -163,6 +165,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentSetLabel = QLabel(self)
         self.ctrlCurrentSetLabel.setText("CL current, mA")
         self.ctrlCurrentSet = QDoubleSpinBox(self)
+        self.ctrlCurrentSet.setRange(BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE)
 
         self.btnSetCTRLCurrent = QPushButton("Set CL current")
         self.btnSetCTRLCurrent.clicked.connect(self.set_ctrl_current)
@@ -183,9 +186,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentFromLabel = QLabel(self)
         self.ctrlCurrentFromLabel.setText("CL Current from, mA")
         self.ctrlCurrentFrom = QDoubleSpinBox(self)
+        self.ctrlCurrentFrom.setRange(BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE)
         self.ctrlCurrentToLabel = QLabel(self)
         self.ctrlCurrentToLabel.setText("CL Current to, mA")
         self.ctrlCurrentTo = QDoubleSpinBox(self)
+        self.ctrlCurrentTo.setRange(BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE)
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points num")
         self.ctrlPoints = QDoubleSpinBox(self)
@@ -212,9 +217,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasVoltageFromLabel = QLabel(self)
         self.biasVoltageFromLabel.setText("Voltage from, mV")
         self.biasVoltageFrom = QDoubleSpinBox(self)
+        self.biasVoltageFrom.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
         self.biasVoltageToLabel = QLabel(self)
         self.biasVoltageToLabel.setText("Voltage to, mv")
         self.biasVoltageTo = QDoubleSpinBox(self)
+        self.biasVoltageTo.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
         self.biasPointsLabel = QLabel(self)
         self.biasPointsLabel.setText("Points num")
         self.biasPoints = QDoubleSpinBox(self)
