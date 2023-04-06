@@ -1,8 +1,8 @@
 import logging
 import socket
+import time
 from collections import defaultdict
 from datetime import datetime
-from time import time
 
 import numpy as np
 
@@ -67,7 +67,6 @@ class Block(metaclass=Singleton):
                 return result
             except Exception as e:
                 logger.error(f"Exception: {e}; attempt {attempt}")
-                continue
         return "0"
 
     def get_ctrl_short_status(self, s: socket.socket = None):
@@ -235,6 +234,8 @@ class Block(metaclass=Singleton):
             v_range = np.linspace(v_from, v_to, points_num)
             start_t = datetime.now()
             for i, v_set in enumerate(v_range):
+                if i == 0:
+                    time.sleep(0.1)
                 proc = round((i / points_num) * 100, 2)
                 self.set_bias_voltage(v_set, s)
                 v_get = self.get_bias_voltage(s)
@@ -269,6 +270,8 @@ class Block(metaclass=Singleton):
             vna = VNABlock()
             start_t = datetime.now()
             for i, v_set in enumerate(v_range):
+                if i == 0:
+                    time.sleep(0.1)
                 proc = round((i / points_num) * 100, 2)
                 self.set_bias_voltage(v_set, s)
                 v_get = self.get_bias_voltage(s)
