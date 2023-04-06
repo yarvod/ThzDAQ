@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_CTRL_POINTS_MAX, BLOCK_CTRL_POINTS
 from interactors.block import Block
+from ui.windows.biasGraphWindow import BiasGraphWindow
 from ui.windows.clGraphWindow import CLGraphWindow
 
 logger = logging.getLogger(__name__)
@@ -67,28 +68,49 @@ class UtilsMixin:
             logger.warning(f"Range values is not correct floats/ints")
             return
         results = self.block.scan_ctrl_current(ctrl_i_from, ctrl_i_to, points_num)
-        self.show_graph_window(x=results["ctrl_i_get"], y=results["bias_i"])
+        self.show_ctrl_graph_window(x=results["ctrl_i_get"], y=results["bias_i"])
+
+    def scan_bias_iv(self):
+        try:
+            bias_v_from = float(self.biasVoltageFrom.value()) * 1e-3
+            bias_v_to = float(self.biasVoltageTo.value()) * 1e-3
+            points_num = int(self.biasPoints.value())
+        except ValueError:
+            logger.warning(f"Range values is not correct floats/ints")
+            return
+        results = self.block.scan_bias(bias_v_from, bias_v_to, points_num)
+        self.show_bias_graph_window(x=results["v_get"], y=results["i_get"])
 
 
 class BlockTabWidget(QWidget, UtilsMixin):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.graphWindow = None
+        self.ctrlGraphWindow = None
+        self.biasGraphWindow = None
         self.createGroupValuesGet()
         self.createGroupValuesSet()
         self.createGroupCTRLScan()
+        self.createGroupBiasScan()
         self.layout.addWidget(self.rowValuesGet)
         self.layout.addWidget(self.rowValuesSet)
         self.layout.addWidget(self.rowCTRLScan)
+        self.layout.addWidget(self.rowBiasScan)
         self.setLayout(self.layout)
 
-    def show_graph_window(self, x: list, y: list):
-        if self.graphWindow is None:
-            self.graphWindow = CLGraphWindow(x=x, y=y)
+    def show_ctrl_graph_window(self, x: list, y: list):
+        if self.ctrlGraphWindow is None:
+            self.ctrlGraphWindow = CLGraphWindow(x=x, y=y)
         else:
-            self.graphWindow.plotNew(x, y)
-        self.graphWindow.show()
+            self.ctrlGraphWindow.plotNew(x, y)
+        self.ctrlGraphWindow.show()
+
+    def show_bias_graph_window(self, x: list, y: list):
+        if self.biasGraphWindow is None:
+            self.biasGraphWindow = BiasGraphWindow(x=x, y=y)
+        else:
+            self.biasGraphWindow.plotNew(x, y)
+        self.biasGraphWindow.show()
 
     def createGroupValuesGet(self):
         self.rowValuesGet = QGroupBox("Get values")
@@ -174,3 +196,32 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.btnCTRLScan, 4, 0, 1, 2)
 
         self.rowCTRLScan.setLayout(layout)
+
+    def createGroupBiasScan(self):
+        self.rowBiasScan = QGroupBox("Scan Bias IV")
+        layout = QGridLayout()
+
+        self.biasVoltageFromLabel = QLabel(self)
+        self.biasVoltageFromLabel.setText("Voltage from, mV")
+        self.biasVoltageFrom = QDoubleSpinBox(self)
+        self.biasVoltageToLabel = QLabel(self)
+        self.biasVoltageToLabel.setText("Voltage to, mv")
+        self.biasVoltageTo = QDoubleSpinBox(self)
+        self.biasPointsLabel = QLabel(self)
+        self.biasPointsLabel.setText("Points num")
+        self.biasPoints = QDoubleSpinBox(self)
+        self.biasPoints.setDecimals(0)
+        self.biasPoints.setValue(BLOCK_CTRL_POINTS_MAX)
+        self.biasPoints.setValue(BLOCK_CTRL_POINTS)
+        self.btnBiasScan = QPushButton("Scan Bias IV")
+        self.btnBiasScan.clicked.connect(lambda: self.scan_bias_iv())
+
+        layout.addWidget(self.biasVoltageFromLabel, 1, 0)
+        layout.addWidget(self.biasVoltageFrom, 1, 1)
+        layout.addWidget(self.biasVoltageToLabel, 2, 0)
+        layout.addWidget(self.biasVoltageTo, 2, 1)
+        layout.addWidget(self.biasPointsLabel, 3, 0)
+        layout.addWidget(self.biasPoints, 3, 1)
+        layout.addWidget(self.btnBiasScan, 4, 0, 1, 2)
+
+        self.rowBiasScan.setLayout(layout)

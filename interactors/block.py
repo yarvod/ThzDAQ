@@ -232,13 +232,17 @@ class Block(metaclass=Singleton):
             s.connect((self.host, self.port))
             initial_v = self.get_bias_voltage(s)
             v_range = np.linspace(v_from, v_to, points_num)
-            for v_set in v_range:
+            start_t = datetime.now()
+            for i, v_set in enumerate(v_range):
+                proc = round((i / points_num) * 100, 2)
                 self.set_bias_voltage(v_set, s)
                 v_get = self.get_bias_voltage(s)
                 i_get = self.get_bias_current(s)
                 results["v_get"].append(v_get)
                 results["v_set"].append(v_set)
                 results["i_get"].append(i_get)
+                delta_t = datetime.now() - start_t
+                print(f"Proc {proc} %; Time {delta_t}; V_set {v_set}")
             self.set_bias_voltage(initial_v, s)
 
         return results
