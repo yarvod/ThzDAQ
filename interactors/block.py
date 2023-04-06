@@ -259,10 +259,10 @@ class Block(metaclass=Singleton):
             v_range = np.linspace(v_from, v_to, points_num)
             start_t = datetime.now()
             for i, v_set in enumerate(v_range):
-                if i == 0:
-                    time.sleep(0.1)
                 proc = round((i / points_num) * 100, 2)
                 self.set_bias_voltage(v_set, s)
+                if i == 0:
+                    time.sleep(1)
                 v_get = self.get_bias_voltage(s)
                 i_get = self.get_bias_current(s)
                 results["v_get"].append(v_get * 1e3)
@@ -295,10 +295,10 @@ class Block(metaclass=Singleton):
             vna = VNABlock()
             start_t = datetime.now()
             for i, v_set in enumerate(v_range):
-                if i == 0:
-                    time.sleep(0.1)
                 proc = round((i / points_num) * 100, 2)
                 self.set_bias_voltage(v_set, s)
+                if i == 0:
+                    time.sleep(1)
                 v_get = self.get_bias_voltage(s)
                 i_get = self.get_bias_current(s)
                 refl = vna.get_reflection()
