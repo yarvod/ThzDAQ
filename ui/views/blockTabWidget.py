@@ -85,7 +85,7 @@ class UtilsMixin:
         self.show_bias_graph_window(x=results["v_get"], y=results["i_get"])
         try:
             filepath = QFileDialog.getSaveFileName()[0]
-            df = pd.DataFrame(dict(v_set=results["v_set"], v_get=results["v_get"], i_get=results["i_get"]))
+            df = pd.DataFrame(dict(v_set=results["v_set"], v_get=results["v_get"], i_get=results["i_get"], time=results["time"]))
             df.to_csv(filepath)
         except (IndexError, FileNotFoundError):
             pass

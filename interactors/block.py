@@ -235,6 +235,8 @@ class Block(metaclass=Singleton):
         v_from: float,
         v_to: float,
         points_num: int = 300,
+        time_per_point: float = 1,
+        points_to_average: int = 3,
     ) -> dict:
         results = {
             "i_get": [],
@@ -254,6 +256,7 @@ class Block(metaclass=Singleton):
                 time.sleep(1)
             v_get = self.get_bias_voltage()
             i_get = self.get_bias_current()
+            time.sleep(0.8)  # waiting for VNA averaging
             refl = vna.get_reflection()
             results["v_get"].append(v_get * 1e3)
             results["v_set"].append(v_set * 1e3)
