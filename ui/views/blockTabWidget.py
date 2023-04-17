@@ -127,7 +127,31 @@ class UtilsMixin:
             pass
 
 
-class SISBlockWorker(QObject):
+class BlockStreamWorker(QObject):
+    finished = pyqtSignal()
+    cl_current = pyqtSignal(float)
+    bias_voltage = pyqtSignal(float)
+    bias_current = pyqtSignal(float)
+
+    def run(self):
+        self.block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        self.block.connect()
+        while 1:
+            time.sleep(1)
+            bias_voltage = self.block.get_bias_voltage()
+            bias_current = self.block.get_bias_current()
+            cl_current = self.block.get_ctrl_current()
+            self.bias_voltage.emit(bias_voltage)
+            self.bias_current.emit(bias_current)
+            self.cl_current.emit(cl_current)
+
+
+class BlockCLScanWorker(QObject):
     finished = pyqtSignal()
     results = pyqtSignal(dict)
 
@@ -199,7 +223,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def scan_ctrl_current_v2(self):
         self.sis_thread = QThread()
-        self.sis_worker = SISBlockWorker()
+        self.sis_worker = BlockCLScanWorker()
         self.sis_worker.moveToThread(self.sis_thread)
 
         config.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
@@ -215,6 +239,30 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.btnCTRLScan.setEnabled(False)
         self.sis_thread.finished.connect(lambda: self.btnCTRLScan.setEnabled(True))
+
+    def startStreamBlock(self):
+        self.stream_thread = QThread()
+        self.stream_worker = BlockStreamWorker()
+        self.stream_worker.moveToThread(self.stream_thread)
+
+        self.stream_thread.started.connect(self.stream_worker.run)
+        self.stream_worker.finished.connect(self.stream_thread.quit)
+        self.stream_worker.finished.connect(self.stream_worker.deleteLater)
+        self.stream_thread.finished.connect(self.stream_thread.deleteLater)
+        self.stream_worker.cl_current.connect(lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}"))
+        self.stream_worker.bias_current.connect(lambda x: self.current_g.setText(f"{round(x * 1e6, 3)}"))
+        self.stream_worker.bias_voltage.connect(lambda x: self.voltage_g.setText(f"{round(x * 1e3, 3)}"))
+        self.stream_thread.start()
+
+        self.btnStartStreamBlock.setEnabled(False)
+        self.stream_thread.finished.connect(lambda: self.btnStartStreamBlock.setEnabled(True))
+
+        self.btnStopStreamBlock.setEnabled(True)
+        self.stream_thread.finished.connect(lambda: self.btnStopStreamBlock.setEnabled(False))
+
+    def stopStreamBlock(self):
+        self.stream_worker.block.disconnect()
+        self.stream_worker.finished.emit()
 
     def createGroupValuesGet(self):
         self.rowValuesGet = QGroupBox("Get values")
@@ -238,8 +286,12 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentGet.setText("0.0")
         self.ctrlCurrentGet.setStyleSheet("font-size: 20px; font-weight: bold;")
 
-        self.btnUpdateValues = QPushButton("Update")
-        self.btnUpdateValues.clicked.connect(self.updateValues)
+        self.btnStartStreamBlock = QPushButton("Start Stream")
+        self.btnStartStreamBlock.clicked.connect(self.startStreamBlock)
+
+        self.btnStopStreamBlock = QPushButton("Stop Stream")
+        self.btnStopStreamBlock.setEnabled(False)
+        self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
         layout.addWidget(self.voltGLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.currGLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -252,7 +304,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
         layout.addWidget(
-            self.btnUpdateValues, 3, 0, 1, 3, alignment=Qt.AlignmentFlag.AlignCenter
+            self.btnStartStreamBlock, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.btnStopStreamBlock, 3, 1, alignment=Qt.AlignmentFlag.AlignCenter
         )
 
         self.rowValuesGet.setLayout(layout)
