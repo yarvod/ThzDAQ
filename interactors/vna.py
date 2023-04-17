@@ -7,6 +7,7 @@ from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_F
 from RsInstrument import *
 
 from utils.classes import Singleton
+from utils.decorators import exception
 
 
 class Instrument(RsInstrument, metaclass=Singleton):
@@ -26,6 +27,7 @@ class VNABlock(metaclass=Singleton):
         self.param = param
         self.update(vna_ip, points, channel_format, power, param)
 
+    @exception
     def update(
         self,
         vna_ip: str = VNA_ADDRESS,
@@ -47,6 +49,7 @@ class VNABlock(metaclass=Singleton):
     def name(self):
         return self.instr.query_str("*IDN?")
 
+    @exception
     def test(self) -> str:
         """
         Methods for self testing Instrument.

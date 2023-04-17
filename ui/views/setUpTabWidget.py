@@ -1,5 +1,7 @@
 import logging
+import time
 
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -22,6 +24,18 @@ from interactors.block import Block
 from interactors.vna import VNABlock
 
 logger = logging.getLogger(__name__)
+
+
+class VNAWorker(QObject):
+    finished = pyqtSignal()
+    status = pyqtSignal(str)
+
+    def run(self, vna_ip: str):
+        vna = VNABlock()
+        vna.update(vna_ip=vna_ip)
+        result = vna.test()
+        self.status.emit(VNA_TEST_MAP.get(result, "Error"))
+        self.finished.emit()
 
 
 class SetUpTabWidget(QWidget):
@@ -103,7 +117,22 @@ class SetUpTabWidget(QWidget):
         result = block.get_bias_data()
         logger.info(f"Health check SIS block {result}")
 
+    def set_vna_status(self, status: str):
+        self.vnaStatus.setText(status)
+
     def initialize_vna(self):
-        vna = VNABlock()
-        result = vna.test()
-        self.vnaStatus.setText(VNA_TEST_MAP.get(result, "Error"))
+        self.thread = QThread()
+        self.vna_worker = VNAWorker()
+
+        self.vna_worker.moveToThread(self.thread)
+        self.thread.started.connect(lambda: self.vna_worker.run(vna_ip=self.vna_ip.text()))
+        self.vna_worker.finished.connect(self.thread.quit)
+        self.vna_worker.finished.connect(self.vna_worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.vna_worker.status.connect(self.set_vna_status)
+        self.thread.start()
+
+        self.btnInitVna.setEnabled(False)
+        self.thread.finished.connect(
+            lambda: self.btnInitVna.setEnabled(True)
+        )
