@@ -1,5 +1,8 @@
 import logging
+import time
+from datetime import datetime
 
+import numpy as np
 import pandas as pd
 from PyQt6.QtWidgets import (
     QWidget,
@@ -11,20 +14,10 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 
-from config import (
-    BLOCK_ADDRESS,
-    BLOCK_PORT,
-    BLOCK_CTRL_POINTS_MAX,
-    BLOCK_CTRL_POINTS,
-    BLOCK_BIAS_VOLT_POINTS,
-    BLOCK_BIAS_VOLT_POINTS_MAX,
-    BLOCK_BIAS_VOLT_MIN_VALUE,
-    BLOCK_BIAS_VOLT_MAX_VALUE,
-    BLOCK_CTRL_CURR_MAX_VALUE,
-    BLOCK_CTRL_CURR_MIN_VALUE,
-)
+from config import config
+
 from interactors.block import Block
 from ui.windows.biasGraphWindow import BiasGraphWindow
 from ui.windows.clGraphWindow import CLGraphWindow
@@ -33,58 +26,82 @@ logger = logging.getLogger(__name__)
 
 
 class UtilsMixin:
-    @property
-    def block(self):
-        return Block(BLOCK_ADDRESS, BLOCK_PORT)
-
     def updateValues(self):
-        current = self.block.get_bias_current()
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        current = block.get_bias_current()
         self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = self.block.get_bias_voltage()
+        voltage = block.get_bias_voltage()
         self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
-        ctrlCurrentGet = self.block.get_ctrl_current()
+        ctrlCurrentGet = block.get_ctrl_current()
         self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
+        block.disconnect()
 
     def set_voltage(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
         try:
             voltage_to_set = float(self.voltage_s.value()) * 1e-3
         except ValueError:
             logger.warning(f"Value {self.voltage_s.value()} is not correct float")
             return
-        self.block.set_bias_voltage(voltage_to_set)
-        current = self.block.get_bias_current()
+        block.set_bias_voltage(voltage_to_set)
+        current = block.get_bias_current()
         self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = self.block.get_bias_voltage()
+        voltage = block.get_bias_voltage()
         self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
+        block.disconnect()
 
     def set_ctrl_current(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
         try:
             ctrlCurrentSet = float(self.ctrlCurrentSet.value()) * 1e-3
         except ValueError:
             logger.warning(f"Value {self.ctrlCurrentSet.value()} is not correct float")
             return
-        self.block.set_ctrl_current(ctrlCurrentSet)
-        ctrlCurrentGet = self.block.get_ctrl_current()
+        block.set_ctrl_current(ctrlCurrentSet)
+        ctrlCurrentGet = block.get_ctrl_current()
+        block.disconnect()
         self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
 
     def get_voltage_current(self):
-        current = self.block.get_bias_current()
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        current = block.get_bias_current()
         self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = self.block.get_bias_voltage()
+        voltage = block.get_bias_voltage()
         self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
-
-    def scan_ctrl_current(self):
-        try:
-            ctrl_i_from = float(self.ctrlCurrentFrom.value()) * 1e-3
-            ctrl_i_to = float(self.ctrlCurrentTo.value()) * 1e-3
-            points_num = int(self.ctrlPoints.value())
-        except ValueError:
-            logger.warning(f"Range values is not correct floats/ints")
-            return
-        results = self.block.scan_ctrl_current(ctrl_i_from, ctrl_i_to, points_num)
-        self.show_ctrl_graph_window(x=results["ctrl_i_get"], y=results["bias_i"])
+        block.disconnect()
 
     def scan_bias_iv(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
         try:
             bias_v_from = float(self.biasVoltageFrom.value()) * 1e-3
             bias_v_to = float(self.biasVoltageTo.value()) * 1e-3
@@ -92,7 +109,8 @@ class UtilsMixin:
         except ValueError:
             logger.warning(f"Range values is not correct floats/ints")
             return
-        results = self.block.scan_bias(bias_v_from, bias_v_to, points_num)
+        results = block.scan_bias(bias_v_from, bias_v_to, points_num)
+        block.disconnect()
         self.show_bias_graph_window(x=results["v_get"], y=results["i_get"])
         try:
             filepath = QFileDialog.getSaveFileName()[0]
@@ -107,6 +125,48 @@ class UtilsMixin:
             df.to_csv(filepath)
         except (IndexError, FileNotFoundError):
             pass
+
+
+class SISBlockWorker(QObject):
+    finished = pyqtSignal()
+    results = pyqtSignal(dict)
+
+    def run(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        results = {
+            "ctrl_i_set": [],
+            "ctrl_i_get": [],
+            "bias_i": [],
+        }
+        ctrl_i_range = np.linspace(
+            config.BLOCK_CTRL_CURR_FROM,
+            config.BLOCK_CTRL_CURR_TO,
+            config.BLOCK_CTRL_POINTS,
+        )
+        initial_ctrl_i = block.get_ctrl_current()
+        start_t = datetime.now()
+        for i, ctrl_i in enumerate(ctrl_i_range):
+            if i == 0:
+                time.sleep(0.1)
+            proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
+            results["ctrl_i_set"].append(ctrl_i * 1e3)
+            block.set_ctrl_current(ctrl_i)
+            results["ctrl_i_get"].append(block.get_ctrl_current() * 1e3)
+            results["bias_i"].append(block.get_bias_current() * 1e6)
+            delta_t = datetime.now() - start_t
+            logger.info(
+                f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
+            )
+        block.set_ctrl_current(initial_ctrl_i)
+        self.results.emit(results)
+        block.disconnect()
+        self.finished.emit()
 
 
 class BlockTabWidget(QWidget, UtilsMixin):
@@ -125,19 +185,36 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.layout.addWidget(self.rowBiasScan)
         self.setLayout(self.layout)
 
-    def show_ctrl_graph_window(self, x: list, y: list):
+    def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphWindow is None:
-            self.ctrlGraphWindow = CLGraphWindow(x=x, y=y)
-        else:
-            self.ctrlGraphWindow.plotNew(x, y)
+            self.ctrlGraphWindow = CLGraphWindow()
+        self.ctrlGraphWindow.plotNew(x=results["ctrl_i_get"], y=results["bias_i"])
         self.ctrlGraphWindow.show()
 
     def show_bias_graph_window(self, x: list, y: list):
         if self.biasGraphWindow is None:
-            self.biasGraphWindow = BiasGraphWindow(x=x, y=y)
-        else:
-            self.biasGraphWindow.plotNew(x, y)
+            self.biasGraphWindow = BiasGraphWindow()
+        self.biasGraphWindow.plotNew(x, y)
         self.biasGraphWindow.show()
+
+    def scan_ctrl_current_v2(self):
+        self.sis_thread = QThread()
+        self.sis_worker = SISBlockWorker()
+        self.sis_worker.moveToThread(self.sis_thread)
+
+        config.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
+        config.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
+        config.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
+
+        self.sis_thread.started.connect(self.sis_worker.run)
+        self.sis_worker.finished.connect(self.sis_thread.quit)
+        self.sis_worker.finished.connect(self.sis_worker.deleteLater)
+        self.sis_thread.finished.connect(self.sis_thread.deleteLater)
+        self.sis_worker.results.connect(self.show_ctrl_graph_window)
+        self.sis_thread.start()
+
+        self.btnCTRLScan.setEnabled(False)
+        self.sis_thread.finished.connect(lambda: self.btnCTRLScan.setEnabled(True))
 
     def createGroupValuesGet(self):
         self.rowValuesGet = QGroupBox("Get values")
@@ -166,11 +243,17 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         layout.addWidget(self.voltGLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.currGLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.ctrlCurrentGetLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(
+            self.ctrlCurrentGetLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         layout.addWidget(self.voltage_g, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.current_g, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.btnUpdateValues, 3, 0, 1, 3, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(
+            self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.btnUpdateValues, 3, 0, 1, 3, alignment=Qt.AlignmentFlag.AlignCenter
+        )
 
         self.rowValuesGet.setLayout(layout)
 
@@ -181,7 +264,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.voltSLabel = QLabel(self)
         self.voltSLabel.setText("BIAS voltage, mV:")
         self.voltage_s = QDoubleSpinBox(self)
-        self.voltage_s.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
+        self.voltage_s.setRange(
+            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+        )
 
         self.btn_set_voltage = QPushButton("Set BIAS voltage")
         self.btn_set_voltage.clicked.connect(lambda: self.set_voltage())
@@ -190,7 +275,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentSetLabel.setText("CL current, mA")
         self.ctrlCurrentSet = QDoubleSpinBox(self)
         self.ctrlCurrentSet.setRange(
-            BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE
+            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
 
         self.btnSetCTRLCurrent = QPushButton("Set CL current")
@@ -213,22 +298,22 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentFromLabel.setText("CL Current from, mA")
         self.ctrlCurrentFrom = QDoubleSpinBox(self)
         self.ctrlCurrentFrom.setRange(
-            BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE
+            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlCurrentToLabel = QLabel(self)
         self.ctrlCurrentToLabel.setText("CL Current to, mA")
         self.ctrlCurrentTo = QDoubleSpinBox(self)
         self.ctrlCurrentTo.setRange(
-            BLOCK_CTRL_CURR_MIN_VALUE, BLOCK_CTRL_CURR_MAX_VALUE
+            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points num")
         self.ctrlPoints = QDoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
-        self.ctrlPoints.setMaximum(BLOCK_CTRL_POINTS_MAX)
-        self.ctrlPoints.setValue(BLOCK_CTRL_POINTS)
+        self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
+        self.ctrlPoints.setValue(config.BLOCK_CTRL_POINTS)
         self.btnCTRLScan = QPushButton("Scan CL Current")
-        self.btnCTRLScan.clicked.connect(lambda: self.scan_ctrl_current())
+        self.btnCTRLScan.clicked.connect(self.scan_ctrl_current_v2)
 
         layout.addWidget(self.ctrlCurrentFromLabel, 1, 0)
         layout.addWidget(self.ctrlCurrentFrom, 1, 1)
@@ -248,20 +333,20 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasVoltageFromLabel.setText("Voltage from, mV")
         self.biasVoltageFrom = QDoubleSpinBox(self)
         self.biasVoltageFrom.setRange(
-            BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE
+            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasVoltageToLabel = QLabel(self)
         self.biasVoltageToLabel.setText("Voltage to, mv")
         self.biasVoltageTo = QDoubleSpinBox(self)
         self.biasVoltageTo.setRange(
-            BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE
+            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasPointsLabel = QLabel(self)
         self.biasPointsLabel.setText("Points num")
         self.biasPoints = QDoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
-        self.biasPoints.setMaximum(BLOCK_BIAS_VOLT_POINTS_MAX)
-        self.biasPoints.setValue(BLOCK_BIAS_VOLT_POINTS)
+        self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
+        self.biasPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
         self.btnBiasScan = QPushButton("Scan Bias IV")
         self.btnBiasScan.clicked.connect(lambda: self.scan_bias_iv())
 

@@ -9,17 +9,11 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
-    QPushButton, QDoubleSpinBox,
+    QPushButton,
+    QDoubleSpinBox,
 )
 
-from config import (
-    BLOCK_ADDRESS,
-    BLOCK_PORT,
-    BLOCK_CTRL_DEV,
-    BLOCK_BIAS_DEV,
-    VNA_ADDRESS,
-    VNA_TEST_MAP,
-)
+from config import config
 from interactors.block import Block
 from interactors.vna import VNABlock
 
@@ -30,11 +24,10 @@ class VNAWorker(QObject):
     finished = pyqtSignal()
     status = pyqtSignal(str)
 
-    def run(self, vna_ip: str):
-        vna = VNABlock()
-        vna.update(vna_ip=vna_ip)
+    def run(self):
+        vna = VNABlock(vna_ip=config.VNA_ADDRESS)
         result = vna.test()
-        self.status.emit(VNA_TEST_MAP.get(result, "Error"))
+        self.status.emit(config.VNA_TEST_MAP.get(result, "Error"))
         self.finished.emit()
 
 
@@ -42,10 +35,16 @@ class SISBlockWorker(QObject):
     finished = pyqtSignal()
     status = pyqtSignal(str)
 
-    def run(self, block_ip: str, block_port: float):
-        block = Block()
-        block.update(host=block_ip, port=int(block_port))
+    def run(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
         result = block.get_bias_data()
+        block.disconnect()
         if not result:
             result = "Connection error"
         logger.info(f"Health check SIS block {result}")
@@ -70,14 +69,14 @@ class SetUpTabWidget(QWidget):
         self.blockIPLabel = QLabel(self)
         self.blockIPLabel.setText("Block IP:")
         self.block_ip = QLineEdit(self)
-        self.block_ip.setText(BLOCK_ADDRESS)
+        self.block_ip.setText(config.BLOCK_ADDRESS)
 
         self.blockPortLabel = QLabel(self)
         self.blockPortLabel.setText("Block Port:")
         self.block_port = QDoubleSpinBox(self)
         self.block_port.setMaximum(10000)
         self.block_port.setDecimals(0)
-        self.block_port.setValue(BLOCK_PORT)
+        self.block_port.setValue(config.BLOCK_PORT)
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
@@ -85,8 +84,8 @@ class SetUpTabWidget(QWidget):
         self.biasDev = QLineEdit(self)
         self.ctrlDevLabel.setText("CTRL Device:")
         self.biasDevLabel.setText("BIAS Device:")
-        self.ctrlDev.setText(BLOCK_CTRL_DEV)
-        self.biasDev.setText(BLOCK_BIAS_DEV)
+        self.ctrlDev.setText(config.BLOCK_CTRL_DEV)
+        self.biasDev.setText(config.BLOCK_BIAS_DEV)
 
         self.sisBlockStatusLabel = QLabel(self)
         self.sisBlockStatusLabel.setText("SIS Block status:")
@@ -117,7 +116,7 @@ class SetUpTabWidget(QWidget):
         self.vnaIPLabel = QLabel(self)
         self.vnaIPLabel.setText("VNA IP:")
         self.vna_ip = QLineEdit(self)
-        self.vna_ip.setText(VNA_ADDRESS)
+        self.vna_ip.setText(config.VNA_ADDRESS)
 
         self.vnaStatusLabel = QLabel(self)
         self.vnaStatusLabel.setText("VNA status:")
@@ -142,12 +141,13 @@ class SetUpTabWidget(QWidget):
         self.sis_thread = QThread()
         self.sis_worker = SISBlockWorker()
 
+        config.BLOCK_ADDRESS = self.block_ip.text()
+        config.BLOCK_PORT = int(self.block_port.value())
+        config.BLOCK_BIAS_DEV = self.biasDev.text()
+        config.BLOCK_CTRL_DEV = self.ctrlDev.text()
+
         self.sis_worker.moveToThread(self.sis_thread)
-        self.sis_thread.started.connect(
-            lambda: self.sis_worker.run(
-                block_ip=self.block_ip.text(), block_port=self.block_port.value()
-            )
-        )
+        self.sis_thread.started.connect(self.sis_worker.run)
         self.sis_worker.finished.connect(self.sis_thread.quit)
         self.sis_worker.finished.connect(self.sis_worker.deleteLater)
         self.sis_thread.finished.connect(self.sis_thread.deleteLater)
@@ -164,10 +164,10 @@ class SetUpTabWidget(QWidget):
         self.vna_thread = QThread()
         self.vna_worker = VNAWorker()
 
+        config.VNA_ADDRESS = self.vna_ip.text()
+
         self.vna_worker.moveToThread(self.vna_thread)
-        self.vna_thread.started.connect(
-            lambda: self.vna_worker.run(vna_ip=self.vna_ip.text())
-        )
+        self.vna_thread.started.connect(self.vna_worker.run)
         self.vna_worker.finished.connect(self.vna_thread.quit)
         self.vna_worker.finished.connect(self.vna_worker.deleteLater)
         self.vna_thread.finished.connect(self.vna_thread.deleteLater)

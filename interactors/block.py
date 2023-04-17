@@ -4,31 +4,28 @@ from collections import defaultdict
 from datetime import datetime
 
 import numpy as np
-
-from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_BIAS_DEV, BLOCK_CTRL_DEV
+from config import config
 from interactors.vna import VNABlock
-from utils.classes import Singleton
 from utils.decorators import exception
 from utils.logger import logger
 
 
-class Block(metaclass=Singleton):
+class Block:
     """
     Scontel SIS block operation interface.
     """
-    @exception
+
     def __init__(
         self,
-        host: str = BLOCK_ADDRESS,
-        port: int = BLOCK_PORT,
-        bias_dev: str = BLOCK_BIAS_DEV,
-        ctrl_dev: str = BLOCK_CTRL_DEV,
+        host: str = config.BLOCK_ADDRESS,
+        port: int = config.BLOCK_PORT,
+        bias_dev: str = config.BLOCK_BIAS_DEV,
+        ctrl_dev: str = config.BLOCK_CTRL_DEV,
     ):
         self.host = host
-        self.port = int(port)
+        self.port = port
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
-        self.iv = defaultdict(list)
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     @exception
@@ -37,7 +34,7 @@ class Block(metaclass=Singleton):
         try:
             self.s.connect((self.host, self.port))
             logger.info(f"Connected to Block {self.host}:{self.port}")
-        except OSError as e:
+        except Exception as e:
             logger.warning(f"Warning[Block.connect] {e}")
         self.s.settimeout(None)
 
@@ -45,20 +42,6 @@ class Block(metaclass=Singleton):
     def disconnect(self):
         self.s.close()
         logger.info(f"Disconnected from Block {self.host}:{self.port}")
-
-    @exception
-    def update(
-        self,
-        host: str = BLOCK_ADDRESS,
-        port: int = BLOCK_PORT,
-        bias_dev: str = BLOCK_BIAS_DEV,
-        ctrl_dev: str = BLOCK_CTRL_DEV,
-    ):
-        self.host = host
-        self.port = int(port)
-        self.bias_dev = bias_dev
-        self.ctrl_dev = ctrl_dev
-        self.connect()
 
     def manipulate(self, cmd: str) -> str:
         """
@@ -289,7 +272,7 @@ class Block(metaclass=Singleton):
 
 
 if __name__ == "__main__":
-    block = Block(BLOCK_ADDRESS, BLOCK_PORT)
+    block = Block(config.BLOCK_ADDRESS, config.BLOCK_PORT)
     block.connect()
     print(block.set_bias_short_status(0))
     print(block.get_bias_data())

@@ -15,7 +15,7 @@ class GraphWindow(QWidget):
     y_label = "y label"
     x_label = "x label"
 
-    def __init__(self, x: Iterable, y: Iterable):
+    def __init__(self):
         super().__init__()
         self.setWindowTitle(self.window_title)
         layout = QVBoxLayout()
@@ -26,7 +26,6 @@ class GraphWindow(QWidget):
         layout.addWidget(self.graphWidget)
         self.datasets = defaultdict(dict)
         self.prepare()
-        self.plotNew(x, y)
         self.setLayout(layout)
 
     def prepare(self) -> None:
@@ -58,6 +57,7 @@ class GraphWindow(QWidget):
     def plotNew(self, x: Iterable, y: Iterable):
         ds_id = self.addData(x, y)
         self.plotGraph(ds_id)
+        return ds_id
 
     def remove_hidden_graphs(self):
         plotItem = self.graphWidget.getPlotItem()

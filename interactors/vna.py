@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from config import VNA_ADDRESS, VNA_SPARAM, VNA_POINTS, VNA_POWER, VNA_CHANNEL_FORMAT
+from config import config
 
 from RsInstrument import *
 
@@ -10,18 +10,18 @@ from utils.classes import Singleton
 from utils.decorators import exception
 
 
-class Instrument(RsInstrument, metaclass=Singleton):
+class Instrument(RsInstrument):
     ...
 
 
-class VNABlock(metaclass=Singleton):
+class VNABlock:
     def __init__(
         self,
-        vna_ip: str = VNA_ADDRESS,
-        points: int = VNA_POINTS,
-        channel_format: str = VNA_CHANNEL_FORMAT,
-        power: float = VNA_POWER,
-        param: str = VNA_SPARAM,
+        vna_ip: str = config.VNA_ADDRESS,
+        points: int = config.VNA_POINTS,
+        channel_format: str = config.VNA_CHANNEL_FORMAT,
+        power: float = config.VNA_POWER,
+        param: str = config.VNA_SPARAM,
     ):
         self.vna_ip = vna_ip
         self.param = param
@@ -30,11 +30,11 @@ class VNABlock(metaclass=Singleton):
     @exception
     def update(
         self,
-        vna_ip: str = VNA_ADDRESS,
-        points: int = VNA_POINTS,
-        channel_format: str = VNA_CHANNEL_FORMAT,
-        power: float = VNA_POWER,
-        param: str = VNA_SPARAM,
+        vna_ip: str = config.VNA_ADDRESS,
+        points: int = config.VNA_POINTS,
+        channel_format: str = config.VNA_CHANNEL_FORMAT,
+        power: float = config.VNA_POWER,
+        param: str = config.VNA_SPARAM,
     ):
         self.vna_ip = vna_ip
         self.param = param
@@ -58,16 +58,16 @@ class VNABlock(metaclass=Singleton):
         """
         return self.instr.query_str("*TST?")
 
-    def set_sweep(self, points: int = VNA_POINTS):
+    def set_sweep(self, points: int = config.VNA_POINTS):
         self.instr.write_int("SWE:POIN", points)
 
-    def set_channel_format(self, form: str = VNA_CHANNEL_FORMAT):
+    def set_channel_format(self, form: str = config.VNA_CHANNEL_FORMAT):
         self.instr.write(f"CALC:FORM {form}")
 
     def get_channel_format(self):
         return self.instr.query_str("CALC:FORM?")
 
-    def set_power(self, power: float = VNA_POWER):
+    def set_power(self, power: float = config.VNA_POWER):
         self.instr.write(f"SOUR:POW {power}")
 
     def get_power(self):

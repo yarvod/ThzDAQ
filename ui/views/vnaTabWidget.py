@@ -11,19 +11,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 
-from config import (
-    VNA_POINTS,
-    VNA_FREQ_FROM,
-    VNA_FREQ_TO,
-    BLOCK_BIAS_VOLT_MIN_VALUE,
-    BLOCK_BIAS_VOLT_MAX_VALUE,
-    BLOCK_BIAS_VOLT_POINTS,
-    BLOCK_BIAS_VOLT_POINTS_MAX,
-    VNA_POINTS_MAX,
-    VNA_POWER,
-    VNA_POWER_MAX,
-    VNA_POWER_MIN,
-)
+from config import config
 from interactors.block import Block
 from interactors.vna import VNABlock
 from ui.windows.vnaGraphWindow import VNAGraphWindow
@@ -104,25 +92,25 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.freqFromLabel = QLabel(self)
         self.freqFromLabel.setText("Freq from, GHz:")
         self.freqFrom = QDoubleSpinBox(self)
-        self.freqFrom.setValue(VNA_FREQ_FROM)
+        self.freqFrom.setValue(config.VNA_FREQ_FROM)
 
         self.freqToLabel = QLabel(self)
         self.freqToLabel.setText("Freq to, GHz:")
         self.freqTo = QDoubleSpinBox(self)
-        self.freqTo.setValue(VNA_FREQ_TO)
+        self.freqTo.setValue(config.VNA_FREQ_TO)
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points num:")
         self.vnaPoints = QDoubleSpinBox(self)
-        self.vnaPoints.setMaximum(VNA_POINTS_MAX)
+        self.vnaPoints.setMaximum(config.VNA_POINTS_MAX)
         self.vnaPoints.setDecimals(0)
-        self.vnaPoints.setValue(VNA_POINTS)
+        self.vnaPoints.setValue(config.VNA_POINTS)
 
         self.vnaPowerLabel = QLabel(self)
         self.vnaPowerLabel.setText("Power, dB:")
         self.vnaPower = QDoubleSpinBox(self)
-        self.vnaPower.setRange(VNA_POWER_MIN, VNA_POWER_MAX)
-        self.vnaPower.setValue(VNA_POWER)
+        self.vnaPower.setRange(config.VNA_POWER_MIN, config.VNA_POWER_MAX)
+        self.vnaPower.setValue(config.VNA_POWER)
 
         self.btnGetReflection = QPushButton("Get reflection")
         self.btnGetReflection.clicked.connect(self.plotReflection)
@@ -146,19 +134,23 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
         self.voltFrom = QDoubleSpinBox(self)
-        self.voltFrom.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
+        self.voltFrom.setRange(
+            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+        )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
         self.voltTo = QDoubleSpinBox(self)
-        self.voltTo.setRange(BLOCK_BIAS_VOLT_MIN_VALUE, BLOCK_BIAS_VOLT_MAX_VALUE)
+        self.voltTo.setRange(
+            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+        )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points num")
         self.voltPoints = QDoubleSpinBox(self)
-        self.voltPoints.setMaximum(BLOCK_BIAS_VOLT_POINTS_MAX)
+        self.voltPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
-        self.voltPoints.setValue(BLOCK_BIAS_VOLT_POINTS)
+        self.voltPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
 
         self.btnBiasReflScan = QPushButton("Scan Bias Reflection")
         self.btnBiasReflScan.clicked.connect(lambda: self.scan_bias_refl())
@@ -179,7 +171,6 @@ class VNATabWidget(QWidget, UtilsMixin):
         )
         reflection = self.get_reflection()
         if self.vnaGraphWindow is None:
-            self.vnaGraphWindow = VNAGraphWindow(x=freq_list, y=reflection)
-        else:
-            self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
+            self.vnaGraphWindow = VNAGraphWindow()
+        self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
         self.vnaGraphWindow.show()
