@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
 )
+from PyQt6.QtCore import Qt
 
 from config import (
     BLOCK_ADDRESS,
@@ -143,27 +144,33 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout = QGridLayout()
 
         self.voltGLabel = QLabel(self)
-        self.voltGLabel.setText("BIAS voltage, mV:")
+        self.voltGLabel.setText("<h4>BIAS voltage, mV</h4>")
         self.voltage_g = QLabel(self)
+        self.voltage_g.setText("0.0")
+        self.voltage_g.setStyleSheet("font-size: 20px; font-weight: bold;")
 
         self.currGLabel = QLabel(self)
-        self.currGLabel.setText("BIAS current, mkA:")
+        self.currGLabel.setText("<h4>BIAS current, mkA</h4>")
         self.current_g = QLabel(self)
+        self.current_g.setText("0.0")
+        self.current_g.setStyleSheet("font-size: 20px; font-weight: bold;")
 
         self.ctrlCurrentGetLabel = QLabel(self)
-        self.ctrlCurrentGetLabel.setText("CL current, mA:")
+        self.ctrlCurrentGetLabel.setText("<h4>CL current, mA</h4>")
         self.ctrlCurrentGet = QLabel(self)
+        self.ctrlCurrentGet.setText("0.0")
+        self.ctrlCurrentGet.setStyleSheet("font-size: 20px; font-weight: bold;")
 
         self.btnUpdateValues = QPushButton("Update")
         self.btnUpdateValues.clicked.connect(self.updateValues)
 
-        layout.addWidget(self.voltGLabel, 1, 0)
-        layout.addWidget(self.voltage_g, 1, 1)
-        layout.addWidget(self.currGLabel, 2, 0)
-        layout.addWidget(self.current_g, 2, 1)
-        layout.addWidget(self.ctrlCurrentGetLabel, 3, 0)
-        layout.addWidget(self.ctrlCurrentGet, 3, 1)
-        layout.addWidget(self.btnUpdateValues, 4, 0, 1, 2)
+        layout.addWidget(self.voltGLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.currGLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.ctrlCurrentGetLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.voltage_g, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.current_g, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.btnUpdateValues, 3, 0, 1, 3, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.rowValuesGet.setLayout(layout)
 

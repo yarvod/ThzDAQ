@@ -12,7 +12,7 @@ from utils.decorators import exception
 from utils.logger import logger
 
 
-class Block:
+class Block(metaclass=Singleton):
     """
     Scontel SIS block operation interface.
     """
