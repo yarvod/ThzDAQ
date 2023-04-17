@@ -8,14 +8,15 @@ import numpy as np
 from config import BLOCK_ADDRESS, BLOCK_PORT, BLOCK_BIAS_DEV, BLOCK_CTRL_DEV
 from interactors.vna import VNABlock
 from utils.classes import Singleton
+from utils.decorators import exception
 from utils.logger import logger
 
 
-class Block(metaclass=Singleton):
+class Block:
     """
     Scontel SIS block operation interface.
     """
-
+    @exception
     def __init__(
         self,
         host: str = BLOCK_ADDRESS,
@@ -29,19 +30,23 @@ class Block(metaclass=Singleton):
         self.ctrl_dev = ctrl_dev
         self.iv = defaultdict(list)
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.update()
 
+    @exception
     def connect(self):
+        self.s.settimeout(10)
         try:
             self.s.connect((self.host, self.port))
             logger.info(f"Connected to Block {self.host}:{self.port}")
         except OSError as e:
             logger.warning(f"Warning[Block.connect] {e}")
+        self.s.settimeout(None)
 
+    @exception
     def disconnect(self):
         self.s.close()
         logger.info(f"Disconnected from Block {self.host}:{self.port}")
 
+    @exception
     def update(
         self,
         host: str = BLOCK_ADDRESS,
@@ -73,9 +78,13 @@ class Block(metaclass=Singleton):
                 self.s.sendall(cmd)
                 data = self.s.recv(1024)
                 result = data.decode().rstrip()
-                logger.debug(f"[manipulate] Received result: {result}; attempt {attempt}")
+                logger.debug(
+                    f"[manipulate] Received result: {result}; attempt {attempt}"
+                )
                 if "ERROR" in result:
-                    logger.warning(f"Warning[manipulate] Received Error result: {result}; attempt {attempt}")
+                    logger.warning(
+                        f"Warning[manipulate] Received Error result: {result}; attempt {attempt}"
+                    )
                     continue
                 return result
             except Exception as e:
@@ -88,7 +97,7 @@ class Block(metaclass=Singleton):
         Shorted = 1
         Opened = 0
         """
-        return self.manipulate(f"CTRL:{self.ctrl_dev}:SHOR?", s)
+        return self.manipulate(f"CTRL:{self.ctrl_dev}:SHOR?")
 
     def set_ctrl_short_status(self, status: int):
         """
@@ -144,7 +153,9 @@ class Block(metaclass=Singleton):
                 if attempt > 1:
                     time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
-                logger.debug(f"Success [get_bias_current] received {result} current; attempt {attempt}")
+                logger.debug(
+                    f"Success [get_bias_current] received {result} current; attempt {attempt}"
+                )
                 return result
             except Exception as e:
                 logger.debug(f"Exception[get_bias_current] {e}, attempt {attempt}")
@@ -156,7 +167,9 @@ class Block(metaclass=Singleton):
                 if attempt > 1:
                     time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
-                logger.debug(f"Success [get_bias_voltage] received {result} voltage; attempt {attempt}")
+                logger.debug(
+                    f"Success [get_bias_voltage] received {result} voltage; attempt {attempt}"
+                )
                 return result
             except Exception as e:
                 logger.debug(f"Exception[get_bias_voltage] {e}; attempt {attempt}")
@@ -166,16 +179,17 @@ class Block(metaclass=Singleton):
         for attempt in range(5):
             status = self.manipulate(f"BIAS:{self.bias_dev}:VOLT {volt}")
             if status == "OK":
-                logger.debug(f"Success[set_bias_voltage] set volt {volt}; status {status}; attempt {attempt}")
+                logger.debug(
+                    f"Success[set_bias_voltage] set volt {volt}; status {status}; attempt {attempt}"
+                )
                 return
-            logger.warning(f"Warning[set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}")
+            logger.warning(
+                f"Warning[set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}"
+            )
         return
 
     def scan_ctrl_current(
-        self,
-        ctrl_i_from: float,
-        ctrl_i_to: float,
-        points_num: int = 50
+        self, ctrl_i_from: float, ctrl_i_to: float, points_num: int = 50
     ):
         results = {
             "ctrl_i_set": [],
@@ -194,7 +208,9 @@ class Block(metaclass=Singleton):
             results["ctrl_i_get"].append(self.get_ctrl_current() * 1e3)
             results["bias_i"].append(self.get_bias_current() * 1e6)
             delta_t = datetime.now() - start_t
-            logger.info(f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}")
+            logger.info(
+                f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
+            )
         self.set_ctrl_current(initial_ctrl_i)
         return results
 
@@ -264,7 +280,9 @@ class Block(metaclass=Singleton):
             results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t)
-            logger.info(f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}")
+            logger.info(
+                f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
+            )
         self.set_bias_voltage(initial_v)
 
         return results

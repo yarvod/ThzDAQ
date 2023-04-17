@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QDoubleSpinBox,
-    QPushButton, QFileDialog,
+    QPushButton,
+    QFileDialog,
 )
 
 from config import (
@@ -55,7 +56,11 @@ class UtilsMixin:
     def scan_bias_refl(self):
         self.vna_update()
         block = Block()
-        freqs = np.linspace(self.freqFrom.value() * 1e9, self.freqTo.value() * 1e9, int(self.vnaPoints.value()))
+        freqs = np.linspace(
+            self.freqFrom.value() * 1e9,
+            self.freqTo.value() * 1e9,
+            int(self.vnaPoints.value()),
+        )
         data = block.scan_reflection(
             v_from=self.voltFrom.value() * 1e-3,
             v_to=self.voltTo.value() * 1e-3,
@@ -67,7 +72,9 @@ class UtilsMixin:
             refl_df.to_csv(refl_filepath)
 
             iv_filepath = QFileDialog.getSaveFileName()[0]
-            iv_df = pd.DataFrame(dict(v_set=data["v_set"], v_get=data["v_get"], i_get=data["i_get"]))
+            iv_df = pd.DataFrame(
+                dict(v_set=data["v_set"], v_get=data["v_get"], i_get=data["i_get"])
+            )
             iv_df.to_csv(iv_filepath)
         except (IndexError, FileNotFoundError):
             pass

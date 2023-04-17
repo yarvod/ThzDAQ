@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
+    QPushButton, QDoubleSpinBox,
 )
 
 from config import (
@@ -38,6 +38,21 @@ class VNAWorker(QObject):
         self.finished.emit()
 
 
+class SISBlockWorker(QObject):
+    finished = pyqtSignal()
+    status = pyqtSignal(str)
+
+    def run(self, block_ip: str, block_port: float):
+        block = Block()
+        block.update(host=block_ip, port=int(block_port))
+        result = block.get_bias_data()
+        if not result:
+            result = "Connection error"
+        logger.info(f"Health check SIS block {result}")
+        self.status.emit(result)
+        self.finished.emit()
+
+
 class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -59,8 +74,10 @@ class SetUpTabWidget(QWidget):
 
         self.blockPortLabel = QLabel(self)
         self.blockPortLabel.setText("Block Port:")
-        self.block_port = QLineEdit(self)
-        self.block_port.setText(str(BLOCK_PORT))
+        self.block_port = QDoubleSpinBox(self)
+        self.block_port.setMaximum(10000)
+        self.block_port.setDecimals(0)
+        self.block_port.setValue(BLOCK_PORT)
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
@@ -70,6 +87,11 @@ class SetUpTabWidget(QWidget):
         self.biasDevLabel.setText("BIAS Device:")
         self.ctrlDev.setText(BLOCK_CTRL_DEV)
         self.biasDev.setText(BLOCK_BIAS_DEV)
+
+        self.sisBlockStatusLabel = QLabel(self)
+        self.sisBlockStatusLabel.setText("SIS Block status:")
+        self.sisBlockStatus = QLabel(self)
+        self.sisBlockStatus.setText("SIS Block is not initialized yet!")
 
         self.btnInitBlock = QPushButton("Initialize Block")
         self.btnInitBlock.clicked.connect(self.initialize_block)
@@ -82,7 +104,9 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.ctrlDev, 3, 1)
         layout.addWidget(self.biasDevLabel, 4, 0)
         layout.addWidget(self.biasDev, 4, 1)
-        layout.addWidget(self.btnInitBlock, 5, 0, 1, 2)
+        layout.addWidget(self.sisBlockStatusLabel, 5, 0)
+        layout.addWidget(self.sisBlockStatus, 5, 1)
+        layout.addWidget(self.btnInitBlock, 6, 0, 1, 2)
 
         self.groupBlock.setLayout(layout)
 
@@ -111,28 +135,44 @@ class SetUpTabWidget(QWidget):
 
         self.groupVna.setLayout(layout)
 
+    def set_sis_block_status(self, status: str):
+        self.sisBlockStatus.setText(status)
+
     def initialize_block(self):
-        block = Block()
-        block.update(host=self.block_ip.text(), port=self.block_port.text())
-        result = block.get_bias_data()
-        logger.info(f"Health check SIS block {result}")
+        self.sis_thread = QThread()
+        self.sis_worker = SISBlockWorker()
+
+        self.sis_worker.moveToThread(self.sis_thread)
+        self.sis_thread.started.connect(
+            lambda: self.sis_worker.run(
+                block_ip=self.block_ip.text(), block_port=self.block_port.value()
+            )
+        )
+        self.sis_worker.finished.connect(self.sis_thread.quit)
+        self.sis_worker.finished.connect(self.sis_worker.deleteLater)
+        self.sis_thread.finished.connect(self.sis_thread.deleteLater)
+        self.sis_worker.status.connect(self.set_sis_block_status)
+        self.sis_thread.start()
+
+        self.btnInitBlock.setEnabled(False)
+        self.sis_thread.finished.connect(lambda: self.btnInitBlock.setEnabled(True))
 
     def set_vna_status(self, status: str):
         self.vnaStatus.setText(status)
 
     def initialize_vna(self):
-        self.thread = QThread()
+        self.vna_thread = QThread()
         self.vna_worker = VNAWorker()
 
-        self.vna_worker.moveToThread(self.thread)
-        self.thread.started.connect(lambda: self.vna_worker.run(vna_ip=self.vna_ip.text()))
-        self.vna_worker.finished.connect(self.thread.quit)
+        self.vna_worker.moveToThread(self.vna_thread)
+        self.vna_thread.started.connect(
+            lambda: self.vna_worker.run(vna_ip=self.vna_ip.text())
+        )
+        self.vna_worker.finished.connect(self.vna_thread.quit)
         self.vna_worker.finished.connect(self.vna_worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
+        self.vna_thread.finished.connect(self.vna_thread.deleteLater)
         self.vna_worker.status.connect(self.set_vna_status)
-        self.thread.start()
+        self.vna_thread.start()
 
         self.btnInitVna.setEnabled(False)
-        self.thread.finished.connect(
-            lambda: self.btnInitVna.setEnabled(True)
-        )
+        self.vna_thread.finished.connect(lambda: self.btnInitVna.setEnabled(True))
