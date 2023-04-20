@@ -14,10 +14,10 @@ class Config:
     BLOCK_CTRL_POINTS = 300
 
     # Block constants
-    BLOCK_BIAS_VOLT_MIN_VALUE = -20
-    BLOCK_BIAS_VOLT_MAX_VALUE = 20
-    BLOCK_BIAS_VOLT_POINTS_MAX = 2000
-    BLOCK_CTRL_POINTS_MAX = 1001
+    BLOCK_BIAS_VOLT_MIN_VALUE = -30
+    BLOCK_BIAS_VOLT_MAX_VALUE = 30
+    BLOCK_BIAS_VOLT_POINTS_MAX = 10001
+    BLOCK_CTRL_POINTS_MAX = 10001
     BLOCK_CTRL_CURR_MIN_VALUE = -100
     BLOCK_CTRL_CURR_MAX_VALUE = 100
 
@@ -36,6 +36,7 @@ class Config:
     VNA_POINTS_MAX = 2000
     VNA_TEST_MAP = dict(
         (
+            (None, "Ok"),
             ("0", "Ok"),
             ("1", "Error"),
         )

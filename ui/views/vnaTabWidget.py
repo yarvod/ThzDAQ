@@ -43,7 +43,13 @@ class UtilsMixin:
 
     def scan_bias_refl(self):
         self.vna_update()
-        block = Block()
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
         freqs = np.linspace(
             self.freqFrom.value() * 1e9,
             self.freqTo.value() * 1e9,

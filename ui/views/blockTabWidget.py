@@ -142,7 +142,7 @@ class BlockStreamWorker(QObject):
         )
         self.block.connect()
         while 1:
-            time.sleep(1)
+            time.sleep(0.25)
             bias_voltage = self.block.get_bias_voltage()
             bias_current = self.block.get_bias_current()
             cl_current = self.block.get_ctrl_current()
@@ -169,8 +169,8 @@ class BlockCLScanWorker(QObject):
             "bias_i": [],
         }
         ctrl_i_range = np.linspace(
-            config.BLOCK_CTRL_CURR_FROM,
-            config.BLOCK_CTRL_CURR_TO,
+            config.BLOCK_CTRL_CURR_FROM / 1e3,
+            config.BLOCK_CTRL_CURR_TO / 1e3,
             config.BLOCK_CTRL_POINTS,
         )
         initial_ctrl_i = block.get_ctrl_current()
@@ -272,19 +272,19 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.voltGLabel.setText("<h4>BIAS voltage, mV</h4>")
         self.voltage_g = QLabel(self)
         self.voltage_g.setText("0.0")
-        self.voltage_g.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.voltage_g.setStyleSheet("font-size: 23px; font-weight: bold;")
 
         self.currGLabel = QLabel(self)
         self.currGLabel.setText("<h4>BIAS current, mkA</h4>")
         self.current_g = QLabel(self)
         self.current_g.setText("0.0")
-        self.current_g.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.current_g.setStyleSheet("font-size: 23px; font-weight: bold;")
 
         self.ctrlCurrentGetLabel = QLabel(self)
         self.ctrlCurrentGetLabel.setText("<h4>CL current, mA</h4>")
         self.ctrlCurrentGet = QLabel(self)
         self.ctrlCurrentGet.setText("0.0")
-        self.ctrlCurrentGet.setStyleSheet("font-size: 20px; font-weight: bold;")
+        self.ctrlCurrentGet.setStyleSheet("font-size: 23px; font-weight: bold;")
 
         self.btnStartStreamBlock = QPushButton("Start Stream")
         self.btnStartStreamBlock.clicked.connect(self.startStreamBlock)

@@ -10,7 +10,7 @@ from utils.classes import Singleton
 from utils.decorators import exception
 
 
-class Instrument(RsInstrument):
+class Instrument(RsInstrument, metaclass=Singleton):
     ...
 
 
@@ -105,8 +105,9 @@ class VNABlock:
 if __name__ == "__main__":
     vna = VNABlock()
     print(vna.name())
+    print(vna.test())
     print(vna.set_start_frequency(2e9))
     print(vna.get_start_frequency())
     print(vna.set_stop_frequency(12e9))
     print(vna.get_stop_frequency())
-    print(vna.get_reflection())
+    print(len(vna.get_reflection()))
