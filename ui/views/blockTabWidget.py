@@ -26,22 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class UtilsMixin:
-    def updateValues(self):
-        block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        current = block.get_bias_current()
-        self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = block.get_bias_voltage()
-        self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
-        ctrlCurrentGet = block.get_ctrl_current()
-        self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
-        block.disconnect()
-
     def set_voltage(self):
         block = Block(
             host=config.BLOCK_ADDRESS,
@@ -79,20 +63,6 @@ class UtilsMixin:
         ctrlCurrentGet = block.get_ctrl_current()
         block.disconnect()
         self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
-
-    def get_voltage_current(self):
-        block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        current = block.get_bias_current()
-        self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = block.get_bias_voltage()
-        self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
-        block.disconnect()
 
     def scan_bias_iv(self):
         block = Block(
@@ -142,6 +112,7 @@ class BlockStreamWorker(QObject):
         )
         self.block.connect()
         while 1:
+            logger.info(f"finished: {self.finished.__dict__}")
             time.sleep(0.25)
             bias_voltage = self.block.get_bias_voltage()
             bias_current = self.block.get_bias_current()
