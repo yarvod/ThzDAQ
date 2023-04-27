@@ -112,7 +112,6 @@ class BlockStreamWorker(QObject):
         )
         self.block.connect()
         while 1:
-            logger.info(f"finished: {self.finished.__dict__}")
             time.sleep(0.25)
             bias_voltage = self.block.get_bias_voltage()
             bias_current = self.block.get_bias_current()
