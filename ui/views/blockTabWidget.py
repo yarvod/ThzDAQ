@@ -193,6 +193,50 @@ class BlockCLScanWorker(QObject):
         self.finished.emit()
 
 
+class BlockBIASScanWorker(QObject):
+    finished = pyqtSignal()
+    results = pyqtSignal(dict)
+
+    def run(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        results = {
+            "i_get": [],
+            "v_set": [],
+            "v_get": [],
+            "time": [],
+        }
+        initial_v = block.get_bias_voltage()
+        v_range = np.linspace(
+            config.BLOCK_BIAS_VOLT_FROM * 1e-3,
+            config.BLOCK_BIAS_VOLT_TO * 1e-3,
+            config.BLOCK_BIAS_VOLT_POINTS
+        )
+        start_t = datetime.now()
+        for i, v_set in enumerate(v_range):
+            proc = round((i / config.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
+            block.set_bias_voltage(v_set)
+            if i == 0:
+                time.sleep(1)
+            v_get = block.get_bias_voltage()
+            i_get = block.get_bias_current()
+            results["v_get"].append(v_get * 1e3)
+            results["v_set"].append(v_set * 1e3)
+            results["i_get"].append(i_get * 1e6)
+            delta_t = datetime.now() - start_t
+            results["time"].append(delta_t)
+            logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
+        block.set_bias_voltage(initial_v)
+        block.disconnect()
+        self.results.emit(results)
+        self.finished.emit()
+
+
 class BlockTabWidget(QWidget, UtilsMixin):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -215,10 +259,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlGraphWindow.plotNew(x=results["ctrl_i_get"], y=results["bias_i"])
         self.ctrlGraphWindow.show()
 
-    def show_bias_graph_window(self, x: list, y: list):
+    def show_bias_graph_window(self, results):
         if self.biasGraphWindow is None:
             self.biasGraphWindow = BiasGraphWindow()
-        self.biasGraphWindow.plotNew(x, y)
+        self.biasGraphWindow.plotNew(results["v_get"], results["i_get"])
         self.biasGraphWindow.show()
 
     def scan_ctrl_current_v2(self):
@@ -239,6 +283,25 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.btnCTRLScan.setEnabled(False)
         self.sis_thread.finished.connect(lambda: self.btnCTRLScan.setEnabled(True))
+
+    def scan_bias_iv_v2(self):
+        self.sis_bias_thread = QThread()
+        self.sis_bias_worker = BlockBIASScanWorker()
+        self.sis_bias_worker.moveToThread(self.sis_bias_thread)
+
+        config.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
+        config.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
+        config.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
+
+        self.sis_bias_thread.started.connect(self.sis_bias_worker.run)
+        self.sis_bias_worker.finished.connect(self.sis_bias_thread.quit)
+        self.sis_bias_worker.finished.connect(self.sis_bias_worker.deleteLater)
+        self.sis_bias_thread.finished.connect(self.sis_bias_thread.deleteLater)
+        self.sis_bias_worker.results.connect(self.show_bias_graph_window)
+        self.sis_bias_thread.start()
+
+        self.btnBiasScan.setEnabled(False)
+        self.sis_bias_thread.finished.connect(lambda: self.btnBiasScan.setEnabled(True))
 
     def startStreamBlock(self):
         self.stream_thread = QThread()
@@ -403,7 +466,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
         self.btnBiasScan = QPushButton("Scan Bias IV")
-        self.btnBiasScan.clicked.connect(lambda: self.scan_bias_iv())
+        self.btnBiasScan.clicked.connect(self.scan_bias_iv_v2)
 
         layout.addWidget(self.biasVoltageFromLabel, 1, 0)
         layout.addWidget(self.biasVoltageFrom, 1, 1)
