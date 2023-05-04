@@ -254,6 +254,21 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnCTRLScan.setEnabled(False)
         self.sis_thread.finished.connect(lambda: self.btnCTRLScan.setEnabled(True))
 
+    def save_iv_data(self, results):
+        try:
+            filepath = QFileDialog.getSaveFileName()[0]
+            df = pd.DataFrame(
+                dict(
+                    v_set=results["v_set"],
+                    v_get=results["v_get"],
+                    i_get=results["i_get"],
+                    time=results["time"],
+                )
+            )
+            df.to_csv(filepath)
+        except (IndexError, FileNotFoundError):
+            pass
+
     def scan_bias_iv_v2(self):
         self.sis_bias_thread = QThread()
         self.sis_bias_worker = BlockBIASScanWorker()
@@ -268,6 +283,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.sis_bias_worker.finished.connect(self.sis_bias_worker.deleteLater)
         self.sis_bias_thread.finished.connect(self.sis_bias_thread.deleteLater)
         self.sis_bias_worker.results.connect(self.show_bias_graph_window)
+        self.sis_bias_worker.results.connect(self.save_iv_data)
         self.sis_bias_thread.start()
 
         self.btnBiasScan.setEnabled(False)
