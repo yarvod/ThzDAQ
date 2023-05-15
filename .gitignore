@@ -1,7 +1,7 @@
 .idea
 venv
 build
-dist/*
+dist
 *__pacache__
 *.log
 
