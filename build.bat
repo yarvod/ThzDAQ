@@ -1,0 +1,1 @@
+pyInstaller main.py -n SIS_manager --onedir
