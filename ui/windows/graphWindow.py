@@ -46,9 +46,7 @@ class GraphWindow(QWidget):
             return
 
         plotItem = self.graphWidget.getPlotItem()
-        items = {
-            int(item.name()): item for item in plotItem.items
-        }
+        items = {int(item.name()): item for item in plotItem.items}
         if items.get(ds_id):
             items.get(ds_id).setData(x, y)
             return
