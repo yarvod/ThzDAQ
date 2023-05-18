@@ -39,7 +39,6 @@ class Config:
     VNA_POINTS_MAX = 2000
     VNA_TEST_MAP = dict(
         (
-            (None, "Ok"),
             ("0", "Ok"),
             ("1", "Error"),
         )

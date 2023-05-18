@@ -6,7 +6,7 @@ def exception(func):
 
     def wrapper(*args, **kwargs):
         try:
-            func(*args, **kwargs)
+            return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"[{func.__qualname__}] {e}")
 
