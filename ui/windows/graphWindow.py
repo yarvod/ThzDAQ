@@ -49,13 +49,15 @@ class GraphWindow(QWidget):
             x, y, name=f"{ds_id}", pen=pen, symbolSize=5, symbolBrush=pen.color()
         )
 
-    def addData(self, x: Iterable, y: Iterable) -> int:
-        ds_id = max(self.datasets.keys(), default=0) + 1
+    def addData(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
+        ds_id = max(self.datasets.keys(), default=0)
+        if new_plot:
+            ds_id += 1
         self.datasets[ds_id] = {"x": x, "y": y}
         return ds_id
 
-    def plotNew(self, x: Iterable, y: Iterable):
-        ds_id = self.addData(x, y)
+    def plotNew(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
+        ds_id = self.addData(x, y, new_plot)
         self.plotGraph(ds_id)
         return ds_id
 

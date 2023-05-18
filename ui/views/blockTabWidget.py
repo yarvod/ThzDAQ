@@ -124,6 +124,7 @@ class BlockStreamWorker(QObject):
 class BlockCLScanWorker(QObject):
     finished = pyqtSignal()
     results = pyqtSignal(dict)
+    stream_result = pyqtSignal(dict)
 
     def run(self):
         block = Block(
@@ -151,8 +152,15 @@ class BlockCLScanWorker(QObject):
             proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
             results["ctrl_i_set"].append(ctrl_i * 1e3)
             block.set_ctrl_current(ctrl_i)
-            results["ctrl_i_get"].append(block.get_ctrl_current() * 1e3)
-            results["bias_i"].append(block.get_bias_current() * 1e6)
+            ctrl_current = block.get_ctrl_current() * 1e3
+            bias_current = block.get_bias_current() * 1e6
+            results["ctrl_i_get"].append(ctrl_current)
+            results["bias_i"].append(bias_current)
+            self.stream_result.emit({
+                "x": ctrl_current,
+                "y": bias_current,
+                "new_plot": i == 0,
+            })
             delta_t = datetime.now() - start_t
             logger.info(
                 f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
@@ -226,7 +234,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphWindow is None:
             self.ctrlGraphWindow = CLGraphWindow()
-        self.ctrlGraphWindow.plotNew(x=results["ctrl_i_get"], y=results["bias_i"])
+        self.ctrlGraphWindow.plotNew(**results)
         self.ctrlGraphWindow.show()
 
     def show_bias_graph_window(self, results):
@@ -248,7 +256,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.sis_worker.finished.connect(self.sis_thread.quit)
         self.sis_worker.finished.connect(self.sis_worker.deleteLater)
         self.sis_thread.finished.connect(self.sis_thread.deleteLater)
-        self.sis_worker.results.connect(self.show_ctrl_graph_window)
+        self.sis_worker.stream_result.connect(self.show_ctrl_graph_window)
         self.sis_thread.start()
 
         self.btnCTRLScan.setEnabled(False)
