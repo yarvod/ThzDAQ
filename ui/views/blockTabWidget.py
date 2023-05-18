@@ -64,38 +64,6 @@ class UtilsMixin:
         block.disconnect()
         self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
 
-    def scan_bias_iv(self):
-        block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        try:
-            bias_v_from = float(self.biasVoltageFrom.value()) * 1e-3
-            bias_v_to = float(self.biasVoltageTo.value()) * 1e-3
-            points_num = int(self.biasPoints.value())
-        except ValueError:
-            logger.warning(f"Range values is not correct floats/ints")
-            return
-        results = block.scan_bias(bias_v_from, bias_v_to, points_num)
-        block.disconnect()
-        self.show_bias_graph_window(x=results["v_get"], y=results["i_get"])
-        try:
-            filepath = QFileDialog.getSaveFileName()[0]
-            df = pd.DataFrame(
-                dict(
-                    v_set=results["v_set"],
-                    v_get=results["v_get"],
-                    i_get=results["i_get"],
-                    time=results["time"],
-                )
-            )
-            df.to_csv(filepath)
-        except (IndexError, FileNotFoundError):
-            pass
-
 
 class BlockStreamWorker(QObject):
     finished = pyqtSignal()
@@ -112,6 +80,8 @@ class BlockStreamWorker(QObject):
         )
         self.block.connect()
         while 1:
+            if not config.BLOCK_STREAM_THREAD:
+                break
             time.sleep(0.25)
             bias_voltage = self.block.get_bias_voltage()
             bias_current = self.block.get_bias_current()
@@ -119,6 +89,8 @@ class BlockStreamWorker(QObject):
             self.bias_voltage.emit(bias_voltage)
             self.bias_current.emit(bias_current)
             self.cl_current.emit(cl_current)
+
+        self.block.disconnect()
 
 
 class BlockCLScanWorker(QObject):
@@ -147,6 +119,8 @@ class BlockCLScanWorker(QObject):
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
         for i, ctrl_i in enumerate(ctrl_i_range):
+            if not config.BLOCK_CTRL_SCAN_THREAD:
+                break
             if i == 0:
                 time.sleep(0.1)
             proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
@@ -200,6 +174,8 @@ class BlockBIASScanWorker(QObject):
         )
         start_t = datetime.now()
         for i, v_set in enumerate(v_range):
+            if not config.BLOCK_BIAS_SCAN_THREAD:
+                break
             proc = round((i / config.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
             block.set_bias_voltage(v_set)
             if i == 0:
@@ -261,7 +237,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         )
         self.biasGraphWindow.show()
 
-    def scan_ctrl_current_v2(self):
+    def scan_ctrl_current(self):
         self.sis_thread = QThread()
         self.sis_worker = BlockCLScanWorker()
         self.sis_worker.moveToThread(self.sis_thread)
@@ -269,6 +245,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         config.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
         config.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
         config.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
+        config.BLOCK_CTRL_SCAN_THREAD = True
 
         self.sis_thread.started.connect(self.sis_worker.run)
         self.sis_worker.finished.connect(self.sis_thread.quit)
@@ -279,6 +256,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.btnCTRLScan.setEnabled(False)
         self.sis_thread.finished.connect(lambda: self.btnCTRLScan.setEnabled(True))
+
+    def stop_scan_ctrl_current(self):
+        config.BLOCK_CTRL_SCAN_THREAD = False
 
     def save_iv_data(self, results):
         try:
@@ -295,7 +275,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         except (IndexError, FileNotFoundError):
             pass
 
-    def scan_bias_iv_v2(self):
+    def scan_bias_iv(self):
         self.sis_bias_thread = QThread()
         self.sis_bias_worker = BlockBIASScanWorker()
         self.sis_bias_worker.moveToThread(self.sis_bias_thread)
@@ -303,6 +283,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         config.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
         config.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
         config.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
+        config.BLOCK_BIAS_SCAN_THREAD = True
 
         self.sis_bias_thread.started.connect(self.sis_bias_worker.run)
         self.sis_bias_worker.finished.connect(self.sis_bias_thread.quit)
@@ -315,10 +296,15 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnBiasScan.setEnabled(False)
         self.sis_bias_thread.finished.connect(lambda: self.btnBiasScan.setEnabled(True))
 
+    def stop_scan_bias_iv(self):
+        config.BLOCK_BIAS_SCAN_THREAD = False
+
     def startStreamBlock(self):
         self.stream_thread = QThread()
         self.stream_worker = BlockStreamWorker()
         self.stream_worker.moveToThread(self.stream_thread)
+
+        config.BLOCK_STREAM_THREAD = True
 
         self.stream_thread.started.connect(self.stream_worker.run)
         self.stream_worker.finished.connect(self.stream_thread.quit)
@@ -346,7 +332,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         )
 
     def stopStreamBlock(self):
-        self.stream_worker.block.disconnect()
+        config.BLOCK_STREAM_THREAD = False
         self.stream_worker.finished.emit()
 
     def createGroupValuesGet(self):
@@ -453,7 +439,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
         self.ctrlPoints.setValue(config.BLOCK_CTRL_POINTS)
         self.btnCTRLScan = QPushButton("Scan CL Current")
-        self.btnCTRLScan.clicked.connect(self.scan_ctrl_current_v2)
+        self.btnCTRLScan.clicked.connect(self.scan_ctrl_current)
+
+        self.btnCTRLStopScan = QPushButton("Stop Scan")
+        self.btnCTRLStopScan.clicked.connect(self.stop_scan_ctrl_current)
 
         layout.addWidget(self.ctrlCurrentFromLabel, 1, 0)
         layout.addWidget(self.ctrlCurrentFrom, 1, 1)
@@ -462,6 +451,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.ctrlPointsLabel, 3, 0)
         layout.addWidget(self.ctrlPoints, 3, 1)
         layout.addWidget(self.btnCTRLScan, 4, 0, 1, 2)
+        layout.addWidget(self.btnCTRLStopScan, 5, 0, 1, 2)
 
         self.rowCTRLScan.setLayout(layout)
 
@@ -488,7 +478,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
         self.btnBiasScan = QPushButton("Scan Bias IV")
-        self.btnBiasScan.clicked.connect(self.scan_bias_iv_v2)
+        self.btnBiasScan.clicked.connect(self.scan_bias_iv)
+
+        self.btnBiasStopScan = QPushButton("Stop Scan")
+        self.btnBiasStopScan.clicked.connect(self.stop_scan_bias_iv)
 
         layout.addWidget(self.biasVoltageFromLabel, 1, 0)
         layout.addWidget(self.biasVoltageFrom, 1, 1)
@@ -497,5 +490,6 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.biasPointsLabel, 3, 0)
         layout.addWidget(self.biasPoints, 3, 1)
         layout.addWidget(self.btnBiasScan, 4, 0, 1, 2)
+        layout.addWidget(self.btnBiasStopScan, 5, 0, 1, 2)
 
         self.rowBiasScan.setLayout(layout)

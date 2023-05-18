@@ -12,6 +12,9 @@ class Config:
     BLOCK_CTRL_CURR_FROM = 0
     BLOCK_CTRL_CURR_TO = 30
     BLOCK_CTRL_POINTS = 300
+    BLOCK_BIAS_SCAN_THREAD = False
+    BLOCK_CTRL_SCAN_THREAD = False
+    BLOCK_STREAM_THREAD = False
 
     # Block constants
     BLOCK_BIAS_VOLT_MIN_VALUE = -30

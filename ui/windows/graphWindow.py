@@ -84,8 +84,7 @@ class GraphWindow(QWidget):
         }
         for item in items_to_remove.values():
             plotItem.removeItem(item)
-        self.datasets = {
-            ds_id: ds
-            for ds_id, ds in self.datasets.items()
-            if ds_id not in items_to_remove.keys()
-        }
+        self.datasets = defaultdict(dict)
+        for ds_id, ds in self.datasets.items():
+            if ds_id not in items_to_remove.keys():
+                self.datasets[ds_id] = ds
