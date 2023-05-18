@@ -176,6 +176,7 @@ class BlockCLScanWorker(QObject):
 class BlockBIASScanWorker(QObject):
     finished = pyqtSignal()
     results = pyqtSignal(dict)
+    stream_result = pyqtSignal(dict)
 
     def run(self):
         block = Block(
@@ -208,6 +209,13 @@ class BlockBIASScanWorker(QObject):
             results["v_get"].append(v_get * 1e3)
             results["v_set"].append(v_set * 1e3)
             results["i_get"].append(i_get * 1e6)
+            self.stream_result.emit(
+                {
+                    "x": [v_get * 1e3],
+                    "y": [i_get * 1e6],
+                    "new_plot": i == 0,
+                }
+            )
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t)
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
@@ -246,7 +254,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def show_bias_graph_window(self, results):
         if self.biasGraphWindow is None:
             self.biasGraphWindow = BiasGraphWindow()
-        self.biasGraphWindow.plotNew(results["v_get"], results["i_get"])
+        self.biasGraphWindow.plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot", True),
+        )
         self.biasGraphWindow.show()
 
     def scan_ctrl_current_v2(self):
@@ -296,7 +308,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.sis_bias_worker.finished.connect(self.sis_bias_thread.quit)
         self.sis_bias_worker.finished.connect(self.sis_bias_worker.deleteLater)
         self.sis_bias_thread.finished.connect(self.sis_bias_thread.deleteLater)
-        self.sis_bias_worker.results.connect(self.show_bias_graph_window)
+        self.sis_bias_worker.stream_result.connect(self.show_bias_graph_window)
         self.sis_bias_worker.results.connect(self.save_iv_data)
         self.sis_bias_thread.start()
 
