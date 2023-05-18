@@ -156,11 +156,13 @@ class BlockCLScanWorker(QObject):
             bias_current = block.get_bias_current() * 1e6
             results["ctrl_i_get"].append(ctrl_current)
             results["bias_i"].append(bias_current)
-            self.stream_result.emit({
-                "x": ctrl_current,
-                "y": bias_current,
-                "new_plot": i == 0,
-            })
+            self.stream_result.emit(
+                {
+                    "x": [ctrl_current],
+                    "y": [bias_current],
+                    "new_plot": i == 0,
+                }
+            )
             delta_t = datetime.now() - start_t
             logger.info(
                 f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
@@ -193,7 +195,7 @@ class BlockBIASScanWorker(QObject):
         v_range = np.linspace(
             config.BLOCK_BIAS_VOLT_FROM * 1e-3,
             config.BLOCK_BIAS_VOLT_TO * 1e-3,
-            config.BLOCK_BIAS_VOLT_POINTS
+            config.BLOCK_BIAS_VOLT_POINTS,
         )
         start_t = datetime.now()
         for i, v_set in enumerate(v_range):
@@ -234,7 +236,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphWindow is None:
             self.ctrlGraphWindow = CLGraphWindow()
-        self.ctrlGraphWindow.plotNew(**results)
+        self.ctrlGraphWindow.plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot", True),
+        )
         self.ctrlGraphWindow.show()
 
     def show_bias_graph_window(self, results):
@@ -306,16 +312,26 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.stream_worker.finished.connect(self.stream_thread.quit)
         self.stream_worker.finished.connect(self.stream_worker.deleteLater)
         self.stream_thread.finished.connect(self.stream_thread.deleteLater)
-        self.stream_worker.cl_current.connect(lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}"))
-        self.stream_worker.bias_current.connect(lambda x: self.current_g.setText(f"{round(x * 1e6, 3)}"))
-        self.stream_worker.bias_voltage.connect(lambda x: self.voltage_g.setText(f"{round(x * 1e3, 3)}"))
+        self.stream_worker.cl_current.connect(
+            lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}")
+        )
+        self.stream_worker.bias_current.connect(
+            lambda x: self.current_g.setText(f"{round(x * 1e6, 3)}")
+        )
+        self.stream_worker.bias_voltage.connect(
+            lambda x: self.voltage_g.setText(f"{round(x * 1e3, 3)}")
+        )
         self.stream_thread.start()
 
         self.btnStartStreamBlock.setEnabled(False)
-        self.stream_thread.finished.connect(lambda: self.btnStartStreamBlock.setEnabled(True))
+        self.stream_thread.finished.connect(
+            lambda: self.btnStartStreamBlock.setEnabled(True)
+        )
 
         self.btnStopStreamBlock.setEnabled(True)
-        self.stream_thread.finished.connect(lambda: self.btnStopStreamBlock.setEnabled(False))
+        self.stream_thread.finished.connect(
+            lambda: self.btnStopStreamBlock.setEnabled(False)
+        )
 
     def stopStreamBlock(self):
         self.stream_worker.block.disconnect()

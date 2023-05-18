@@ -38,13 +38,22 @@ class GraphWindow(QWidget):
         self.graphWidget.showGrid(x=True, y=True)
 
     def plotGraph(self, ds_id: int = 1):
-        pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100))
         try:
             x = self.datasets[ds_id]["x"]
             y = self.datasets[ds_id]["y"]
         except (IndexError, KeyError) as e:
             logger.error(f"Plot graph Error: {e}")
             return
+
+        plotItem = self.graphWidget.getPlotItem()
+        items = {
+            int(item.name()): item for item in plotItem.items
+        }
+        if items.get(ds_id):
+            items.get(ds_id).setData(x, y)
+            return
+
+        pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100))
         self.graphWidget.plot(
             x, y, name=f"{ds_id}", pen=pen, symbolSize=5, symbolBrush=pen.color()
         )
@@ -53,7 +62,14 @@ class GraphWindow(QWidget):
         ds_id = max(self.datasets.keys(), default=0)
         if new_plot:
             ds_id += 1
-        self.datasets[ds_id] = {"x": x, "y": y}
+        if not self.datasets[ds_id].get("x"):
+            self.datasets[ds_id]["x"] = x
+        else:
+            self.datasets[ds_id]["x"].extend(x)
+        if not self.datasets[ds_id].get("y"):
+            self.datasets[ds_id]["y"] = y
+        else:
+            self.datasets[ds_id]["y"].extend(y)
         return ds_id
 
     def plotNew(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:

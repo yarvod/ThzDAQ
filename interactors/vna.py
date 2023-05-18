@@ -85,7 +85,7 @@ class VNABlock:
     def set_stop_frequency(self, freq: float):
         self.instr.write_float("SENS:FREQ:STOP", freq)
 
-    def get_reflection(self) -> np.ndarray[complex]:
+    def get_reflection(self):
         """
         Method to get reflection level from VNA
         """
