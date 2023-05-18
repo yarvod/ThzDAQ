@@ -2,7 +2,7 @@
 venv
 build
 dist
-*__pacache__
+*__pycache__
 *.log
-
+*.DS_Store
 *.spec
