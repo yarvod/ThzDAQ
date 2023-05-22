@@ -6,7 +6,7 @@ from ui.views.index import TabsWidget
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.title = "CL manager"
+        self.title = "SIS manager"
         self.left = 0
         self.top = 0
         self.width = 400
