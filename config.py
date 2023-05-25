@@ -44,5 +44,18 @@ class Config:
         )
     )
 
+    # NRX variables
+    NRX_APER_TIME = 0.05
+    NRX_FILTER_TIME = 0.01
+    NRX_IP = "169.254.2.20"
+
+    # NRX constants
+    NRX_TEST_MAP = dict(
+        (
+            ("0", "Ok"),
+            ("1", "Error"),
+        )
+    )
+
 
 config = Config()

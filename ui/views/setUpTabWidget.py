@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 
 from config import config
 from interactors.block import Block
+from interactors.rs_nrx import NRXBlock
 from interactors.vna import VNABlock
 
 logger = logging.getLogger(__name__)
@@ -52,14 +53,32 @@ class SISBlockWorker(QObject):
         self.finished.emit()
 
 
+class NRXBlockWorker(QObject):
+    finished = pyqtSignal()
+    status = pyqtSignal(str)
+
+    def run(self):
+        block = NRXBlock(
+            ip=config.NRX_IP,
+            filter_time=config.NRX_FILTER_TIME,
+            aperture_time=config.NRX_APER_TIME,
+        )
+        result = block.test()
+        block.close()
+        self.status.emit(config.NRX_TEST_MAP.get(result, "Error"))
+        self.finished.emit()
+
+
 class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.createGroupBlock()
         self.createGroupVna()
+        self.createGroupNRX()
         self.layout.addWidget(self.groupBlock)
         self.layout.addWidget(self.groupVna)
+        self.layout.addWidget(self.groupNRX)
         self.setLayout(self.layout)
 
     def createGroupBlock(self):
@@ -134,6 +153,47 @@ class SetUpTabWidget(QWidget):
 
         self.groupVna.setLayout(layout)
 
+    def createGroupNRX(self):
+        self.groupNRX = QGroupBox("NRX config")
+        layout = QGridLayout()
+
+        self.nrxIPLabel = QLabel(self)
+        self.nrxIPLabel.setText("NRX IP:")
+        self.nrxIP = QLineEdit(self)
+        self.nrxIP.setText(config.NRX_IP)
+
+        self.nrxFilterTimeLabel = QLabel(self)
+        self.nrxFilterTimeLabel.setText("NRX Filter time, s:")
+        self.nrxFilterTime = QDoubleSpinBox(self)
+        self.nrxFilterTime.setRange(0.01, 1000)
+
+        self.nrxAperTimeLabel = QLabel(self)
+        self.nrxAperTimeLabel.setText("NRX Aperture time, s:")
+        self.nrxAperTime = QDoubleSpinBox(self)
+        self.nrxAperTime.setDecimals(5)
+        self.nrxAperTime.setRange(1e-5, 1000)
+        self.nrxAperTime.setValue(config.NRX_APER_TIME)
+
+        self.nrxStatusLabel = QLabel(self)
+        self.nrxStatusLabel.setText("NRX status:")
+        self.nrxStatus = QLabel(self)
+        self.nrxStatus.setText("NRX is not initialized yet!")
+
+        self.btnInitNRX = QPushButton("Initialize NRX")
+        self.btnInitNRX.clicked.connect(self.initialize_nrx)
+
+        layout.addWidget(self.nrxIPLabel, 1, 0)
+        layout.addWidget(self.nrxIP, 1, 1)
+        layout.addWidget(self.nrxFilterTimeLabel, 2, 0)
+        layout.addWidget(self.nrxFilterTime, 2, 1)
+        layout.addWidget(self.nrxAperTimeLabel, 3, 0)
+        layout.addWidget(self.nrxAperTime, 3, 1)
+        layout.addWidget(self.nrxStatusLabel, 4, 0)
+        layout.addWidget(self.nrxStatus, 4, 1)
+        layout.addWidget(self.btnInitNRX, 5, 0, 1, 2)
+
+        self.groupNRX.setLayout(layout)
+
     def set_sis_block_status(self, status: str):
         self.sisBlockStatus.setText(status)
 
@@ -176,3 +236,25 @@ class SetUpTabWidget(QWidget):
 
         self.btnInitVna.setEnabled(False)
         self.vna_thread.finished.connect(lambda: self.btnInitVna.setEnabled(True))
+
+    def set_nrx_status(self, status: str):
+        self.nrxStatus.setText(status)
+
+    def initialize_nrx(self):
+        self.nrx_thread = QThread()
+        self.nrx_worker = NRXBlockWorker()
+
+        config.NRX_IP = self.nrxIP.text()
+        config.NRX_FILTER_TIME = self.nrxFilterTime.value()
+        config.NRX_APER_TIME = self.nrxAperTime.value()
+
+        self.nrx_worker.moveToThread(self.nrx_thread)
+        self.nrx_thread.started.connect(self.nrx_worker.run)
+        self.nrx_worker.finished.connect(self.nrx_thread.quit)
+        self.nrx_worker.finished.connect(self.nrx_worker.deleteLater)
+        self.nrx_thread.finished.connect(self.nrx_thread.deleteLater)
+        self.nrx_worker.status.connect(self.set_nrx_status)
+        self.nrx_thread.start()
+
+        self.btnInitNRX.setEnabled(False)
+        self.nrx_thread.finished.connect(lambda: self.btnInitNRX.setEnabled(True))
