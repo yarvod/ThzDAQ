@@ -40,10 +40,6 @@ class UtilsMixin:
             logger.warning(f"Value {self.voltage_s.value()} is not correct float")
             return
         block.set_bias_voltage(voltage_to_set)
-        current = block.get_bias_current()
-        self.current_g.setText(f"{round(current * 1e6, 3)}")
-        voltage = block.get_bias_voltage()
-        self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
         block.disconnect()
 
     def set_ctrl_current(self):
@@ -60,9 +56,7 @@ class UtilsMixin:
             logger.warning(f"Value {self.ctrlCurrentSet.value()} is not correct float")
             return
         block.set_ctrl_current(ctrlCurrentSet)
-        ctrlCurrentGet = block.get_ctrl_current()
         block.disconnect()
-        self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
 
 
 class BlockStreamWorker(QObject):
