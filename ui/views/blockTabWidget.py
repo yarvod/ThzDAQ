@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QDoubleSpinBox,
-    QFileDialog,
+    QFileDialog, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 
@@ -205,16 +205,17 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ctrlGraphWindow = None
         self.biasGraphWindow = None
-        self.createGroupValuesGet()
+        self.createGroupMonitor()
         self.createGroupValuesSet()
         self.createGroupCTRLScan()
         self.createGroupBiasScan()
-        self.layout.addWidget(self.rowValuesGet)
+        self.layout.addWidget(self.groupMonitor)
         self.layout.addWidget(self.rowValuesSet)
-        self.layout.addWidget(self.rowCTRLScan)
-        self.layout.addWidget(self.rowBiasScan)
+        self.layout.addWidget(self.groupCTRLScan)
+        self.layout.addWidget(self.groupBiasScan)
         self.setLayout(self.layout)
 
     def show_ctrl_graph_window(self, results: dict):
@@ -314,10 +315,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
             lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}")
         )
         self.stream_worker.bias_current.connect(
-            lambda x: self.current_g.setText(f"{round(x * 1e6, 3)}")
+            lambda x: self.sisCurrentGet.setText(f"{round(x * 1e6, 3)}")
         )
         self.stream_worker.bias_voltage.connect(
-            lambda x: self.voltage_g.setText(f"{round(x * 1e3, 3)}")
+            lambda x: self.sisVoltageGet.setText(f"{round(x * 1e3, 3)}")
         )
         self.stream_thread.start()
 
@@ -335,21 +336,22 @@ class BlockTabWidget(QWidget, UtilsMixin):
         config.BLOCK_STREAM_THREAD = False
         self.stream_worker.finished.emit()
 
-    def createGroupValuesGet(self):
-        self.rowValuesGet = QGroupBox("Get values")
+    def createGroupMonitor(self):
+        self.groupMonitor = QGroupBox("Block Monitor")
+        self.groupMonitor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
-        self.voltGLabel = QLabel(self)
-        self.voltGLabel.setText("<h4>BIAS voltage, mV</h4>")
-        self.voltage_g = QLabel(self)
-        self.voltage_g.setText("0.0")
-        self.voltage_g.setStyleSheet("font-size: 23px; font-weight: bold;")
+        self.sisVoltageGetLabel = QLabel(self)
+        self.sisVoltageGetLabel.setText("<h4>BIAS voltage, mV</h4>")
+        self.sisVoltageGet = QLabel(self)
+        self.sisVoltageGet.setText("0.0")
+        self.sisVoltageGet.setStyleSheet("font-size: 23px; font-weight: bold;")
 
-        self.currGLabel = QLabel(self)
-        self.currGLabel.setText("<h4>BIAS current, mkA</h4>")
-        self.current_g = QLabel(self)
-        self.current_g.setText("0.0")
-        self.current_g.setStyleSheet("font-size: 23px; font-weight: bold;")
+        self.sisCurrentGetLabel = QLabel(self)
+        self.sisCurrentGetLabel.setText("<h4>BIAS current, mkA</h4>")
+        self.sisCurrentGet = QLabel(self)
+        self.sisCurrentGet.setText("0.0")
+        self.sisCurrentGet.setStyleSheet("font-size: 23px; font-weight: bold;")
 
         self.ctrlCurrentGetLabel = QLabel(self)
         self.ctrlCurrentGetLabel.setText("<h4>CL current, mA</h4>")
@@ -364,13 +366,13 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnStopStreamBlock.setEnabled(False)
         self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
-        layout.addWidget(self.voltGLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.currGLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.sisCurrentGetLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(
             self.ctrlCurrentGetLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        layout.addWidget(self.voltage_g, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.current_g, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.sisVoltageGet, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.sisCurrentGet, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -378,13 +380,14 @@ class BlockTabWidget(QWidget, UtilsMixin):
             self.btnStartStreamBlock, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
         layout.addWidget(
-            self.btnStopStreamBlock, 3, 1, alignment=Qt.AlignmentFlag.AlignCenter
+            self.btnStopStreamBlock, 3, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
 
-        self.rowValuesGet.setLayout(layout)
+        self.groupMonitor.setLayout(layout)
 
     def createGroupValuesSet(self):
-        self.rowValuesSet = QGroupBox("Set values")
+        self.rowValuesSet = QGroupBox("Set block values")
+        self.rowValuesSet.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.voltSLabel = QLabel(self)
@@ -417,7 +420,8 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.rowValuesSet.setLayout(layout)
 
     def createGroupCTRLScan(self):
-        self.rowCTRLScan = QGroupBox("Scan CTRL current")
+        self.groupCTRLScan = QGroupBox("Scan CTRL current")
+        self.groupCTRLScan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.ctrlCurrentFromLabel = QLabel(self)
@@ -453,10 +457,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.btnCTRLScan, 4, 0, 1, 2)
         layout.addWidget(self.btnCTRLStopScan, 5, 0, 1, 2)
 
-        self.rowCTRLScan.setLayout(layout)
+        self.groupCTRLScan.setLayout(layout)
 
     def createGroupBiasScan(self):
-        self.rowBiasScan = QGroupBox("Scan Bias IV")
+        self.groupBiasScan = QGroupBox("Scan Bias IV")
+        self.groupBiasScan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.biasVoltageFromLabel = QLabel(self)
@@ -492,4 +497,4 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.btnBiasScan, 4, 0, 1, 2)
         layout.addWidget(self.btnBiasStopScan, 5, 0, 1, 2)
 
-        self.rowBiasScan.setLayout(layout)
+        self.groupBiasScan.setLayout(layout)

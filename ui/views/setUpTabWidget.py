@@ -1,7 +1,7 @@
 import logging
 import time
 
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QDoubleSpinBox,
+    QDoubleSpinBox, QSizePolicy,
 )
 
 from config import config
@@ -73,16 +73,18 @@ class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
-        self.layout.addWidget(self.groupBlock)
-        self.layout.addWidget(self.groupVna)
-        self.layout.addWidget(self.groupNRX)
+        self.layout.addWidget(self.groupBlock, alignment=Qt.AlignmentFlag.AlignTop)
+        self.layout.addWidget(self.groupVna, alignment=Qt.AlignmentFlag.AlignTop)
+        self.layout.addWidget(self.groupNRX, alignment=Qt.AlignmentFlag.AlignTop)
         self.setLayout(self.layout)
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox("Block config")
+        self.groupBlock.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.blockIPLabel = QLabel(self)
@@ -130,6 +132,7 @@ class SetUpTabWidget(QWidget):
 
     def createGroupVna(self):
         self.groupVna = QGroupBox("VNA config")
+        self.groupVna.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.vnaIPLabel = QLabel(self)
@@ -155,6 +158,7 @@ class SetUpTabWidget(QWidget):
 
     def createGroupNRX(self):
         self.groupNRX = QGroupBox("NRX config")
+        self.groupNRX.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.nrxIPLabel = QLabel(self)

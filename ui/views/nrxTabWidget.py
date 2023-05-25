@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QObject, pyqtSignal, Qt, QThread
-from PyQt6.QtWidgets import QGroupBox, QGridLayout, QVBoxLayout, QWidget, QLabel, QPushButton
+from PyQt6.QtWidgets import QGroupBox, QGridLayout, QVBoxLayout, QWidget, QLabel, QPushButton, QSizePolicy
 
 from config import config
 from interactors.rs_nrx import NRXBlock
@@ -26,12 +26,14 @@ class NRXTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.createGroupNRX()
-        self.layout.addWidget(self.groupNRX)
+        self.layout.addWidget(self.groupNRX, alignment=Qt.AlignmentFlag.AlignTop)
         self.setLayout(self.layout)
 
     def createGroupNRX(self):
         self.groupNRX = QGroupBox("NRX monitor")
+        self.groupNRX.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout = QGridLayout()
 
         self.nrxPowerLabel = QLabel("<h4>Power, dBm</h4>")
