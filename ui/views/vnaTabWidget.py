@@ -19,9 +19,9 @@ from utils.functions import to_db
 
 
 class UtilsMixin:
-    @property
-    def vna(self):
-        return VNABlock()
+
+    def __init__(self):
+        self.vna = VNABlock()
 
     def vna_set_start_frequency(self):
         self.vna.set_start_frequency(self.freqFrom.value() * 1e9)
