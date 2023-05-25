@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
 from ui.views.blockTabWidget import BlockTabWidget
+from ui.views.nrxTabWidget import NRXTabWidget
 from ui.views.setUpTabWidget import SetUpTabWidget
 from ui.views.vnaTabWidget import VNATabWidget
 
@@ -15,12 +16,14 @@ class TabsWidget(QWidget):
         self.tab_setup = SetUpTabWidget(self)
         self.tab_block = BlockTabWidget(self)
         self.tab_vna = VNATabWidget(self)
+        self.tab_nrx = NRXTabWidget(self)
         self.tabs.resize(300, 200)
 
         # Add tabs
         self.tabs.addTab(self.tab_setup, "Set Up")
         self.tabs.addTab(self.tab_block, "SIS Block")
         self.tabs.addTab(self.tab_vna, "VNA")
+        self.tabs.addTab(self.tab_nrx, "Power Meter")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)
