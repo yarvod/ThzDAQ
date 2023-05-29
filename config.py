@@ -17,6 +17,8 @@ class Config:
     BLOCK_STREAM_THREAD = False
     BLOCK_BIAS_POWER_MEASURE = False
     BLOCK_BIAS_STEP_DELAY = 0.1
+    BLOCK_BIAS_SHORT_STATUS = "1"
+    BLOCK_CTRL_SHORT_STATUS = "1"
 
     # Block constants
     BLOCK_BIAS_VOLT_MIN_VALUE = -30
@@ -25,6 +27,10 @@ class Config:
     BLOCK_CTRL_POINTS_MAX = 10001
     BLOCK_CTRL_CURR_MIN_VALUE = -100
     BLOCK_CTRL_CURR_MAX_VALUE = 100
+    BLOCK_SHORT_STATUS_MAP = {
+        "0": "Open",
+        "1": "Short",
+    }
 
     # VNA variables
     VNA_ADDRESS = "169.254.106.189"

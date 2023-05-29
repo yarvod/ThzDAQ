@@ -262,6 +262,44 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def stop_scan_ctrl_current(self):
         config.BLOCK_CTRL_SCAN_THREAD = False
 
+    def set_block_bias_short_status(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        if config.BLOCK_BIAS_SHORT_STATUS == "1":
+            status = "0"
+        else:
+            status = "1"
+        block.set_bias_short_status(status)
+        new_status = block.get_bias_short_status()
+        config.BLOCK_BIAS_SHORT_STATUS = new_status
+        self.btnSetBiasShortStatus.setText(
+            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_BIAS_SHORT_STATUS)}"
+        )
+
+    def set_block_ctrl_short_status(self):
+        block = Block(
+            host=config.BLOCK_ADDRESS,
+            port=config.BLOCK_PORT,
+            bias_dev=config.BLOCK_BIAS_DEV,
+            ctrl_dev=config.BLOCK_CTRL_DEV,
+        )
+        block.connect()
+        if config.BLOCK_CTRL_SHORT_STATUS == "1":
+            status = "0"
+        else:
+            status = "1"
+        block.set_ctrl_short_status(status)
+        new_status = block.get_ctrl_short_status()
+        config.BLOCK_CTRL_SHORT_STATUS = new_status
+        self.btnSetCtrlShortStatus.setText(
+            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_CTRL_SHORT_STATUS)}"
+        )
+
     def save_iv_data(self, results):
         try:
             filepath = QFileDialog.getSaveFileName()[0]
@@ -423,12 +461,30 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnSetCTRLCurrent = QPushButton("Set CL current")
         self.btnSetCTRLCurrent.clicked.connect(self.set_ctrl_current)
 
+        self.btnSetBiasShortStatusLabel = QLabel()
+        self.btnSetBiasShortStatusLabel.setText("Bias Status:")
+        self.btnSetBiasShortStatus = QPushButton(
+            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_BIAS_SHORT_STATUS)}"
+        )
+        self.btnSetBiasShortStatus.clicked.connect(self.set_block_bias_short_status)
+
+        self.btnSetCtrlShortStatusLabel = QLabel()
+        self.btnSetCtrlShortStatusLabel.setText("CTRL Status:")
+        self.btnSetCtrlShortStatus = QPushButton(
+            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_CTRL_SHORT_STATUS)}"
+        )
+        self.btnSetCtrlShortStatus.clicked.connect(self.set_block_ctrl_short_status)
+
         layout.addWidget(self.sisVoltageSetLabel, 1, 0)
         layout.addWidget(self.sisVoltageSet, 1, 1)
         layout.addWidget(self.btn_set_voltage, 1, 2)
         layout.addWidget(self.ctrlCurrentSetLabel, 2, 0)
         layout.addWidget(self.ctrlCurrentSet, 2, 1)
         layout.addWidget(self.btnSetCTRLCurrent, 2, 2)
+        layout.addWidget(self.btnSetBiasShortStatusLabel, 3, 0)
+        layout.addWidget(self.btnSetBiasShortStatus, 3, 1)
+        layout.addWidget(self.btnSetCtrlShortStatusLabel, 4, 0)
+        layout.addWidget(self.btnSetCtrlShortStatus, 4, 1)
 
         self.rowValuesSet.setLayout(layout)
 

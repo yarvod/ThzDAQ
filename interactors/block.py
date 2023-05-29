@@ -82,7 +82,7 @@ class Block:
         """
         return self.manipulate(f"CTRL:{self.ctrl_dev}:SHOR?")
 
-    def set_ctrl_short_status(self, status: int):
+    def set_ctrl_short_status(self, status: str):
         """
         Method to set Short status for CTRL.
         Shorted = 1
@@ -98,7 +98,7 @@ class Block:
         """
         return self.manipulate(f"BIAS:{self.bias_dev}:SHOR?")
 
-    def set_bias_short_status(self, status: int):
+    def set_bias_short_status(self, status: str):
         """
         Method to set Short status for BIAS.
         Shorted = 1
