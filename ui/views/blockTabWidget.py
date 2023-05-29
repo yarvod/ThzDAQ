@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QDoubleSpinBox,
-    QFileDialog, QSizePolicy,
+    QFileDialog,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 
@@ -35,15 +36,15 @@ class UtilsMixin:
         )
         block.connect()
         try:
-            voltage_to_set = float(self.voltage_s.value()) * 1e-3
+            voltage_to_set = float(self.sisVoltageSet.value()) * 1e-3
         except ValueError:
-            logger.warning(f"Value {self.voltage_s.value()} is not correct float")
+            logger.warning(f"Value {self.sisVoltageSet.value()} is not correct float")
             return
         block.set_bias_voltage(voltage_to_set)
         current = block.get_bias_current()
-        self.current_g.setText(f"{round(current * 1e6, 3)}")
+        self.sisCurrentGet.setText(f"{round(current * 1e6, 3)}")
         voltage = block.get_bias_voltage()
-        self.voltage_g.setText(f"{round(voltage * 1e3, 3)}")
+        self.sisVoltageGet.setText(f"{round(voltage * 1e3, 3)}")
         block.disconnect()
 
     def set_ctrl_current(self):
@@ -338,7 +339,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def createGroupMonitor(self):
         self.groupMonitor = QGroupBox("Block Monitor")
-        self.groupMonitor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupMonitor.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.sisVoltageGetLabel = QLabel(self)
@@ -366,13 +369,21 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnStopStreamBlock.setEnabled(False)
         self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
-        layout.addWidget(self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.sisCurrentGetLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(
+            self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.sisCurrentGetLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         layout.addWidget(
             self.ctrlCurrentGetLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        layout.addWidget(self.sisVoltageGet, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.sisCurrentGet, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(
+            self.sisVoltageGet, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.sisCurrentGet, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         layout.addWidget(
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -387,13 +398,15 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def createGroupValuesSet(self):
         self.rowValuesSet = QGroupBox("Set block values")
-        self.rowValuesSet.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.rowValuesSet.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
-        self.voltSLabel = QLabel(self)
-        self.voltSLabel.setText("BIAS voltage, mV:")
-        self.voltage_s = QDoubleSpinBox(self)
-        self.voltage_s.setRange(
+        self.sisVoltageSetLabel = QLabel(self)
+        self.sisVoltageSetLabel.setText("BIAS voltage, mV:")
+        self.sisVoltageSet = QDoubleSpinBox(self)
+        self.sisVoltageSet.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
@@ -410,8 +423,8 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnSetCTRLCurrent = QPushButton("Set CL current")
         self.btnSetCTRLCurrent.clicked.connect(self.set_ctrl_current)
 
-        layout.addWidget(self.voltSLabel, 1, 0)
-        layout.addWidget(self.voltage_s, 1, 1)
+        layout.addWidget(self.sisVoltageSetLabel, 1, 0)
+        layout.addWidget(self.sisVoltageSet, 1, 1)
         layout.addWidget(self.btn_set_voltage, 1, 2)
         layout.addWidget(self.ctrlCurrentSetLabel, 2, 0)
         layout.addWidget(self.ctrlCurrentSet, 2, 1)
@@ -421,7 +434,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def createGroupCTRLScan(self):
         self.groupCTRLScan = QGroupBox("Scan CTRL current")
-        self.groupCTRLScan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupCTRLScan.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.ctrlCurrentFromLabel = QLabel(self)
@@ -461,7 +476,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def createGroupBiasScan(self):
         self.groupBiasScan = QGroupBox("Scan Bias IV")
-        self.groupBiasScan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupBiasScan.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.biasVoltageFromLabel = QLabel(self)
