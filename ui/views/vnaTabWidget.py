@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QDoubleSpinBox,
     QPushButton,
-    QFileDialog, QSizePolicy,
+    QFileDialog,
+    QSizePolicy,
 )
 
 from config import config
@@ -20,7 +21,6 @@ from utils.functions import to_db
 
 
 class UtilsMixin:
-
     def __init__(self):
         self.vna = VNABlock()
 
@@ -89,13 +89,19 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.vnaGraphWindow = None
         self.createGroupVNAParameters()
         self.createGroupBiasReflScan()
-        self.layout.addWidget(self.groupVNAParameters, alignment=Qt.AlignmentFlag.AlignTop)
-        self.layout.addWidget(self.groupBiasReflScan, alignment=Qt.AlignmentFlag.AlignTop)
+        self.layout.addWidget(
+            self.groupVNAParameters, alignment=Qt.AlignmentFlag.AlignTop
+        )
+        self.layout.addWidget(
+            self.groupBiasReflScan, alignment=Qt.AlignmentFlag.AlignTop
+        )
         self.setLayout(self.layout)
 
     def createGroupVNAParameters(self):
         self.groupVNAParameters = QGroupBox("VNA parameters")
-        self.groupVNAParameters.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupVNAParameters.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.freqFromLabel = QLabel(self)
@@ -138,7 +144,9 @@ class VNATabWidget(QWidget, UtilsMixin):
 
     def createGroupBiasReflScan(self):
         self.groupBiasReflScan = QGroupBox("Scan Bias Reflection")
-        self.groupBiasReflScan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupBiasReflScan.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.voltFromLabel = QLabel(self)

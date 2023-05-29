@@ -15,6 +15,8 @@ class Config:
     BLOCK_BIAS_SCAN_THREAD = False
     BLOCK_CTRL_SCAN_THREAD = False
     BLOCK_STREAM_THREAD = False
+    BLOCK_BIAS_POWER_MEASURE = False
+    BLOCK_BIAS_STEP_DELAY = 0.1
 
     # Block constants
     BLOCK_BIAS_VOLT_MIN_VALUE = -30

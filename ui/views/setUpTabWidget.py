@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QDoubleSpinBox, QSizePolicy,
+    QDoubleSpinBox,
+    QSizePolicy,
 )
 
 from config import config
@@ -84,7 +85,9 @@ class SetUpTabWidget(QWidget):
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox("Block config")
-        self.groupBlock.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupBlock.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.blockIPLabel = QLabel(self)
@@ -132,7 +135,9 @@ class SetUpTabWidget(QWidget):
 
     def createGroupVna(self):
         self.groupVna = QGroupBox("VNA config")
-        self.groupVna.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupVna.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.vnaIPLabel = QLabel(self)
@@ -158,7 +163,9 @@ class SetUpTabWidget(QWidget):
 
     def createGroupNRX(self):
         self.groupNRX = QGroupBox("NRX config")
-        self.groupNRX.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.groupNRX.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         layout = QGridLayout()
 
         self.nrxIPLabel = QLabel(self)
