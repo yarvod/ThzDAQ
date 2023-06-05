@@ -66,5 +66,12 @@ class Config:
         )
     )
 
+    # Bias reflection variables
+    BIAS_REFL_THREAD = False
+    BIAS_REFL_VOLT_FROM = 0
+    BIAS_REFL_VOLT_TO = 0
+    BIAS_REFL_VOLT_POINTS = 300
+    BIAS_REFL_DELAY = 0.8
+
 
 config = Config()

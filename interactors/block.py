@@ -1,11 +1,7 @@
 import socket
 import time
-from collections import defaultdict
-from datetime import datetime
 
-import numpy as np
 from config import config
-from interactors.vna import VNABlock
 from utils.decorators import exception
 from utils.logger import logger
 
@@ -36,7 +32,7 @@ class Block:
             logger.info(f"Connected to Block {self.host}:{self.port}")
         except Exception as e:
             logger.warning(f"Warning[Block.connect] {e}")
-        self.s.settimeout(None)
+        self.s.settimeout(1)
 
     @exception
     def disconnect(self):
@@ -197,105 +193,6 @@ class Block:
                 f"[Block.set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}"
             )
         return
-
-    def scan_ctrl_current(
-        self, ctrl_i_from: float, ctrl_i_to: float, points_num: int = 50
-    ):
-        results = {
-            "ctrl_i_set": [],
-            "ctrl_i_get": [],
-            "bias_i": [],
-        }
-        ctrl_i_range = np.linspace(ctrl_i_from, ctrl_i_to, points_num)
-        initial_ctrl_i = self.get_ctrl_current()
-        start_t = datetime.now()
-        for i, ctrl_i in enumerate(ctrl_i_range):
-            if i == 0:
-                time.sleep(0.1)
-            proc = round((i / points_num) * 100, 2)
-            results["ctrl_i_set"].append(ctrl_i * 1e3)
-            self.set_ctrl_current(ctrl_i)
-            results["ctrl_i_get"].append(self.get_ctrl_current() * 1e3)
-            results["bias_i"].append(self.get_bias_current() * 1e6)
-            delta_t = datetime.now() - start_t
-            logger.info(
-                f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
-            )
-        self.set_ctrl_current(initial_ctrl_i)
-        return results
-
-    def scan_bias(
-        self,
-        v_from: float,
-        v_to: float,
-        points_num: int = 300,
-    ) -> dict:
-        results = {
-            "i_get": [],
-            "v_set": [],
-            "v_get": [],
-            "time": [],
-        }
-        initial_v = self.get_bias_voltage()
-        v_range = np.linspace(v_from, v_to, points_num)
-        start_t = datetime.now()
-        for i, v_set in enumerate(v_range):
-            proc = round((i / points_num) * 100, 2)
-            self.set_bias_voltage(v_set)
-            if i == 0:
-                time.sleep(1)
-            v_get = self.get_bias_voltage()
-            i_get = self.get_bias_current()
-            results["v_get"].append(v_get * 1e3)
-            results["v_set"].append(v_set * 1e3)
-            results["i_get"].append(i_get * 1e6)
-            delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
-            logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
-        self.set_bias_voltage(initial_v)
-
-        return results
-
-    def scan_reflection(
-        self,
-        v_from: float,
-        v_to: float,
-        points_num: int = 300,
-        time_per_point: float = 1,
-        points_to_average: int = 3,
-    ) -> dict:
-        results = {
-            "i_get": [],
-            "v_set": [],
-            "v_get": [],
-            "refl": defaultdict(np.ndarray),
-            "time": [],
-        }
-        initial_v = self.get_bias_voltage()
-        v_range = np.linspace(v_from, v_to, points_num)
-        vna = VNABlock()
-        start_t = datetime.now()
-        for i, v_set in enumerate(v_range):
-            proc = round((i / points_num) * 100, 2)
-            self.set_bias_voltage(v_set)
-            if i == 0:
-                time.sleep(1)
-            v_get = self.get_bias_voltage()
-            i_get = self.get_bias_current()
-            time.sleep(0.8)  # waiting for VNA averaging
-            refl = vna.get_reflection()
-            results["v_get"].append(v_get * 1e3)
-            results["v_set"].append(v_set * 1e3)
-            results["i_get"].append(i_get * 1e6)
-            results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
-            delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
-            logger.info(
-                f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
-            )
-        self.set_bias_voltage(initial_v)
-
-        return results
 
 
 if __name__ == "__main__":

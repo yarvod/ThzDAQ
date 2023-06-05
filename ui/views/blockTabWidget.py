@@ -508,7 +508,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
             config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlPointsLabel = QLabel(self)
-        self.ctrlPointsLabel.setText("Points num")
+        self.ctrlPointsLabel.setText("Points count")
         self.ctrlPoints = QDoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
         self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
@@ -550,7 +550,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasPointsLabel = QLabel(self)
-        self.biasPointsLabel.setText("Points num")
+        self.biasPointsLabel.setText("Points count")
         self.biasPoints = QDoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
         self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)

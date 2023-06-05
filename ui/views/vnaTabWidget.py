@@ -1,6 +1,10 @@
+import time
+from collections import defaultdict
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -18,32 +22,16 @@ from interactors.block import Block
 from interactors.vna import VNABlock
 from ui.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
+from utils.logger import logger
 
 
-class UtilsMixin:
-    def __init__(self):
-        self.vna = VNABlock()
+class BiasReflectionWorker(QObject):
+    finished = pyqtSignal()
+    results = pyqtSignal(dict)
+    progress = pyqtSignal(float)
 
-    def vna_set_start_frequency(self):
-        self.vna.set_start_frequency(self.freqFrom.value() * 1e9)
-
-    def vna_set_stop_frequency(self):
-        self.vna.set_stop_frequency(self.freqTo.value() * 1e9)
-
-    def vna_set_sweep(self):
-        self.vna.set_sweep(int(self.vnaPoints.value()))
-
-    def vna_set_power(self):
-        self.vna.set_power(self.vnaPower.value())
-
-    def vna_update(self):
-        self.vna_set_start_frequency()
-        self.vna_set_stop_frequency()
-        self.vna_set_sweep()
-        self.vna_set_power()
-
-    def scan_bias_refl(self):
-        self.vna_update()
+    def run(self):
+        vna = VNABlock(vna_ip=config.VNA_ADDRESS)
         block = Block(
             host=config.BLOCK_ADDRESS,
             port=config.BLOCK_PORT,
@@ -51,37 +39,68 @@ class UtilsMixin:
             ctrl_dev=config.BLOCK_CTRL_DEV,
         )
         block.connect()
-        freqs = np.linspace(
-            self.freqFrom.value() * 1e9,
-            self.freqTo.value() * 1e9,
-            int(self.vnaPoints.value()),
-        )
-        data = block.scan_reflection(
-            v_from=self.voltFrom.value() * 1e-3,
-            v_to=self.voltTo.value() * 1e-3,
-            points_num=int(self.voltPoints.value()),
-        )
-        try:
-            refl_filepath = QFileDialog.getSaveFileName()[0]
-            refl_df = pd.DataFrame(data["refl"], index=freqs)
-            refl_df.to_csv(refl_filepath)
 
-            iv_filepath = QFileDialog.getSaveFileName()[0]
-            iv_df = pd.DataFrame(
-                dict(v_set=data["v_set"], v_get=data["v_get"], i_get=data["i_get"])
+        frequencies = np.linspace(
+            config.VNA_FREQ_FROM, config.VNA_FREQ_TO, config.VNA_POINTS
+        )
+
+        results = {
+            "i_get": [],
+            "v_set": [],
+            "v_get": [],
+            "refl": defaultdict(np.ndarray),
+            "frequencies": frequencies,
+            "time": [],
+        }
+        initial_v = block.get_bias_voltage()
+        v_range = np.linspace(
+            config.BIAS_REFL_VOLT_FROM * 1e-3,
+            config.BIAS_REFL_VOLT_TO * 1e-3,
+            config.BIAS_REFL_VOLT_POINTS,
+        )
+        start_t = datetime.now()
+        for i, v_set in enumerate(v_range, 1):
+            if not config.BIAS_REFL_THREAD:
+                break
+            proc = round((i / config.BIAS_REFL_VOLT_POINTS) * 100, 2)
+            block.set_bias_voltage(v_set)
+            if i == 0:
+                time.sleep(1)
+            v_get = block.get_bias_voltage()
+            i_get = block.get_bias_current()
+            time.sleep(config.BIAS_REFL_DELAY)  # waiting for VNA averaging
+            refl = vna.get_reflection()
+            results["v_get"].append(v_get * 1e3)
+            results["v_set"].append(v_set * 1e3)
+            results["i_get"].append(i_get * 1e6)
+            results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
+            delta_t = datetime.now() - start_t
+            results["time"].append(delta_t)
+            logger.info(
+                f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
             )
-            iv_df.to_csv(iv_filepath)
-        except (IndexError, FileNotFoundError):
-            pass
+            self.progress.emit(proc)
 
-    def get_reflection(self):
-        self.vna_update()
-        reflection = self.vna.get_reflection()
-        reflection_db = to_db(reflection)
-        return reflection_db
+        block.set_bias_voltage(initial_v)
+        block.disconnect()
+
+        self.results.emit(results)
+        self.finished.emit()
 
 
-class VNATabWidget(QWidget, UtilsMixin):
+class VNAGetReflectionWorker(QObject):
+    finished = pyqtSignal()
+    reflection = pyqtSignal(list)
+
+    def run(self):
+        vna = VNABlock(vna_ip=config.VNA_ADDRESS)
+        reflection = vna.get_reflection()
+        reflection_db = list(to_db(reflection))
+        self.reflection.emit(reflection_db)
+        self.finished.emit()
+
+
+class VNATabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
@@ -115,7 +134,7 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.freqTo.setValue(config.VNA_FREQ_TO)
 
         self.vnaPointsLabel = QLabel(self)
-        self.vnaPointsLabel.setText("Points num:")
+        self.vnaPointsLabel.setText("Points count:")
         self.vnaPoints = QDoubleSpinBox(self)
         self.vnaPoints.setMaximum(config.VNA_POINTS_MAX)
         self.vnaPoints.setDecimals(0)
@@ -128,7 +147,7 @@ class VNATabWidget(QWidget, UtilsMixin):
         self.vnaPower.setValue(config.VNA_POWER)
 
         self.btnGetReflection = QPushButton("Get reflection")
-        self.btnGetReflection.clicked.connect(self.plotReflection)
+        self.btnGetReflection.clicked.connect(self.getReflection)
 
         layout.addWidget(self.freqFromLabel, 1, 0)
         layout.addWidget(self.freqFrom, 1, 1)
@@ -164,14 +183,24 @@ class VNATabWidget(QWidget, UtilsMixin):
         )
 
         self.voltPointsLabel = QLabel(self)
-        self.voltPointsLabel.setText("Points num")
+        self.voltPointsLabel.setText("Points count")
         self.voltPoints = QDoubleSpinBox(self)
         self.voltPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
 
+        self.scanStepDelayLabel = QLabel("Scan delay, s")
+        self.scanStepDelay = QDoubleSpinBox(self)
+        self.scanStepDelay.setRange(0, 10)
+        self.scanStepDelay.setValue(config.BIAS_REFL_DELAY)
+
+        self.scanProgressLabel = QLabel("Progress")
+        self.scanProgress = QLabel("0 %")
+
         self.btnBiasReflScan = QPushButton("Scan Bias Reflection")
-        self.btnBiasReflScan.clicked.connect(lambda: self.scan_bias_refl())
+        self.btnBiasReflScan.clicked.connect(self.scan_bias_reflection)
+        self.btnStopBiasReflScan = QPushButton("Stop Scan")
+        self.btnStopBiasReflScan.clicked.connect(self.stop_scan_bias_reflection)
 
         layout.addWidget(self.voltFromLabel, 1, 0)
         layout.addWidget(self.voltFrom, 1, 1)
@@ -179,16 +208,108 @@ class VNATabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.voltTo, 2, 1)
         layout.addWidget(self.voltPointsLabel, 3, 0)
         layout.addWidget(self.voltPoints, 3, 1)
-        layout.addWidget(self.btnBiasReflScan, 4, 0, 1, 2)
+        layout.addWidget(self.scanStepDelayLabel, 4, 0)
+        layout.addWidget(self.scanStepDelay, 4, 1)
+        layout.addWidget(self.scanProgressLabel, 5, 0)
+        layout.addWidget(self.scanProgress, 5, 1)
+        layout.addWidget(self.btnBiasReflScan, 6, 0)
+        layout.addWidget(self.btnStopBiasReflScan, 6, 1)
 
         self.groupBiasReflScan.setLayout(layout)
 
-    def plotReflection(self):
-        freq_list = np.linspace(
-            self.freqFrom.value(), self.freqTo.value(), int(self.vnaPoints.value())
+    def update_vna_params(self):
+        config.VNA_POWER = self.vnaPower.value()
+        config.VNA_POINTS = int(self.vnaPoints.value())
+        config.VNA_FREQ_FROM = self.freqFrom.value() * 1e9
+        config.VNA_FREQ_TO = self.freqTo.value() * 1e9
+
+    def getReflection(self):
+        self.vna_get_reflection_thread = QThread()
+        self.vna_get_reflection_worker = VNAGetReflectionWorker()
+
+        self.update_vna_params()
+
+        self.vna_get_reflection_worker.moveToThread(self.vna_get_reflection_thread)
+        self.vna_get_reflection_thread.started.connect(
+            self.vna_get_reflection_worker.run
         )
-        reflection = self.get_reflection()
+        self.vna_get_reflection_worker.finished.connect(
+            self.vna_get_reflection_thread.quit
+        )
+        self.vna_get_reflection_worker.finished.connect(
+            self.vna_get_reflection_worker.deleteLater
+        )
+        self.vna_get_reflection_thread.finished.connect(
+            self.vna_get_reflection_thread.deleteLater
+        )
+        self.vna_get_reflection_worker.reflection.connect(self.plotReflection)
+        self.vna_get_reflection_thread.start()
+
+        self.btnGetReflection.setEnabled(False)
+        self.vna_get_reflection_thread.finished.connect(
+            lambda: self.btnGetReflection.setEnabled(True)
+        )
+
+    def plotReflection(self, reflection):
+        freq_list = np.linspace(
+            config.VNA_FREQ_FROM, config.VNA_FREQ_TO, config.VNA_POINTS
+        )
         if self.vnaGraphWindow is None:
             self.vnaGraphWindow = VNAGraphWindow()
         self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
         self.vnaGraphWindow.show()
+
+    def scan_bias_reflection(self):
+        self.bias_reflection_thread = QThread()
+        self.bias_reflection_worker = BiasReflectionWorker()
+
+        self.update_vna_params()
+        config.BIAS_REFL_THREAD = True
+        config.BIAS_REFL_VOLT_FROM = self.voltFrom.value()
+        config.BIAS_REFL_VOLT_TO = self.voltTo.value()
+        config.BIAS_REFL_VOLT_POINTS = int(self.voltPoints.value())
+        config.BIAS_REFL_DELAY = self.scanStepDelay.value()
+
+        self.bias_reflection_worker.moveToThread(self.bias_reflection_thread)
+        self.bias_reflection_thread.started.connect(self.bias_reflection_worker.run)
+        self.bias_reflection_worker.finished.connect(self.bias_reflection_thread.quit)
+        self.bias_reflection_worker.finished.connect(
+            self.bias_reflection_worker.deleteLater
+        )
+        self.bias_reflection_thread.finished.connect(
+            self.bias_reflection_thread.deleteLater
+        )
+        self.bias_reflection_worker.results.connect(self.save_bias_reflection)
+        self.bias_reflection_worker.progress.connect(self.set_bias_reflection_progress)
+        self.bias_reflection_thread.start()
+
+        self.btnBiasReflScan.setEnabled(False)
+        self.bias_reflection_thread.finished.connect(
+            lambda: self.btnBiasReflScan.setEnabled(True)
+        )
+
+    def stop_scan_bias_reflection(self):
+        config.BIAS_REFL_THREAD = False
+
+    def save_bias_reflection(self, data):
+        try:
+            refl_filepath = QFileDialog.getSaveFileName()[0]
+            refl_df = pd.DataFrame(data["refl"], index=data["frequencies"])
+            refl_df.to_csv(refl_filepath)
+
+            iv_filepath = QFileDialog.getSaveFileName()[0]
+            iv_df = pd.DataFrame(
+                dict(
+                    v_set=data["v_set"],
+                    v_get=data["v_get"],
+                    i_get=data["i_get"],
+                    time=data["time"],
+                )
+            )
+            iv_df.to_csv(iv_filepath)
+        except (IndexError, FileNotFoundError):
+            pass
+        self.scanProgress.setText(f"0 %")
+
+    def set_bias_reflection_progress(self, progress):
+        self.scanProgress.setText(f"{progress} %")

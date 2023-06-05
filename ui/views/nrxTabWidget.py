@@ -201,7 +201,7 @@ class NRXTabWidget(QWidget):
         )
 
         self.voltPointsLabel = QLabel(self)
-        self.voltPointsLabel.setText("Points num")
+        self.voltPointsLabel.setText("Points count")
         self.voltPoints = QDoubleSpinBox(self)
         self.voltPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)

@@ -146,7 +146,7 @@ class SetUpTabWidget(QWidget):
         self.vnaStatusLabel = QLabel(self)
         self.vnaStatusLabel.setText("VNA status:")
         self.vnaStatus = QLabel(self)
-        self.vnaStatus.setText("VNA is not checked yet!")
+        self.vnaStatus.setText("VNA is not initialized yet!")
 
         self.btnInitVna = QPushButton("Initialize VNA")
         self.btnInitVna.clicked.connect(self.initialize_vna)
