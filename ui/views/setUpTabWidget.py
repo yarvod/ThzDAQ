@@ -45,10 +45,8 @@ class SISBlockWorker(QObject):
             ctrl_dev=config.BLOCK_CTRL_DEV,
         )
         block.connect()
-        result = block.get_bias_data()
+        result = block.test()
         block.disconnect()
-        if not result:
-            result = "Connection error"
         logger.info(f"Health check SIS block {result}")
         self.status.emit(result)
         self.finished.emit()

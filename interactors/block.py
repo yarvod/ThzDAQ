@@ -129,6 +129,18 @@ class Block:
         """
         return self.manipulate(f"GEN:{self.ctrl_dev}:STAT?")
 
+    def test(self):
+        """
+        Method to test full block.
+        """
+        bias = self.test_bias()
+        logger.info(f"[Block.test] Bias test `{bias}`")
+        ctrl = self.test_ctrl()
+        logger.info(f"[Block.test] CTRL test `{ctrl}`")
+        if bias == "OK" and ctrl == "OK":
+            return "OK"
+        return "ERROR"
+
     def set_ctrl_current(self, curr: float):
         return self.manipulate(f"CTRL:{self.ctrl_dev}:CURR {curr}")
 
