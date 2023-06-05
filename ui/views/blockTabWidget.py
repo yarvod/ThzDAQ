@@ -83,7 +83,7 @@ class BlockStreamWorker(QObject):
         while 1:
             if not config.BLOCK_STREAM_THREAD:
                 break
-            time.sleep(0.25)
+            time.sleep(0.1)
             bias_voltage = self.block.get_bias_voltage()
             bias_current = self.block.get_bias_current()
             cl_current = self.block.get_ctrl_current()

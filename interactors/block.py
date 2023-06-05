@@ -51,18 +51,17 @@ class Block:
         Returns:
             result (str): Block answer
         """
-        if type(cmd) != bytes:
-            cmd = bytes(cmd, "utf-8")
+        cmd = bytes(cmd, "utf-8")
         max_attempts = 5
-        for attempt in range(max_attempts):
+        for attempt in range(1, max_attempts + 1):
             try:
-                if attempt > 2:
+                if attempt > 1:
                     time.sleep(0.1)
                 self.s.sendall(cmd)
                 data = self.s.recv(1024)
                 result = data.decode().rstrip()
                 logger.debug(
-                    f"[manipulate] Received result: {result}; attempt {attempt}"
+                    f"[Block.manipulate] Received result: {result}; attempt {attempt}"
                 )
                 if "ERROR" in result:
                     logger.warning(
@@ -118,6 +117,18 @@ class Block:
         """
         return self.manipulate(f"CTRL:{self.ctrl_dev}:DATA?")
 
+    def test_bias(self):
+        """
+        Method to get status bias dev.
+        """
+        return self.manipulate(f"GEN:{self.bias_dev}:STAT?")
+
+    def test_ctrl(self):
+        """
+        Method to get status ctrl dev.
+        """
+        return self.manipulate(f"GEN:{self.ctrl_dev}:STAT?")
+
     def set_ctrl_current(self, curr: float):
         return self.manipulate(f"CTRL:{self.ctrl_dev}:CURR {curr}")
 
@@ -131,43 +142,47 @@ class Block:
                 logger.debug(f"Exception[get_ctrl_current] {e}; attempt {attempt}")
 
     def get_bias_current(self):
-        for attempt in range(5):
+        for attempt in range(1, 6):
             try:
                 if attempt > 1:
                     time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
                 logger.debug(
-                    f"Success [get_bias_current] received {result} current; attempt {attempt}"
+                    f"Success [Block.get_bias_current] received {result} current; attempt {attempt}"
                 )
                 return result
             except Exception as e:
-                logger.debug(f"Exception[get_bias_current] {e}, attempt {attempt}")
-        return 0
+                logger.debug(
+                    f"[Block.get_bias_current][Exception] {e}, attempt {attempt}"
+                )
+        return None
 
     def get_bias_voltage(self):
-        for attempt in range(5):
+        for attempt in range(1, 6):
             try:
                 if attempt > 1:
                     time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
                 logger.debug(
-                    f"Success [get_bias_voltage] received {result} voltage; attempt {attempt}"
+                    f"[Block.get_bias_voltage] Success received {result} voltage; attempt {attempt}"
                 )
                 return result
             except Exception as e:
-                logger.debug(f"Exception[get_bias_voltage] {e}; attempt {attempt}")
-            return 0
+                logger.debug(
+                    f"[Block.get_bias_voltage] Exception {e}; attempt {attempt}"
+                )
+            return None
 
     def set_bias_voltage(self, volt: float):
-        for attempt in range(5):
+        for attempt in range(1, 6):
             status = self.manipulate(f"BIAS:{self.bias_dev}:VOLT {volt}")
             if status == "OK":
                 logger.debug(
-                    f"Success[set_bias_voltage] set volt {volt}; status {status}; attempt {attempt}"
+                    f"[Block.set_bias_voltage] Success set volt {volt}; status {status}; attempt {attempt}"
                 )
                 return
             logger.warning(
-                f"Warning[set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}"
+                f"[Block.set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}"
             )
         return
 
@@ -281,4 +296,5 @@ if __name__ == "__main__":
     print(block.set_ctrl_short_status(0))
     print(block.get_ctrl_data())
     print(block.set_ctrl_short_status(1))
+    print(block.test_bias())
     block.disconnect()
