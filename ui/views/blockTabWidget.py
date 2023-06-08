@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QPushButton,
-    QDoubleSpinBox,
     QFileDialog,
     QSizePolicy,
 )
@@ -20,6 +19,7 @@ from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 from config import config
 
 from interactors.block import Block
+from ui.components import CustomQDoubleSpinBox
 from ui.windows.biasGraphWindow import BiasGraphWindow
 from ui.windows.clGraphWindow import CLGraphWindow
 
@@ -85,8 +85,14 @@ class BlockStreamWorker(QObject):
                 break
             time.sleep(0.1)
             bias_voltage = self.block.get_bias_voltage()
+            if not bias_voltage:
+                continue
             bias_current = self.block.get_bias_current()
+            if not bias_current:
+                continue
             cl_current = self.block.get_ctrl_current()
+            if not cl_current:
+                continue
             self.bias_voltage.emit(bias_voltage)
             self.bias_current.emit(bias_current)
             self.cl_current.emit(cl_current)
@@ -119,7 +125,8 @@ class BlockCLScanWorker(QObject):
         )
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
-        for i, ctrl_i in enumerate(ctrl_i_range):
+        i = 0
+        for ctrl_i in ctrl_i_range:
             if not config.BLOCK_CTRL_SCAN_THREAD:
                 break
             proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
@@ -147,6 +154,7 @@ class BlockCLScanWorker(QObject):
             logger.info(
                 f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
             )
+            i += 1
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
@@ -179,7 +187,8 @@ class BlockBIASScanWorker(QObject):
             config.BLOCK_BIAS_VOLT_POINTS,
         )
         start_t = datetime.now()
-        for i, v_set in enumerate(v_range):
+        i = 0
+        for v_set in v_range:
             if not config.BLOCK_BIAS_SCAN_THREAD:
                 break
             proc = round((i / config.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
@@ -204,6 +213,7 @@ class BlockBIASScanWorker(QObject):
             )
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t)
+            i += 1
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
         block.disconnect()
@@ -453,7 +463,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.sisVoltageSetLabel = QLabel(self)
         self.sisVoltageSetLabel.setText("BIAS voltage, mV:")
-        self.sisVoltageSet = QDoubleSpinBox(self)
+        self.sisVoltageSet = CustomQDoubleSpinBox(self)
         self.sisVoltageSet.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
@@ -463,7 +473,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.ctrlCurrentSetLabel = QLabel(self)
         self.ctrlCurrentSetLabel.setText("CL current, mA")
-        self.ctrlCurrentSet = QDoubleSpinBox(self)
+        self.ctrlCurrentSet = CustomQDoubleSpinBox(self)
         self.ctrlCurrentSet.setRange(
             config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
@@ -507,24 +517,24 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.ctrlCurrentFromLabel = QLabel(self)
         self.ctrlCurrentFromLabel.setText("CL Current from, mA")
-        self.ctrlCurrentFrom = QDoubleSpinBox(self)
+        self.ctrlCurrentFrom = CustomQDoubleSpinBox(self)
         self.ctrlCurrentFrom.setRange(
             config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlCurrentToLabel = QLabel(self)
         self.ctrlCurrentToLabel.setText("CL Current to, mA")
-        self.ctrlCurrentTo = QDoubleSpinBox(self)
+        self.ctrlCurrentTo = CustomQDoubleSpinBox(self)
         self.ctrlCurrentTo.setRange(
             config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points count")
-        self.ctrlPoints = QDoubleSpinBox(self)
+        self.ctrlPoints = CustomQDoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
         self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
         self.ctrlPoints.setValue(config.BLOCK_CTRL_POINTS)
         self.ctrlStepDelayLabel = QLabel("Step delay, s")
-        self.ctrlStepDelay = QDoubleSpinBox(self)
+        self.ctrlStepDelay = CustomQDoubleSpinBox(self)
         self.ctrlStepDelay.setRange(0, 10)
         self.ctrlStepDelay.setDecimals(2)
         self.ctrlStepDelay.setValue(config.BLOCK_CTRL_STEP_DELAY)
@@ -556,19 +566,19 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.biasVoltageFromLabel = QLabel(self)
         self.biasVoltageFromLabel.setText("Voltage from, mV")
-        self.biasVoltageFrom = QDoubleSpinBox(self)
+        self.biasVoltageFrom = CustomQDoubleSpinBox(self)
         self.biasVoltageFrom.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasVoltageToLabel = QLabel(self)
         self.biasVoltageToLabel.setText("Voltage to, mv")
-        self.biasVoltageTo = QDoubleSpinBox(self)
+        self.biasVoltageTo = CustomQDoubleSpinBox(self)
         self.biasVoltageTo.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasPointsLabel = QLabel(self)
         self.biasPointsLabel.setText("Points count")
-        self.biasPoints = QDoubleSpinBox(self)
+        self.biasPoints = CustomQDoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
         self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)

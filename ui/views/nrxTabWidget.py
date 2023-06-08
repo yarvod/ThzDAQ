@@ -192,28 +192,28 @@ class NRXTabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = QDoubleSpinBox(self)
+        self.voltFrom = CustomQDoubleSpinBox(self)
         self.voltFrom.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = QDoubleSpinBox(self)
+        self.voltTo = CustomQDoubleSpinBox(self)
         self.voltTo.setRange(
             config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = QDoubleSpinBox(self)
+        self.voltPoints = CustomQDoubleSpinBox(self)
         self.voltPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
-        self.voltStepDelay = QDoubleSpinBox(self)
+        self.voltStepDelay = CustomQDoubleSpinBox(self)
         self.voltStepDelay.setRange(0, 10)
         self.voltStepDelay.setValue(config.BLOCK_BIAS_STEP_DELAY)
 
