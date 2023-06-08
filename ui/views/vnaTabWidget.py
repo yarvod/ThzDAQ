@@ -67,7 +67,11 @@ class BiasReflectionWorker(QObject):
             if i == 0:
                 time.sleep(1)
             v_get = block.get_bias_voltage()
+            if not v_get:
+                continue
             i_get = block.get_bias_current()
+            if not i_get:
+                continue
             time.sleep(config.BIAS_REFL_DELAY)  # waiting for VNA averaging
             refl = vna.get_reflection()
             results["v_get"].append(v_get * 1e3)

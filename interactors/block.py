@@ -32,7 +32,7 @@ class Block:
             logger.info(f"Connected to Block {self.host}:{self.port}")
         except Exception as e:
             logger.warning(f"Warning[Block.connect] {e}")
-        self.s.settimeout(1)
+        self.s.settimeout(2)
 
     @exception
     def disconnect(self):
@@ -144,7 +144,7 @@ class Block:
         for attempt in range(5):
             try:
                 if attempt > 1:
-                    time.sleep(0.1)
+                    time.sleep(0.5)
                 return float(self.manipulate(f"CTRL:{self.ctrl_dev}:CURR?"))
             except ValueError as e:
                 logger.debug(f"Exception[get_ctrl_current] {e}; attempt {attempt}")

@@ -81,7 +81,11 @@ class BiasPowerWorker(QObject):
             block.set_bias_voltage(voltage_set)
             time.sleep(config.BLOCK_BIAS_STEP_DELAY)
             voltage_get = block.get_bias_voltage()
+            if not voltage_get:
+                continue
             current_get = block.get_bias_current()
+            if not current_get:
+                continue
             power = nrx.get_power()
             time_step = time.time() - initial_time
 

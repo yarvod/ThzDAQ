@@ -123,12 +123,16 @@ class BlockCLScanWorker(QObject):
             if not config.BLOCK_CTRL_SCAN_THREAD:
                 break
             if i == 0:
-                time.sleep(0.1)
+                time.sleep(0.5)
             proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
             results["ctrl_i_set"].append(ctrl_i * 1e3)
             block.set_ctrl_current(ctrl_i)
             ctrl_current = block.get_ctrl_current() * 1e3
+            if not ctrl_current:
+                continue
             bias_current = block.get_bias_current() * 1e6
+            if not bias_current:
+                continue
             results["ctrl_i_get"].append(ctrl_current)
             results["bias_i"].append(bias_current)
             self.stream_result.emit(
@@ -182,7 +186,11 @@ class BlockBIASScanWorker(QObject):
             if i == 0:
                 time.sleep(1)
             v_get = block.get_bias_voltage()
+            if not v_get:
+                continue
             i_get = block.get_bias_current()
+            if not i_get:
+                continue
             results["v_get"].append(v_get * 1e3)
             results["v_set"].append(v_set * 1e3)
             results["i_get"].append(i_get * 1e6)
