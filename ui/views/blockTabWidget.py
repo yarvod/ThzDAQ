@@ -122,11 +122,12 @@ class BlockCLScanWorker(QObject):
         for i, ctrl_i in enumerate(ctrl_i_range):
             if not config.BLOCK_CTRL_SCAN_THREAD:
                 break
-            if i == 0:
-                time.sleep(0.5)
             proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
             results["ctrl_i_set"].append(ctrl_i * 1e3)
             block.set_ctrl_current(ctrl_i)
+            if i == 0:
+                time.sleep(1)
+            time.sleep(config.BLOCK_CTRL_STEP_DELAY)
             ctrl_current = block.get_ctrl_current() * 1e3
             if not ctrl_current:
                 continue
@@ -256,6 +257,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         config.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
         config.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
         config.BLOCK_CTRL_SCAN_THREAD = True
+        config.BLOCK_CTRL_STEP_DELAY = self.ctrlStepDelay.value()
 
         self.sis_thread.started.connect(self.sis_worker.run)
         self.sis_worker.finished.connect(self.sis_thread.quit)
@@ -521,6 +523,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlPoints.setDecimals(0)
         self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
         self.ctrlPoints.setValue(config.BLOCK_CTRL_POINTS)
+        self.ctrlStepDelayLabel = QLabel("Step delay, s")
+        self.ctrlStepDelay = QDoubleSpinBox(self)
+        self.ctrlStepDelay.setRange(0, 10)
+        self.ctrlStepDelay.setDecimals(2)
+        self.ctrlStepDelay.setValue(config.BLOCK_CTRL_STEP_DELAY)
         self.btnCTRLScan = QPushButton("Scan CL Current")
         self.btnCTRLScan.clicked.connect(self.scan_ctrl_current)
 
@@ -533,8 +540,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.ctrlCurrentTo, 2, 1)
         layout.addWidget(self.ctrlPointsLabel, 3, 0)
         layout.addWidget(self.ctrlPoints, 3, 1)
-        layout.addWidget(self.btnCTRLScan, 4, 0, 1, 2)
-        layout.addWidget(self.btnCTRLStopScan, 5, 0, 1, 2)
+        layout.addWidget(self.ctrlStepDelayLabel, 4, 0)
+        layout.addWidget(self.ctrlStepDelay, 4, 1)
+        layout.addWidget(self.btnCTRLScan, 5, 0)
+        layout.addWidget(self.btnCTRLStopScan, 5, 1)
 
         self.groupCTRLScan.setLayout(layout)
 

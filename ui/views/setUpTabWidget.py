@@ -179,7 +179,7 @@ class SetUpTabWidget(QWidget):
         self.nrxAperTimeLabel = QLabel(self)
         self.nrxAperTimeLabel.setText("NRX Aperture time, s:")
         self.nrxAperTime = QDoubleSpinBox(self)
-        self.nrxAperTime.setDecimals(5)
+        self.nrxAperTime.setDecimals(2)
         self.nrxAperTime.setRange(1e-5, 1000)
         self.nrxAperTime.setValue(config.NRX_APER_TIME)
 
