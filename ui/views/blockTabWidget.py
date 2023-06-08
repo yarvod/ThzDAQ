@@ -310,7 +310,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def save_iv_data(self, results):
         try:
-            filepath = QFileDialog.getSaveFileName()[0]
+            filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
             df = pd.DataFrame(
                 dict(
                     v_set=results["v_set"],

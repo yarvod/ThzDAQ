@@ -91,7 +91,7 @@ class BiasPowerWorker(QObject):
 
             self.stream_results.emit(
                 {
-                    "x": [voltage_get],
+                    "x": [voltage_get * 1e3],
                     "y": [power],
                     "new_plot": i == 0,
                 }
@@ -280,7 +280,7 @@ class NRXTabWidget(QWidget):
 
     def save_bias_power_scan(self, results):
         try:
-            filepath = QFileDialog.getSaveFileName()[0]
+            filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
             df = pd.DataFrame(results)
             df.to_csv(filepath, index=False)
         except (IndexError, FileNotFoundError):

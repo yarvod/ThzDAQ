@@ -297,11 +297,11 @@ class VNATabWidget(QWidget):
 
     def save_bias_reflection(self, data):
         try:
-            refl_filepath = QFileDialog.getSaveFileName()[0]
+            refl_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
             refl_df = pd.DataFrame(data["refl"], index=data["frequencies"])
             refl_df.to_csv(refl_filepath)
 
-            iv_filepath = QFileDialog.getSaveFileName()[0]
+            iv_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
             iv_df = pd.DataFrame(
                 dict(
                     v_set=data["v_set"],
