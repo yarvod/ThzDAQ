@@ -1,8 +1,8 @@
 import logging
-import time
 
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
+    QStackedLayout,
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -73,17 +73,22 @@ class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
-        self.layout.addWidget(self.groupBlock, alignment=Qt.AlignmentFlag.AlignTop)
-        self.layout.addWidget(self.groupVna, alignment=Qt.AlignmentFlag.AlignTop)
-        self.layout.addWidget(self.groupNRX, alignment=Qt.AlignmentFlag.AlignTop)
+        self.layout.addWidget(self.groupBlock)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupVna)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupNRX)
+        self.layout.addSpacing(10)
+        self.layout.addStretch()
         self.setLayout(self.layout)
 
     def createGroupBlock(self):
-        self.groupBlock = QGroupBox("SIS Block config")
+        self.groupBlock = QGroupBox(self)
+        self.groupBlock.setTitle("SIS Block config")
         self.groupBlock.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -133,7 +138,8 @@ class SetUpTabWidget(QWidget):
         self.groupBlock.setLayout(layout)
 
     def createGroupVna(self):
-        self.groupVna = QGroupBox("VNA config")
+        self.groupVna = QGroupBox(self)
+        self.groupVna.setTitle("VNA config")
         self.groupVna.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -161,7 +167,8 @@ class SetUpTabWidget(QWidget):
         self.groupVna.setLayout(layout)
 
     def createGroupNRX(self):
-        self.groupNRX = QGroupBox("Power meter config")
+        self.groupNRX = QGroupBox(self)
+        self.groupNRX.setTitle("Power meter config")
         self.groupNRX.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )

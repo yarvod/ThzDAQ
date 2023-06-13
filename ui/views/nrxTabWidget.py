@@ -114,12 +114,14 @@ class NRXTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.biasPowerGraphWindow = None
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
-        self.layout.addWidget(self.groupNRX, alignment=Qt.AlignmentFlag.AlignTop)
+        self.layout.addWidget(self.groupNRX)
+        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupBiasPowerScan)
+        self.layout.addStretch()
         self.setLayout(self.layout)
 
     def createGroupNRX(self):

@@ -225,7 +225,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.ctrlGraphWindow = None
         self.biasGraphWindow = None
         self.createGroupMonitor()
@@ -233,9 +233,13 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.createGroupCTRLScan()
         self.createGroupBiasScan()
         self.layout.addWidget(self.groupMonitor)
+        self.layout.addSpacing(10)
         self.layout.addWidget(self.rowValuesSet)
+        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupCTRLScan)
+        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupBiasScan)
+        self.layout.addStretch()
         self.setLayout(self.layout)
 
     def show_ctrl_graph_window(self, results: dict):

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -108,16 +108,14 @@ class VNATabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.vnaGraphWindow = None
         self.createGroupVNAParameters()
         self.createGroupBiasReflScan()
-        self.layout.addWidget(
-            self.groupVNAParameters, alignment=Qt.AlignmentFlag.AlignTop
-        )
-        self.layout.addWidget(
-            self.groupBiasReflScan, alignment=Qt.AlignmentFlag.AlignTop
-        )
+        self.layout.addWidget(self.groupVNAParameters)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupBiasReflScan)
+        self.layout.addStretch()
         self.setLayout(self.layout)
 
     def createGroupVNAParameters(self):
