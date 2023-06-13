@@ -123,7 +123,7 @@ class NRXTabWidget(QWidget):
         self.setLayout(self.layout)
 
     def createGroupNRX(self):
-        self.groupNRX = QGroupBox("NRX monitor")
+        self.groupNRX = QGroupBox("Power meter monitor")
         self.groupNRX.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )

@@ -83,7 +83,7 @@ class SetUpTabWidget(QWidget):
         self.setLayout(self.layout)
 
     def createGroupBlock(self):
-        self.groupBlock = QGroupBox("Block config")
+        self.groupBlock = QGroupBox("SIS Block config")
         self.groupBlock.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -111,7 +111,7 @@ class SetUpTabWidget(QWidget):
         self.biasDev.setText(config.BLOCK_BIAS_DEV)
 
         self.sisBlockStatusLabel = QLabel(self)
-        self.sisBlockStatusLabel.setText("SIS Block status:")
+        self.sisBlockStatusLabel.setText("Block status:")
         self.sisBlockStatus = QLabel(self)
         self.sisBlockStatus.setText("SIS Block is not initialized yet!")
 
@@ -161,46 +161,39 @@ class SetUpTabWidget(QWidget):
         self.groupVna.setLayout(layout)
 
     def createGroupNRX(self):
-        self.groupNRX = QGroupBox("NRX config")
+        self.groupNRX = QGroupBox("Power meter config")
         self.groupNRX.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         layout = QGridLayout()
 
         self.nrxIPLabel = QLabel(self)
-        self.nrxIPLabel.setText("NRX IP:")
+        self.nrxIPLabel.setText("PM IP:")
         self.nrxIP = QLineEdit(self)
         self.nrxIP.setText(config.NRX_IP)
 
-        self.nrxFilterTimeLabel = QLabel(self)
-        self.nrxFilterTimeLabel.setText("NRX Filter time, s:")
-        self.nrxFilterTime = CustomQDoubleSpinBox(self)
-        self.nrxFilterTime.setRange(0.01, 1000)
-
         self.nrxAperTimeLabel = QLabel(self)
-        self.nrxAperTimeLabel.setText("NRX Aperture time, s:")
+        self.nrxAperTimeLabel.setText("PM Averaging time, s:")
         self.nrxAperTime = CustomQDoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
         self.nrxAperTime.setRange(1e-5, 1000)
         self.nrxAperTime.setValue(config.NRX_APER_TIME)
 
         self.nrxStatusLabel = QLabel(self)
-        self.nrxStatusLabel.setText("NRX status:")
+        self.nrxStatusLabel.setText("PM status:")
         self.nrxStatus = QLabel(self)
-        self.nrxStatus.setText("NRX is not initialized yet!")
+        self.nrxStatus.setText("PM is not initialized yet!")
 
-        self.btnInitNRX = QPushButton("Initialize NRX")
+        self.btnInitNRX = QPushButton("Initialize PM")
         self.btnInitNRX.clicked.connect(self.initialize_nrx)
 
         layout.addWidget(self.nrxIPLabel, 1, 0)
         layout.addWidget(self.nrxIP, 1, 1)
-        layout.addWidget(self.nrxFilterTimeLabel, 2, 0)
-        layout.addWidget(self.nrxFilterTime, 2, 1)
-        layout.addWidget(self.nrxAperTimeLabel, 3, 0)
-        layout.addWidget(self.nrxAperTime, 3, 1)
-        layout.addWidget(self.nrxStatusLabel, 4, 0)
-        layout.addWidget(self.nrxStatus, 4, 1)
-        layout.addWidget(self.btnInitNRX, 5, 0, 1, 2)
+        layout.addWidget(self.nrxAperTimeLabel, 2, 0)
+        layout.addWidget(self.nrxAperTime, 2, 1)
+        layout.addWidget(self.nrxStatusLabel, 3, 0)
+        layout.addWidget(self.nrxStatus, 3, 1)
+        layout.addWidget(self.btnInitNRX, 4, 0, 1, 2)
 
         self.groupNRX.setLayout(layout)
 
