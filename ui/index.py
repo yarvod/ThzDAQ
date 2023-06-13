@@ -12,7 +12,7 @@ class App(QMainWindow):
         self.top = 0
         self.width = 400
         self.height = 300
-        self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
+        self.setWindowIcon(QtGui.QIcon("./assets/logo_small.ico"))
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
 
