@@ -73,31 +73,31 @@ class BlockStreamWorker(QObject):
     bias_current = pyqtSignal(float)
 
     def run(self):
-        self.block = Block(
+        block = Block(
             host=config.BLOCK_ADDRESS,
             port=config.BLOCK_PORT,
             bias_dev=config.BLOCK_BIAS_DEV,
             ctrl_dev=config.BLOCK_CTRL_DEV,
         )
-        self.block.connect()
+        block.connect()
         while 1:
             if not config.BLOCK_STREAM_THREAD:
                 break
             time.sleep(0.1)
-            bias_voltage = self.block.get_bias_voltage()
+            bias_voltage = block.get_bias_voltage()
             if not bias_voltage:
                 continue
-            bias_current = self.block.get_bias_current()
+            bias_current = block.get_bias_current()
             if not bias_current:
                 continue
-            cl_current = self.block.get_ctrl_current()
+            cl_current = block.get_ctrl_current()
             if not cl_current:
                 continue
             self.bias_voltage.emit(bias_voltage)
             self.bias_current.emit(bias_current)
             self.cl_current.emit(cl_current)
 
-        self.block.disconnect()
+        block.disconnect()
 
 
 class BlockCLScanWorker(QObject):
@@ -304,6 +304,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnSetBiasShortStatus.setText(
             f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_BIAS_SHORT_STATUS)}"
         )
+        block.disconnect()
 
     def set_block_ctrl_short_status(self):
         block = Block(
@@ -323,6 +324,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnSetCtrlShortStatus.setText(
             f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_CTRL_SHORT_STATUS)}"
         )
+        block.disconnect()
 
     def save_iv_data(self, results):
         try:
@@ -397,7 +399,8 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def stopStreamBlock(self):
         config.BLOCK_STREAM_THREAD = False
-        self.stream_worker.finished.emit()
+        self.stream_thread.quit()
+
 
     def createGroupMonitor(self):
         self.groupMonitor = QGroupBox("Block Monitor")

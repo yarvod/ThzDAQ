@@ -24,3 +24,16 @@ class SingletonSafe(type):
                         *args, **kwargs
                     )
         return cls._instances[cls]
+
+
+class BaseInstrumentInterface:
+    """Base Instrument Api interface"""
+
+    def connect(self):
+        raise NotImplementedError
+
+    def disconnect(self):
+        raise NotImplementedError
+
+    def __del__(self):
+        raise NotImplementedError

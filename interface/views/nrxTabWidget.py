@@ -33,8 +33,11 @@ class NRXBlockStreamWorker(QObject):
         )
         while config.NRX_STREAM:
             power = block.get_power()
+            if not power:
+                time.sleep(2)
+                continue
             self.power.emit(power)
-        block.close()
+        block.disconnect()
         self.finished.emit()
 
 
@@ -105,7 +108,7 @@ class BiasPowerWorker(QObject):
 
         block.set_bias_voltage(initial_v)
         block.disconnect()
-        nrx.close()
+        nrx.disconnect()
         self.results.emit(results)
         self.finished.emit()
 

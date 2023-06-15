@@ -1,12 +1,14 @@
 import socket
 import time
+from typing import Union
 
 from config import config
+from utils.classes import BaseInstrumentInterface
 from utils.decorators import exception
 from utils.logger import logger
 
 
-class Block:
+class Block(BaseInstrumentInterface):
     """
     Scontel SIS block operation interface.
     """
@@ -52,7 +54,7 @@ class Block:
         for attempt in range(1, max_attempts + 1):
             try:
                 if attempt > 1:
-                    time.sleep(0.1)
+                    time.sleep(1)
                 self.s.sendall(cmd)
                 data = self.s.recv(1024)
                 result = data.decode().rstrip()
@@ -60,13 +62,14 @@ class Block:
                     f"[Block.manipulate] Received result: {result}; attempt {attempt}"
                 )
                 if "ERROR" in result:
-                    logger.warning(
-                        f"Warning[manipulate] Received Error result: {result}; attempt {attempt}"
+                    logger.error(
+                        f"[Block.manipulate] Received Error result: {result}; attempt {attempt}"
                     )
                     continue
                 return result
             except Exception as e:
-                logger.debug(f"[manipulate] Exception: {e}; attempt {attempt}")
+                logger.error(f"[Block.manipulate] Exception: {e}; attempt {attempt}")
+                continue
         return ""
 
     def get_ctrl_short_status(self, s: socket.socket = None):
@@ -140,20 +143,22 @@ class Block:
     def set_ctrl_current(self, curr: float):
         return self.manipulate(f"CTRL:{self.ctrl_dev}:CURR {curr}")
 
-    def get_ctrl_current(self):
+    def get_ctrl_current(self) -> Union[float, None]:
         for attempt in range(5):
             try:
                 if attempt > 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                 return float(self.manipulate(f"CTRL:{self.ctrl_dev}:CURR?"))
             except ValueError as e:
                 logger.debug(f"Exception[get_ctrl_current] {e}; attempt {attempt}")
+                continue
+        return None
 
-    def get_bias_current(self):
+    def get_bias_current(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
                 if attempt > 1:
-                    time.sleep(0.1)
+                    time.sleep(2)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
                 logger.debug(
                     f"Success [Block.get_bias_current] received {result} current; attempt {attempt}"
@@ -163,13 +168,14 @@ class Block:
                 logger.debug(
                     f"[Block.get_bias_current][Exception] {e}, attempt {attempt}"
                 )
+                continue
         return None
 
-    def get_bias_voltage(self):
+    def get_bias_voltage(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
                 if attempt > 1:
-                    time.sleep(0.1)
+                    time.sleep(2)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
                 logger.debug(
                     f"[Block.get_bias_voltage] Success received {result} voltage; attempt {attempt}"
@@ -179,9 +185,10 @@ class Block:
                 logger.debug(
                     f"[Block.get_bias_voltage] Exception {e}; attempt {attempt}"
                 )
-            return None
+                continue
+        return None
 
-    def set_bias_voltage(self, volt: float):
+    def set_bias_voltage(self, volt: float) -> None:
         for attempt in range(1, 6):
             status = self.manipulate(f"BIAS:{self.bias_dev}:VOLT {volt}")
             if status == "OK":
@@ -192,7 +199,12 @@ class Block:
             logger.warning(
                 f"[Block.set_bias_voltage] unable to set volt {volt}; received {status}; attempt {attempt}"
             )
+            continue
         return
+
+    def __del__(self):
+        self.disconnect()
+        logger.info(f"[Block.__del__] Instance {self} deleted")
 
 
 if __name__ == "__main__":

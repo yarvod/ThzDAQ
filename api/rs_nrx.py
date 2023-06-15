@@ -1,11 +1,12 @@
 from RsInstrument import *
 
 from config import config
+from utils.classes import BaseInstrumentInterface
 from utils.decorators import exception
 from utils.logger import logger
 
 
-class NRXBlock:
+class NRXBlock(BaseInstrumentInterface):
     def __init__(
         self,
         ip: str = config.NRX_IP,
@@ -15,18 +16,19 @@ class NRXBlock:
         self.address = f"TCPIP::{ip}::INSTR"
         self.instr = None
 
-        self.open_instrument()
+        self.connect()
         # self.set_filter_time(filter_time)
         self.set_filter_state(0)
         self.set_aperture_time(aperture_time)
 
     @exception
-    def open_instrument(self):
+    def connect(self):
         self.instr = RsInstrument(self.address, reset=False)
 
     @exception
-    def close(self):
+    def disconnect(self):
         self.instr.close()
+        logger.info(f"[NRXBlock.close] NRX block closed")
 
     @exception
     def reset(self):
@@ -37,34 +39,37 @@ class NRXBlock:
 
     @exception
     def idn(self):
+        """Method to get power meter name"""
         return self.instr.query("*IDN?")
 
     @exception
     def test(self):
+        """Method to test power meter"""
         return self.instr.query("*TST?")
 
     @exception
     def get_power(self):
+        """Main method to get power from power meter"""
         return self.instr.query_float("READ?")
 
     @exception
-    def meas(self):
-        return self.instr.query_float("MEAS? -50,3,(@1)")
-
-    @exception
     def get_conf(self):
+        """Get current power meter config"""
         return self.instr.query("CONF?")
 
     @exception
     def fetch(self):
+        """Get data without new measure, it will return old measured value"""
         return self.instr.query_float("FETCH?")
 
     @exception
     def set_lower_limit(self, limit: float):
+        """Set lower measurement limit"""
         self.instr.write(f"CALCulate1:LIMit1:LOWer:DATA {limit}")
 
     @exception
     def set_upper_limit(self, limit: float):
+        """Set upper measurement limit"""
         self.instr.write(f"CALCulate1:LIMit1:UPPer:DATA {limit}")
 
     @exception
@@ -75,6 +80,7 @@ class NRXBlock:
     @exception
     def set_filter_time(self, time: float = config.NRX_FILTER_TIME):
         """
+        Setting filter time
         :param time: seconds
         :return:
         """
@@ -83,10 +89,15 @@ class NRXBlock:
     @exception
     def set_aperture_time(self, time: float = config.NRX_APER_TIME):
         """
+        Setting averaging time
         :param time: seconds
         :return:
         """
         self.instr.write(f"CALC:APER {time}")
+
+    def __del__(self):
+        self.disconnect()
+        logger.info(f"[NRXBlock.__del__] Instance {self} deleted")
 
 
 if __name__ == "__main__":

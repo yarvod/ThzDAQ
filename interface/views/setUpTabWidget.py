@@ -47,7 +47,7 @@ class SISBlockWorker(QObject):
         )
         block.connect()
         result = block.test()
-        block.disconnect()
+        # block.disconnect()
         logger.info(f"Health check SIS block {result}")
         self.status.emit(result)
         self.finished.emit()
@@ -64,7 +64,7 @@ class NRXBlockWorker(QObject):
             aperture_time=config.NRX_APER_TIME,
         )
         result = block.test()
-        block.close()
+        block.disconnect()
         self.status.emit(config.NRX_TEST_MAP.get(result, "Error"))
         self.finished.emit()
 
@@ -255,7 +255,6 @@ class SetUpTabWidget(QWidget):
         self.nrx_worker = NRXBlockWorker()
 
         config.NRX_IP = self.nrxIP.text()
-        config.NRX_FILTER_TIME = self.nrxFilterTime.value()
         config.NRX_APER_TIME = self.nrxAperTime.value()
 
         self.nrx_worker.moveToThread(self.nrx_thread)
