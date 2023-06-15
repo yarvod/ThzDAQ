@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QMainWindow
 from PyQt6 import QtGui
 
-from ui.views.index import TabsWidget
+from interface.views.index import TabsWidget
 
 
 class App(QMainWindow):

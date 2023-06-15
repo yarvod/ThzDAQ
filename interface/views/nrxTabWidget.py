@@ -15,10 +15,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config import config
-from interactors.block import Block
-from interactors.rs_nrx import NRXBlock
-from ui.components import CustomQDoubleSpinBox
-from ui.windows.biasPowerGraphWindow import BiasPowerGraphWindow
+from api.block import Block
+from api.rs_nrx import NRXBlock
+from interface.components import CustomQDoubleSpinBox
+from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 
 
 class NRXBlockStreamWorker(QObject):

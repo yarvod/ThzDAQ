@@ -17,10 +17,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config import config
-from interactors.block import Block
-from interactors.vna import VNABlock
-from ui.components import CustomQDoubleSpinBox
-from ui.windows.vnaGraphWindow import VNAGraphWindow
+from api.block import Block
+from api.vna import VNABlock
+from interface.components import CustomQDoubleSpinBox
+from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
 from utils.logger import logger
 

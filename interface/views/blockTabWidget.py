@@ -18,10 +18,10 @@ from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 
 from config import config
 
-from interactors.block import Block
-from ui.components import CustomQDoubleSpinBox
-from ui.windows.biasGraphWindow import BiasGraphWindow
-from ui.windows.clGraphWindow import CLGraphWindow
+from api.block import Block
+from interface.components import CustomQDoubleSpinBox
+from interface.windows.biasGraphWindow import BiasGraphWindow
+from interface.windows.clGraphWindow import CLGraphWindow
 
 logger = logging.getLogger(__name__)
 

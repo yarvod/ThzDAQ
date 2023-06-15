@@ -15,10 +15,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config import config
-from interactors.block import Block
-from interactors.rs_nrx import NRXBlock
-from interactors.vna import VNABlock
-from ui.components import CustomQDoubleSpinBox
+from api.block import Block
+from api.rs_nrx import NRXBlock
+from api.vna import VNABlock
+from interface.components import CustomQDoubleSpinBox
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-from ui.windows.graphWindow import GraphWindow
+from interface.windows.graphWindow import GraphWindow
 
 
 class CLGraphWindow(GraphWindow):

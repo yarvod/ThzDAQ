@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
-from ui.views.blockTabWidget import BlockTabWidget
-from ui.views.nrxTabWidget import NRXTabWidget
-from ui.views.setUpTabWidget import SetUpTabWidget
-from ui.views.vnaTabWidget import VNATabWidget
+from interface.views.blockTabWidget import BlockTabWidget
+from interface.views.nrxTabWidget import NRXTabWidget
+from interface.views.setUpTabWidget import SetUpTabWidget
+from interface.views.vnaTabWidget import VNATabWidget
 
 
 class TabsWidget(QWidget):
