@@ -12,8 +12,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QFileDialog,
+    QCheckBox,
 )
 
+from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from state import state
 from api.block import Block
 from api.rs_nrx import NRXBlock
@@ -23,7 +25,7 @@ from utils.logger import logger
 
 
 class NRXBlockStreamThread(QThread):
-    power = pyqtSignal(float)
+    meas = pyqtSignal(dict)
 
     def run(self):
         nrx = NRXBlock(
@@ -31,18 +33,33 @@ class NRXBlockStreamThread(QThread):
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
+        i = 0
+        start_time = time.time()
         while state.NRX_STREAM_THREAD:
             power = nrx.get_power()
+            meas_time = time.time() - start_time
             if not power:
                 time.sleep(2)
                 continue
-            self.power.emit(power)
+
+            self.meas.emit({"power": power, "time": meas_time, "reset": i == 0})
+            i += 1
         self.finished.emit()
 
     def terminate(self) -> None:
+        state.NRX_STREAM_THREAD = False
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+
+    def exit(self, returnCode: int = ...) -> None:
         state.NRX_STREAM_THREAD = False
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+
+    def quit(self) -> None:
+        state.NRX_STREAM_THREAD = False
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
 
 class BiasPowerThread(QThread):
@@ -135,6 +152,7 @@ class NRXTabWidget(QWidget):
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.biasPowerGraphWindow = None
+        self.powerStreamGraphWindow = None
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
         self.layout.addWidget(self.groupNRX)
@@ -162,6 +180,16 @@ class NRXTabWidget(QWidget):
         self.btnStopStreamNRX.setEnabled(False)
         self.btnStopStreamNRX.clicked.connect(self.stop_stream_nrx)
 
+        self.checkNRXStreamPlot = QCheckBox(self)
+        self.checkNRXStreamPlot.setText("Plot stream time line")
+
+        self.nrxStreamPlotPointsLabel = QLabel(self)
+        self.nrxStreamPlotPointsLabel.setText("Window points")
+        self.nrxStreamPlotPoints = CustomQDoubleSpinBox(self)
+        self.nrxStreamPlotPoints.setRange(10, 1000)
+        self.nrxStreamPlotPoints.setDecimals(0)
+        self.nrxStreamPlotPoints.setValue(state.NRX_STREAM_GRAPH_POINTS)
+
         layout.addWidget(
             self.nrxPowerLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -172,17 +200,25 @@ class NRXTabWidget(QWidget):
         layout.addWidget(
             self.btnStopStreamNRX, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter
         )
-
+        layout.addWidget(
+            self.checkNRXStreamPlot, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.nrxStreamPlotPointsLabel, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        layout.addWidget(
+            self.nrxStreamPlotPoints, 4, 1, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         self.groupNRX.setLayout(layout)
 
     def start_stream_nrx(self):
         self.nrx_stream_thread = NRXBlockStreamThread()
 
         state.NRX_STREAM_THREAD = True
+        state.NRX_STREAM_PLOT_GRAPH = self.checkNRXStreamPlot.isChecked()
+        state.NRX_STREAM_GRAPH_POINTS = int(self.nrxStreamPlotPoints.value())
 
-        self.nrx_stream_thread.power.connect(
-            lambda x: self.nrxPower.setText(f"{round(x, 3)}")
-        )
+        self.nrx_stream_thread.meas.connect(self.update_nrx_stream_values)
         self.nrx_stream_thread.start()
 
         self.btnStartStreamNRX.setEnabled(False)
@@ -195,8 +231,24 @@ class NRXTabWidget(QWidget):
             lambda: self.btnStopStreamNRX.setEnabled(False)
         )
 
+    def show_power_stream_graph(self, x: float, y: float, reset: bool = True):
+        if self.powerStreamGraphWindow is None:
+            self.powerStreamGraphWindow = NRXStreamGraphWindow()
+        self.powerStreamGraphWindow.plotNew(x=x, y=y, reset_data=reset)
+        self.powerStreamGraphWindow.show()
+
+    def update_nrx_stream_values(self, measure: dict):
+        self.nrxPower.setText(f"{round(measure.get('power'), 3)}")
+        if state.NRX_STREAM_PLOT_GRAPH:
+            self.show_power_stream_graph(
+                x=measure.get("time"),
+                y=measure.get("power"),
+                reset=measure.get("reset"),
+            )
+
     def stop_stream_nrx(self):
-        self.nrx_stream_thread.terminate()
+        self.nrx_stream_thread.quit()
+        self.nrx_stream_thread.exit(0)
 
     def createGroupBiasPowerScan(self):
         self.groupBiasPowerScan = QGroupBox("Scan Bias Power")

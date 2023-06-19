@@ -58,6 +58,8 @@ class State:
     NRX_FILTER_TIME = 0.01
     NRX_IP = "169.254.2.20"
     NRX_STREAM_THREAD = False
+    NRX_STREAM_PLOT_GRAPH = False
+    NRX_STREAM_GRAPH_POINTS = 150
 
     # NRX constants
     NRX_TEST_MAP = dict(
