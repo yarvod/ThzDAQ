@@ -2,7 +2,7 @@ import socket
 import time
 from typing import Union
 
-from config import config
+from state import state
 from utils.classes import BaseInstrumentInterface
 from utils.decorators import exception
 from utils.logger import logger
@@ -15,10 +15,10 @@ class Block(BaseInstrumentInterface):
 
     def __init__(
         self,
-        host: str = config.BLOCK_ADDRESS,
-        port: int = config.BLOCK_PORT,
-        bias_dev: str = config.BLOCK_BIAS_DEV,
-        ctrl_dev: str = config.BLOCK_CTRL_DEV,
+        host: str = state.BLOCK_ADDRESS,
+        port: int = state.BLOCK_PORT,
+        bias_dev: str = state.BLOCK_BIAS_DEV,
+        ctrl_dev: str = state.BLOCK_CTRL_DEV,
     ):
         self.host = host
         self.port = port
@@ -208,7 +208,7 @@ class Block(BaseInstrumentInterface):
 
 
 if __name__ == "__main__":
-    block = Block(config.BLOCK_ADDRESS, config.BLOCK_PORT)
+    block = Block(state.BLOCK_ADDRESS, state.BLOCK_PORT)
     block.connect()
     print(block.set_bias_short_status(0))
     print(block.get_bias_data())

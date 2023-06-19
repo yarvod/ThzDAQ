@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-from config import config
+from state import state
 from api.block import Block
 from api.rs_nrx import NRXBlock
 from api.vna import VNABlock
@@ -28,9 +28,9 @@ class VNAThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        vna = VNABlock(vna_ip=config.VNA_ADDRESS)
+        vna = VNABlock(vna_ip=state.VNA_ADDRESS)
         result = vna.test()
-        self.status.emit(config.VNA_TEST_MAP.get(result, "Error"))
+        self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
         self.finished.emit()
 
     def terminate(self):
@@ -52,10 +52,10 @@ class SISBlockThread(QThread):
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         result = block.test()
@@ -82,12 +82,12 @@ class NRXBlockThread(QThread):
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = NRXBlock(
-            ip=config.NRX_IP,
-            filter_time=config.NRX_FILTER_TIME,
-            aperture_time=config.NRX_APER_TIME,
+            ip=state.NRX_IP,
+            filter_time=state.NRX_FILTER_TIME,
+            aperture_time=state.NRX_APER_TIME,
         )
         result = block.test()
-        self.status.emit(config.NRX_TEST_MAP.get(result, "Error"))
+        self.status.emit(state.NRX_TEST_MAP.get(result, "Error"))
         self.finished.emit()
 
     def terminate(self):
@@ -131,14 +131,14 @@ class SetUpTabWidget(QWidget):
         self.blockIPLabel = QLabel(self)
         self.blockIPLabel.setText("Block IP:")
         self.block_ip = QLineEdit(self)
-        self.block_ip.setText(config.BLOCK_ADDRESS)
+        self.block_ip.setText(state.BLOCK_ADDRESS)
 
         self.blockPortLabel = QLabel(self)
         self.blockPortLabel.setText("Block Port:")
         self.block_port = QDoubleSpinBox(self)
         self.block_port.setMaximum(10000)
         self.block_port.setDecimals(0)
-        self.block_port.setValue(config.BLOCK_PORT)
+        self.block_port.setValue(state.BLOCK_PORT)
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
@@ -146,8 +146,8 @@ class SetUpTabWidget(QWidget):
         self.biasDev = QLineEdit(self)
         self.ctrlDevLabel.setText("CTRL Device:")
         self.biasDevLabel.setText("BIAS Device:")
-        self.ctrlDev.setText(config.BLOCK_CTRL_DEV)
-        self.biasDev.setText(config.BLOCK_BIAS_DEV)
+        self.ctrlDev.setText(state.BLOCK_CTRL_DEV)
+        self.biasDev.setText(state.BLOCK_BIAS_DEV)
 
         self.sisBlockStatusLabel = QLabel(self)
         self.sisBlockStatusLabel.setText("Block status:")
@@ -182,7 +182,7 @@ class SetUpTabWidget(QWidget):
         self.vnaIPLabel = QLabel(self)
         self.vnaIPLabel.setText("VNA IP:")
         self.vna_ip = QLineEdit(self)
-        self.vna_ip.setText(config.VNA_ADDRESS)
+        self.vna_ip.setText(state.VNA_ADDRESS)
 
         self.vnaStatusLabel = QLabel(self)
         self.vnaStatusLabel.setText("VNA status:")
@@ -211,14 +211,14 @@ class SetUpTabWidget(QWidget):
         self.nrxIPLabel = QLabel(self)
         self.nrxIPLabel.setText("PM IP:")
         self.nrxIP = QLineEdit(self)
-        self.nrxIP.setText(config.NRX_IP)
+        self.nrxIP.setText(state.NRX_IP)
 
         self.nrxAperTimeLabel = QLabel(self)
         self.nrxAperTimeLabel.setText("PM Averaging time, s:")
         self.nrxAperTime = CustomQDoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
         self.nrxAperTime.setRange(1e-5, 1000)
-        self.nrxAperTime.setValue(config.NRX_APER_TIME)
+        self.nrxAperTime.setValue(state.NRX_APER_TIME)
 
         self.nrxStatusLabel = QLabel(self)
         self.nrxStatusLabel.setText("PM status:")
@@ -244,10 +244,10 @@ class SetUpTabWidget(QWidget):
     def initialize_block(self):
         self.sis_block_thread = SISBlockThread()
 
-        config.BLOCK_ADDRESS = self.block_ip.text()
-        config.BLOCK_PORT = int(self.block_port.value())
-        config.BLOCK_BIAS_DEV = self.biasDev.text()
-        config.BLOCK_CTRL_DEV = self.ctrlDev.text()
+        state.BLOCK_ADDRESS = self.block_ip.text()
+        state.BLOCK_PORT = int(self.block_port.value())
+        state.BLOCK_BIAS_DEV = self.biasDev.text()
+        state.BLOCK_CTRL_DEV = self.ctrlDev.text()
 
         self.sis_block_thread.status.connect(self.set_sis_block_status)
         self.sis_block_thread.start()
@@ -264,7 +264,7 @@ class SetUpTabWidget(QWidget):
         self.vna_thread = VNAThread()
         self.vna_thread.status.connect(self.set_vna_status)
 
-        config.VNA_ADDRESS = self.vna_ip.text()
+        state.VNA_ADDRESS = self.vna_ip.text()
         self.vna_thread.start()
 
         self.btnInitVna.setEnabled(False)
@@ -276,8 +276,8 @@ class SetUpTabWidget(QWidget):
     def initialize_nrx(self):
         self.nrx_thread = NRXBlockThread()
         self.nrx_thread.status.connect(self.set_nrx_status)
-        config.NRX_IP = self.nrxIP.text()
-        config.NRX_APER_TIME = self.nrxAperTime.value()
+        state.NRX_IP = self.nrxIP.text()
+        state.NRX_APER_TIME = self.nrxAperTime.value()
         self.nrx_thread.start()
 
         self.btnInitNRX.setEnabled(False)

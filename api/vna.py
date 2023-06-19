@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from config import config
+from state import state
 
 from RsInstrument import *
 
@@ -17,11 +17,11 @@ class Instrument(RsInstrument, metaclass=Singleton):
 class VNABlock:
     def __init__(
         self,
-        vna_ip: str = config.VNA_ADDRESS,
-        points: int = config.VNA_POINTS,
-        channel_format: str = config.VNA_CHANNEL_FORMAT,
-        power: float = config.VNA_POWER,
-        param: str = config.VNA_SPARAM,
+        vna_ip: str = state.VNA_ADDRESS,
+        points: int = state.VNA_POINTS,
+        channel_format: str = state.VNA_CHANNEL_FORMAT,
+        power: float = state.VNA_POWER,
+        param: str = state.VNA_SPARAM,
     ):
         self.vna_ip = vna_ip
         self.param = param
@@ -30,11 +30,11 @@ class VNABlock:
     @exception
     def update(
         self,
-        vna_ip: str = config.VNA_ADDRESS,
-        points: int = config.VNA_POINTS,
-        channel_format: str = config.VNA_CHANNEL_FORMAT,
-        power: float = config.VNA_POWER,
-        param: str = config.VNA_SPARAM,
+        vna_ip: str = state.VNA_ADDRESS,
+        points: int = state.VNA_POINTS,
+        channel_format: str = state.VNA_CHANNEL_FORMAT,
+        power: float = state.VNA_POWER,
+        param: str = state.VNA_SPARAM,
     ):
         self.vna_ip = vna_ip
         self.param = param
@@ -58,16 +58,16 @@ class VNABlock:
         """
         return self.instr.query_str("*TST?")
 
-    def set_sweep(self, points: int = config.VNA_POINTS):
+    def set_sweep(self, points: int = state.VNA_POINTS):
         self.instr.write_int("SWE:POIN", points)
 
-    def set_channel_format(self, form: str = config.VNA_CHANNEL_FORMAT):
+    def set_channel_format(self, form: str = state.VNA_CHANNEL_FORMAT):
         self.instr.write(f"CALC:FORM {form}")
 
     def get_channel_format(self):
         return self.instr.query_str("CALC:FORM?")
 
-    def set_power(self, power: float = config.VNA_POWER):
+    def set_power(self, power: float = state.VNA_POWER):
         self.instr.write(f"SOUR:POW {power}")
 
     def get_power(self):

@@ -1,4 +1,4 @@
-class Config:
+class State:
     # Block variables
     BLOCK_ADDRESS = "169.254.190.83"
     BLOCK_PORT = 9876
@@ -75,4 +75,4 @@ class Config:
     BIAS_REFL_DELAY = 0.8
 
 
-config = Config()
+state = State()

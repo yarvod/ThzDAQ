@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 
-from config import config
+from state import state
 from api.block import Block
 from api.rs_nrx import NRXBlock
 from interface.components import CustomQDoubleSpinBox
@@ -27,11 +27,11 @@ class NRXBlockStreamThread(QThread):
 
     def run(self):
         nrx = NRXBlock(
-            ip=config.NRX_IP,
-            filter_time=config.NRX_FILTER_TIME,
-            aperture_time=config.NRX_APER_TIME,
+            ip=state.NRX_IP,
+            filter_time=state.NRX_FILTER_TIME,
+            aperture_time=state.NRX_APER_TIME,
         )
-        while config.NRX_STREAM_THREAD:
+        while state.NRX_STREAM_THREAD:
             power = nrx.get_power()
             if not power:
                 time.sleep(2)
@@ -42,7 +42,7 @@ class NRXBlockStreamThread(QThread):
     def terminate(self) -> None:
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        config.NRX_STREAM_THREAD = False
+        state.NRX_STREAM_THREAD = False
 
 
 class BiasPowerThread(QThread):
@@ -51,15 +51,15 @@ class BiasPowerThread(QThread):
 
     def run(self):
         nrx = NRXBlock(
-            ip=config.NRX_IP,
-            filter_time=config.NRX_FILTER_TIME,
-            aperture_time=config.NRX_APER_TIME,
+            ip=state.NRX_IP,
+            filter_time=state.NRX_FILTER_TIME,
+            aperture_time=state.NRX_APER_TIME,
         )
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         results = {
@@ -70,14 +70,14 @@ class BiasPowerThread(QThread):
             "time": [],
         }
         v_range = np.linspace(
-            config.BLOCK_BIAS_VOLT_FROM * 1e-3,
-            config.BLOCK_BIAS_VOLT_TO * 1e-3,
-            config.BLOCK_BIAS_VOLT_POINTS,
+            state.BLOCK_BIAS_VOLT_FROM * 1e-3,
+            state.BLOCK_BIAS_VOLT_TO * 1e-3,
+            state.BLOCK_BIAS_VOLT_POINTS,
         )
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         for i, voltage_set in enumerate(v_range):
-            if not config.BLOCK_BIAS_POWER_MEASURE_THREAD:
+            if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
             if i == 0:
@@ -85,7 +85,7 @@ class BiasPowerThread(QThread):
                 initial_time = time.time()
 
             block.set_bias_voltage(voltage_set)
-            time.sleep(config.BLOCK_BIAS_STEP_DELAY)
+            time.sleep(state.BLOCK_BIAS_STEP_DELAY)
             voltage_get = block.get_bias_voltage()
             if not voltage_get:
                 continue
@@ -116,17 +116,17 @@ class BiasPowerThread(QThread):
     def terminate(self) -> None:
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def quit(self) -> None:
         super().quit()
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def exit(self, returnCode: int = ...):
         super().exit(returnCode)
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
 class NRXTabWidget(QWidget):
@@ -178,7 +178,7 @@ class NRXTabWidget(QWidget):
     def start_stream_nrx(self):
         self.nrx_stream_thread = NRXBlockStreamThread()
 
-        config.NRX_STREAM_THREAD = True
+        state.NRX_STREAM_THREAD = True
 
         self.nrx_stream_thread.power.connect(
             lambda x: self.nrxPower.setText(f"{round(x, 3)}")
@@ -209,28 +209,28 @@ class NRXTabWidget(QWidget):
         self.voltFromLabel.setText("Bias voltage from, mV")
         self.voltFrom = CustomQDoubleSpinBox(self)
         self.voltFrom.setRange(
-            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+            state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
         self.voltTo = CustomQDoubleSpinBox(self)
         self.voltTo.setRange(
-            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+            state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
         self.voltPoints = CustomQDoubleSpinBox(self)
-        self.voltPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
+        self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
-        self.voltPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
+        self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
         self.voltStepDelay = CustomQDoubleSpinBox(self)
         self.voltStepDelay.setRange(0, 10)
-        self.voltStepDelay.setValue(config.BLOCK_BIAS_STEP_DELAY)
+        self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
         self.btnStartBiasPowerScan = QPushButton("Start Scan")
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_bias_power)
@@ -255,11 +255,11 @@ class NRXTabWidget(QWidget):
     def start_measure_bias_power(self):
         self.bias_power_thread = BiasPowerThread()
 
-        config.BLOCK_BIAS_POWER_MEASURE_THREAD = True
-        config.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
-        config.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
-        config.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
-        config.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
+        state.BLOCK_BIAS_POWER_MEASURE_THREAD = True
+        state.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
+        state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
+        state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
+        state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
         self.bias_power_thread.results.connect(self.save_bias_power_scan)

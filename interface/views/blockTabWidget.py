@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
 
-from config import config
+from state import state
 
 from api.block import Block
 from interface.components import CustomQDoubleSpinBox
@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 class UtilsMixin:
     def set_voltage(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         try:
@@ -49,10 +49,10 @@ class UtilsMixin:
 
     def set_ctrl_current(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         try:
@@ -73,14 +73,14 @@ class BlockStreamThread(QThread):
 
     def run(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         while 1:
-            if not config.BLOCK_STREAM_THREAD:
+            if not state.BLOCK_STREAM_THREAD:
                 break
             time.sleep(0.1)
             bias_voltage = block.get_bias_voltage()
@@ -101,7 +101,7 @@ class BlockStreamThread(QThread):
     def terminate(self):
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        config.BLOCK_STREAM_THREAD = False
+        state.BLOCK_STREAM_THREAD = False
 
 
 class BlockCLScanThread(QThread):
@@ -110,10 +110,10 @@ class BlockCLScanThread(QThread):
 
     def run(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         results = {
@@ -122,22 +122,22 @@ class BlockCLScanThread(QThread):
             "bias_i": [],
         }
         ctrl_i_range = np.linspace(
-            config.BLOCK_CTRL_CURR_FROM / 1e3,
-            config.BLOCK_CTRL_CURR_TO / 1e3,
-            config.BLOCK_CTRL_POINTS,
+            state.BLOCK_CTRL_CURR_FROM / 1e3,
+            state.BLOCK_CTRL_CURR_TO / 1e3,
+            state.BLOCK_CTRL_POINTS,
         )
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
         i = 0
         for ctrl_i in ctrl_i_range:
-            if not config.BLOCK_CTRL_SCAN_THREAD:
+            if not state.BLOCK_CTRL_SCAN_THREAD:
                 break
-            proc = round((i / config.BLOCK_CTRL_POINTS) * 100, 2)
+            proc = round((i / state.BLOCK_CTRL_POINTS) * 100, 2)
             results["ctrl_i_set"].append(ctrl_i * 1e3)
             block.set_ctrl_current(ctrl_i)
             if i == 0:
                 time.sleep(1)
-            time.sleep(config.BLOCK_CTRL_STEP_DELAY)
+            time.sleep(state.BLOCK_CTRL_STEP_DELAY)
             ctrl_current = block.get_ctrl_current() * 1e3
             if not ctrl_current:
                 continue
@@ -166,19 +166,19 @@ class BlockCLScanThread(QThread):
     def terminate(self):
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        config.BLOCK_CTRL_SCAN_THREAD = False
+        state.BLOCK_CTRL_SCAN_THREAD = False
 
     def exit(self, returnCode: int = ...):
         super().exit(returnCode)
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        config.BLOCK_CTRL_SCAN_THREAD = False
+        state.BLOCK_CTRL_SCAN_THREAD = False
 
     def quit(
         self,
     ):
         super().quit()
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        config.BLOCK_CTRL_SCAN_THREAD = False
+        state.BLOCK_CTRL_SCAN_THREAD = False
 
 
 class BlockBIASScanThread(QThread):
@@ -187,10 +187,10 @@ class BlockBIASScanThread(QThread):
 
     def run(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
         results = {
@@ -201,16 +201,16 @@ class BlockBIASScanThread(QThread):
         }
         initial_v = block.get_bias_voltage()
         v_range = np.linspace(
-            config.BLOCK_BIAS_VOLT_FROM * 1e-3,
-            config.BLOCK_BIAS_VOLT_TO * 1e-3,
-            config.BLOCK_BIAS_VOLT_POINTS,
+            state.BLOCK_BIAS_VOLT_FROM * 1e-3,
+            state.BLOCK_BIAS_VOLT_TO * 1e-3,
+            state.BLOCK_BIAS_VOLT_POINTS,
         )
         start_t = datetime.now()
         i = 0
         for v_set in v_range:
-            if not config.BLOCK_BIAS_SCAN_THREAD:
+            if not state.BLOCK_BIAS_SCAN_THREAD:
                 break
-            proc = round((i / config.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
+            proc = round((i / state.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
             block.set_bias_voltage(v_set)
             if i == 0:
                 time.sleep(1)
@@ -242,19 +242,19 @@ class BlockBIASScanThread(QThread):
     def terminate(self):
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        config.BLOCK_BIAS_SCAN_THREAD = False
+        state.BLOCK_BIAS_SCAN_THREAD = False
 
     def exit(self, returnCode: int = ...):
         super().exit(returnCode)
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        config.BLOCK_BIAS_SCAN_THREAD = False
+        state.BLOCK_BIAS_SCAN_THREAD = False
 
     def quit(
         self,
     ):
         super().quit()
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        config.BLOCK_BIAS_SCAN_THREAD = False
+        state.BLOCK_BIAS_SCAN_THREAD = False
 
 
 class BlockTabWidget(QWidget, UtilsMixin):
@@ -302,11 +302,11 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_ctrl_scan_thread = BlockCLScanThread()
         self.block_ctrl_scan_thread.stream_result.connect(self.show_ctrl_graph_window)
 
-        config.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
-        config.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
-        config.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
-        config.BLOCK_CTRL_SCAN_THREAD = True
-        config.BLOCK_CTRL_STEP_DELAY = self.ctrlStepDelay.value()
+        state.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
+        state.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
+        state.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
+        state.BLOCK_CTRL_SCAN_THREAD = True
+        state.BLOCK_CTRL_STEP_DELAY = self.ctrlStepDelay.value()
 
         self.block_ctrl_scan_thread.start()
 
@@ -324,41 +324,41 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
     def set_block_bias_short_status(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
-        if config.BLOCK_BIAS_SHORT_STATUS == "1":
+        if state.BLOCK_BIAS_SHORT_STATUS == "1":
             status = "0"
         else:
             status = "1"
         block.set_bias_short_status(status)
         new_status = block.get_bias_short_status()
-        config.BLOCK_BIAS_SHORT_STATUS = new_status
+        state.BLOCK_BIAS_SHORT_STATUS = new_status
         self.btnSetBiasShortStatus.setText(
-            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_BIAS_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_BIAS_SHORT_STATUS)}"
         )
         block.disconnect()
 
     def set_block_ctrl_short_status(self):
         block = Block(
-            host=config.BLOCK_ADDRESS,
-            port=config.BLOCK_PORT,
-            bias_dev=config.BLOCK_BIAS_DEV,
-            ctrl_dev=config.BLOCK_CTRL_DEV,
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
-        if config.BLOCK_CTRL_SHORT_STATUS == "1":
+        if state.BLOCK_CTRL_SHORT_STATUS == "1":
             status = "0"
         else:
             status = "1"
         block.set_ctrl_short_status(status)
         new_status = block.get_ctrl_short_status()
-        config.BLOCK_CTRL_SHORT_STATUS = new_status
+        state.BLOCK_CTRL_SHORT_STATUS = new_status
         self.btnSetCtrlShortStatus.setText(
-            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_CTRL_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_CTRL_SHORT_STATUS)}"
         )
         block.disconnect()
 
@@ -382,10 +382,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_bias_scan_thread.stream_result.connect(self.show_bias_graph_window)
         self.block_bias_scan_thread.results.connect(self.save_iv_data)
 
-        config.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
-        config.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
-        config.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
-        config.BLOCK_BIAS_SCAN_THREAD = True
+        state.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
+        state.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
+        state.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
+        state.BLOCK_BIAS_SCAN_THREAD = True
 
         self.block_bias_scan_thread.start()
 
@@ -415,7 +415,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
             lambda x: self.sisVoltageGet.setText(f"{round(x * 1e3, 3)}")
         )
 
-        config.BLOCK_STREAM_THREAD = True
+        state.BLOCK_STREAM_THREAD = True
         self.stream_thread.start()
 
         self.btnStartStreamBlock.setEnabled(False)
@@ -501,7 +501,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.sisVoltageSetLabel.setText("BIAS voltage, mV:")
         self.sisVoltageSet = CustomQDoubleSpinBox(self)
         self.sisVoltageSet.setRange(
-            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+            state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.btn_set_voltage = QPushButton("Set BIAS voltage")
@@ -511,7 +511,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentSetLabel.setText("CL current, mA")
         self.ctrlCurrentSet = CustomQDoubleSpinBox(self)
         self.ctrlCurrentSet.setRange(
-            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
+            state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
 
         self.btnSetCTRLCurrent = QPushButton("Set CL current")
@@ -520,14 +520,14 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnSetBiasShortStatusLabel = QLabel()
         self.btnSetBiasShortStatusLabel.setText("Bias Status:")
         self.btnSetBiasShortStatus = QPushButton(
-            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_BIAS_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_BIAS_SHORT_STATUS)}"
         )
         self.btnSetBiasShortStatus.clicked.connect(self.set_block_bias_short_status)
 
         self.btnSetCtrlShortStatusLabel = QLabel()
         self.btnSetCtrlShortStatusLabel.setText("CTRL Status:")
         self.btnSetCtrlShortStatus = QPushButton(
-            f"{config.BLOCK_SHORT_STATUS_MAP.get(config.BLOCK_CTRL_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_CTRL_SHORT_STATUS)}"
         )
         self.btnSetCtrlShortStatus.clicked.connect(self.set_block_ctrl_short_status)
 
@@ -555,25 +555,25 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.ctrlCurrentFromLabel.setText("CL Current from, mA")
         self.ctrlCurrentFrom = CustomQDoubleSpinBox(self)
         self.ctrlCurrentFrom.setRange(
-            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
+            state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlCurrentToLabel = QLabel(self)
         self.ctrlCurrentToLabel.setText("CL Current to, mA")
         self.ctrlCurrentTo = CustomQDoubleSpinBox(self)
         self.ctrlCurrentTo.setRange(
-            config.BLOCK_CTRL_CURR_MIN_VALUE, config.BLOCK_CTRL_CURR_MAX_VALUE
+            state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points count")
         self.ctrlPoints = CustomQDoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
-        self.ctrlPoints.setMaximum(config.BLOCK_CTRL_POINTS_MAX)
-        self.ctrlPoints.setValue(config.BLOCK_CTRL_POINTS)
+        self.ctrlPoints.setMaximum(state.BLOCK_CTRL_POINTS_MAX)
+        self.ctrlPoints.setValue(state.BLOCK_CTRL_POINTS)
         self.ctrlStepDelayLabel = QLabel("Step delay, s")
         self.ctrlStepDelay = CustomQDoubleSpinBox(self)
         self.ctrlStepDelay.setRange(0, 10)
         self.ctrlStepDelay.setDecimals(2)
-        self.ctrlStepDelay.setValue(config.BLOCK_CTRL_STEP_DELAY)
+        self.ctrlStepDelay.setValue(state.BLOCK_CTRL_STEP_DELAY)
         self.btnCTRLScan = QPushButton("Scan CL Current")
         self.btnCTRLScan.clicked.connect(self.scan_ctrl_current)
 
@@ -605,20 +605,20 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasVoltageFromLabel.setText("Voltage from, mV")
         self.biasVoltageFrom = CustomQDoubleSpinBox(self)
         self.biasVoltageFrom.setRange(
-            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+            state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasVoltageToLabel = QLabel(self)
         self.biasVoltageToLabel.setText("Voltage to, mv")
         self.biasVoltageTo = CustomQDoubleSpinBox(self)
         self.biasVoltageTo.setRange(
-            config.BLOCK_BIAS_VOLT_MIN_VALUE, config.BLOCK_BIAS_VOLT_MAX_VALUE
+            state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasPointsLabel = QLabel(self)
         self.biasPointsLabel.setText("Points count")
         self.biasPoints = CustomQDoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
-        self.biasPoints.setMaximum(config.BLOCK_BIAS_VOLT_POINTS_MAX)
-        self.biasPoints.setValue(config.BLOCK_BIAS_VOLT_POINTS)
+        self.biasPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
+        self.biasPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
         self.btnBiasScan = QPushButton("Scan Bias IV")
         self.btnBiasScan.clicked.connect(self.scan_bias_iv)
 
