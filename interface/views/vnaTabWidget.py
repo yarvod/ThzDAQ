@@ -25,8 +25,7 @@ from utils.functions import to_db
 from utils.logger import logger
 
 
-class BiasReflectionWorker(QObject):
-    finished = pyqtSignal()
+class BiasReflectionThread(QThread):
     results = pyqtSignal(dict)
     progress = pyqtSignal(float)
 
@@ -60,7 +59,7 @@ class BiasReflectionWorker(QObject):
         )
         start_t = datetime.now()
         for i, v_set in enumerate(v_range, 1):
-            if not config.BIAS_REFL_THREAD:
+            if not config.BIAS_REFL_SCAN_THREAD:
                 break
             proc = round((i / config.BIAS_REFL_VOLT_POINTS) * 100, 2)
             block.set_bias_voltage(v_set)
@@ -91,9 +90,25 @@ class BiasReflectionWorker(QObject):
         self.results.emit(results)
         self.finished.emit()
 
+    def terminate(self):
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+        config.BIAS_REFL_SCAN_THREAD = False
 
-class VNAGetReflectionWorker(QObject):
-    finished = pyqtSignal()
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+        config.BIAS_REFL_SCAN_THREAD = False
+
+    def quit(
+        self,
+    ):
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
+        config.BIAS_REFL_SCAN_THREAD = False
+
+
+class VNAGetReflectionThread(QThread):
     reflection = pyqtSignal(list)
 
     def run(self):
@@ -102,6 +117,20 @@ class VNAGetReflectionWorker(QObject):
         reflection_db = list(to_db(reflection))
         self.reflection.emit(reflection_db)
         self.finished.emit()
+
+    def terminate(self):
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+
+    def quit(
+        self,
+    ):
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
 
 class VNATabWidget(QWidget):
@@ -203,6 +232,7 @@ class VNATabWidget(QWidget):
         self.btnBiasReflScan.clicked.connect(self.scan_bias_reflection)
         self.btnStopBiasReflScan = QPushButton("Stop Scan")
         self.btnStopBiasReflScan.clicked.connect(self.stop_scan_bias_reflection)
+        self.btnStopBiasReflScan.setEnabled(False)
 
         layout.addWidget(self.voltFromLabel, 1, 0)
         layout.addWidget(self.voltFrom, 1, 1)
@@ -226,25 +256,11 @@ class VNATabWidget(QWidget):
         config.VNA_FREQ_TO = self.freqTo.value() * 1e9
 
     def getReflection(self):
-        self.vna_get_reflection_thread = QThread()
-        self.vna_get_reflection_worker = VNAGetReflectionWorker()
+        self.vna_get_reflection_thread = VNAGetReflectionThread()
 
         self.update_vna_params()
 
-        self.vna_get_reflection_worker.moveToThread(self.vna_get_reflection_thread)
-        self.vna_get_reflection_thread.started.connect(
-            self.vna_get_reflection_worker.run
-        )
-        self.vna_get_reflection_worker.finished.connect(
-            self.vna_get_reflection_thread.quit
-        )
-        self.vna_get_reflection_worker.finished.connect(
-            self.vna_get_reflection_worker.deleteLater
-        )
-        self.vna_get_reflection_thread.finished.connect(
-            self.vna_get_reflection_thread.deleteLater
-        )
-        self.vna_get_reflection_worker.reflection.connect(self.plotReflection)
+        self.vna_get_reflection_thread.reflection.connect(self.plotReflection)
         self.vna_get_reflection_thread.start()
 
         self.btnGetReflection.setEnabled(False)
@@ -262,36 +278,31 @@ class VNATabWidget(QWidget):
         self.vnaGraphWindow.show()
 
     def scan_bias_reflection(self):
-        self.bias_reflection_thread = QThread()
-        self.bias_reflection_worker = BiasReflectionWorker()
+        self.bias_reflection_thread = BiasReflectionThread()
 
         self.update_vna_params()
-        config.BIAS_REFL_THREAD = True
+        config.BIAS_REFL_SCAN_THREAD = True
         config.BIAS_REFL_VOLT_FROM = self.voltFrom.value()
         config.BIAS_REFL_VOLT_TO = self.voltTo.value()
         config.BIAS_REFL_VOLT_POINTS = int(self.voltPoints.value())
         config.BIAS_REFL_DELAY = self.scanStepDelay.value()
 
-        self.bias_reflection_worker.moveToThread(self.bias_reflection_thread)
-        self.bias_reflection_thread.started.connect(self.bias_reflection_worker.run)
-        self.bias_reflection_worker.finished.connect(self.bias_reflection_thread.quit)
-        self.bias_reflection_worker.finished.connect(
-            self.bias_reflection_worker.deleteLater
-        )
-        self.bias_reflection_thread.finished.connect(
-            self.bias_reflection_thread.deleteLater
-        )
-        self.bias_reflection_worker.results.connect(self.save_bias_reflection)
-        self.bias_reflection_worker.progress.connect(self.set_bias_reflection_progress)
+        self.bias_reflection_thread.results.connect(self.save_bias_reflection)
+        self.bias_reflection_thread.progress.connect(self.set_bias_reflection_progress)
         self.bias_reflection_thread.start()
 
         self.btnBiasReflScan.setEnabled(False)
         self.bias_reflection_thread.finished.connect(
             lambda: self.btnBiasReflScan.setEnabled(True)
         )
+        self.btnStopBiasReflScan.setEnabled(True)
+        self.bias_reflection_thread.finished.connect(
+            lambda: self.btnStopBiasReflScan.setEnabled(False)
+        )
 
     def stop_scan_bias_reflection(self):
-        config.BIAS_REFL_THREAD = False
+        self.bias_reflection_thread.quit()
+        self.bias_reflection_thread.exit(0)
 
     def save_bias_reflection(self, data):
         try:

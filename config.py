@@ -16,7 +16,7 @@ class Config:
     BLOCK_CTRL_SCAN_THREAD = False
     BLOCK_CTRL_STEP_DELAY = 0.01
     BLOCK_STREAM_THREAD = False
-    BLOCK_BIAS_POWER_MEASURE = False
+    BLOCK_BIAS_POWER_MEASURE_THREAD = False
     BLOCK_BIAS_STEP_DELAY = 0.1
     BLOCK_BIAS_SHORT_STATUS = "1"
     BLOCK_CTRL_SHORT_STATUS = "1"
@@ -57,7 +57,7 @@ class Config:
     NRX_APER_TIME = 0.05
     NRX_FILTER_TIME = 0.01
     NRX_IP = "169.254.2.20"
-    NRX_STREAM = False
+    NRX_STREAM_THREAD = False
 
     # NRX constants
     NRX_TEST_MAP = dict(
@@ -68,7 +68,7 @@ class Config:
     )
 
     # Bias reflection variables
-    BIAS_REFL_THREAD = False
+    BIAS_REFL_SCAN_THREAD = False
     BIAS_REFL_VOLT_FROM = 0
     BIAS_REFL_VOLT_TO = 0
     BIAS_REFL_VOLT_POINTS = 300

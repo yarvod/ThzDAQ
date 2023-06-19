@@ -19,30 +19,33 @@ from api.block import Block
 from api.rs_nrx import NRXBlock
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
+from utils.logger import logger
 
 
-class NRXBlockStreamWorker(QObject):
-    finished = pyqtSignal()
+class NRXBlockStreamThread(QThread):
     power = pyqtSignal(float)
 
     def run(self):
-        block = NRXBlock(
+        nrx = NRXBlock(
             ip=config.NRX_IP,
             filter_time=config.NRX_FILTER_TIME,
             aperture_time=config.NRX_APER_TIME,
         )
-        while config.NRX_STREAM:
-            power = block.get_power()
+        while config.NRX_STREAM_THREAD:
+            power = nrx.get_power()
             if not power:
                 time.sleep(2)
                 continue
             self.power.emit(power)
-        block.disconnect()
         self.finished.emit()
 
+    def terminate(self) -> None:
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+        config.NRX_STREAM_THREAD = False
 
-class BiasPowerWorker(QObject):
-    finished = pyqtSignal()
+
+class BiasPowerThread(QThread):
     results = pyqtSignal(dict)
     stream_results = pyqtSignal(dict)
 
@@ -74,7 +77,7 @@ class BiasPowerWorker(QObject):
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         for i, voltage_set in enumerate(v_range):
-            if not config.BLOCK_BIAS_POWER_MEASURE:
+            if not config.BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
             if i == 0:
@@ -107,10 +110,23 @@ class BiasPowerWorker(QObject):
             results["time"].append(time_step)
 
         block.set_bias_voltage(initial_v)
-        block.disconnect()
-        nrx.disconnect()
         self.results.emit(results)
         self.finished.emit()
+
+    def terminate(self) -> None:
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+
+    def quit(self) -> None:
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
+        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+        config.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
 class NRXTabWidget(QWidget):
@@ -160,17 +176,11 @@ class NRXTabWidget(QWidget):
         self.groupNRX.setLayout(layout)
 
     def start_stream_nrx(self):
-        self.nrx_stream_thread = QThread()
-        self.nrx_stream_worker = NRXBlockStreamWorker()
-        self.nrx_stream_worker.moveToThread(self.nrx_stream_thread)
+        self.nrx_stream_thread = NRXBlockStreamThread()
 
-        config.NRX_STREAM = True
+        config.NRX_STREAM_THREAD = True
 
-        self.nrx_stream_thread.started.connect(self.nrx_stream_worker.run)
-        self.nrx_stream_worker.finished.connect(self.nrx_stream_thread.quit)
-        self.nrx_stream_worker.finished.connect(self.nrx_stream_worker.deleteLater)
-        self.nrx_stream_thread.finished.connect(self.nrx_stream_thread.deleteLater)
-        self.nrx_stream_worker.power.connect(
+        self.nrx_stream_thread.power.connect(
             lambda x: self.nrxPower.setText(f"{round(x, 3)}")
         )
         self.nrx_stream_thread.start()
@@ -186,7 +196,7 @@ class NRXTabWidget(QWidget):
         )
 
     def stop_stream_nrx(self):
-        config.NRX_STREAM = False
+        self.nrx_stream_thread.terminate()
 
     def createGroupBiasPowerScan(self):
         self.groupBiasPowerScan = QGroupBox("Scan Bias Power")
@@ -227,6 +237,7 @@ class NRXTabWidget(QWidget):
 
         self.btnStopBiasPowerScan = QPushButton("Stop Scan")
         self.btnStopBiasPowerScan.clicked.connect(self.stop_measure_bias_power)
+        self.btnStopBiasPowerScan.setEnabled(False)
 
         layout.addWidget(self.voltFromLabel, 1, 0)
         layout.addWidget(self.voltFrom, 1, 1)
@@ -242,22 +253,16 @@ class NRXTabWidget(QWidget):
         self.groupBiasPowerScan.setLayout(layout)
 
     def start_measure_bias_power(self):
-        self.bias_power_thread = QThread()
-        self.bias_power_worker = BiasPowerWorker()
-        self.bias_power_worker.moveToThread(self.bias_power_thread)
+        self.bias_power_thread = BiasPowerThread()
 
-        config.BLOCK_BIAS_POWER_MEASURE = True
+        config.BLOCK_BIAS_POWER_MEASURE_THREAD = True
         config.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
         config.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         config.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
         config.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
 
-        self.bias_power_thread.started.connect(self.bias_power_worker.run)
-        self.bias_power_worker.finished.connect(self.bias_power_thread.quit)
-        self.bias_power_worker.finished.connect(self.bias_power_worker.deleteLater)
-        self.bias_power_thread.finished.connect(self.bias_power_thread.deleteLater)
-        self.bias_power_worker.stream_results.connect(self.show_bias_power_graph)
-        self.bias_power_worker.results.connect(self.save_bias_power_scan)
+        self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
+        self.bias_power_thread.results.connect(self.save_bias_power_scan)
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -271,7 +276,7 @@ class NRXTabWidget(QWidget):
         )
 
     def stop_measure_bias_power(self):
-        config.BLOCK_BIAS_POWER_MEASURE = False
+        self.bias_power_thread.exit(0)
 
     def show_bias_power_graph(self, results):
         if self.biasPowerGraphWindow is None:

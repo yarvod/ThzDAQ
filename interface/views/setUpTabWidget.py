@@ -23,22 +23,34 @@ from interface.components import CustomQDoubleSpinBox
 logger = logging.getLogger(__name__)
 
 
-class VNAWorker(QObject):
-    finished = pyqtSignal()
+class VNAThread(QThread):
     status = pyqtSignal(str)
 
     def run(self):
+        logger.info(f"[{self.__class__.__name__}.run] Running...")
         vna = VNABlock(vna_ip=config.VNA_ADDRESS)
         result = vna.test()
         self.status.emit(config.VNA_TEST_MAP.get(result, "Error"))
         self.finished.emit()
 
+    def terminate(self):
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
 
-class SISBlockWorker(QObject):
-    finished = pyqtSignal()
+    def quit(self) -> None:
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
+
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+
+
+class SISBlockThread(QThread):
     status = pyqtSignal(str)
 
     def run(self):
+        logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = Block(
             host=config.BLOCK_ADDRESS,
             port=config.BLOCK_PORT,
@@ -47,26 +59,48 @@ class SISBlockWorker(QObject):
         )
         block.connect()
         result = block.test()
-        # block.disconnect()
-        logger.info(f"Health check SIS block {result}")
+        logger.info(f"[{self.__class__.__name__}.run]Health check SIS block {result}")
         self.status.emit(result)
         self.finished.emit()
 
+    def terminate(self):
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
 
-class NRXBlockWorker(QObject):
-    finished = pyqtSignal()
+    def quit(self) -> None:
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
+
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
+
+
+class NRXBlockThread(QThread):
     status = pyqtSignal(str)
 
     def run(self):
+        logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = NRXBlock(
             ip=config.NRX_IP,
             filter_time=config.NRX_FILTER_TIME,
             aperture_time=config.NRX_APER_TIME,
         )
         result = block.test()
-        block.disconnect()
         self.status.emit(config.NRX_TEST_MAP.get(result, "Error"))
         self.finished.emit()
+
+    def terminate(self):
+        super().terminate()
+        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+
+    def quit(self) -> None:
+        super().quit()
+        logger.info(f"[{self.__class__.__name__}.quit] Quited")
+
+    def exit(self, returnCode: int = ...):
+        super().exit(returnCode)
+        logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
 class SetUpTabWidget(QWidget):
@@ -208,40 +242,29 @@ class SetUpTabWidget(QWidget):
         self.sisBlockStatus.setText(status)
 
     def initialize_block(self):
-        self.sis_thread = QThread()
-        self.sis_worker = SISBlockWorker()
+        self.sis_block_thread = SISBlockThread()
 
         config.BLOCK_ADDRESS = self.block_ip.text()
         config.BLOCK_PORT = int(self.block_port.value())
         config.BLOCK_BIAS_DEV = self.biasDev.text()
         config.BLOCK_CTRL_DEV = self.ctrlDev.text()
 
-        self.sis_worker.moveToThread(self.sis_thread)
-        self.sis_thread.started.connect(self.sis_worker.run)
-        self.sis_worker.finished.connect(self.sis_thread.quit)
-        self.sis_worker.finished.connect(self.sis_worker.deleteLater)
-        self.sis_thread.finished.connect(self.sis_thread.deleteLater)
-        self.sis_worker.status.connect(self.set_sis_block_status)
-        self.sis_thread.start()
+        self.sis_block_thread.status.connect(self.set_sis_block_status)
+        self.sis_block_thread.start()
 
         self.btnInitBlock.setEnabled(False)
-        self.sis_thread.finished.connect(lambda: self.btnInitBlock.setEnabled(True))
+        self.sis_block_thread.finished.connect(
+            lambda: self.btnInitBlock.setEnabled(True)
+        )
 
     def set_vna_status(self, status: str):
         self.vnaStatus.setText(status)
 
     def initialize_vna(self):
-        self.vna_thread = QThread()
-        self.vna_worker = VNAWorker()
+        self.vna_thread = VNAThread()
+        self.vna_thread.status.connect(self.set_vna_status)
 
         config.VNA_ADDRESS = self.vna_ip.text()
-
-        self.vna_worker.moveToThread(self.vna_thread)
-        self.vna_thread.started.connect(self.vna_worker.run)
-        self.vna_worker.finished.connect(self.vna_thread.quit)
-        self.vna_worker.finished.connect(self.vna_worker.deleteLater)
-        self.vna_thread.finished.connect(self.vna_thread.deleteLater)
-        self.vna_worker.status.connect(self.set_vna_status)
         self.vna_thread.start()
 
         self.btnInitVna.setEnabled(False)
@@ -251,18 +274,10 @@ class SetUpTabWidget(QWidget):
         self.nrxStatus.setText(status)
 
     def initialize_nrx(self):
-        self.nrx_thread = QThread()
-        self.nrx_worker = NRXBlockWorker()
-
+        self.nrx_thread = NRXBlockThread()
+        self.nrx_thread.status.connect(self.set_nrx_status)
         config.NRX_IP = self.nrxIP.text()
         config.NRX_APER_TIME = self.nrxAperTime.value()
-
-        self.nrx_worker.moveToThread(self.nrx_thread)
-        self.nrx_thread.started.connect(self.nrx_worker.run)
-        self.nrx_worker.finished.connect(self.nrx_thread.quit)
-        self.nrx_worker.finished.connect(self.nrx_worker.deleteLater)
-        self.nrx_thread.finished.connect(self.nrx_thread.deleteLater)
-        self.nrx_worker.status.connect(self.set_nrx_status)
         self.nrx_thread.start()
 
         self.btnInitNRX.setEnabled(False)
