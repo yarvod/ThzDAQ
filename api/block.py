@@ -53,8 +53,6 @@ class Block(BaseInstrumentInterface):
         max_attempts = 5
         for attempt in range(1, max_attempts + 1):
             try:
-                if attempt > 1:
-                    time.sleep(1)
                 self.s.sendall(cmd)
                 data = self.s.recv(1024)
                 result = data.decode().rstrip()
