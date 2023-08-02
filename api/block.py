@@ -145,7 +145,7 @@ class Block(BaseInstrumentInterface):
         for attempt in range(5):
             try:
                 if attempt > 1:
-                    time.sleep(2)
+                    time.sleep(0.1)
                 return float(self.manipulate(f"CTRL:{self.ctrl_dev}:CURR?"))
             except ValueError as e:
                 logger.debug(f"Exception[get_ctrl_current] {e}; attempt {attempt}")
@@ -156,7 +156,7 @@ class Block(BaseInstrumentInterface):
         for attempt in range(1, 6):
             try:
                 if attempt > 1:
-                    time.sleep(2)
+                    time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
                 logger.debug(
                     f"Success [Block.get_bias_current] received {result} current; attempt {attempt}"
@@ -173,7 +173,7 @@ class Block(BaseInstrumentInterface):
         for attempt in range(1, 6):
             try:
                 if attempt > 1:
-                    time.sleep(2)
+                    time.sleep(0.1)
                 result = float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
                 logger.debug(
                     f"[Block.get_bias_voltage] Success received {result} voltage; attempt {attempt}"
