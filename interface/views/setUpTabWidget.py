@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
+from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from state import state
 from api.block import Block
 from api.rs_nrx import NRXBlock
@@ -103,6 +104,30 @@ class NRXBlockThread(QThread):
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
+class PrologixEthernetThread(QThread):
+    status = pyqtSignal(bool)
+
+    def run(self):
+        try:
+            # define and close existing prologix instance
+            prologix = PrologixEthernetAdapter(host=state.PROLOGIX_IP)
+            prologix.close()
+            # Set new IP for prologix and connect again
+            prologix.host = state.PROLOGIX_IP
+            prologix.init()
+            logger.info(
+                f"[{self.__class__.__name__}.run] Prologix Ethernet Initialized"
+            )
+            self.status.emit(True)
+        except:
+            logger.error(
+                f"[{self.__class__.__name__}.run] Prologix Ethernet unable to initialize"
+            )
+            self.status.emit(False)
+
+        self.finished.emit()
+
+
 class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -111,18 +136,20 @@ class SetUpTabWidget(QWidget):
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
+        self.createGroupPrologixEthernet()
         self.layout.addWidget(self.groupBlock)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupNRX)
         self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupPrologixEthernet)
         self.layout.addStretch()
         self.setLayout(self.layout)
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox(self)
-        self.groupBlock.setTitle("SIS Block config")
+        self.groupBlock.setTitle("SIS Block")
         self.groupBlock.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -173,7 +200,7 @@ class SetUpTabWidget(QWidget):
 
     def createGroupVna(self):
         self.groupVna = QGroupBox(self)
-        self.groupVna.setTitle("VNA config")
+        self.groupVna.setTitle("VNA")
         self.groupVna.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -202,7 +229,7 @@ class SetUpTabWidget(QWidget):
 
     def createGroupNRX(self):
         self.groupNRX = QGroupBox(self)
-        self.groupNRX.setTitle("Power meter config")
+        self.groupNRX.setTitle("Power meter")
         self.groupNRX.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -237,6 +264,53 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.btnInitNRX, 4, 0, 1, 2)
 
         self.groupNRX.setLayout(layout)
+
+    def createGroupPrologixEthernet(self):
+        self.groupPrologixEthernet = QGroupBox("Prologix Ethernet")
+        self.groupPrologixEthernet.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QGridLayout()
+
+        self.prologixIPAdressLabel = QLabel(self)
+        self.prologixIPAdressLabel.setText("IP address:")
+        self.prologixIPAdress = QLineEdit(self)
+        self.prologixIPAdress.setText(state.PROLOGIX_IP)
+
+        self.prologixEthernetStatusLabel = QLabel(self)
+        self.prologixEthernetStatusLabel.setText("Status:")
+        self.prologixEthernetStatus = QLabel(self)
+        self.prologixEthernetStatus.setText("Prologix is not initialized yet!")
+
+        self.btnInitPrologixEthernet = QPushButton("Initialize Prologix")
+        self.btnInitPrologixEthernet.clicked.connect(self.initialize_prologix_ethernet)
+
+        layout.addWidget(self.prologixIPAdressLabel, 1, 0)
+        layout.addWidget(self.prologixIPAdress, 1, 1)
+        layout.addWidget(self.prologixEthernetStatusLabel, 2, 0)
+        layout.addWidget(self.prologixEthernetStatus, 2, 1)
+        layout.addWidget(self.btnInitPrologixEthernet, 3, 0, 1, 2)
+
+        self.groupPrologixEthernet.setLayout(layout)
+
+    def initialize_prologix_ethernet(self):
+        self.prologix_ethernet_thread = PrologixEthernetThread()
+
+        state.PROLOGIX_IP = self.prologixIPAdress.text()
+
+        self.prologix_ethernet_thread.status.connect(self.set_prologix_ethernet_status)
+        self.prologix_ethernet_thread.start()
+
+        self.btnInitPrologixEthernet.setEnabled(False)
+        self.prologix_ethernet_thread.finished.connect(
+            lambda: self.btnInitPrologixEthernet.setEnabled(True)
+        )
+
+    def set_prologix_ethernet_status(self, status: bool):
+        if status:
+            self.prologixEthernetStatus.setText("Ok")
+        else:
+            self.prologixEthernetStatus.setText("Error!")
 
     def set_sis_block_status(self, status: str):
         self.sisBlockStatus.setText(status)

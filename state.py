@@ -76,5 +76,15 @@ class State:
     BIAS_REFL_VOLT_POINTS = 300
     BIAS_REFL_DELAY = 0.8
 
+    # Agilent signal generator
+    AGILENT_SIGNAL_GENERATOR_IP = "169.254.190.9"
+    AGILENT_SIGNAL_GENERATOR_GPIB = 19
+
+    AGILENT_SIGNAL_GENERATOR_FREQUENCY = 14  # GHz
+    AGILENT_SIGNAL_GENERATOR_AMPLITUDE = -20  # dBm
+
+    # Prologix
+    PROLOGIX_IP = "169.254.156.103"
+
 
 state = State()
