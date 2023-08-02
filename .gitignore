@@ -1,6 +1,7 @@
 .idea
 venv
 build
+dist
 *__pycache__
 *.log
 *.DS_Store
