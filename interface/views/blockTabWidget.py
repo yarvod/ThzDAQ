@@ -22,6 +22,7 @@ from api.block import Block
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.clGraphWindow import CLGraphWindow
+from store.base import MeasureModel, MeasureType
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,7 @@ class BlockBIASScanThread(QThread):
         )
         start_t = datetime.now()
         i = 0
+        measure = MeasureModel.objects.create(measure_type=MeasureType.IV_CURVE, data={})
         for v_set in v_range:
             if not state.BLOCK_BIAS_SCAN_THREAD:
                 break
@@ -235,6 +237,7 @@ class BlockBIASScanThread(QThread):
             )
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t)
+            measure.data = results
             i += 1
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
