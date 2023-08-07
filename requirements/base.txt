@@ -10,3 +10,4 @@ PyVisa==1.13.0
 pyvisa-py==0.6.3
 setuptools==58.4.0
 numpy==1.23
+pyserial==3.5
