@@ -97,11 +97,12 @@ class BiasPowerThread(QThread):
             if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
+            block.set_bias_voltage(voltage_set)
+
             if i == 0:
                 time.sleep(0.5)
                 initial_time = time.time()
 
-            block.set_bias_voltage(voltage_set)
             time.sleep(state.BLOCK_BIAS_STEP_DELAY)
             voltage_get = block.get_bias_voltage()
             if not voltage_get:

@@ -13,7 +13,7 @@ void setup() {
 void loop() {
   while (Serial.available() > 0) {
     String data = Serial.readStringUntil('\n');
-    Serial.println("Recieved data " + data);
+    Serial.println("Received data " + data);
     stepperRotate(data);
   }
 }

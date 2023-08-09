@@ -18,13 +18,13 @@ void loop()
   digitalWrite(dirPin,HIGH); // Enables the motor to move in a particular direction
   // Makes 1000 pulses for making one full cycle rotation
   for(int x = 0; x < stepsPerRevolution; x++) {
-    digitalWrite(stepPin,HIGH); 
-    delayMicroseconds(stepDelay); 
-    digitalWrite(stepPin,LOW); 
-    delayMicroseconds(stepDelay); 
+    digitalWrite(stepPin,HIGH);
+    delayMicroseconds(stepDelay);
+    digitalWrite(stepPin,LOW);
+    delayMicroseconds(stepDelay);
   }
   delay(1000); // One second delay
-  
+
   digitalWrite(dirPin,LOW); //Changes the rotations direction
   // Makes 1000 pulses for making two full cycle rotation
   for(int x = 0; x < stepsPerRevolution; x++) {
