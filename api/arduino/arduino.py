@@ -16,7 +16,7 @@ class StepMotorManager:
         Params:
             angle: float - Angle in degrees
         """
-        self.adapter.write((angle + "\n").encode())
+        self.adapter.write(f"{angle}\n".encode())
 
     def __del__(self) -> None:
         self.adapter.close()
