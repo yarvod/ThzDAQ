@@ -23,6 +23,6 @@ class StepMotorManager:
 
 
 if __name__ == "__main__":
-    angle = input("Angle: ")
+    angle = float(input("Angle: "))
     ard = StepMotorManager()
     ard.rotate(angle)
