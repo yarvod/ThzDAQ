@@ -1,14 +1,28 @@
-from serial import Serial
+import serial
 
 
-ser = Serial("COM5", 9600)
+class StepMotorManager:
+    MAX_STEPS = 1000
 
-ser.write(b"ping")
+    def __init__(
+        self,
+        address: str = "COM5",
+    ):
+        self.address = address
+        self.adapter = serial.Serial(address, 9600, timeout=5)
 
-response = ser.readline().decode("ascii")
-if response == "pong\r\n":
-    print("Arduino Uno доступна")
-else:
-    print("Arduino Uno недоступна")
+    def rotate(self, angle: float = 90) -> None:
+        """Rotate method
+        Params:
+            angle: float - Angle in degrees
+        """
+        self.adapter.write((angle + "\n").encode())
 
-ser.close()
+    def __del__(self) -> None:
+        self.adapter.close()
+
+
+if __name__ == "__main__":
+    angle = input("Angle: ")
+    ard = StepMotorManager()
+    ard.rotate(angle)
