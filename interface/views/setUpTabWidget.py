@@ -1,8 +1,7 @@
 import logging
 
-from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtWidgets import (
-    QStackedLayout,
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -137,6 +136,7 @@ class SetUpTabWidget(QWidget):
         self.createGroupVna()
         self.createGroupNRX()
         self.createGroupPrologixEthernet()
+        self.createGroupStepMotor()
         self.layout.addWidget(self.groupBlock)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
@@ -144,6 +144,8 @@ class SetUpTabWidget(QWidget):
         self.layout.addWidget(self.groupNRX)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupPrologixEthernet)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupStepMotor)
         self.layout.addStretch()
         self.setLayout(self.layout)
 
@@ -292,6 +294,30 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.btnInitPrologixEthernet, 3, 0, 1, 2)
 
         self.groupPrologixEthernet.setLayout(layout)
+
+    def createGroupStepMotor(self):
+        self.groupStepMotor = QGroupBox("Step Motor")
+        self.groupStepMotor.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QGridLayout()
+
+        self.stepMotorAddressLabel = QLabel(self)
+        self.stepMotorAddressLabel.setText("Address:")
+        self.stepMotorAddress = QLineEdit(self)
+        self.stepMotorAddress.setText(state.STEP_MOTOR_ADDRESS)
+
+        self.btnSetMotorAddress = QPushButton("Set address")
+        self.btnSetMotorAddress.clicked.connect(self.set_step_motor_address)
+
+        layout.addWidget(self.stepMotorAddressLabel, 1, 0)
+        layout.addWidget(self.stepMotorAddress, 1, 1)
+        layout.addWidget(self.btnSetMotorAddress, 2, 0, 1, 2)
+
+        self.groupStepMotor.setLayout(layout)
+
+    def set_step_motor_address(self):
+        state.STEP_MOTOR_ADDRESS = self.stepMotorAddress.text()
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()

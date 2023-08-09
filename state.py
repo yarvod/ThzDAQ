@@ -86,5 +86,8 @@ class State:
     # Prologix
     PROLOGIX_IP = "169.254.156.103"
 
+    # Arduino step motor
+    STEP_MOTOR_ADDRESS = "COM5"
+
 
 state = State()
