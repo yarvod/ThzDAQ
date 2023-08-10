@@ -76,10 +76,10 @@ class SocketAdapter(InstrumentAdapterInterface):
     def write(self, cmd: str, **kwargs):
         self._send(cmd)
 
-    def read(self, num_bytes=1024, **kwargs):
+    def read(self, num_bytes=1024, **kwargs) -> str:
         return self._recv(num_bytes)
 
-    def query(self, cmd: str, buffer_size=1024 * 1024, **kwargs):
+    def query(self, cmd: str, buffer_size=1024 * 1024, **kwargs) -> str:
         self.write(cmd, **kwargs)
         return self.read(num_bytes=buffer_size)
 
@@ -90,13 +90,13 @@ class SocketAdapter(InstrumentAdapterInterface):
         self.timeout = timeout
         self.socket.settimeout(self.timeout)
 
-    def _send(self, value):
+    def _send(self, value) -> None:
         encoded_value = ("%s\n" % value).encode("ascii")
         self.socket.send(encoded_value)
 
-    def _recv(self, byte_num):
+    def _recv(self, byte_num) -> str:
         value = self.socket.recv(byte_num)
-        return value.decode("ascii")
+        return value.decode("ascii").rstrip()
 
     def __del__(self):
         self.close()

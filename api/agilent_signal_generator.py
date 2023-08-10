@@ -1,6 +1,6 @@
 import logging
 
-from settings import ADAPTERS
+from settings import ADAPTERS, PROLOGIX_ETHERNET
 from state import state
 from utils.classes import Singleton
 from utils.functions import import_class
@@ -17,7 +17,7 @@ class AgilentSignalGenerator(metaclass=Singleton):
         self,
         host: str = state.AGILENT_SIGNAL_GENERATOR_IP,
         gpib: int = state.AGILENT_SIGNAL_GENERATOR_GPIB,
-        adapter: str = "PROLOGIX_ETHERNET",
+        adapter: str = PROLOGIX_ETHERNET,
         *args,
         **kwargs,
     ):

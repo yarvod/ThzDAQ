@@ -84,15 +84,14 @@ class BlockStreamThread(QThread):
                 break
             time.sleep(0.2)
             bias_voltage = block.get_bias_voltage()
-            time.sleep(0.01)
             if not bias_voltage:
                 continue
+            time.sleep(0.05)
             bias_current = block.get_bias_current()
-            time.sleep(0.01)
             if not bias_current:
                 continue
+            time.sleep(0.05)
             cl_current = block.get_ctrl_current()
-            time.sleep(0.01)
             if not cl_current:
                 continue
             self.bias_voltage.emit(bias_voltage)
