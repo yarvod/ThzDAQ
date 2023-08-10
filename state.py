@@ -89,5 +89,12 @@ class State:
     # Arduino step motor
     STEP_MOTOR_ADDRESS = "COM5"
 
+    GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
+
+    STEP_MOTOR_ANGLE_FROM = 0
+    STEP_MOTOR_ANGLE_TO = 0
+    STEP_MOTOR_ANGLE_STEP = 10
+    STEP_MOTOR_SPEED = 180  # degree per second
+
 
 state = State()

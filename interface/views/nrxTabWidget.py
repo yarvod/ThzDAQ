@@ -282,7 +282,7 @@ class NRXTabWidget(QWidget):
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
         self.voltStepDelay = CustomQDoubleSpinBox(self)
-        self.voltStepDelay.setRange(0, 10)
+        self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
         self.btnStartBiasPowerScan = QPushButton("Start Scan")

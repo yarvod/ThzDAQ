@@ -246,7 +246,7 @@ class SetUpTabWidget(QWidget):
         self.nrxAperTimeLabel.setText("PM Averaging time, s:")
         self.nrxAperTime = CustomQDoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
-        self.nrxAperTime.setRange(1e-5, 1000)
+        self.nrxAperTime.setRange(0.01, 1000)
         self.nrxAperTime.setValue(state.NRX_APER_TIME)
 
         self.nrxStatusLabel = QLabel(self)
