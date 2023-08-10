@@ -87,7 +87,7 @@ class State:
     PROLOGIX_IP = "169.254.156.103"
 
     # Arduino step motor
-    STEP_MOTOR_ADDRESS = "COM5"
+    STEP_MOTOR_ADDRESS = "COM13"
 
     GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 

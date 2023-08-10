@@ -205,7 +205,7 @@ class StepMotorTabWidget(QWidget):
         )
 
         self.voltPointsLabel = QLabel(self)
-        self.voltPointsLabel.setText("Points count")
+        self.voltPointsLabel.setText("Bias voltage points")
         self.voltPoints = CustomQDoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
