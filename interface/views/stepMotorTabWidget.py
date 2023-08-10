@@ -58,7 +58,7 @@ class StepBiasPowerThread(QThread):
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         motor.rotate(state.STEP_MOTOR_ANGLE_FROM)
-        time.sleep(state.STEP_MOTOR_SPEED * abs(state.STEP_MOTOR_ANGLE_FROM))
+        time.sleep(abs(state.STEP_MOTOR_ANGLE_FROM) / state.STEP_MOTOR_SPEED)
         for ind, angle in enumerate(angle_range):
             if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
@@ -75,14 +75,14 @@ class StepBiasPowerThread(QThread):
             }
             if ind != 0:
                 motor.rotate(state.STEP_MOTOR_ANGLE_STEP)
-            time.sleep(state.STEP_MOTOR_SPEED * abs(state.STEP_MOTOR_ANGLE_STEP))
+            time.sleep(abs(state.STEP_MOTOR_ANGLE_STEP) / state.STEP_MOTOR_SPEED)
 
             for i, voltage_set in enumerate(volt_range):
                 if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                     break
 
                 block.set_bias_voltage(voltage_set)
-                if i == 0:  # чтобы блок успел сместить на начальную точку
+                if i == 0:  # block ned time to set first point
                     time.sleep(0.5)
                 time.sleep(state.BLOCK_BIAS_STEP_DELAY)
                 voltage_get = block.get_bias_voltage()
@@ -270,7 +270,7 @@ class StepMotorTabWidget(QWidget):
         )
 
     def stop_measure_step_bias_power(self):
-        self.bias_power_thread.terminate()
+        self.bias_power_thread.quit()
 
     def save_bias_power_scan(self, results):
         try:
@@ -278,7 +278,7 @@ class StepMotorTabWidget(QWidget):
             if not filepath.endswith(".json"):
                 filepath += ".json"
             with open(filepath, "w", encoding="utf-8") as file:
-                json.dump(results, file, ensure_ascii=False)
+                json.dump(results, file, ensure_ascii=False, indent=4)
         except (IndexError, FileNotFoundError):
             pass
 

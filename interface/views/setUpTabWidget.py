@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
+from api.arduino.arduino import StepMotorManager
 from state import state
 from api.block import Block
 from api.rs_nrx import NRXBlock
@@ -307,17 +308,28 @@ class SetUpTabWidget(QWidget):
         self.stepMotorAddress = QLineEdit(self)
         self.stepMotorAddress.setText(state.STEP_MOTOR_ADDRESS)
 
-        self.btnSetMotorAddress = QPushButton("Set address")
-        self.btnSetMotorAddress.clicked.connect(self.set_step_motor_address)
+        self.stepMotorStatusLabel = QLabel(self)
+        self.stepMotorStatusLabel.setText("Status:")
+        self.stepMotorStatus = QLabel(self)
+        self.stepMotorStatus.setText("Step motor is not initialized yet!")
+
+        self.btnInitStepMotor = QPushButton("Initialize")
+        self.btnInitStepMotor.clicked.connect(self.initialize_step_motor)
 
         layout.addWidget(self.stepMotorAddressLabel, 1, 0)
         layout.addWidget(self.stepMotorAddress, 1, 1)
-        layout.addWidget(self.btnSetMotorAddress, 2, 0, 1, 2)
+        layout.addWidget(self.stepMotorStatusLabel, 2, 0)
+        layout.addWidget(self.stepMotorStatus, 2, 1)
+        layout.addWidget(self.btnInitStepMotor, 3, 0, 1, 2)
 
         self.groupStepMotor.setLayout(layout)
 
-    def set_step_motor_address(self):
-        state.STEP_MOTOR_ADDRESS = self.stepMotorAddress.text()
+    def initialize_step_motor(self):
+        address = self.stepMotorAddress.text()
+        test_result, test_message = StepMotorManager.test(address=address)
+        self.stepMotorStatus.setText(test_message)
+        if test_result:
+            state.STEP_MOTOR_ADDRESS = address
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()
