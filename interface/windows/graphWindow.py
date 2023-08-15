@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict
 from typing import Iterable
 
+from PyQt6 import QtGui
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton
 import pyqtgraph as pg
 
@@ -17,6 +18,7 @@ class GraphWindow(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
         layout = QVBoxLayout()
         self.graphWidget = pg.PlotWidget()
