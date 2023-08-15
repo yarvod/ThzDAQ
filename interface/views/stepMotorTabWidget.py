@@ -15,9 +15,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 
-from api.arduino.arduino import StepMotorManager
-from api.block import Block
-from api.rs_nrx import NRXBlock
+from api.Arduino.step_motor import StepMotorManager
+from api.Scontel.sis_block import SisBlock
+from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.biasPowerGraphWindow import StepBiasPowerGraphWindow
 from state import state
@@ -32,12 +32,12 @@ class StepBiasPowerThread(QThread):
 
     def run(self):
         motor = StepMotorManager(address=state.STEP_MOTOR_ADDRESS)
-        nrx = NRXBlock(
+        nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,

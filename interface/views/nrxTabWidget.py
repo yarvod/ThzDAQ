@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import QObject, pyqtSignal, Qt, QThread
+from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import (
     QGroupBox,
     QGridLayout,
@@ -17,8 +17,8 @@ from PyQt6.QtWidgets import (
 
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from state import state
-from api.block import Block
-from api.rs_nrx import NRXBlock
+from api.Scontel.sis_block import SisBlock
+from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 from utils.logger import logger
@@ -28,7 +28,7 @@ class NRXBlockStreamThread(QThread):
     meas = pyqtSignal(dict)
 
     def run(self):
-        nrx = NRXBlock(
+        nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
@@ -67,12 +67,12 @@ class BiasPowerThread(QThread):
     stream_results = pyqtSignal(dict)
 
     def run(self):
-        nrx = NRXBlock(
+        nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,

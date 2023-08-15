@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
 )
 
-from api.agilent_signal_generator import AgilentSignalGenerator
+from api.Agilent.signal_generator import SignalGenerator
 from interface.components import CustomQDoubleSpinBox
 from state import state
 
@@ -54,10 +54,10 @@ class SignalGeneratorTabWidget(QWidget):
 
     def set_frequency(self):
         state.AGILENT_SIGNAL_GENERATOR_FREQUENCY = self.frequency.value()
-        agilent = AgilentSignalGenerator(host=state.PROLOGIX_IP)
+        agilent = SignalGenerator(host=state.PROLOGIX_IP)
         agilent.set_frequency(state.AGILENT_SIGNAL_GENERATOR_FREQUENCY * 1e9)
 
     def set_amplitude(self):
         state.AGILENT_SIGNAL_GENERATOR_AMPLITUDE = self.amplitude.value()
-        agilent = AgilentSignalGenerator(host=state.PROLOGIX_IP)
+        agilent = SignalGenerator(host=state.PROLOGIX_IP)
         agilent.set_amplitude(state.AGILENT_SIGNAL_GENERATOR_AMPLITUDE)

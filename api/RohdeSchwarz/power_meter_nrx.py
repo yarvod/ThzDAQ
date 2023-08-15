@@ -6,7 +6,7 @@ from utils.decorators import exception
 from utils.logger import logger
 
 
-class NRXBlock(BaseInstrumentInterface):
+class NRXPowerMeter(BaseInstrumentInterface):
     def __init__(
         self,
         ip: str = state.NRX_IP,
@@ -101,5 +101,5 @@ class NRXBlock(BaseInstrumentInterface):
 
 
 if __name__ == "__main__":
-    nrx = NRXBlock()
+    nrx = NRXPowerMeter()
     nrx.instr.write(f"CALC:APER 0.2")

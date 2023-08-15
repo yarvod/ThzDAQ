@@ -14,11 +14,11 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
 from state import state
 
-from api.block import Block
+from api.Scontel.sis_block import SisBlock
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.clGraphWindow import CLGraphWindow
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class UtilsMixin:
     def set_voltage(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -48,7 +48,7 @@ class UtilsMixin:
         block.disconnect()
 
     def set_ctrl_current(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -72,7 +72,7 @@ class BlockStreamThread(QThread):
     bias_current = pyqtSignal(float)
 
     def run(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -112,7 +112,7 @@ class BlockCLScanThread(QThread):
     stream_result = pyqtSignal(dict)
 
     def run(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -189,7 +189,7 @@ class BlockBIASScanThread(QThread):
     stream_result = pyqtSignal(dict)
 
     def run(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -326,7 +326,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_ctrl_scan_thread.terminate()
 
     def set_block_bias_short_status(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -346,7 +346,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         block.disconnect()
 
     def set_block_ctrl_short_status(self):
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,

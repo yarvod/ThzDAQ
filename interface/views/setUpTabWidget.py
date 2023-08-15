@@ -14,11 +14,11 @@ from PyQt6.QtWidgets import (
 )
 
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
-from api.arduino.arduino import StepMotorManager
+from api.Arduino.step_motor import StepMotorManager
 from state import state
-from api.block import Block
-from api.rs_nrx import NRXBlock
-from api.vna import VNABlock
+from api.Scontel.sis_block import SisBlock
+from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
+from api.RohdeSchwarz.vna import VNABlock
 from interface.components import CustomQDoubleSpinBox
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class SISBlockThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -82,7 +82,7 @@ class NRXBlockThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        block = NRXBlock(
+        block = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,8 +17,8 @@ from PyQt6.QtWidgets import (
 )
 
 from state import state
-from api.block import Block
-from api.vna import VNABlock
+from api.Scontel.sis_block import SisBlock
+from api.RohdeSchwarz.vna import VNABlock
 from interface.components import CustomQDoubleSpinBox
 from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
@@ -31,7 +31,7 @@ class BiasReflectionThread(QThread):
 
     def run(self):
         vna = VNABlock(vna_ip=state.VNA_ADDRESS)
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,

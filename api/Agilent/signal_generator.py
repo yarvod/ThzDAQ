@@ -9,7 +9,7 @@ from utils.functions import import_class
 logger = logging.getLogger(__name__)
 
 
-class AgilentSignalGenerator(metaclass=Singleton):
+class SignalGenerator(metaclass=Singleton):
     ALC_RANGE = [-7.9, 2]
     ATTENUATOR_RANGE = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
 
@@ -85,7 +85,7 @@ class AgilentSignalGenerator(metaclass=Singleton):
 
 
 if __name__ == "__main__":
-    dev = AgilentSignalGenerator(host="169.254.156.103", gpib=19)
+    dev = SignalGenerator(host="169.254.156.103", gpib=19)
     print("Power:")
     power = float(input())
     dev.set_amplitude(power)
