@@ -1,4 +1,11 @@
+import logging
 import threading
+
+from settings import ADAPTERS
+from utils.functions import import_class
+
+
+logger = logging.getLogger(__name__)
 
 
 class Singleton(type):
@@ -24,6 +31,32 @@ class SingletonSafe(type):
                         *args, **kwargs
                     )
         return cls._instances[cls]
+
+
+class BaseInstrument:
+    def __init__(
+        self,
+        host: str,
+        gpib: int,
+        adapter: str,
+        *args,
+        **kwargs,
+    ):
+        self.host = host
+        self.gpib = gpib
+        self.adapter_name = adapter
+        self.adapter = None
+
+        if self.adapter is None:
+            self._set_adapter(adapter, *args, **kwargs)
+
+    def _set_adapter(self, adapter: str, *args, **kwargs) -> None:
+        adapter_path = ADAPTERS.get(adapter)
+        try:
+            adapter_class = import_class(adapter_path)
+            self.adapter = adapter_class(host=self.host, *args, **kwargs)
+        except (ImportError, ImportWarning) as e:
+            logger.error(f"[{self.__class__.__name__}._set_adapter] {e}")
 
 
 class BaseInstrumentInterface:
