@@ -96,5 +96,10 @@ class State:
     STEP_MOTOR_ANGLE_STEP = 10
     STEP_MOTOR_SPEED = 180  # degree per second
 
+    # LakeShore Temperature controller
+    LAKE_SHORE_IP = "192.168.0.12"
+    LAKE_SHORE_PORT = 7777
+    LAKE_SHORE_GPIB = 1
+
 
 state = State()
