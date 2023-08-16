@@ -11,80 +11,89 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress ip(169, 254, 0, 52);
 EthernetServer server(80);
 
-void setup()
-{
-  Serial.begin(9600);
-  while (!Serial) {
-  }
-  Serial.print("Serial init OK\r\n");
-  if (Ethernet.begin(mac) == 0) {
-    Serial.println("Failed to configure Ethernet using DHCP");
-    Ethernet.begin(mac, ip);
-  }
-  server.begin();
-  Serial.print("Server is at ");
-  Serial.println(Ethernet.localIP());
-}
-
-
-void loop()
-{
-  EthernetClient client = server.available();
-  if (client) {
-    Serial.println("New client");
-    boolean currentLineIsBlank = true;
-    String request = "";
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        request += c;
-        Serial.write(c);
-        if (c == '\n') {
-          break;
-        }
-        urlHandler(request);
-      }
-    delay(1);
-    client.stop();
-    Serial.println("Client disconnected");
-  }
-}
-
-void urlHandler(String request) {
+// Helpers
+void urlHandler(String request, EthernetClient client) {
+  Serial.print("Recieved request: " + String(request));
   if (request.indexOf("POST /rotate") != -1) {
-    stepperRotateView(request);
+    Serial.println("Calling stepperRotateView");
+    stepperRotateView(request, client);
   }
 }
 
-int getContentLength(String request) {
+int getContentLength(String bodyFull) {
   int contentLength = 0;
-  int contentLengthIndex = request.indexOf("Content-Length:");
+  int contentLengthIndex = bodyFull.indexOf("Content-Length:");
   if (contentLengthIndex != -1) {
     contentLengthIndex += 16;
-    String contentLengthStr = request.substring(contentLengthIndex);
+    String contentLengthStr = bodyFull.substring(contentLengthIndex);
     contentLength = contentLengthStr.toInt();
   }
+  Serial.println("Request Length: " + String(contentLength));
   return contentLength;
 }
 
-String getRequestBody(String request) {
-  int contentLength = getContentLength(request);
-  String body = "";
-  for (int i = 0; i < contentLength; i++) {
-    body += (char)client.read();
-  }
-  return body
+void sendResponse(EthernetClient client, String response) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.print("Content-Length: ");
+  client.println(response.length());
+  client.println();
+  client.println(response);
 }
 
-void stepperRotateView(String request) {
-  String body = getRequestBody(request);
-  DynamicJsonDocument doc(1024);
-  deserializeJson(doc, body);
-  int angle = doc["angle"];
+// Serialization
+float serializeRequest(String request, EthernetClient client) {
+  String bodyFull = client.readString();
+  int contentLength = getContentLength(bodyFull);
+  int bodyFullLength = bodyFull.length();
+  String body = bodyFull.substring(bodyFullLength - contentLength, bodyFullLength);
+  body.replace("\n", "");
+  body.replace("\r", "");
+  body.replace(" ", "");
+  Serial.println("Body: " + body);
+  // DynamicJsonDocument doc(JSON_OBJECT_SIZE(1));
+  // deserializeJson(doc, body);
+  // if (serializeJsonPretty(doc, Serial) == 0) {
+  //   Serial.println(F("Failed to write to buffer"));
+  // }
+  // float angle = doc["angle"];
+  int ind1 = body.indexOf(":") + 1;
+  int ind2 = body.length() - 1;
+  float angle = body.substring(ind1, ind2).toFloat();
+  Serial.println("Angle: " + String(angle));
+  client.flush();
+  return angle;
 }
 
-void stepperRotate(int angle) {
-  int stepsRev = abs((float)stepsPerRevolution * angle / 360);
+String serializeResponse(float angle) {
+  DynamicJsonDocument responseDoc(1024);
+  responseDoc["status"] = "OK";
+  responseDoc["angle"] = angle;
+  String response;
+  serializeJson(responseDoc, response);
+  return response;
+}
+
+void processResponse(EthernetClient client, float angle) {
+  String response = serializeResponse(angle);
+  sendResponse(client, response);
+}
+
+// Views
+void stepperRotateView(String request, EthernetClient client) {
+  float angle = serializeRequest(request, client);
+  processResponse(client, angle);
+  delay(0.1);
+  client.stop();
+  Serial.println("Client disconnected");
+  stepperRotate(angle);
+}
+
+// UseCases
+void stepperRotate(float angle) {
+  int stepsRev = abs(stepsPerRevolution * angle / 360);
+  Serial.println("Steps: " + String(stepsRev));
   if (angle >= 0) {
     digitalWrite(dirPin, HIGH);
   } else {
@@ -96,5 +105,34 @@ void stepperRotate(int angle) {
     delayMicroseconds(stepDelay);
     digitalWrite(stepPin, LOW);
     delayMicroseconds(stepDelay);
+  }
+}
+
+// Set Up
+void setup() {
+  Serial.begin(9600);
+  Serial.print("Serial init OK\r\n");
+  Ethernet.begin(mac, ip);
+  server.begin();
+  Serial.print("Server is at ");
+  Serial.println(Ethernet.localIP());
+}
+
+// Main Loop
+void loop() {
+  EthernetClient client = server.available();
+  if (client) {
+    Serial.println("New client");
+    String request = "";
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        request += c;
+        if (c == '\n') {
+          break;
+        }
+      }
+    }
+    urlHandler(request, client);
   }
 }
