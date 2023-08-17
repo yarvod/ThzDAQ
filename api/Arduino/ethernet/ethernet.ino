@@ -52,12 +52,6 @@ float serializeRequest(String request, EthernetClient client) {
   body.replace("\r", "");
   body.replace(" ", "");
   Serial.println("Body: " + body);
-  // DynamicJsonDocument doc(JSON_OBJECT_SIZE(1));
-  // deserializeJson(doc, body);
-  // if (serializeJsonPretty(doc, Serial) == 0) {
-  //   Serial.println(F("Failed to write to buffer"));
-  // }
-  // float angle = doc["angle"];
   int ind1 = body.indexOf(":") + 1;
   int ind2 = body.length() - 1;
   float angle = body.substring(ind1, ind2).toFloat();
