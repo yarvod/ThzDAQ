@@ -11,3 +11,4 @@ pyvisa-py==0.6.3
 setuptools==58.4.0
 numpy==1.23
 pyserial==3.5
+requests==2.31.0

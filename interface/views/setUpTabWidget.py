@@ -128,6 +128,17 @@ class PrologixEthernetThread(QThread):
         self.finished.emit()
 
 
+class StepMotorThread(QThread):
+    status = pyqtSignal(str)
+
+    def run(self):
+        test_result, test_message = StepMotorManager(
+            host=state.STEP_MOTOR_ADDRESS
+        ).test()
+        self.status.emit(test_message)
+        self.finished.emit()
+
+
 class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
@@ -325,11 +336,17 @@ class SetUpTabWidget(QWidget):
         self.groupStepMotor.setLayout(layout)
 
     def initialize_step_motor(self):
-        address = self.stepMotorAddress.text()
-        test_result, test_message = StepMotorManager.test(address=address)
-        self.stepMotorStatus.setText(test_message)
-        if test_result:
-            state.STEP_MOTOR_ADDRESS = address
+        state.STEP_MOTOR_ADDRESS = self.stepMotorAddress.text()
+        self.step_motor_thread = StepMotorThread()
+        self.step_motor_thread.status.connect(self.set_step_motor_status)
+        self.step_motor_thread.start()
+        self.btnInitStepMotor.setEnabled(False)
+        self.step_motor_thread.finished.connect(
+            lambda: self.btnInitStepMotor.setEnabled(True)
+        )
+
+    def set_step_motor_status(self, status):
+        self.stepMotorStatus.setText(status)
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()

@@ -18,6 +18,10 @@ void urlHandler(String request, EthernetClient client) {
     Serial.println("Calling stepperRotateView");
     stepperRotateView(request, client);
   }
+  if (request.indexOf("POST /test") != -1) {
+    Serial.println("Calling testStepperRotateView");
+    testStepperRotateView(request, client);
+  }
 }
 
 int getContentLength(String bodyFull) {
@@ -60,17 +64,16 @@ float serializeRequest(String request, EthernetClient client) {
   return angle;
 }
 
-String serializeResponse(float angle) {
+String serializeResponse() {
   DynamicJsonDocument responseDoc(1024);
   responseDoc["status"] = "OK";
-  responseDoc["angle"] = angle;
   String response;
   serializeJson(responseDoc, response);
   return response;
 }
 
-void processResponse(EthernetClient client, float angle) {
-  String response = serializeResponse(angle);
+void processResponse(EthernetClient client) {
+  String response = serializeResponse();
   sendResponse(client, response);
 }
 
@@ -78,7 +81,13 @@ void processResponse(EthernetClient client, float angle) {
 void stepperRotateView(String request, EthernetClient client) {
   float angle = serializeRequest(request, client);
   stepperRotate(angle);
-  processResponse(client, angle);
+  processResponse(client);
+}
+
+void testStepperRotateView(String request, EthernetClient client) {
+  stepperRotate(45);
+  stepperRotate(-45);
+  processResponse(client);
 }
 
 // UseCases

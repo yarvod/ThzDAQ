@@ -5,6 +5,9 @@ from typing import Tuple
 import serial
 from serial.tools.list_ports import main as list_ports
 
+from settings import ADAPTERS, HTTP, SERIAL
+from state import state
+from utils.functions import import_class
 
 logger = logging.getLogger(__name__)
 
@@ -14,30 +17,52 @@ class StepMotorManager:
 
     def __init__(
         self,
-        address: str = "COM5",
-        timeout: float = 5,
+        host: str = state.STEP_MOTOR_ADDRESS,
+        adapter: str = HTTP,
+        *args,
+        **kwargs,
     ):
-        self.address = address
-        self.adapter = serial.Serial(address, 9600, timeout=timeout)
+        self.host = host
+        self.adapter_name = adapter
+        self.adapter = None
+        if self.adapter is None:
+            self._set_adapter(adapter, *args, **kwargs)
+
+    def _set_adapter(self, adapter: str, *args, **kwargs) -> None:
+        adapter_path = ADAPTERS.get(adapter)
+        try:
+            adapter_class = import_class(adapter_path)
+            self.adapter = adapter_class(host=self.host, *args, **kwargs)
+        except (ImportError, ImportWarning) as e:
+            logger.error(f"[{self.__class__.__name__}._set_adapter] {e}")
 
     def rotate(self, angle: float = 90) -> None:
         """Rotate method
         Params:
             angle: float - Angle in degrees
         """
-        self.adapter.write(f"{angle}\n".encode())
+        if self.adapter_name == SERIAL:
+            self.adapter.write(f"{angle}\n".encode())
+        elif self.adapter_name == HTTP:
+            self.adapter.post(url="/rotate", data={"angle": angle})
 
-    @classmethod
-    def test(cls, address, timeout=5) -> Tuple[bool, str]:
+    def test(self) -> Tuple[bool, str]:
         """Simple test func"""
-        try:
-            adapter = serial.Serial(address, 9600, timeout=timeout)
-            adapter.write(f"test\n".encode())
-            response = adapter.readline().decode(encoding="utf-8").rstrip()
-            return response == "OK", response
-        except Exception as e:
-            logger.error(f"[{cls.__name__}.test] {e}")
-            return False, f"{e}"
+        if self.adapter_name == SERIAL:
+            try:
+                self.adapter.write(f"test\n".encode())
+                response = self.adapter.readline().decode(encoding="utf-8").rstrip()
+                return response == "OK", response
+            except Exception as e:
+                logger.error(f"[{self.__class__.__name__}.test] {e}")
+                return False, f"{e}"
+        if self.adapter_name == HTTP:
+            try:
+                status, response = self.adapter.post(url="/test", data={})
+                return status == 200, "Ok"
+            except Exception as e:
+                logger.error(f"[{self.__class__.__name__}.test] {e}")
+                return False, f"{e}"
 
     @staticmethod
     def scan_ports():
@@ -48,7 +73,6 @@ class StepMotorManager:
 
 
 if __name__ == "__main__":
-    dev = sys.argv[1]
-    angle = float(sys.argv[2])
-    ard = StepMotorManager(address=dev)
+    angle = float(sys.argv[1])
+    ard = StepMotorManager()
     ard.rotate(angle)

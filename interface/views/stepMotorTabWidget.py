@@ -26,12 +26,18 @@ from state import state
 logger = logging.getLogger(__name__)
 
 
+class StepMotorThread(QThread):
+    def run(self):
+        StepMotorManager(host=state.STEP_MOTOR_ADDRESS).rotate(state.STEP_MOTOR_ANGLE)
+        self.finished.emit()
+
+
 class StepBiasPowerThread(QThread):
     results = pyqtSignal(list)
     stream_results = pyqtSignal(dict)
 
     def run(self):
-        motor = StepMotorManager(address=state.STEP_MOTOR_ADDRESS)
+        motor = StepMotorManager(host=state.STEP_MOTOR_ADDRESS)
         nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
@@ -293,6 +299,8 @@ class StepMotorTabWidget(QWidget):
         self.stepBiasPowerGraphWindow.show()
 
     def rotate(self):
-        state.AGILENT_SIGNAL_GENERATOR_FREQUENCY = self.angle.value()
-        motor = StepMotorManager(address=state.STEP_MOTOR_ADDRESS)
-        motor.rotate(self.angle.value())
+        state.STEP_MOTOR_ANGLE = self.angle.value()
+        self.step_motor_thread = StepMotorThread()
+        self.step_motor_thread.start()
+        self.btnRotate.setEnabled(False)
+        self.step_motor_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))
