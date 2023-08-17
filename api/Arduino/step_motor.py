@@ -2,9 +2,9 @@ import logging
 import sys
 from typing import Tuple
 
-import serial
 from serial.tools.list_ports import main as list_ports
 
+from api.adapters.http_adapter import HttpAdapter
 from settings import ADAPTERS, HTTP, SERIAL
 from state import state
 from utils.functions import import_class
@@ -24,7 +24,7 @@ class StepMotorManager:
     ):
         self.host = host
         self.adapter_name = adapter
-        self.adapter = None
+        self.adapter = HttpAdapter(host=host)
         if self.adapter is None:
             self._set_adapter(adapter, *args, **kwargs)
 
