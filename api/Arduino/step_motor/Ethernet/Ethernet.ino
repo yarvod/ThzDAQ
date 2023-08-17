@@ -77,11 +77,8 @@ void processResponse(EthernetClient client, float angle) {
 // Views
 void stepperRotateView(String request, EthernetClient client) {
   float angle = serializeRequest(request, client);
-  processResponse(client, angle);
-  delay(0.1);
-  client.stop();
-  Serial.println("Client disconnected");
   stepperRotate(angle);
+  processResponse(client, angle);
 }
 
 // UseCases
@@ -106,6 +103,8 @@ void stepperRotate(float angle) {
 void setup() {
   Serial.begin(9600);
   Serial.print("Serial init OK\r\n");
+  pinMode(dirPin, OUTPUT);
+  pinMode(stepPin, OUTPUT);
   Ethernet.begin(mac, ip);
   server.begin();
   Serial.print("Server is at ");
@@ -128,5 +127,8 @@ void loop() {
       }
     }
     urlHandler(request, client);
+    delay(0.1);
+    client.stop();
+    Serial.println("Client disconnected");
   }
 }
