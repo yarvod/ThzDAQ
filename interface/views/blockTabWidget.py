@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QSizePolicy,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
@@ -260,9 +261,10 @@ class BlockBIASScanThread(QThread):
         state.BLOCK_BIAS_SCAN_THREAD = False
 
 
-class BlockTabWidget(QWidget, UtilsMixin):
+class BlockTabWidget(QScrollArea, UtilsMixin):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
+        self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.ctrlGraphWindow = None
@@ -279,7 +281,13 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupBiasScan)
         self.layout.addStretch()
-        self.setLayout(self.layout)
+
+        self.widget.setLayout(self.layout)
+
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setWidgetResizable(True)
+        self.setWidget(self.widget)
 
     def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphWindow is None:

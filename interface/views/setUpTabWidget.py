@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QSizePolicy,
     QComboBox,
+    QScrollArea,
 )
 
 from api.Agilent.signal_generator import SignalGenerator
@@ -141,9 +142,10 @@ class StepMotorThread(QThread):
         self.finished.emit()
 
 
-class SetUpTabWidget(QWidget):
+class SetUpTabWidget(QScrollArea):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
+        self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
@@ -164,7 +166,13 @@ class SetUpTabWidget(QWidget):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupSignalGenerator)
         self.layout.addStretch()
-        self.setLayout(self.layout)
+
+        self.widget.setLayout(self.layout)
+
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setWidgetResizable(True)
+        self.setWidget(self.widget)
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox(self)
