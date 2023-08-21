@@ -19,7 +19,7 @@ from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 from utils.logger import logger
 
@@ -186,7 +186,7 @@ class NRXTabWidget(QWidget):
 
         self.nrxStreamPlotPointsLabel = QLabel(self)
         self.nrxStreamPlotPointsLabel.setText("Window points")
-        self.nrxStreamPlotPoints = CustomQDoubleSpinBox(self)
+        self.nrxStreamPlotPoints = DoubleSpinBox(self)
         self.nrxStreamPlotPoints.setRange(10, 1000)
         self.nrxStreamPlotPoints.setDecimals(0)
         self.nrxStreamPlotPoints.setValue(state.NRX_STREAM_GRAPH_POINTS)
@@ -260,28 +260,28 @@ class NRXTabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
-        self.voltStepDelay = CustomQDoubleSpinBox(self)
+        self.voltStepDelay = DoubleSpinBox(self)
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 

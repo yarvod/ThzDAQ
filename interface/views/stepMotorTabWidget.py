@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 from api.Arduino.step_motor import StepMotorManager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import StepBiasPowerGraphWindow
 from state import state
 
@@ -159,7 +159,7 @@ class StepMotorTabWidget(QWidget):
 
         self.angleLabel = QLabel(self)
         self.angleLabel.setText("Angle, degree")
-        self.angle = CustomQDoubleSpinBox(self)
+        self.angle = DoubleSpinBox(self)
         self.angle.setRange(-720, 720)
         self.angle.setValue(90)
         self.btnRotate = QPushButton("Rotate")
@@ -180,46 +180,46 @@ class StepMotorTabWidget(QWidget):
 
         self.angleStartLabel = QLabel(self)
         self.angleStartLabel.setText("Angle start, degree")
-        self.angleStart = CustomQDoubleSpinBox(self)
+        self.angleStart = DoubleSpinBox(self)
         self.angleStart.setRange(-180, 180)
         self.angleStart.setValue(state.STEP_MOTOR_ANGLE_FROM)
 
         self.angleStopLabel = QLabel(self)
         self.angleStopLabel.setText("Angle stop, degree")
-        self.angleStop = CustomQDoubleSpinBox(self)
+        self.angleStop = DoubleSpinBox(self)
         self.angleStop.setRange(-180, 180)
         self.angleStop.setValue(state.STEP_MOTOR_ANGLE_TO)
 
         self.angleStepLabel = QLabel(self)
         self.angleStepLabel.setText("Angle step, degree")
-        self.angleStep = CustomQDoubleSpinBox(self)
+        self.angleStep = DoubleSpinBox(self)
         self.angleStep.setRange(-180, 180)
         self.angleStep.setValue(state.STEP_MOTOR_ANGLE_STEP)
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Bias voltage points")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
-        self.voltStepDelay = CustomQDoubleSpinBox(self)
+        self.voltStepDelay = DoubleSpinBox(self)
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 

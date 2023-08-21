@@ -22,7 +22,7 @@ from state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +271,7 @@ class SetUpTabWidget(QScrollArea):
 
         self.nrxAperTimeLabel = QLabel(self)
         self.nrxAperTimeLabel.setText("Averaging time, s:")
-        self.nrxAperTime = CustomQDoubleSpinBox(self)
+        self.nrxAperTime = DoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
         self.nrxAperTime.setRange(0.01, 1000)
         self.nrxAperTime.setValue(state.NRX_APER_TIME)

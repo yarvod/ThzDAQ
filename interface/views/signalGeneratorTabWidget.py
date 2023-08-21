@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Agilent.signal_generator import SignalGenerator
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from state import state
 
 
@@ -38,19 +38,19 @@ class SignalGeneratorTabWidget(QWidget):
 
         self.OemFrequencyStartLabel = QLabel(self)
         self.OemFrequencyStartLabel.setText("Frequency Start, GHz")
-        self.OemFrequencyStart = CustomQDoubleSpinBox(self)
+        self.OemFrequencyStart = DoubleSpinBox(self)
         self.OemFrequencyStart.setRange(200, 350)
         self.OemFrequencyStart.setValue(219.6)
 
         self.OemFrequencyStopLabel = QLabel(self)
         self.OemFrequencyStopLabel.setText("Frequency Stop, GHz")
-        self.OemFrequencyStop = CustomQDoubleSpinBox(self)
+        self.OemFrequencyStop = DoubleSpinBox(self)
         self.OemFrequencyStop.setRange(200, 350)
         self.OemFrequencyStop.setValue(325.8)
 
         self.OemMultiplierLabel = QLabel(self)
         self.OemMultiplierLabel.setText("OEM multiplier")
-        self.OemMultiplier = CustomQDoubleSpinBox(self)
+        self.OemMultiplier = DoubleSpinBox(self)
         self.OemMultiplier.setRange(1, 40)
         self.OemMultiplier.setValue(18)
 
@@ -82,7 +82,7 @@ class SignalGeneratorTabWidget(QWidget):
 
         self.frequencyLabel = QLabel(self)
         self.frequencyLabel.setText("Frequency, GHz")
-        self.frequency = CustomQDoubleSpinBox(self)
+        self.frequency = DoubleSpinBox(self)
         self.frequency.setRange(1, 50)
         self.frequency.setValue(14)
         self.btnSetFrequency = QPushButton("Set frequency")
@@ -90,7 +90,7 @@ class SignalGeneratorTabWidget(QWidget):
 
         self.amplitudeLabel = QLabel(self)
         self.amplitudeLabel.setText("Amplitude, dBm")
-        self.amplitude = CustomQDoubleSpinBox(self)
+        self.amplitude = DoubleSpinBox(self)
         self.amplitude.setRange(-90, 4)
         self.amplitude.setValue(-20)
         self.btnSetAmplitude = QPushButton("Set amplitude")

@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
 from utils.logger import logger
@@ -156,24 +156,24 @@ class VNATabWidget(QWidget):
 
         self.freqFromLabel = QLabel(self)
         self.freqFromLabel.setText("Freq from, GHz:")
-        self.freqFrom = CustomQDoubleSpinBox(self)
+        self.freqFrom = DoubleSpinBox(self)
         self.freqFrom.setValue(state.VNA_FREQ_FROM)
 
         self.freqToLabel = QLabel(self)
         self.freqToLabel.setText("Freq to, GHz:")
-        self.freqTo = CustomQDoubleSpinBox(self)
+        self.freqTo = DoubleSpinBox(self)
         self.freqTo.setValue(state.VNA_FREQ_TO)
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
-        self.vnaPoints = CustomQDoubleSpinBox(self)
+        self.vnaPoints = DoubleSpinBox(self)
         self.vnaPoints.setMaximum(state.VNA_POINTS_MAX)
         self.vnaPoints.setDecimals(0)
         self.vnaPoints.setValue(state.VNA_POINTS)
 
         self.vnaPowerLabel = QLabel(self)
         self.vnaPowerLabel.setText("Power, dB:")
-        self.vnaPower = CustomQDoubleSpinBox(self)
+        self.vnaPower = DoubleSpinBox(self)
         self.vnaPower.setRange(state.VNA_POWER_MIN, state.VNA_POWER_MAX)
         self.vnaPower.setValue(state.VNA_POWER)
 
@@ -201,27 +201,27 @@ class VNATabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.scanStepDelayLabel = QLabel("Scan delay, s")
-        self.scanStepDelay = CustomQDoubleSpinBox(self)
+        self.scanStepDelay = DoubleSpinBox(self)
         self.scanStepDelay.setRange(0, 10)
         self.scanStepDelay.setValue(state.BIAS_REFL_DELAY)
 
