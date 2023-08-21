@@ -4,6 +4,7 @@ from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.nrxTabWidget import NRXTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
+from interface.views.stepMotorTabWidget import StepMotorTabWidget
 from interface.views.vnaTabWidget import VNATabWidget
 
 
@@ -19,6 +20,7 @@ class TabsWidget(QWidget):
         self.tab_vna = VNATabWidget(self)
         self.tab_nrx = NRXTabWidget(self)
         self.tab_signal_generator = SignalGeneratorTabWidget(self)
+        self.tab_step_motor = StepMotorTabWidget(self)
         self.tabs.resize(300, 200)
 
         # Add tabs
@@ -27,6 +29,7 @@ class TabsWidget(QWidget):
         self.tabs.addTab(self.tab_vna, "VNA")
         self.tabs.addTab(self.tab_nrx, "Power Meter")
         self.tabs.addTab(self.tab_signal_generator, "Signal Generator")
+        self.tabs.addTab(self.tab_step_motor, "Step Motor")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)

@@ -9,7 +9,7 @@ from utils.functions import import_class
 logger = logging.getLogger(__name__)
 
 
-class AgilentSignalGenerator(metaclass=Singleton):
+class SignalGenerator:
     ALC_RANGE = [-7.9, 2]
     ATTENUATOR_RANGE = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
 
@@ -44,7 +44,11 @@ class AgilentSignalGenerator(metaclass=Singleton):
 
     def test(self) -> str:
         assert self.adapter is not None, "Adapter couldn't be None"
-        return self.adapter.query("*TST?", eq_addr=self.gpib)
+        # return self.adapter.query("*TST?", eq_addr=self.gpib)
+        result = self.idn()
+        if "Agilent" in result:
+            return "OK"
+        return "Error"
 
     def reset(self) -> str:
         assert self.adapter is not None, "Adapter couldn't be None"
@@ -83,9 +87,35 @@ class AgilentSignalGenerator(metaclass=Singleton):
         self.set_attenuation_level(attenuation)
         self.set_alc_level(alc)
 
+    def get_oem_status(self) -> str:
+        """ON|OFF|NONE|REAR|FRONT"""
+        return self.adapter.query(":SYSTem:OEMHead:SELect?")
+
+    def set_oem_status(self, value: str) -> None:
+        """ON|OFF|NONE|REAR|FRONT"""
+        self.adapter.write(f":SYSTem:OEMHead:SELect {value}")
+
+    def get_oem_frequency_start(self) -> float:
+        return float(self.adapter.query(":SYSTem:OEMHead:FREQuency:STARt?"))
+
+    def set_oem_frequency_start(self, value: float) -> None:
+        self.adapter.write(f":SYSTem:OEMHead:FREQuency:STARt {value}")
+
+    def get_oem_frequency_stop(self) -> float:
+        return float(self.adapter.query(":SYSTem:OEMHead:FREQuency:STOP?"))
+
+    def set_oem_frequency_stop(self, value: float) -> None:
+        self.adapter.write(f":SYSTem:OEMHead:FREQuency:STOP {value}")
+
+    def get_oem_multiplier(self) -> float:
+        return float(self.adapter.query(":SYST:OEMH:FREQ:MULT?"))
+
+    def set_oem_multiplier(self, value: float) -> None:
+        self.adapter.write(f":SYST:OEMH:FREQ:MULT {value}")
+
 
 if __name__ == "__main__":
-    dev = AgilentSignalGenerator(host="169.254.156.103", gpib=19)
+    dev = SignalGenerator(host="169.254.156.103", gpib=19)
     print("Power:")
     power = float(input())
     dev.set_amplitude(power)

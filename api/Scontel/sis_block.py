@@ -8,7 +8,7 @@ from utils.decorators import exception
 from utils.logger import logger
 
 
-class Block(BaseInstrumentInterface):
+class SisBlock(BaseInstrumentInterface):
     """
     Scontel SIS block operation interface.
     """
@@ -206,7 +206,7 @@ class Block(BaseInstrumentInterface):
 
 
 if __name__ == "__main__":
-    block = Block(state.BLOCK_ADDRESS, state.BLOCK_PORT)
+    block = SisBlock(state.BLOCK_ADDRESS, state.BLOCK_PORT)
     block.connect()
     print(block.set_bias_short_status(0))
     print(block.get_bias_data())

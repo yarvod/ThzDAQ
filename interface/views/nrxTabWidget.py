@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import QObject, pyqtSignal, Qt, QThread
+from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import (
     QGroupBox,
     QGridLayout,
@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
 
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from state import state
-from api.block import Block
-from api.rs_nrx import NRXBlock
-from interface.components import CustomQDoubleSpinBox
+from api.Scontel.sis_block import SisBlock
+from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 from utils.logger import logger
 
@@ -28,7 +28,7 @@ class NRXBlockStreamThread(QThread):
     meas = pyqtSignal(dict)
 
     def run(self):
-        nrx = NRXBlock(
+        nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
@@ -67,12 +67,12 @@ class BiasPowerThread(QThread):
     stream_results = pyqtSignal(dict)
 
     def run(self):
-        nrx = NRXBlock(
+        nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
-        block = Block(
+        block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
             bias_dev=state.BLOCK_BIAS_DEV,
@@ -97,11 +97,12 @@ class BiasPowerThread(QThread):
             if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
+            block.set_bias_voltage(voltage_set)
+
             if i == 0:
                 time.sleep(0.5)
                 initial_time = time.time()
 
-            block.set_bias_voltage(voltage_set)
             time.sleep(state.BLOCK_BIAS_STEP_DELAY)
             voltage_get = block.get_bias_voltage()
             if not voltage_get:
@@ -185,7 +186,7 @@ class NRXTabWidget(QWidget):
 
         self.nrxStreamPlotPointsLabel = QLabel(self)
         self.nrxStreamPlotPointsLabel.setText("Window points")
-        self.nrxStreamPlotPoints = CustomQDoubleSpinBox(self)
+        self.nrxStreamPlotPoints = DoubleSpinBox(self)
         self.nrxStreamPlotPoints.setRange(10, 1000)
         self.nrxStreamPlotPoints.setDecimals(0)
         self.nrxStreamPlotPoints.setValue(state.NRX_STREAM_GRAPH_POINTS)
@@ -259,29 +260,29 @@ class NRXTabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
-        self.voltStepDelay = CustomQDoubleSpinBox(self)
-        self.voltStepDelay.setRange(0, 10)
+        self.voltStepDelay = DoubleSpinBox(self)
+        self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
         self.btnStartBiasPowerScan = QPushButton("Start Scan")

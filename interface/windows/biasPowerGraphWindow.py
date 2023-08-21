@@ -6,3 +6,10 @@ class BiasPowerGraphWindow(GraphWindow):
     graph_title = "Power (Bias Voltage)"
     x_label = "Bias Voltage, mV"
     y_label = "Power, dBm"
+
+
+class StepBiasPowerGraphWindow(GraphWindow):
+    window_title = "Step GRID Bias Power Graphs"
+    graph_title = "Power (Bias Voltage)"
+    x_label = "Bias Voltage, mV"
+    y_label = "Power, dBm"
