@@ -1,21 +1,26 @@
-from PyQt6.QtGui import QStandardItemModel
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QListView
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView
+
+from interface.components.TableView import TableView
+from store.base import MeasureTableModel, MeasureManager
 
 
 class MeasureDataTabWidget(QWidget):
-
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self.listView = None
+        self.tableView = None
         self.model = None
-        self.createListView()
-        self.layout.addWidget(self.listView)
+        self.createTableView()
+        self.layout.addWidget(self.tableView)
 
-    def createListView(self):
-        self.listView = QListView(self)
-        self.model = QStandardItemModel()
-        self.listView.setModel(self.model)
-        self.listView.setObjectName("Measurement Data")
+    def createTableView(self):
+        self.tableView = TableView(self)
+        self.tableView.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.tableView.setAutoScroll(True)
+        self.model = MeasureTableModel()
+        MeasureManager.table = self.model
+        self.tableView.setModel(self.model)

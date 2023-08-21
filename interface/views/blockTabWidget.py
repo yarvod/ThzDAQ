@@ -134,6 +134,9 @@ class BlockCLScanThread(QThread):
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
         i = 0
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.CL_CURVE, data={}
+        )
         for ctrl_i in ctrl_i_range:
             if not state.BLOCK_CTRL_SCAN_THREAD:
                 break
@@ -162,10 +165,13 @@ class BlockCLScanThread(QThread):
             logger.info(
                 f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
             )
+            measure.data = results
             i += 1
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
+        measure.finished = datetime.now()
+        measure.save()
         self.finished.emit()
 
     def terminate(self):
@@ -212,7 +218,9 @@ class BlockBIASScanThread(QThread):
         )
         start_t = datetime.now()
         i = 0
-        measure = MeasureModel.objects.create(measure_type=MeasureType.IV_CURVE, data={})
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.IV_CURVE, data={}
+        )
         for v_set in v_range:
             if not state.BLOCK_BIAS_SCAN_THREAD:
                 break
@@ -237,12 +245,14 @@ class BlockBIASScanThread(QThread):
                 }
             )
             delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
+            results["time"].append(delta_t.total_seconds())
             measure.data = results
             i += 1
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
         block.disconnect()
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results)
         self.finished.emit()
 
@@ -334,7 +344,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         )
 
     def stop_scan_ctrl_current(self):
-        self.block_ctrl_scan_thread.terminate()
+        self.block_ctrl_scan_thread.quit()
 
     def set_block_bias_short_status(self):
         block = SisBlock(

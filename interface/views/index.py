@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
 from interface.views.blockTabWidget import BlockTabWidget
+from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.nrxTabWidget import NRXTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
@@ -16,6 +17,7 @@ class TabsWidget(QWidget):
         # Initialize tab screen
         self.tabs = QTabWidget(self)
         self.tab_setup = SetUpTabWidget(self)
+        self.tab_data = MeasureDataTabWidget(self)
         self.tab_block = BlockTabWidget(self)
         self.tab_vna = VNATabWidget(self)
         self.tab_nrx = NRXTabWidget(self)
@@ -25,6 +27,7 @@ class TabsWidget(QWidget):
 
         # Add tabs
         self.tabs.addTab(self.tab_setup, "Set Up")
+        self.tabs.addTab(self.tab_data, "Data")
         self.tabs.addTab(self.tab_block, "SIS Block")
         self.tabs.addTab(self.tab_vna, "VNA")
         self.tabs.addTab(self.tab_nrx, "Power Meter")
