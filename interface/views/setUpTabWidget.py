@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QDoubleSpinBox,
     QSizePolicy,
+    QComboBox,
 )
 
 from api.Agilent.signal_generator import SignalGenerator
@@ -187,12 +188,14 @@ class SetUpTabWidget(QWidget):
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
-        self.ctrlDev = QLineEdit(self)
-        self.biasDev = QLineEdit(self)
+        self.ctrlDev = QComboBox(self)
+        self.ctrlDev.addItems(["DEV1", "DEV3"])
+        self.biasDev = QComboBox(self)
+        self.biasDev.addItems(["DEV2", "DEV4"])
         self.ctrlDevLabel.setText("CTRL Device:")
         self.biasDevLabel.setText("BIAS Device:")
-        self.ctrlDev.setText(state.BLOCK_CTRL_DEV)
-        self.biasDev.setText(state.BLOCK_BIAS_DEV)
+        self.ctrlDev.setCurrentText(state.BLOCK_CTRL_DEV)
+        self.biasDev.setCurrentText(state.BLOCK_BIAS_DEV)
 
         self.sisBlockStatusLabel = QLabel(self)
         self.sisBlockStatusLabel.setText("Status:")
@@ -417,8 +420,8 @@ class SetUpTabWidget(QWidget):
 
         state.BLOCK_ADDRESS = self.block_ip.text()
         state.BLOCK_PORT = int(self.block_port.value())
-        state.BLOCK_BIAS_DEV = self.biasDev.text()
-        state.BLOCK_CTRL_DEV = self.ctrlDev.text()
+        state.BLOCK_BIAS_DEV = self.biasDev.currentText()
+        state.BLOCK_CTRL_DEV = self.ctrlDev.currentText()
 
         self.sis_block_thread.status.connect(self.set_sis_block_status)
         self.sis_block_thread.start()
