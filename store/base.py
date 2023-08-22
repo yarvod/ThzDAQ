@@ -45,9 +45,8 @@ class MeasureList(list):
     def filter(self, **kwargs) -> "MeasureList":
         return self.__class__(self._filter(**kwargs))
 
-    def delete_by_indexes(self, indexes: List[int]) -> None:
-        for ind in indexes:
-            del self[ind]
+    def delete_by_index(self, index: int) -> None:
+        del self[index]
 
 
 class MeasureManager:
@@ -86,8 +85,8 @@ class MeasureManager:
         return filtered[0]
 
     @classmethod
-    def delete_by_indexes(cls, indexes: List[int]) -> None:
-        cls.all().delete_by_indexes(indexes)
+    def delete_by_index(cls, index: int) -> None:
+        cls.all().delete_by_index(index)
         cls.update_table()
 
     @classmethod

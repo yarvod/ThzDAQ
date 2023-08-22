@@ -1,5 +1,5 @@
 from PyQt6 import QtGui, QtWidgets, QtCore
-from PyQt6.QtWidgets import QAbstractItemView
+from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
 
 class TableView(QtWidgets.QTableView):
@@ -28,5 +28,21 @@ class TableView(QtWidgets.QTableView):
     def deleteSelectedRows(self):
         model = self.model()
         selection = self.selectionModel()
-        rows = set(index.row() for index in selection.selectedIndexes())
-        model.manager.delete_by_indexes(rows)
+        row = list(set(index.row() for index in selection.selectedIndexes()))[0]
+        measure = model.manager.all()[row]
+
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Deleting data")
+        dlg.setText(
+            f"Аre you sure you want to delete the data '{measure.type_display} {measure.finished.__str__()}'"
+        )
+        dlg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        dlg.setIcon(QMessageBox.Icon.Question)
+        button = dlg.exec()
+
+        if button == QMessageBox.StandardButton.Yes:
+            model.manager.delete_by_index(row)
+        else:
+            return
