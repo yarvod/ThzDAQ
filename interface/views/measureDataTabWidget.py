@@ -18,7 +18,7 @@ class MeasureDataTabWidget(QWidget):
     def createTableView(self):
         self.tableView = TableView(self)
         self.tableView.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
+            QHeaderView.ResizeMode.Interactive
         )
         self.tableView.setAutoScroll(True)
         self.model = MeasureTableModel()
