@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Agilent.signal_generator import SignalGenerator
+from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from store.state import state
@@ -152,6 +153,7 @@ class SetUpTabWidget(QScrollArea):
         self.createGroupPrologixEthernet()
         self.createGroupGrid()
         self.createGroupSignalGenerator()
+        self.createGroupTemperatureController()
 
         self.layout.addWidget(self.groupBlock)
         self.layout.addSpacing(10)
@@ -164,6 +166,8 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addWidget(self.groupGrid)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupSignalGenerator)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupTemperatureController)
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
@@ -378,6 +382,42 @@ class SetUpTabWidget(QScrollArea):
         layout.addWidget(self.btnSignalGeneratorInit, 3, 0, 1, 2)
 
         self.groupSignalGenerator.setLayout(layout)
+
+    def createGroupTemperatureController(self):
+        self.groupTemperatureController = QGroupBox("Temperature controller")
+        self.groupGrid.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QGridLayout()
+
+        self.temperatureControllerAddressLabel = QLabel(self)
+        self.temperatureControllerAddressLabel.setText("IP Address:")
+        self.temperatureControllerAddress = QLineEdit(self)
+        self.temperatureControllerAddress.setText(state.LAKE_SHORE_IP)
+
+        self.temperatureControllerStatusLabel = QLabel(self)
+        self.temperatureControllerStatusLabel.setText("Status:")
+        self.temperatureControllerStatus = QLabel(self)
+        self.temperatureControllerStatus.setText("Doesn't initialized yet!")
+
+        self.btnTemperatureControllerInit = QPushButton("Initialize")
+        self.btnTemperatureControllerInit.clicked.connect(
+            self.initialize_temperature_controller
+        )
+
+        layout.addWidget(self.temperatureControllerAddressLabel, 1, 0)
+        layout.addWidget(self.temperatureControllerAddress, 1, 1)
+        layout.addWidget(self.temperatureControllerStatusLabel, 2, 0)
+        layout.addWidget(self.temperatureControllerStatus, 2, 1)
+        layout.addWidget(self.btnTemperatureControllerInit, 3, 0, 1, 2)
+
+        self.groupTemperatureController.setLayout(layout)
+
+    def initialize_temperature_controller(self):
+        state.LAKE_SHORE_IP = self.temperatureControllerAddress.text()
+        tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
+        result = tc.test()
+        self.temperatureControllerStatus.setText(result)
 
     def initialize_signal_generator(self):
         state.AGILENT_SIGNAL_GENERATOR_GPIB = self.signalGeneratorAddress.value()

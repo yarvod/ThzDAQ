@@ -58,6 +58,16 @@ class BaseInstrument:
         except (ImportError, ImportWarning) as e:
             logger.error(f"[{self.__class__.__name__}._set_adapter] {e}")
 
+    def query(self, cmd: str) -> str:
+        if self.gpib:
+            return self.adapter.query(cmd, eq_addr=self.gpib)
+        return self.adapter.query(cmd)
+
+    def write(self, cmd: str) -> None:
+        if self.gpib:
+            return self.adapter.write(cmd, eq_addr=self.gpib)
+        return self.adapter.write(cmd)
+
 
 class BaseInstrumentInterface:
     """Base Instrument Api interface"""

@@ -1,4 +1,5 @@
-from state import state
+from settings import SOCKET
+from store.state import state
 from utils.classes import BaseInstrument
 
 
@@ -7,19 +8,30 @@ class TemperatureController(BaseInstrument):
         self,
         host: str = state.LAKE_SHORE_IP,
         gpib: int = None,
-        adapter: str = "SOCKET",
+        adapter: str = SOCKET,
         *args,
         **kwargs,
     ):
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
     def idn(self) -> str:
-        if self.gpib:
-            return self.adapter.query("*IDN?", eq_addr=self.gpib)
-        return self.adapter.query("*IDN?")
+        return self.query("*IDN?")
+
+    def test(self) -> str:
+        result = self.idn()
+        if "LSCI,MODEL336,LSA2CMQ/LSA2C8R,2.9" in result:
+            return "OK"
+        return "ERROR"
+
+    def get_temperature_a(self) -> float:
+        return float(self.query("KRDG? A"))
+
+    def get_temperature_c(self) -> float:
+        return float(self.query("KRDG? C"))
 
 
 if __name__ == "__main__":
-    temp = TemperatureController(port=state.LAKE_SHORE_PORT)
-
-    print(temp.idn())
+    tc = TemperatureController(port=state.LAKE_SHORE_PORT)
+    print(tc.idn())
+    print(tc.get_temperature_a())
+    print(tc.get_temperature_c())

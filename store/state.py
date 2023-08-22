@@ -97,7 +97,7 @@ class State:
     GRID_SPEED = 180  # degree per second
 
     # LakeShore Temperature controller
-    LAKE_SHORE_IP = "192.168.0.12"
+    LAKE_SHORE_IP = "169.254.0.56"
     LAKE_SHORE_PORT = 7777
     LAKE_SHORE_GPIB = 1
 
