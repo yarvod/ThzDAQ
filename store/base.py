@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Union, Dict, Any, List
 
+from PyQt6 import QtGui
 from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from PyQt6.QtWidgets import QFileDialog
 
@@ -102,6 +103,8 @@ class MeasureManager:
                 filepath += ".json"
             with open(filepath, "w", encoding="utf-8") as file:
                 json.dump(results, file, ensure_ascii=False, indent=4)
+            measure.saved = True
+            measure.save()
         except (IndexError, FileNotFoundError):
             pass
 
@@ -112,6 +115,7 @@ class MeasureModel:
         0: "measure_type",
         1: "started",
         2: "finished",
+        3: "saved",
     }
 
     def __init__(
@@ -127,6 +131,7 @@ class MeasureModel:
         self.id = str(uuid.uuid4())
         self.started = datetime.now()
         self.finished = "--"
+        self.saved = False
 
     @staticmethod
     def validate_type(value: str) -> None:
@@ -152,7 +157,7 @@ class MeasureTableModel(QAbstractTableModel):
     def __init__(self, data=None):
         super().__init__()
         self._data = []
-        self._headers = ["Type", "Started", "Finished"]
+        self._headers = ["Type", "Started", "Finished", "Saved"]
 
     def data(self, index, role):
         if not self._data:
@@ -160,7 +165,13 @@ class MeasureTableModel(QAbstractTableModel):
         value = self._data[index.row()][index.column()]
         if role == Qt.ItemDataRole.DisplayRole:
             if isinstance(value, datetime):
-                return value.strftime("%Y-%m-%d %H:%M:%S")
+                return value.strftime("%H:%M:%S")
+            return value
+        if role == Qt.ItemDataRole.DecorationRole:
+            if isinstance(value, bool):
+                if value:
+                    return QtGui.QIcon("assets/yes-icon.png")
+                return QtGui.QIcon("assets/no-icon.png")
             return value
 
     def setData(self, index: QModelIndex, value: Any, role: int = ...) -> bool:
@@ -175,7 +186,9 @@ class MeasureTableModel(QAbstractTableModel):
     def updateData(self):
         self.beginResetModel()
         measures = self.manager.all()
-        self._data = [[m.type_display, m.started, m.finished] for m in measures]
+        self._data = [
+            [m.type_display, m.started, m.finished, m.saved] for m in measures
+        ]
         self.endResetModel()
 
     def headerData(self, section, orientation, role):
