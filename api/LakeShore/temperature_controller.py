@@ -1,3 +1,4 @@
+from api.adapters.socket_adapter import SocketAdapter
 from settings import SOCKET
 from store.state import state
 from utils.classes import BaseInstrument
@@ -12,6 +13,7 @@ class TemperatureController(BaseInstrument):
         *args,
         **kwargs,
     ):
+        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"))
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
     def idn(self) -> str:
