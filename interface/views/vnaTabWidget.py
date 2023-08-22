@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
+from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
@@ -57,6 +58,9 @@ class BiasReflectionThread(QThread):
             state.BIAS_REFL_VOLT_TO * 1e-3,
             state.BIAS_REFL_VOLT_POINTS,
         )
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.BIAS_VNA, data={}
+        )
         start_t = datetime.now()
         for i, v_set in enumerate(v_range, 1):
             if not state.BIAS_REFL_SCAN_THREAD:
@@ -78,15 +82,17 @@ class BiasReflectionThread(QThread):
             results["i_get"].append(i_get * 1e6)
             results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
             delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
+            results["time"].append(delta_t.total_seconds())
             logger.info(
                 f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
             )
+            measure.data = results
             self.progress.emit(proc)
 
         block.set_bias_voltage(initial_v)
         block.disconnect()
-
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results)
         self.finished.emit()
 
@@ -287,7 +293,6 @@ class VNATabWidget(QWidget):
         state.BIAS_REFL_VOLT_POINTS = int(self.voltPoints.value())
         state.BIAS_REFL_DELAY = self.scanStepDelay.value()
 
-        self.bias_reflection_thread.results.connect(self.save_bias_reflection)
         self.bias_reflection_thread.progress.connect(self.set_bias_reflection_progress)
         self.bias_reflection_thread.start()
 
@@ -303,26 +308,6 @@ class VNATabWidget(QWidget):
     def stop_scan_bias_reflection(self):
         self.bias_reflection_thread.quit()
         self.bias_reflection_thread.exit(0)
-
-    def save_bias_reflection(self, data):
-        try:
-            refl_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            refl_df = pd.DataFrame(data["refl"], index=data["frequencies"])
-            refl_df.to_csv(refl_filepath)
-
-            iv_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            iv_df = pd.DataFrame(
-                dict(
-                    v_set=data["v_set"],
-                    v_get=data["v_get"],
-                    i_get=data["i_get"],
-                    time=data["time"],
-                )
-            )
-            iv_df.to_csv(iv_filepath)
-        except (IndexError, FileNotFoundError):
-            pass
-        self.scanProgress.setText(f"0 %")
 
     def set_bias_reflection_progress(self, progress):
         self.scanProgress.setText(f"{progress} %")

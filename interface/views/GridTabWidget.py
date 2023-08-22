@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from datetime import datetime
 
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -20,6 +21,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import StepBiasPowerGraphWindow
+from store.base import MeasureModel, MeasureType
 from store.state import state
 
 
@@ -64,6 +66,9 @@ class StepBiasPowerThread(QThread):
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         motor.rotate(state.GRID_ANGLE_START)
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.GRID_BIAS_POWER, data={}
+        )
         time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
         for ind, angle in enumerate(angle_range):
             if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
@@ -119,7 +124,11 @@ class StepBiasPowerThread(QThread):
                 else:
                     results_list[ind] = results
 
+                measure.data = results_list
+
         block.set_bias_voltage(initial_v)
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results_list)
         self.finished.emit()
 
@@ -262,7 +271,6 @@ class GridTabWidget(QWidget):
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
-        self.bias_power_thread.results.connect(self.save_bias_power_scan)
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -277,16 +285,6 @@ class GridTabWidget(QWidget):
 
     def stop_measure_step_bias_power(self):
         self.bias_power_thread.quit()
-
-    def save_bias_power_scan(self, results):
-        try:
-            filepath = QFileDialog.getSaveFileName(filter="*.json")[0]
-            if not filepath.endswith(".json"):
-                filepath += ".json"
-            with open(filepath, "w", encoding="utf-8") as file:
-                json.dump(results, file, ensure_ascii=False, indent=4)
-        except (IndexError, FileNotFoundError):
-            pass
 
     def show_bias_power_graph(self, results):
         if self.stepBiasPowerGraphWindow is None:

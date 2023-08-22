@@ -11,11 +11,17 @@ from PyQt6.QtWidgets import QFileDialog
 class MeasureType:
     IV_CURVE = "iv_curve"
     CL_CURVE = "cl_curve"
+    BIAS_VNA = "bias_vna"
+    BIAS_POWER = "bias_power"
+    GRID_BIAS_POWER = "grid_bias_power"
 
     CHOICES = dict(
         (
             (IV_CURVE, "I-V curve"),
             (CL_CURVE, "CL curve"),
+            (BIAS_VNA, "BIAS VNA"),
+            (BIAS_POWER, "BIAS Power"),
+            (GRID_BIAS_POWER, "GRID BIAS Power"),
         )
     )
 
