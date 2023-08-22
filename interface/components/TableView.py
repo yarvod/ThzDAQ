@@ -8,10 +8,16 @@ class TableView(QtWidgets.QTableView):
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.menu = QtWidgets.QMenu(self)
+
         self.action_save = QtGui.QAction("Save", self)
         self.action_delete = QtGui.QAction("Delete", self)
+
+        self.action_save.setIcon(QtGui.QIcon("assets/save-icon.png"))
+        self.action_delete.setIcon(QtGui.QIcon("assets/delete-icon.png"))
+
         self.menu.addAction(self.action_save)
         self.menu.addAction(self.action_delete)
+
         self.action_save.triggered.connect(self.saveSelectedRow)
         self.action_delete.triggered.connect(self.deleteSelectedRows)
         self.customContextMenuRequested.connect(self.showContextMenu)
