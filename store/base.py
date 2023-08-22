@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Union, Dict, Any, List
+from typing import Union, Dict, Any
 
 from PyQt6 import QtGui
 from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex

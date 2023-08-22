@@ -87,14 +87,14 @@ class State:
     PROLOGIX_IP = "169.254.156.103"
 
     # Arduino step motor
-    STEP_MOTOR_ADDRESS = "169.254.0.52"
+    GRID_ADDRESS = "169.254.0.52"
 
     GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
-    STEP_MOTOR_ANGLE = 90
-    STEP_MOTOR_ANGLE_FROM = 0
-    STEP_MOTOR_ANGLE_TO = 0
-    STEP_MOTOR_ANGLE_STEP = 10
-    STEP_MOTOR_SPEED = 180  # degree per second
+    GRID_ANGLE = 90
+    GRID_ANGLE_START = 0
+    GRID_ANGLE_STOP = 0
+    GRID_ANGLE_STEP = 10
+    GRID_SPEED = 180  # degree per second
 
 
 state = State()

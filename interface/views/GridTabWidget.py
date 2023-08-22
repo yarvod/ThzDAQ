@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 
-from api.Arduino.step_motor import StepMotorManager
+from api.Arduino.grid import GridManager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.DoubleSpinBox import DoubleSpinBox
@@ -26,9 +26,9 @@ from store.state import state
 logger = logging.getLogger(__name__)
 
 
-class StepMotorThread(QThread):
+class GridThread(QThread):
     def run(self):
-        StepMotorManager(host=state.STEP_MOTOR_ADDRESS).rotate(state.STEP_MOTOR_ANGLE)
+        GridManager(host=state.GRID_ADDRESS).rotate(state.GRID_ANGLE)
         self.finished.emit()
 
 
@@ -37,7 +37,7 @@ class StepBiasPowerThread(QThread):
     stream_results = pyqtSignal(dict)
 
     def run(self):
-        motor = StepMotorManager(host=state.STEP_MOTOR_ADDRESS)
+        motor = GridManager(host=state.GRID_ADDRESS)
         nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
@@ -52,9 +52,9 @@ class StepBiasPowerThread(QThread):
         block.connect()
         results_list = []
         angle_range = np.arange(
-            state.STEP_MOTOR_ANGLE_FROM,
-            state.STEP_MOTOR_ANGLE_TO + state.STEP_MOTOR_ANGLE_STEP,
-            state.STEP_MOTOR_ANGLE_STEP,
+            state.GRID_ANGLE_START,
+            state.GRID_ANGLE_STOP + state.GRID_ANGLE_STEP,
+            state.GRID_ANGLE_STEP,
         )
         volt_range = np.linspace(
             state.BLOCK_BIAS_VOLT_FROM * 1e-3,
@@ -63,15 +63,15 @@ class StepBiasPowerThread(QThread):
         )
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
-        motor.rotate(state.STEP_MOTOR_ANGLE_FROM)
-        time.sleep(abs(state.STEP_MOTOR_ANGLE_FROM) / state.STEP_MOTOR_SPEED)
+        motor.rotate(state.GRID_ANGLE_START)
+        time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
         for ind, angle in enumerate(angle_range):
             if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
             results = {
                 "id": ind,
-                "step": state.STEP_MOTOR_ANGLE_STEP,
+                "step": state.GRID_ANGLE_STEP,
                 "angle": angle,
                 "current_get": [],
                 "voltage_set": [],
@@ -80,8 +80,8 @@ class StepBiasPowerThread(QThread):
                 "time": [],
             }
             if ind != 0:
-                motor.rotate(state.STEP_MOTOR_ANGLE_STEP)
-            time.sleep(abs(state.STEP_MOTOR_ANGLE_STEP) / state.STEP_MOTOR_SPEED)
+                motor.rotate(state.GRID_ANGLE_STEP)
+            time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
 
             for i, voltage_set in enumerate(volt_range):
                 if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
@@ -139,22 +139,22 @@ class StepBiasPowerThread(QThread):
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
-class StepMotorTabWidget(QWidget):
+class GridTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.stepBiasPowerGraphWindow = None
-        self.createGroupStepMotor()
-        self.createGroupStepBiasPowerScan()
-        self.layout.addWidget(self.groupStepMotor)
+        self.createGroupGrid()
+        self.createGroupGridBiasPowerScan()
+        self.layout.addWidget(self.groupGrid)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupStepBiasPowerScan)
+        self.layout.addWidget(self.groupGridBiasPowerScan)
         self.layout.addStretch()
         self.setLayout(self.layout)
 
-    def createGroupStepMotor(self):
-        self.groupStepMotor = QGroupBox("Step Motor")
+    def createGroupGrid(self):
+        self.groupGrid = QGroupBox("GRID")
         layout = QGridLayout()
 
         self.angleLabel = QLabel(self)
@@ -169,11 +169,11 @@ class StepMotorTabWidget(QWidget):
         layout.addWidget(self.angle, 1, 1)
         layout.addWidget(self.btnRotate, 1, 2)
 
-        self.groupStepMotor.setLayout(layout)
+        self.groupGrid.setLayout(layout)
 
-    def createGroupStepBiasPowerScan(self):
-        self.groupStepBiasPowerScan = QGroupBox("Step Power Bias Scan")
-        self.groupStepBiasPowerScan.setSizePolicy(
+    def createGroupGridBiasPowerScan(self):
+        self.groupGridBiasPowerScan = QGroupBox("Grid Power Bias Scan")
+        self.groupGridBiasPowerScan.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         layout = QGridLayout()
@@ -182,19 +182,19 @@ class StepMotorTabWidget(QWidget):
         self.angleStartLabel.setText("Angle start, degree")
         self.angleStart = DoubleSpinBox(self)
         self.angleStart.setRange(-180, 180)
-        self.angleStart.setValue(state.STEP_MOTOR_ANGLE_FROM)
+        self.angleStart.setValue(state.GRID_ANGLE_START)
 
         self.angleStopLabel = QLabel(self)
         self.angleStopLabel.setText("Angle stop, degree")
         self.angleStop = DoubleSpinBox(self)
         self.angleStop.setRange(-180, 180)
-        self.angleStop.setValue(state.STEP_MOTOR_ANGLE_TO)
+        self.angleStop.setValue(state.GRID_ANGLE_STOP)
 
         self.angleStepLabel = QLabel(self)
         self.angleStepLabel.setText("Angle step, degree")
         self.angleStep = DoubleSpinBox(self)
         self.angleStep.setRange(-180, 180)
-        self.angleStep.setValue(state.STEP_MOTOR_ANGLE_STEP)
+        self.angleStep.setValue(state.GRID_ANGLE_STEP)
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
@@ -247,15 +247,15 @@ class StepMotorTabWidget(QWidget):
         layout.addWidget(self.btnStartBiasPowerScan, 8, 0)
         layout.addWidget(self.btnStopBiasPowerScan, 8, 1)
 
-        self.groupStepBiasPowerScan.setLayout(layout)
+        self.groupGridBiasPowerScan.setLayout(layout)
 
     def start_measure_step_bias_power(self):
         self.bias_power_thread = StepBiasPowerThread()
 
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = True
-        state.STEP_MOTOR_ANGLE_FROM = self.angleStart.value()
-        state.STEP_MOTOR_ANGLE_TO = self.angleStop.value()
-        state.STEP_MOTOR_ANGLE_STEP = self.angleStep.value()
+        state.GRID_ANGLE_START = self.angleStart.value()
+        state.GRID_ANGLE_STOP = self.angleStop.value()
+        state.GRID_ANGLE_STEP = self.angleStep.value()
         state.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
         state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
@@ -299,8 +299,8 @@ class StepMotorTabWidget(QWidget):
         self.stepBiasPowerGraphWindow.show()
 
     def rotate(self):
-        state.STEP_MOTOR_ANGLE = self.angle.value()
-        self.step_motor_thread = StepMotorThread()
-        self.step_motor_thread.start()
+        state.GRID_ANGLE = self.angle.value()
+        self.grid_thread = GridThread()
+        self.grid_thread.start()
         self.btnRotate.setEnabled(False)
-        self.step_motor_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))
+        self.grid_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))

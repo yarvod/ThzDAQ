@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 from api.Agilent.signal_generator import SignalGenerator
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
-from api.Arduino.step_motor import StepMotorManager
+from api.Arduino.grid import GridManager
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -131,13 +131,11 @@ class PrologixEthernetThread(QThread):
         self.finished.emit()
 
 
-class StepMotorThread(QThread):
+class GridThread(QThread):
     status = pyqtSignal(str)
 
     def run(self):
-        test_result, test_message = StepMotorManager(
-            host=state.STEP_MOTOR_ADDRESS
-        ).test()
+        test_result, test_message = GridManager(host=state.GRID_ADDRESS).test()
         self.status.emit(test_message)
         self.finished.emit()
 
@@ -152,8 +150,9 @@ class SetUpTabWidget(QScrollArea):
         self.createGroupVna()
         self.createGroupNRX()
         self.createGroupPrologixEthernet()
-        self.createGroupStepMotor()
+        self.createGroupGrid()
         self.createGroupSignalGenerator()
+
         self.layout.addWidget(self.groupBlock)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
@@ -162,7 +161,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupPrologixEthernet)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupStepMotor)
+        self.layout.addWidget(self.groupGrid)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupSignalGenerator)
         self.layout.addStretch()
@@ -322,37 +321,37 @@ class SetUpTabWidget(QScrollArea):
 
         self.groupPrologixEthernet.setLayout(layout)
 
-    def createGroupStepMotor(self):
-        self.groupStepMotor = QGroupBox("Step Motor")
-        self.groupStepMotor.setSizePolicy(
+    def createGroupGrid(self):
+        self.groupGrid = QGroupBox("GRID")
+        self.groupGrid.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         layout = QGridLayout()
 
-        self.stepMotorAddressLabel = QLabel(self)
-        self.stepMotorAddressLabel.setText("IP Address:")
-        self.stepMotorAddress = QLineEdit(self)
-        self.stepMotorAddress.setText(state.STEP_MOTOR_ADDRESS)
+        self.gridAddressLabel = QLabel(self)
+        self.gridAddressLabel.setText("IP Address:")
+        self.gridAddress = QLineEdit(self)
+        self.gridAddress.setText(state.GRID_ADDRESS)
 
-        self.stepMotorStatusLabel = QLabel(self)
-        self.stepMotorStatusLabel.setText("Status:")
-        self.stepMotorStatus = QLabel(self)
-        self.stepMotorStatus.setText("Doesn't initialized yet!")
+        self.gridStatusLabel = QLabel(self)
+        self.gridStatusLabel.setText("Status:")
+        self.gridStatus = QLabel(self)
+        self.gridStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitStepMotor = QPushButton("Initialize")
-        self.btnInitStepMotor.clicked.connect(self.initialize_step_motor)
+        self.btnInitGrid = QPushButton("Initialize")
+        self.btnInitGrid.clicked.connect(self.initialize_grid)
 
-        layout.addWidget(self.stepMotorAddressLabel, 1, 0)
-        layout.addWidget(self.stepMotorAddress, 1, 1)
-        layout.addWidget(self.stepMotorStatusLabel, 2, 0)
-        layout.addWidget(self.stepMotorStatus, 2, 1)
-        layout.addWidget(self.btnInitStepMotor, 3, 0, 1, 2)
+        layout.addWidget(self.gridAddressLabel, 1, 0)
+        layout.addWidget(self.gridAddress, 1, 1)
+        layout.addWidget(self.gridStatusLabel, 2, 0)
+        layout.addWidget(self.gridStatus, 2, 1)
+        layout.addWidget(self.btnInitGrid, 3, 0, 1, 2)
 
-        self.groupStepMotor.setLayout(layout)
+        self.groupGrid.setLayout(layout)
 
     def createGroupSignalGenerator(self):
         self.groupSignalGenerator = QGroupBox("Signal generator")
-        self.groupStepMotor.setSizePolicy(
+        self.groupGrid.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         layout = QGridLayout()
@@ -388,18 +387,16 @@ class SetUpTabWidget(QScrollArea):
         result = sg.test()
         self.signalGeneratorStatus.setText(result)
 
-    def initialize_step_motor(self):
-        state.STEP_MOTOR_ADDRESS = self.stepMotorAddress.text()
-        self.step_motor_thread = StepMotorThread()
-        self.step_motor_thread.status.connect(self.set_step_motor_status)
-        self.step_motor_thread.start()
-        self.btnInitStepMotor.setEnabled(False)
-        self.step_motor_thread.finished.connect(
-            lambda: self.btnInitStepMotor.setEnabled(True)
-        )
+    def initialize_grid(self):
+        state.GRID_ADDRESS = self.gridAddress.text()
+        self.grid_thread = GridThread()
+        self.grid_thread.status.connect(self.set_grid_status)
+        self.grid_thread.start()
+        self.btnInitGrid.setEnabled(False)
+        self.grid_thread.finished.connect(lambda: self.btnInitGrid.setEnabled(True))
 
-    def set_step_motor_status(self, status):
-        self.stepMotorStatus.setText(status)
+    def set_grid_status(self, status):
+        self.gridStatus.setText(status)
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()

@@ -12,12 +12,12 @@ from utils.functions import import_class
 logger = logging.getLogger(__name__)
 
 
-class StepMotorManager:
+class GridManager:
     MAX_STEPS = 1000
 
     def __init__(
         self,
-        host: str = state.STEP_MOTOR_ADDRESS,
+        host: str = state.GRID_ADDRESS,
         adapter: str = HTTP,
         *args,
         **kwargs,
@@ -74,5 +74,5 @@ class StepMotorManager:
 
 if __name__ == "__main__":
     angle = float(sys.argv[1])
-    ard = StepMotorManager()
+    ard = GridManager()
     ard.rotate(angle)
