@@ -1,9 +1,11 @@
 from PyQt6 import QtGui, QtWidgets, QtCore
+from PyQt6.QtWidgets import QAbstractItemView
 
 
 class TableView(QtWidgets.QTableView):
     def __init__(self, parent: QtWidgets.QWidget = None):
         super().__init__(parent)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.menu = QtWidgets.QMenu(self)
         self.action_save = QtGui.QAction("Save", self)

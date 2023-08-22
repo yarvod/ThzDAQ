@@ -96,6 +96,8 @@ class MeasureManager:
         caption = f"Saving {measure.type_display}_{measure.finished.__str__()}"
         try:
             filepath = QFileDialog.getSaveFileName(filter="*.json", caption=caption)[0]
+            if not filepath:
+                return
             if not filepath.endswith(".json"):
                 filepath += ".json"
             with open(filepath, "w", encoding="utf-8") as file:
