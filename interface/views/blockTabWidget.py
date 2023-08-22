@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
-from state import state
+from store.state import state
 
 from api.Scontel.sis_block import SisBlock
 from interface.components.DoubleSpinBox import DoubleSpinBox

@@ -1,8 +1,7 @@
 import logging
 
 from settings import ADAPTERS
-from state import state
-from utils.classes import Singleton
+from store.state import state
 from utils.functions import import_class
 
 

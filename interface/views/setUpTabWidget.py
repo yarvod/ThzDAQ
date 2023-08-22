@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 from api.Agilent.signal_generator import SignalGenerator
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.step_motor import StepMotorManager
-from state import state
+from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.vna import VNABlock

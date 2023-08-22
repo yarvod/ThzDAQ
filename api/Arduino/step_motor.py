@@ -6,7 +6,7 @@ from serial.tools.list_ports import main as list_ports
 
 from api.adapters.http_adapter import HttpAdapter
 from settings import ADAPTERS, HTTP, SERIAL
-from state import state
+from store.state import state
 from utils.functions import import_class
 
 logger = logging.getLogger(__name__)

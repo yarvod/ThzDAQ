@@ -1,5 +1,4 @@
 # Colors
-from state import state
 
 PALE_PURPLE = "#e5d4ed"
 BLUE = "#6d72c3"

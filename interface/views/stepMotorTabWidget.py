@@ -20,7 +20,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import StepBiasPowerGraphWindow
-from state import state
+from store.state import state
 
 
 logger = logging.getLogger(__name__)
