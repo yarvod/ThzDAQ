@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from datetime import datetime
@@ -13,7 +12,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QGridLayout,
-    QFileDialog,
 )
 
 from api.Arduino.grid import GridManager

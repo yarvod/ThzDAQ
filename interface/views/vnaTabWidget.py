@@ -3,7 +3,6 @@ from collections import defaultdict
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
@@ -12,7 +11,6 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QPushButton,
-    QFileDialog,
     QSizePolicy,
 )
 
