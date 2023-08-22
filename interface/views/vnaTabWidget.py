@@ -3,7 +3,6 @@ from collections import defaultdict
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtWidgets import (
     QWidget,
@@ -12,14 +11,14 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QPushButton,
-    QFileDialog,
     QSizePolicy,
 )
 
-from state import state
+from store.base import MeasureModel, MeasureType
+from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
 from utils.logger import logger
@@ -57,6 +56,9 @@ class BiasReflectionThread(QThread):
             state.BIAS_REFL_VOLT_TO * 1e-3,
             state.BIAS_REFL_VOLT_POINTS,
         )
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.BIAS_VNA, data={}
+        )
         start_t = datetime.now()
         for i, v_set in enumerate(v_range, 1):
             if not state.BIAS_REFL_SCAN_THREAD:
@@ -78,15 +80,17 @@ class BiasReflectionThread(QThread):
             results["i_get"].append(i_get * 1e6)
             results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
             delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
+            results["time"].append(delta_t.total_seconds())
             logger.info(
                 f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
             )
+            measure.data = results
             self.progress.emit(proc)
 
         block.set_bias_voltage(initial_v)
         block.disconnect()
-
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results)
         self.finished.emit()
 
@@ -156,24 +160,24 @@ class VNATabWidget(QWidget):
 
         self.freqFromLabel = QLabel(self)
         self.freqFromLabel.setText("Freq from, GHz:")
-        self.freqFrom = CustomQDoubleSpinBox(self)
+        self.freqFrom = DoubleSpinBox(self)
         self.freqFrom.setValue(state.VNA_FREQ_FROM)
 
         self.freqToLabel = QLabel(self)
         self.freqToLabel.setText("Freq to, GHz:")
-        self.freqTo = CustomQDoubleSpinBox(self)
+        self.freqTo = DoubleSpinBox(self)
         self.freqTo.setValue(state.VNA_FREQ_TO)
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
-        self.vnaPoints = CustomQDoubleSpinBox(self)
+        self.vnaPoints = DoubleSpinBox(self)
         self.vnaPoints.setMaximum(state.VNA_POINTS_MAX)
         self.vnaPoints.setDecimals(0)
         self.vnaPoints.setValue(state.VNA_POINTS)
 
         self.vnaPowerLabel = QLabel(self)
         self.vnaPowerLabel.setText("Power, dB:")
-        self.vnaPower = CustomQDoubleSpinBox(self)
+        self.vnaPower = DoubleSpinBox(self)
         self.vnaPower.setRange(state.VNA_POWER_MIN, state.VNA_POWER_MAX)
         self.vnaPower.setValue(state.VNA_POWER)
 
@@ -201,27 +205,27 @@ class VNATabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.scanStepDelayLabel = QLabel("Scan delay, s")
-        self.scanStepDelay = CustomQDoubleSpinBox(self)
+        self.scanStepDelay = DoubleSpinBox(self)
         self.scanStepDelay.setRange(0, 10)
         self.scanStepDelay.setValue(state.BIAS_REFL_DELAY)
 
@@ -287,7 +291,6 @@ class VNATabWidget(QWidget):
         state.BIAS_REFL_VOLT_POINTS = int(self.voltPoints.value())
         state.BIAS_REFL_DELAY = self.scanStepDelay.value()
 
-        self.bias_reflection_thread.results.connect(self.save_bias_reflection)
         self.bias_reflection_thread.progress.connect(self.set_bias_reflection_progress)
         self.bias_reflection_thread.start()
 
@@ -303,26 +306,6 @@ class VNATabWidget(QWidget):
     def stop_scan_bias_reflection(self):
         self.bias_reflection_thread.quit()
         self.bias_reflection_thread.exit(0)
-
-    def save_bias_reflection(self, data):
-        try:
-            refl_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            refl_df = pd.DataFrame(data["refl"], index=data["frequencies"])
-            refl_df.to_csv(refl_filepath)
-
-            iv_filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            iv_df = pd.DataFrame(
-                dict(
-                    v_set=data["v_set"],
-                    v_get=data["v_get"],
-                    i_get=data["i_get"],
-                    time=data["time"],
-                )
-            )
-            iv_df.to_csv(iv_filepath)
-        except (IndexError, FileNotFoundError):
-            pass
-        self.scanProgress.setText(f"0 %")
 
     def set_bias_reflection_progress(self, progress):
         self.scanProgress.setText(f"{progress} %")

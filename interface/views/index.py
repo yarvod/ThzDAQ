@@ -1,10 +1,11 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
 from interface.views.blockTabWidget import BlockTabWidget
+from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.nrxTabWidget import NRXTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
-from interface.views.stepMotorTabWidget import StepMotorTabWidget
+from interface.views.GridTabWidget import GridTabWidget
 from interface.views.vnaTabWidget import VNATabWidget
 
 
@@ -16,20 +17,22 @@ class TabsWidget(QWidget):
         # Initialize tab screen
         self.tabs = QTabWidget(self)
         self.tab_setup = SetUpTabWidget(self)
+        self.tab_data = MeasureDataTabWidget(self)
         self.tab_block = BlockTabWidget(self)
         self.tab_vna = VNATabWidget(self)
         self.tab_nrx = NRXTabWidget(self)
         self.tab_signal_generator = SignalGeneratorTabWidget(self)
-        self.tab_step_motor = StepMotorTabWidget(self)
+        self.tab_grid = GridTabWidget(self)
         self.tabs.resize(300, 200)
 
         # Add tabs
         self.tabs.addTab(self.tab_setup, "Set Up")
+        self.tabs.addTab(self.tab_data, "Data")
         self.tabs.addTab(self.tab_block, "SIS Block")
         self.tabs.addTab(self.tab_vna, "VNA")
         self.tabs.addTab(self.tab_nrx, "Power Meter")
         self.tabs.addTab(self.tab_signal_generator, "Signal Generator")
-        self.tabs.addTab(self.tab_step_motor, "Step Motor")
+        self.tabs.addTab(self.tab_grid, "GRID")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)

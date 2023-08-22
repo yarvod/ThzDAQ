@@ -13,15 +13,17 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QSizePolicy,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
-from state import state
+from store.state import state
 
 from api.Scontel.sis_block import SisBlock
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.clGraphWindow import CLGraphWindow
+from store.base import MeasureModel, MeasureType
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,9 @@ class BlockCLScanThread(QThread):
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
         i = 0
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.CL_CURVE, data={}
+        )
         for ctrl_i in ctrl_i_range:
             if not state.BLOCK_CTRL_SCAN_THREAD:
                 break
@@ -160,10 +165,13 @@ class BlockCLScanThread(QThread):
             logger.info(
                 f"[scan_ctrl_current] Proc {proc} %; Time {delta_t}; I set {ctrl_i * 1e3}"
             )
+            measure.data = results
             i += 1
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
+        measure.finished = datetime.now()
+        measure.save()
         self.finished.emit()
 
     def terminate(self):
@@ -210,6 +218,9 @@ class BlockBIASScanThread(QThread):
         )
         start_t = datetime.now()
         i = 0
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.IV_CURVE, data={}
+        )
         for v_set in v_range:
             if not state.BLOCK_BIAS_SCAN_THREAD:
                 break
@@ -234,11 +245,14 @@ class BlockBIASScanThread(QThread):
                 }
             )
             delta_t = datetime.now() - start_t
-            results["time"].append(delta_t)
+            results["time"].append(delta_t.total_seconds())
+            measure.data = results
             i += 1
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
         block.disconnect()
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results)
         self.finished.emit()
 
@@ -260,9 +274,10 @@ class BlockBIASScanThread(QThread):
         state.BLOCK_BIAS_SCAN_THREAD = False
 
 
-class BlockTabWidget(QWidget, UtilsMixin):
+class BlockTabWidget(QScrollArea, UtilsMixin):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
+        self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.ctrlGraphWindow = None
@@ -279,7 +294,13 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupBiasScan)
         self.layout.addStretch()
-        self.setLayout(self.layout)
+
+        self.widget.setLayout(self.layout)
+
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setWidgetResizable(True)
+        self.setWidget(self.widget)
 
     def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphWindow is None:
@@ -323,7 +344,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         )
 
     def stop_scan_ctrl_current(self):
-        self.block_ctrl_scan_thread.terminate()
+        self.block_ctrl_scan_thread.quit()
 
     def set_block_bias_short_status(self):
         block = SisBlock(
@@ -502,7 +523,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.sisVoltageSetLabel = QLabel(self)
         self.sisVoltageSetLabel.setText("BIAS voltage, mV:")
-        self.sisVoltageSet = CustomQDoubleSpinBox(self)
+        self.sisVoltageSet = DoubleSpinBox(self)
         self.sisVoltageSet.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
@@ -512,7 +533,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.ctrlCurrentSetLabel = QLabel(self)
         self.ctrlCurrentSetLabel.setText("CL current, mA")
-        self.ctrlCurrentSet = CustomQDoubleSpinBox(self)
+        self.ctrlCurrentSet = DoubleSpinBox(self)
         self.ctrlCurrentSet.setRange(
             state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
@@ -556,24 +577,24 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.ctrlCurrentFromLabel = QLabel(self)
         self.ctrlCurrentFromLabel.setText("CL Current from, mA")
-        self.ctrlCurrentFrom = CustomQDoubleSpinBox(self)
+        self.ctrlCurrentFrom = DoubleSpinBox(self)
         self.ctrlCurrentFrom.setRange(
             state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlCurrentToLabel = QLabel(self)
         self.ctrlCurrentToLabel.setText("CL Current to, mA")
-        self.ctrlCurrentTo = CustomQDoubleSpinBox(self)
+        self.ctrlCurrentTo = DoubleSpinBox(self)
         self.ctrlCurrentTo.setRange(
             state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
         self.ctrlPointsLabel = QLabel(self)
         self.ctrlPointsLabel.setText("Points count")
-        self.ctrlPoints = CustomQDoubleSpinBox(self)
+        self.ctrlPoints = DoubleSpinBox(self)
         self.ctrlPoints.setDecimals(0)
         self.ctrlPoints.setMaximum(state.BLOCK_CTRL_POINTS_MAX)
         self.ctrlPoints.setValue(state.BLOCK_CTRL_POINTS)
         self.ctrlStepDelayLabel = QLabel("Step delay, s")
-        self.ctrlStepDelay = CustomQDoubleSpinBox(self)
+        self.ctrlStepDelay = DoubleSpinBox(self)
         self.ctrlStepDelay.setRange(0, 10)
         self.ctrlStepDelay.setDecimals(2)
         self.ctrlStepDelay.setValue(state.BLOCK_CTRL_STEP_DELAY)
@@ -606,19 +627,19 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         self.biasVoltageFromLabel = QLabel(self)
         self.biasVoltageFromLabel.setText("Voltage from, mV")
-        self.biasVoltageFrom = CustomQDoubleSpinBox(self)
+        self.biasVoltageFrom = DoubleSpinBox(self)
         self.biasVoltageFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasVoltageToLabel = QLabel(self)
         self.biasVoltageToLabel.setText("Voltage to, mv")
-        self.biasVoltageTo = CustomQDoubleSpinBox(self)
+        self.biasVoltageTo = DoubleSpinBox(self)
         self.biasVoltageTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
         self.biasPointsLabel = QLabel(self)
         self.biasPointsLabel.setText("Points count")
-        self.biasPoints = CustomQDoubleSpinBox(self)
+        self.biasPoints = DoubleSpinBox(self)
         self.biasPoints.setDecimals(0)
         self.biasPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)

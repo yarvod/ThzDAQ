@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from state import state
+from store.state import state
 
 from RsInstrument import *
 

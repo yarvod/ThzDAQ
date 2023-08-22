@@ -1,6 +1,6 @@
 from RsInstrument import *
 
-from state import state
+from store.state import state
 from utils.classes import BaseInstrumentInterface
 from utils.decorators import exception
 from utils.logger import logger

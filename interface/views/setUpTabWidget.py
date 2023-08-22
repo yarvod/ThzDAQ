@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -11,15 +11,18 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QDoubleSpinBox,
     QSizePolicy,
+    QComboBox,
+    QScrollArea,
 )
 
+from api.Agilent.signal_generator import SignalGenerator
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
-from api.Arduino.step_motor import StepMotorManager
-from state import state
+from api.Arduino.grid import GridManager
+from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 
 logger = logging.getLogger(__name__)
 
@@ -128,16 +131,28 @@ class PrologixEthernetThread(QThread):
         self.finished.emit()
 
 
-class SetUpTabWidget(QWidget):
+class GridThread(QThread):
+    status = pyqtSignal(str)
+
+    def run(self):
+        test_result, test_message = GridManager(host=state.GRID_ADDRESS).test()
+        self.status.emit(test_message)
+        self.finished.emit()
+
+
+class SetUpTabWidget(QScrollArea):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
+        self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
         self.createGroupPrologixEthernet()
-        self.createGroupStepMotor()
+        self.createGroupGrid()
+        self.createGroupSignalGenerator()
+
         self.layout.addWidget(self.groupBlock)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
@@ -146,9 +161,17 @@ class SetUpTabWidget(QWidget):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupPrologixEthernet)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupStepMotor)
+        self.layout.addWidget(self.groupGrid)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupSignalGenerator)
         self.layout.addStretch()
-        self.setLayout(self.layout)
+
+        self.widget.setLayout(self.layout)
+
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setWidgetResizable(True)
+        self.setWidget(self.widget)
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox(self)
@@ -159,12 +182,12 @@ class SetUpTabWidget(QWidget):
         layout = QGridLayout()
 
         self.blockIPLabel = QLabel(self)
-        self.blockIPLabel.setText("Block IP:")
+        self.blockIPLabel.setText("IP Address:")
         self.block_ip = QLineEdit(self)
         self.block_ip.setText(state.BLOCK_ADDRESS)
 
         self.blockPortLabel = QLabel(self)
-        self.blockPortLabel.setText("Block Port:")
+        self.blockPortLabel.setText("Port:")
         self.block_port = QDoubleSpinBox(self)
         self.block_port.setMaximum(10000)
         self.block_port.setDecimals(0)
@@ -172,19 +195,21 @@ class SetUpTabWidget(QWidget):
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
-        self.ctrlDev = QLineEdit(self)
-        self.biasDev = QLineEdit(self)
+        self.ctrlDev = QComboBox(self)
+        self.ctrlDev.addItems(["DEV1", "DEV3"])
+        self.biasDev = QComboBox(self)
+        self.biasDev.addItems(["DEV2", "DEV4"])
         self.ctrlDevLabel.setText("CTRL Device:")
         self.biasDevLabel.setText("BIAS Device:")
-        self.ctrlDev.setText(state.BLOCK_CTRL_DEV)
-        self.biasDev.setText(state.BLOCK_BIAS_DEV)
+        self.ctrlDev.setCurrentText(state.BLOCK_CTRL_DEV)
+        self.biasDev.setCurrentText(state.BLOCK_BIAS_DEV)
 
         self.sisBlockStatusLabel = QLabel(self)
-        self.sisBlockStatusLabel.setText("Block status:")
+        self.sisBlockStatusLabel.setText("Status:")
         self.sisBlockStatus = QLabel(self)
-        self.sisBlockStatus.setText("SIS Block is not initialized yet!")
+        self.sisBlockStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitBlock = QPushButton("Initialize Block")
+        self.btnInitBlock = QPushButton("Initialize")
         self.btnInitBlock.clicked.connect(self.initialize_block)
 
         layout.addWidget(self.blockIPLabel, 1, 0)
@@ -210,16 +235,16 @@ class SetUpTabWidget(QWidget):
         layout = QGridLayout()
 
         self.vnaIPLabel = QLabel(self)
-        self.vnaIPLabel.setText("VNA IP:")
+        self.vnaIPLabel.setText("IP Address:")
         self.vna_ip = QLineEdit(self)
         self.vna_ip.setText(state.VNA_ADDRESS)
 
         self.vnaStatusLabel = QLabel(self)
-        self.vnaStatusLabel.setText("VNA status:")
+        self.vnaStatusLabel.setText("Status:")
         self.vnaStatus = QLabel(self)
-        self.vnaStatus.setText("VNA is not initialized yet!")
+        self.vnaStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitVna = QPushButton("Initialize VNA")
+        self.btnInitVna = QPushButton("Initialize")
         self.btnInitVna.clicked.connect(self.initialize_vna)
 
         layout.addWidget(self.vnaIPLabel, 1, 0)
@@ -239,23 +264,23 @@ class SetUpTabWidget(QWidget):
         layout = QGridLayout()
 
         self.nrxIPLabel = QLabel(self)
-        self.nrxIPLabel.setText("PM IP:")
+        self.nrxIPLabel.setText("IP Address:")
         self.nrxIP = QLineEdit(self)
         self.nrxIP.setText(state.NRX_IP)
 
         self.nrxAperTimeLabel = QLabel(self)
-        self.nrxAperTimeLabel.setText("PM Averaging time, s:")
-        self.nrxAperTime = CustomQDoubleSpinBox(self)
+        self.nrxAperTimeLabel.setText("Averaging time, s:")
+        self.nrxAperTime = DoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
         self.nrxAperTime.setRange(0.01, 1000)
         self.nrxAperTime.setValue(state.NRX_APER_TIME)
 
         self.nrxStatusLabel = QLabel(self)
-        self.nrxStatusLabel.setText("PM status:")
+        self.nrxStatusLabel.setText("Status:")
         self.nrxStatus = QLabel(self)
-        self.nrxStatus.setText("PM is not initialized yet!")
+        self.nrxStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitNRX = QPushButton("Initialize PM")
+        self.btnInitNRX = QPushButton("Initialize")
         self.btnInitNRX.clicked.connect(self.initialize_nrx)
 
         layout.addWidget(self.nrxIPLabel, 1, 0)
@@ -276,14 +301,14 @@ class SetUpTabWidget(QWidget):
         layout = QGridLayout()
 
         self.prologixIPAdressLabel = QLabel(self)
-        self.prologixIPAdressLabel.setText("IP address:")
+        self.prologixIPAdressLabel.setText("IP Address:")
         self.prologixIPAdress = QLineEdit(self)
         self.prologixIPAdress.setText(state.PROLOGIX_IP)
 
         self.prologixEthernetStatusLabel = QLabel(self)
         self.prologixEthernetStatusLabel.setText("Status:")
         self.prologixEthernetStatus = QLabel(self)
-        self.prologixEthernetStatus.setText("Prologix is not initialized yet!")
+        self.prologixEthernetStatus.setText("Doesn't initialized yet!")
 
         self.btnInitPrologixEthernet = QPushButton("Initialize Prologix")
         self.btnInitPrologixEthernet.clicked.connect(self.initialize_prologix_ethernet)
@@ -296,40 +321,82 @@ class SetUpTabWidget(QWidget):
 
         self.groupPrologixEthernet.setLayout(layout)
 
-    def createGroupStepMotor(self):
-        self.groupStepMotor = QGroupBox("Step Motor")
-        self.groupStepMotor.setSizePolicy(
+    def createGroupGrid(self):
+        self.groupGrid = QGroupBox("GRID")
+        self.groupGrid.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         layout = QGridLayout()
 
-        self.stepMotorAddressLabel = QLabel(self)
-        self.stepMotorAddressLabel.setText("Address:")
-        self.stepMotorAddress = QLineEdit(self)
-        self.stepMotorAddress.setText(state.STEP_MOTOR_ADDRESS)
+        self.gridAddressLabel = QLabel(self)
+        self.gridAddressLabel.setText("IP Address:")
+        self.gridAddress = QLineEdit(self)
+        self.gridAddress.setText(state.GRID_ADDRESS)
 
-        self.stepMotorStatusLabel = QLabel(self)
-        self.stepMotorStatusLabel.setText("Status:")
-        self.stepMotorStatus = QLabel(self)
-        self.stepMotorStatus.setText("Step motor is not initialized yet!")
+        self.gridStatusLabel = QLabel(self)
+        self.gridStatusLabel.setText("Status:")
+        self.gridStatus = QLabel(self)
+        self.gridStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitStepMotor = QPushButton("Initialize")
-        self.btnInitStepMotor.clicked.connect(self.initialize_step_motor)
+        self.btnInitGrid = QPushButton("Initialize")
+        self.btnInitGrid.clicked.connect(self.initialize_grid)
 
-        layout.addWidget(self.stepMotorAddressLabel, 1, 0)
-        layout.addWidget(self.stepMotorAddress, 1, 1)
-        layout.addWidget(self.stepMotorStatusLabel, 2, 0)
-        layout.addWidget(self.stepMotorStatus, 2, 1)
-        layout.addWidget(self.btnInitStepMotor, 3, 0, 1, 2)
+        layout.addWidget(self.gridAddressLabel, 1, 0)
+        layout.addWidget(self.gridAddress, 1, 1)
+        layout.addWidget(self.gridStatusLabel, 2, 0)
+        layout.addWidget(self.gridStatus, 2, 1)
+        layout.addWidget(self.btnInitGrid, 3, 0, 1, 2)
 
-        self.groupStepMotor.setLayout(layout)
+        self.groupGrid.setLayout(layout)
 
-    def initialize_step_motor(self):
-        address = self.stepMotorAddress.text()
-        test_result, test_message = StepMotorManager.test(address=address)
-        self.stepMotorStatus.setText(test_message)
-        if test_result:
-            state.STEP_MOTOR_ADDRESS = address
+    def createGroupSignalGenerator(self):
+        self.groupSignalGenerator = QGroupBox("Signal generator")
+        self.groupGrid.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QGridLayout()
+
+        self.signalGeneratorAddressLabel = QLabel(self)
+        self.signalGeneratorAddressLabel.setText("GPIB Address:")
+        self.signalGeneratorAddress = QDoubleSpinBox(self)
+        self.signalGeneratorAddress.setRange(1, 32)
+        self.signalGeneratorAddress.setValue(state.AGILENT_SIGNAL_GENERATOR_GPIB)
+        self.signalGeneratorAddress.setDecimals(0)
+
+        self.signalGeneratorStatusLabel = QLabel(self)
+        self.signalGeneratorStatusLabel.setText("Status:")
+        self.signalGeneratorStatus = QLabel(self)
+        self.signalGeneratorStatus.setText("Doesn't initialized yet!")
+
+        self.btnSignalGeneratorInit = QPushButton("Initialize")
+        self.btnSignalGeneratorInit.clicked.connect(self.initialize_signal_generator)
+
+        layout.addWidget(self.signalGeneratorAddressLabel, 1, 0)
+        layout.addWidget(self.signalGeneratorAddress, 1, 1)
+        layout.addWidget(self.signalGeneratorStatusLabel, 2, 0)
+        layout.addWidget(self.signalGeneratorStatus, 2, 1)
+        layout.addWidget(self.btnSignalGeneratorInit, 3, 0, 1, 2)
+
+        self.groupSignalGenerator.setLayout(layout)
+
+    def initialize_signal_generator(self):
+        state.AGILENT_SIGNAL_GENERATOR_GPIB = self.signalGeneratorAddress.value()
+        sg = SignalGenerator(
+            host=state.PROLOGIX_IP, gpib=state.AGILENT_SIGNAL_GENERATOR_GPIB
+        )
+        result = sg.test()
+        self.signalGeneratorStatus.setText(result)
+
+    def initialize_grid(self):
+        state.GRID_ADDRESS = self.gridAddress.text()
+        self.grid_thread = GridThread()
+        self.grid_thread.status.connect(self.set_grid_status)
+        self.grid_thread.start()
+        self.btnInitGrid.setEnabled(False)
+        self.grid_thread.finished.connect(lambda: self.btnInitGrid.setEnabled(True))
+
+    def set_grid_status(self, status):
+        self.gridStatus.setText(status)
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()
@@ -358,8 +425,8 @@ class SetUpTabWidget(QWidget):
 
         state.BLOCK_ADDRESS = self.block_ip.text()
         state.BLOCK_PORT = int(self.block_port.value())
-        state.BLOCK_BIAS_DEV = self.biasDev.text()
-        state.BLOCK_CTRL_DEV = self.ctrlDev.text()
+        state.BLOCK_BIAS_DEV = self.biasDev.currentText()
+        state.BLOCK_CTRL_DEV = self.ctrlDev.currentText()
 
         self.sis_block_thread.status.connect(self.set_sis_block_status)
         self.sis_block_thread.start()

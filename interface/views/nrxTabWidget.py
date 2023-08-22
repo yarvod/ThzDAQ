@@ -1,7 +1,7 @@
 import time
+from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from PyQt6.QtCore import pyqtSignal, Qt, QThread
 from PyQt6.QtWidgets import (
     QGroupBox,
@@ -11,15 +11,15 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
-    QFileDialog,
     QCheckBox,
 )
 
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
-from state import state
+from store.base import MeasureModel, MeasureType
+from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from interface.components import CustomQDoubleSpinBox
+from interface.components.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 from utils.logger import logger
 
@@ -91,6 +91,9 @@ class BiasPowerThread(QThread):
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,
         )
+        measure = MeasureModel.objects.create(
+            measure_type=MeasureType.BIAS_POWER, data={}
+        )
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         for i, voltage_set in enumerate(v_range):
@@ -126,8 +129,11 @@ class BiasPowerThread(QThread):
             results["current_get"].append(current_get)
             results["power"].append(power)
             results["time"].append(time_step)
+            measure.data = results
 
         block.set_bias_voltage(initial_v)
+        measure.finished = datetime.now()
+        measure.save()
         self.results.emit(results)
         self.finished.emit()
 
@@ -186,7 +192,7 @@ class NRXTabWidget(QWidget):
 
         self.nrxStreamPlotPointsLabel = QLabel(self)
         self.nrxStreamPlotPointsLabel.setText("Window points")
-        self.nrxStreamPlotPoints = CustomQDoubleSpinBox(self)
+        self.nrxStreamPlotPoints = DoubleSpinBox(self)
         self.nrxStreamPlotPoints.setRange(10, 1000)
         self.nrxStreamPlotPoints.setDecimals(0)
         self.nrxStreamPlotPoints.setValue(state.NRX_STREAM_GRAPH_POINTS)
@@ -260,28 +266,28 @@ class NRXTabWidget(QWidget):
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
-        self.voltFrom = CustomQDoubleSpinBox(self)
+        self.voltFrom = DoubleSpinBox(self)
         self.voltFrom.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltToLabel = QLabel(self)
         self.voltToLabel.setText("Bias voltage to, mV")
-        self.voltTo = CustomQDoubleSpinBox(self)
+        self.voltTo = DoubleSpinBox(self)
         self.voltTo.setRange(
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
         self.voltPointsLabel = QLabel(self)
         self.voltPointsLabel.setText("Points count")
-        self.voltPoints = CustomQDoubleSpinBox(self)
+        self.voltPoints = DoubleSpinBox(self)
         self.voltPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.voltPoints.setDecimals(0)
         self.voltPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
         self.voltStepDelayLabel = QLabel(self)
         self.voltStepDelayLabel.setText("Step delay, s")
-        self.voltStepDelay = CustomQDoubleSpinBox(self)
+        self.voltStepDelay = DoubleSpinBox(self)
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
@@ -315,7 +321,6 @@ class NRXTabWidget(QWidget):
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
-        self.bias_power_thread.results.connect(self.save_bias_power_scan)
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -340,11 +345,3 @@ class NRXTabWidget(QWidget):
             new_plot=results.get("new_plot", True),
         )
         self.biasPowerGraphWindow.show()
-
-    def save_bias_power_scan(self, results):
-        try:
-            filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            df = pd.DataFrame(results)
-            df.to_csv(filepath, index=False)
-        except (IndexError, FileNotFoundError):
-            pass

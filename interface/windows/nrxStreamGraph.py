@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
-from state import state
+from store.state import state
 from utils.logger import logger
 
 
