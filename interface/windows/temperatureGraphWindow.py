@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 
+from PyQt6 import QtGui
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
@@ -18,6 +19,7 @@ class TemperatureGraphWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(self.window_title)
+        self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         layout = QVBoxLayout()
         self.graphWidget = pg.PlotWidget()
         layout.addWidget(self.graphWidget)
