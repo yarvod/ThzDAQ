@@ -178,6 +178,8 @@ class MeasureTableModel(QAbstractTableModel):
                     return QtGui.QIcon("assets/yes-icon.png")
                 return QtGui.QIcon("assets/no-icon.png")
             return value
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            return Qt.AlignmentFlag.AlignCenter
 
     def setData(self, index: QModelIndex, value: Any, role: int = ...) -> bool:
         if index.isValid() and role == Qt.ItemDataRole.EditRole:
