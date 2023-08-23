@@ -57,7 +57,7 @@ class NRXStreamGraphWindow(QWidget):
             self.dataset["x"] = [x]
             return
 
-        if len(self.dataset["y"]) == state.NRX_STREAM_GRAPH_POINTS:
+        if max(self.dataset["x"]) >= state.NRX_STREAM_GRAPH_TIME:
             del self.dataset["y"][0]
             del self.dataset["x"][0]
 

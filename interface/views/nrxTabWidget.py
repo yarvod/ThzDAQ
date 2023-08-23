@@ -190,12 +190,12 @@ class NRXTabWidget(QWidget):
         self.checkNRXStreamPlot = QCheckBox(self)
         self.checkNRXStreamPlot.setText("Plot stream time line")
 
-        self.nrxStreamPlotPointsLabel = QLabel(self)
-        self.nrxStreamPlotPointsLabel.setText("Window points")
-        self.nrxStreamPlotPoints = DoubleSpinBox(self)
-        self.nrxStreamPlotPoints.setRange(10, 1000)
-        self.nrxStreamPlotPoints.setDecimals(0)
-        self.nrxStreamPlotPoints.setValue(state.NRX_STREAM_GRAPH_POINTS)
+        self.nrxStreamWindowTimeLabel = QLabel(self)
+        self.nrxStreamWindowTimeLabel.setText("Time window, s")
+        self.nrxStreamWindowTime = DoubleSpinBox(self)
+        self.nrxStreamWindowTime.setRange(10, 3600)
+        self.nrxStreamWindowTime.setDecimals(0)
+        self.nrxStreamWindowTime.setValue(state.NRX_STREAM_GRAPH_TIME)
 
         layout.addWidget(
             self.nrxPowerLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
@@ -211,10 +211,10 @@ class NRXTabWidget(QWidget):
             self.checkNRXStreamPlot, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
         layout.addWidget(
-            self.nrxStreamPlotPointsLabel, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter
+            self.nrxStreamWindowTimeLabel, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
         layout.addWidget(
-            self.nrxStreamPlotPoints, 4, 1, alignment=Qt.AlignmentFlag.AlignCenter
+            self.nrxStreamWindowTime, 4, 1, alignment=Qt.AlignmentFlag.AlignCenter
         )
         self.groupNRX.setLayout(layout)
 
@@ -223,7 +223,7 @@ class NRXTabWidget(QWidget):
 
         state.NRX_STREAM_THREAD = True
         state.NRX_STREAM_PLOT_GRAPH = self.checkNRXStreamPlot.isChecked()
-        state.NRX_STREAM_GRAPH_POINTS = int(self.nrxStreamPlotPoints.value())
+        state.NRX_STREAM_GRAPH_TIME = self.nrxStreamWindowTime.value()
 
         self.nrx_stream_thread.meas.connect(self.update_nrx_stream_values)
         self.nrx_stream_thread.start()
