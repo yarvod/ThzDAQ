@@ -3,7 +3,6 @@ import time
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -386,25 +385,9 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         )
         block.disconnect()
 
-    def save_iv_data(self, results):
-        try:
-            filepath = QFileDialog.getSaveFileName(filter="*.csv")[0]
-            df = pd.DataFrame(
-                dict(
-                    v_set=results["v_set"],
-                    v_get=results["v_get"],
-                    i_get=results["i_get"],
-                    time=results["time"],
-                )
-            )
-            df.to_csv(filepath)
-        except (IndexError, FileNotFoundError):
-            pass
-
     def scan_bias_iv(self):
         self.block_bias_scan_thread = BlockBIASScanThread()
         self.block_bias_scan_thread.stream_result.connect(self.show_bias_graph_window)
-        self.block_bias_scan_thread.results.connect(self.save_iv_data)
 
         state.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
         state.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
