@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QCheckBox,
+    QComboBox,
+    QFormLayout,
 )
 
 from api.LakeShore.temperature_controller import TemperatureController
@@ -41,6 +43,15 @@ class MonitorThread(QThread):
             i += 1
 
 
+class SetHeaterThread(QThread):
+    def run(self):
+        tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
+        tc.set_heater_range(output=1, value=state.LAKE_SHORE_HEATER_RANGE)
+        tc.set_manual_output(output=1, value=state.LAKE_SHORE_MANUAL_OUTPUT)
+        tc.set_control_point(output=1, value=state.LAKE_SHORE_SETUP_POINT)
+        self.finished.emit()
+
+
 class TemperatureControllerTabWidget(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -49,14 +60,18 @@ class TemperatureControllerTabWidget(QWidget):
         self.temperatureStreamGraphWindow = None
 
         self.createGroupMonitor()
+        self.createGroupHeater()
 
         self.layout.addWidget(self.groupMonitor)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupHeater)
         self.layout.addStretch()
 
         self.setLayout(self.layout)
 
     def createGroupMonitor(self):
-        self.groupMonitor = QGroupBox("Monitor")
+        self.groupMonitor = QGroupBox(self)
+        self.groupMonitor.setTitle("Monitor")
         self.groupMonitor.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -150,3 +165,47 @@ class TemperatureControllerTabWidget(QWidget):
             reset_data=measure.get("reset"),
         )
         self.temperatureStreamGraphWindow.show()
+
+    def createGroupHeater(self):
+        self.groupHeater = QGroupBox(self)
+        self.groupHeater.setTitle("Heater")
+        layout = QFormLayout()
+
+        self.heaterRangeLabel = QLabel(self)
+        self.heaterRangeLabel.setText("Heater Range")
+        self.heaterRange = QComboBox(self)
+        self.heaterRange.addItems(["Off", "Low", "Medium", "High"])
+
+        self.manualOutputLabel = QLabel(self)
+        self.manualOutputLabel.setText("Manual Output, %")
+        self.manualOutput = DoubleSpinBox(self)
+        self.manualOutput.setRange(0, 100)
+        self.manualOutput.setValue(100)
+
+        self.setupPointLabel = QLabel(self)
+        self.setupPointLabel.setText("Setup Point, K")
+        self.setupPoint = DoubleSpinBox(self)
+        self.setupPoint.setRange(0.1, 300)
+        self.setupPoint.setValue(292)
+
+        self.btnSetHeater = QPushButton("Set Heater")
+        self.btnSetHeater.clicked.connect(self.set_heater)
+
+        layout.addRow(self.heaterRangeLabel, self.heaterRange)
+        layout.addRow(self.manualOutputLabel, self.manualOutput)
+        layout.addRow(self.setupPointLabel, self.setupPoint)
+        layout.addRow(self.btnSetHeater)
+
+        self.groupHeater.setLayout(layout)
+
+    def set_heater(self):
+        state.LAKE_SHORE_HEATER_RANGE = self.heaterRange.currentIndex()
+        state.LAKE_SHORE_MANUAL_OUTPUT = self.manualOutput.value()
+        state.LAKE_SHORE_SETUP_POINT = self.setupPoint.value()
+
+        self.set_heater_thread = SetHeaterThread()
+        self.set_heater_thread.start()
+        self.btnSetHeater.setEnabled(False)
+        self.set_heater_thread.finished.connect(
+            lambda: self.btnSetHeater.setEnabled(True)
+        )
