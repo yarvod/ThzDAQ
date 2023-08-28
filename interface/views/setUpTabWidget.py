@@ -19,6 +19,7 @@ from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
+from interface.components.ExpandableGroupBox import ExpandableGroupBox
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -147,27 +148,13 @@ class SetUpTabWidget(QScrollArea):
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.createGroupBlock()
-        self.createGroupVna()
-        self.createGroupNRX()
-        self.createGroupPrologixEthernet()
-        self.createGroupGrid()
-        self.createGroupSignalGenerator()
-        self.createGroupTemperatureController()
 
-        self.layout.addWidget(self.groupBlock)
+        self.createGroupAdapters()
+        self.createGroupDevices()
+
+        self.layout.addWidget(self.groupAdapters)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupVna)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupNRX)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupPrologixEthernet)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupGrid)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupSignalGenerator)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupTemperatureController)
+        self.layout.addWidget(self.groupDevices)
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
@@ -176,6 +163,47 @@ class SetUpTabWidget(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
+
+    def createGroupAdapters(self):
+        self.groupAdapters = ExpandableGroupBox(self)
+        self.groupAdapters.setTitle("Adapters")
+        self.groupAdapters.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QVBoxLayout()
+        self.createGroupPrologixEthernet()
+        layout.addWidget(self.groupPrologixEthernet)
+        layout.addStretch()
+        self.groupAdapters.setLayout(layout)
+
+    def createGroupDevices(self):
+        self.groupDevices = ExpandableGroupBox(self)
+        self.groupDevices.setTitle("Devices")
+        self.groupDevices.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        layout = QVBoxLayout()
+
+        self.createGroupBlock()
+        self.createGroupVna()
+        self.createGroupNRX()
+        self.createGroupGrid()
+        self.createGroupSignalGenerator()
+        self.createGroupTemperatureController()
+
+        layout.addWidget(self.groupBlock)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupVna)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupNRX)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupGrid)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupSignalGenerator)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupTemperatureController)
+
+        self.groupDevices.setLayout(layout)
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox(self)
@@ -190,12 +218,12 @@ class SetUpTabWidget(QScrollArea):
         self.block_ip = QLineEdit(self)
         self.block_ip.setText(state.BLOCK_ADDRESS)
 
-        self.blockPortLabel = QLabel(self)
-        self.blockPortLabel.setText("Port:")
-        self.block_port = QDoubleSpinBox(self)
-        self.block_port.setMaximum(10000)
-        self.block_port.setDecimals(0)
-        self.block_port.setValue(state.BLOCK_PORT)
+        # self.blockPortLabel = QLabel(self)
+        # self.blockPortLabel.setText("Port:")
+        # self.block_port = QDoubleSpinBox(self)
+        # self.block_port.setMaximum(10000)
+        # self.block_port.setDecimals(0)
+        # self.block_port.setValue(state.BLOCK_PORT)
 
         self.ctrlDevLabel = QLabel(self)
         self.biasDevLabel = QLabel(self)
@@ -218,8 +246,8 @@ class SetUpTabWidget(QScrollArea):
 
         layout.addWidget(self.blockIPLabel, 1, 0)
         layout.addWidget(self.block_ip, 1, 1)
-        layout.addWidget(self.blockPortLabel, 2, 0)
-        layout.addWidget(self.block_port, 2, 1)
+        # layout.addWidget(self.blockPortLabel, 2, 0)
+        # layout.addWidget(self.block_port, 2, 1)
         layout.addWidget(self.ctrlDevLabel, 3, 0)
         layout.addWidget(self.ctrlDev, 3, 1)
         layout.addWidget(self.biasDevLabel, 4, 0)
@@ -298,7 +326,8 @@ class SetUpTabWidget(QScrollArea):
         self.groupNRX.setLayout(layout)
 
     def createGroupPrologixEthernet(self):
-        self.groupPrologixEthernet = QGroupBox("Prologix Ethernet")
+        self.groupPrologixEthernet = QGroupBox(self)
+        self.groupPrologixEthernet.setTitle("Prologix Ethernet")
         self.groupPrologixEthernet.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
