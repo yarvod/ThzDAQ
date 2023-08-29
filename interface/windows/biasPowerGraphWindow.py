@@ -8,8 +8,15 @@ class BiasPowerGraphWindow(GraphWindow):
     y_label = "Power, dBm"
 
 
-class StepBiasPowerGraphWindow(GraphWindow):
-    window_title = "Step GRID Bias Power Graphs"
-    graph_title = "Power (Bias Voltage)"
-    x_label = "Bias Voltage, mV"
+class GridBiasPowerGraphWindow(GraphWindow):
+    window_title = "GRID P-V Graphs"
+    graph_title = "Power (Voltage)"
+    x_label = "Voltage, mV"
     y_label = "Power, dBm"
+
+
+class GridBiasGraphWindow(GraphWindow):
+    window_title = "GRID I-V Graphs"
+    graph_title = "Current (Voltage)"
+    x_label = "Voltage, mV"
+    y_label = "Current, mkA"

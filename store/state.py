@@ -1,3 +1,6 @@
+from settings import GridPlotTypes
+
+
 class State:
     # Block variables
     BLOCK_ADDRESS = "169.254.190.83"
@@ -95,6 +98,7 @@ class State:
     GRID_ANGLE_STOP = 0
     GRID_ANGLE_STEP = 10
     GRID_SPEED = 180  # degree per second
+    GRID_PLOT_TYPE = GridPlotTypes.IV_CURVE
 
     # LakeShore Temperature controller
     LAKE_SHORE_IP = "169.254.0.56"

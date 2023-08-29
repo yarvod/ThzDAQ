@@ -12,13 +12,19 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QGridLayout,
+    QComboBox,
+    QFormLayout,
 )
 
 from api.Arduino.grid import GridManager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.DoubleSpinBox import DoubleSpinBox
-from interface.windows.biasPowerGraphWindow import StepBiasPowerGraphWindow
+from interface.windows.biasPowerGraphWindow import (
+    GridBiasPowerGraphWindow,
+    GridBiasGraphWindow,
+)
+from settings import GridPlotTypes
 from store.base import MeasureModel, MeasureType
 from store.state import state
 
@@ -106,7 +112,9 @@ class StepBiasPowerThread(QThread):
                 self.stream_results.emit(
                     {
                         "x": [voltage_get * 1e3],
-                        "y": [power],
+                        "y": [power]
+                        if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE
+                        else [current_get],
                         "new_plot": i == 0,
                     }
                 )
@@ -151,7 +159,8 @@ class GridTabWidget(QWidget):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.stepBiasPowerGraphWindow = None
+        self.gridBiasPowerGraphWindow = None
+        self.gridBiasGraphWindow = None
         self.createGroupGrid()
         self.createGroupGridBiasPowerScan()
         self.layout.addWidget(self.groupGrid)
@@ -183,7 +192,7 @@ class GridTabWidget(QWidget):
         self.groupGridBiasPowerScan.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QFormLayout()
 
         self.angleStartLabel = QLabel(self)
         self.angleStartLabel.setText("Angle start, degree")
@@ -230,6 +239,11 @@ class GridTabWidget(QWidget):
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
+        self.gridPlotTypeLabel = QLabel(self)
+        self.gridPlotTypeLabel.setText("Plot type")
+        self.gridPlotType = QComboBox(self)
+        self.gridPlotType.addItems(GridPlotTypes.CHOICES)
+
         self.btnStartBiasPowerScan = QPushButton("Start Scan")
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_step_bias_power)
 
@@ -237,22 +251,16 @@ class GridTabWidget(QWidget):
         self.btnStopBiasPowerScan.clicked.connect(self.stop_measure_step_bias_power)
         self.btnStopBiasPowerScan.setEnabled(False)
 
-        layout.addWidget(self.angleStartLabel, 1, 0)
-        layout.addWidget(self.angleStart, 1, 1)
-        layout.addWidget(self.angleStopLabel, 2, 0)
-        layout.addWidget(self.angleStop, 2, 1)
-        layout.addWidget(self.angleStepLabel, 3, 0)
-        layout.addWidget(self.angleStep, 3, 1)
-        layout.addWidget(self.voltFromLabel, 4, 0)
-        layout.addWidget(self.voltFrom, 4, 1)
-        layout.addWidget(self.voltToLabel, 5, 0)
-        layout.addWidget(self.voltTo, 5, 1)
-        layout.addWidget(self.voltPointsLabel, 6, 0)
-        layout.addWidget(self.voltPoints, 6, 1)
-        layout.addWidget(self.voltStepDelayLabel, 7, 0)
-        layout.addWidget(self.voltStepDelay, 7, 1)
-        layout.addWidget(self.btnStartBiasPowerScan, 8, 0)
-        layout.addWidget(self.btnStopBiasPowerScan, 8, 1)
+        layout.addRow(self.angleStartLabel, self.angleStart)
+        layout.addRow(self.angleStopLabel, self.angleStop)
+        layout.addRow(self.angleStepLabel, self.angleStep)
+        layout.addRow(self.voltFromLabel, self.voltFrom)
+        layout.addRow(self.voltToLabel, self.voltTo)
+        layout.addRow(self.voltPointsLabel, self.voltPoints)
+        layout.addRow(self.voltStepDelayLabel, self.voltStepDelay)
+        layout.addRow(self.gridPlotTypeLabel, self.gridPlotType)
+        layout.addRow(self.btnStartBiasPowerScan)
+        layout.addRow(self.btnStopBiasPowerScan)
 
         self.groupGridBiasPowerScan.setLayout(layout)
 
@@ -267,6 +275,7 @@ class GridTabWidget(QWidget):
         state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
+        state.GRID_PLOT_TYPE = self.gridPlotType.currentIndex()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
         self.bias_power_thread.start()
@@ -285,14 +294,25 @@ class GridTabWidget(QWidget):
         self.bias_power_thread.quit()
 
     def show_bias_power_graph(self, results):
-        if self.stepBiasPowerGraphWindow is None:
-            self.stepBiasPowerGraphWindow = StepBiasPowerGraphWindow()
-        self.stepBiasPowerGraphWindow.plotNew(
-            x=results.get("x", []),
-            y=results.get("y", []),
-            new_plot=results.get("new_plot", True),
-        )
-        self.stepBiasPowerGraphWindow.show()
+        if state.GRID_PLOT_TYPE == GridPlotTypes.IV_CURVE:
+            if self.gridBiasGraphWindow is None:
+                self.gridBiasGraphWindow = GridBiasGraphWindow()
+            self.gridBiasGraphWindow.plotNew(
+                x=results.get("x", []),
+                y=results.get("y", []),
+                new_plot=results.get("new_plot", True),
+            )
+            self.gridBiasGraphWindow.show()
+
+        if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE:
+            if self.gridBiasPowerGraphWindow is None:
+                self.gridBiasPowerGraphWindow = GridBiasPowerGraphWindow()
+            self.gridBiasPowerGraphWindow.plotNew(
+                x=results.get("x", []),
+                y=results.get("y", []),
+                new_plot=results.get("new_plot", True),
+            )
+            self.gridBiasPowerGraphWindow.show()
 
     def rotate(self):
         state.GRID_ANGLE = self.angle.value()

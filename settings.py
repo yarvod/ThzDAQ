@@ -9,3 +9,13 @@ ADAPTERS = {
     HTTP: "api.adapters.http_adapter.HttpAdapter",
     SERIAL: "serial.Serial",
 }
+
+
+class GridPlotTypes:
+    IV_CURVE = 0
+    PV_CURVE = 1
+
+    CHOICES = [
+        "I-V curve",
+        "P-V curve",
+    ]
