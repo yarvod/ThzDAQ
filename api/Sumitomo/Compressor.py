@@ -1,22 +1,15 @@
 import serial
 
-
-class Singleton(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
+from utils.classes import Singleton
 
 
 class Compressor(metaclass=Singleton):
     def __init__(self):
         """ "Initialize."""
         self.ser = serial.Serial(
-            "COM15",
+            "/dev/cu.usbserial-1440",
             baudrate=9600,
-            timeout=3,
+            timeout=1,
             stopbits=serial.STOPBITS_ONE,
             parity=serial.PARITY_NONE,
             bytesize=8,
@@ -26,24 +19,26 @@ class Compressor(metaclass=Singleton):
         )
 
     def read_all_temperatures(self):
-        self.ser.write(str("$TEAA4B9\x00").encode("ascii"))
-        serial_response = self.ser.read()
-        res = serial_response.decode("utf-8").split(",")
+        self.ser.write(str("$TEAA4B9\x0D").encode("ascii"))
+        serial_response = self.ser.readline()
+        res = serial_response.decode("utf-8").rstrip().split(",")
         print(res)
-        print(
-            str("\x24Temperature 1: " + res[1] + " degrees Celsius\n"),
-            str("\x24Temperature 2: " + res[2] + " degrees Celsius\n"),
-            str("\x24Temperature 3: " + res[3] + " degrees Celsius\n"),
-            str("\x24Temperature 4: " + res[4] + " degrees Celsius\n"),
-        )
+        try:
+            print(
+                str("\x24Temperature 1: " + res[1] + " degrees Celsius\n"),
+                str("\x24Temperature 2: " + res[2] + " degrees Celsius\n"),
+                str("\x24Temperature 3: " + res[3] + " degrees Celsius\n"),
+                str("\x24Temperature 4: " + res[4] + " degrees Celsius\n"),
+            )
+        except IndexError:
+            ...
 
     def read_all_pressures(self):
-        self.ser.write(str("$PRA95F7\x00").encode("ascii"))
-        serial_response = self.ser.read()
+        self.ser.write(str("$PRA95F7\x0D").encode("ascii"))
+        serial_response = self.ser.readline()
         res = serial_response.decode("utf-8").split(",")
         print(
-            str("\x24Pressure 1: " + res[1] + " psig\n"),
-            str("\x24Pressure 2: " + res[2] + " psig\n"),
+            str("\x24Pressure 1: " + res[1] + " psig\n" + "\x24Pressure 2: " + res[2] + " psig\n"),
         )
 
     def read_status_bits(self):
@@ -146,49 +141,47 @@ class Compressor(metaclass=Singleton):
 if __name__ == "__main__":
     compressor = Compressor()
     ser = compressor.ser
-    if ser.is_open:
-        print("Connected to serial device")
-        print("--------------------------------")
-
-        comm = input("Please enter your command:\n>>")
-
-        if comm == "help":
-            print(
-                str("--------------------------------\n"),
-                str("\x24Commands for F70H:\x24"),
-                str("\n\t$TEA: Read all  temperatures"),
-                str("\n\t$PRA: Read all  pressures"),
-                str("\n\t$STA: Read status bits"),
-                str("\n\t$ON1: On"),
-                str("\n\t$RS1: Reset"),
-                str("\n\t$CHP: Cold head pause"),
-                str("\n\t$CHR: Cold  head run"),
-                str("\n\t$POF: COld head pause off"),
-            )
+    while 1:
+        if ser.is_open:
+            print("Connected to serial device")
             print("--------------------------------")
-        elif comm == "TEA":
-            compressor.read_all_temperatures()
-        elif comm == "PRA":
-            compressor.read_all_pressures()
-        elif comm == "STA":
-            compressor.read_status_bits()
-        elif comm == "ON1":
-            compressor.turn_on()
-        elif comm == "OFF":
-            compressor.turn_off()
-        elif comm == "RS1":
-            compressor.reset()
-        elif comm == "CHP":
-            compressor.cold_head_pause()
-        elif comm == "CHR":
-            compressor.cold_head_run()
-        elif comm == "POF":
-            compressor.cold_head_pause_off()
+
+            comm = input("Please enter your command:\n>>")
+
+            if comm == "help":
+                print(
+                    str("--------------------------------\n"),
+                    str("\x24Commands for F70H:\x24"),
+                    str("\n\t$TEA: Read all  temperatures"),
+                    str("\n\t$PRA: Read all  pressures"),
+                    str("\n\t$STA: Read status bits"),
+                    str("\n\t$ON1: On"),
+                    str("\n\t$RS1: Reset"),
+                    str("\n\t$CHP: Cold head pause"),
+                    str("\n\t$CHR: Cold  head run"),
+                    str("\n\t$POF: COld head pause off"),
+                )
+                print("--------------------------------")
+            elif comm == "TEA":
+                compressor.read_all_temperatures()
+            elif comm == "PRA":
+                compressor.read_all_pressures()
+            elif comm == "STA":
+                compressor.read_status_bits()
+            elif comm == "ON1":
+                compressor.turn_on()
+            elif comm == "OFF":
+                compressor.turn_off()
+            elif comm == "RS1":
+                compressor.reset()
+            elif comm == "CHP":
+                compressor.cold_head_pause()
+            elif comm == "CHR":
+                compressor.cold_head_run()
+            elif comm == "POF":
+                compressor.cold_head_pause_off()
+            else:
+                print("INVALID COMMAND")
+
         else:
-            print("INVALID COMMAND")
-
-        while True:
-            comm = input(">>")
-
-    else:
-        print("Could not  connect to serial device")
+            print("Could not  connect to serial device")
