@@ -14,6 +14,7 @@ class MeasureType:
     BIAS_VNA = "bias_vna"
     BIAS_POWER = "bias_power"
     GRID_BIAS_POWER = "grid_bias_power"
+    POWER_STREAM = "power_stream"
 
     CHOICES = dict(
         (
@@ -22,6 +23,7 @@ class MeasureType:
             (BIAS_VNA, "BIAS VNA"),
             (BIAS_POWER, "BIAS Power"),
             (GRID_BIAS_POWER, "GRID BIAS Power"),
+            (POWER_STREAM, "Power stream"),
         )
     )
 
