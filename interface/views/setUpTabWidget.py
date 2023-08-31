@@ -34,7 +34,14 @@ class VNAThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        vna = VNABlock(vna_ip=state.VNA_ADDRESS)
+        vna = VNABlock(
+            vna_ip=state.VNA_ADDRESS,
+            port=state.VNA_PORT,
+            start=state.VNA_FREQ_FROM,
+            stop=state.VNA_FREQ_TO,
+            points=state.VNA_POINTS,
+            power=state.VNA_POWER,
+        )
         result = vna.test()
         self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
         self.finished.emit()

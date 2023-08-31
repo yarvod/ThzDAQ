@@ -38,6 +38,7 @@ class State:
 
     # VNA variables
     VNA_ADDRESS = "169.254.106.189"
+    VNA_PORT = 5025
     VNA_SPARAM = "S21"
     VNA_CHANNEL_FORMAT = "COMP"
     VNA_POWER = -30

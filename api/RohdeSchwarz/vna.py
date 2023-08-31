@@ -1,53 +1,38 @@
+import json
+import logging
 import time
 
 import numpy as np
 
+from settings import SOCKET
 from store.state import state
 
-from RsInstrument import *
-
-from utils.classes import Singleton
+from utils.classes import BaseInstrument
 from utils.decorators import exception
 
 
-class Instrument(RsInstrument, metaclass=Singleton):
-    ...
+logger = logging.getLogger(__name__)
 
 
-class VNABlock:
+class VNABlock(BaseInstrument):
     def __init__(
         self,
-        vna_ip: str = state.VNA_ADDRESS,
-        points: int = state.VNA_POINTS,
-        channel_format: str = state.VNA_CHANNEL_FORMAT,
-        power: float = state.VNA_POWER,
-        param: str = state.VNA_SPARAM,
+        host: str = state.VNA_ADDRESS,
+        gpib: int = None,
+        adapter: str = SOCKET,
+        port: int = state.VNA_PORT,
+        *args,
+        **kwargs,
     ):
-        self.vna_ip = vna_ip
-        self.param = param
-        self.update(vna_ip, points, channel_format, power, param)
+        kwargs["port"] = port
+        super().__init__(host, gpib, adapter, *args, **kwargs)
+        self.set_start_frequency(kwargs.get("start", state.VNA_FREQ_FROM))
+        self.set_stop_frequency(kwargs.get("stop", state.VNA_FREQ_TO))
+        self.set_sweep(kwargs.get("points", state.VNA_POINTS))
+        self.set_power(kwargs.get("power", state.VNA_POWER))
 
-    @exception
-    def update(
-        self,
-        vna_ip: str = state.VNA_ADDRESS,
-        points: int = state.VNA_POINTS,
-        channel_format: str = state.VNA_CHANNEL_FORMAT,
-        power: float = state.VNA_POWER,
-        param: str = state.VNA_SPARAM,
-    ):
-        self.vna_ip = vna_ip
-        self.param = param
-        self.set_sweep(points)
-        self.set_channel_format(channel_format)
-        self.set_power(power)
-
-    @property
-    def instr(self):
-        return Instrument(f"TCPIP::{self.vna_ip}::INSTR", id_query=True, reset=False)
-
-    def name(self):
-        return self.instr.query_str("*IDN?")
+    def idn(self) -> str:
+        return self.query("*IDN?")
 
     @exception
     def test(self) -> str:
@@ -56,36 +41,42 @@ class VNABlock:
         Error - 1
         Ok - 0
         """
-        return self.instr.query_str("*TST?")
+        return self.query("*TST?")
 
-    def set_sweep(self, points: int = state.VNA_POINTS):
-        self.instr.write_int("SWE:POIN", points)
+    def set_sweep(self, points: int = state.VNA_POINTS) -> None:
+        self.write(f"SWE:POIN {points}")
 
-    def set_channel_format(self, form: str = state.VNA_CHANNEL_FORMAT):
-        self.instr.write(f"CALC:FORM {form}")
+    def get_sweep(self) -> int:
+        return int(self.query(f"SWE:POIN?"))
+
+    def set_channel_format(self, form: str = state.VNA_CHANNEL_FORMAT) -> None:
+        self.write(f"CALC:FORM {form}")
 
     def get_channel_format(self):
-        return self.instr.query_str("CALC:FORM?")
+        return self.query("CALC:FORM?")
 
-    def set_power(self, power: float = state.VNA_POWER):
-        self.instr.write(f"SOUR:POW {power}")
+    def get_parameter_catalog(self, chan: int = 1) -> str:
+        return self.query(f"CALCulate{chan}:PARameter:CATalog?")
+
+    def set_power(self, power: float = state.VNA_POWER) -> None:
+        self.write(f"SOUR:POW {power}")
 
     def get_power(self):
-        return self.instr.query_str("SOUR:POW?")
+        return self.query("SOUR:POW?")
 
-    def get_start_frequency(self):
-        return self.instr.query_str("SENS:FREQ:STAR?")
+    def get_start_frequency(self) -> float:
+        return float(self.query("SENS:FREQ:STAR?"))
 
-    def get_stop_frequency(self):
-        return self.instr.query_str("SENS:FREQ:STOP?")
+    def get_stop_frequency(self) -> float:
+        return float(self.query("SENS:FREQ:STOP?"))
 
-    def set_start_frequency(self, freq: float):
-        self.instr.write_float("SENS:FREQ:STAR", freq)
+    def set_start_frequency(self, freq: float) -> None:
+        self.write(f"SENS:FREQ:STAR {freq}")
 
-    def set_stop_frequency(self, freq: float):
-        self.instr.write_float("SENS:FREQ:STOP", freq)
+    def set_stop_frequency(self, freq: float) -> None:
+        self.write(f"SENS:FREQ:STOP {freq}")
 
-    def get_reflection(self):
+    def get_reflection(self) -> np.ndarray:
         """
         Method to get reflection level from VNA
         """
@@ -94,7 +85,12 @@ class VNABlock:
         while attempt < attempts:
             time.sleep(0.05)
             attempt += 1
-            resp = self.instr.query_bin_or_ascii_float_list("CALC:DATA? FDAT")
+            response = self.query("CALC:DATA? FDAT").split(",")
+            try:
+                resp = [float(i) for i in response]
+            except ValueError:
+                logger.error(f"[{self.__class__.__name__}.get_reflection] Value error!")
+                continue
             if np.sum(np.abs(resp)) > 0:
                 real = resp[::2]
                 imag = resp[1::2]
@@ -103,11 +99,9 @@ class VNABlock:
 
 
 if __name__ == "__main__":
-    vna = VNABlock()
-    print(vna.name())
-    print(vna.test())
-    print(vna.set_start_frequency(2e9))
-    print(vna.get_start_frequency())
-    print(vna.set_stop_frequency(12e9))
-    print(vna.get_stop_frequency())
-    print(len(vna.get_reflection()))
+    vna = VNABlock(start=2e9, stop=16e9, points=1001, delay=0.4)
+    refl = vna.get_reflection()
+    freq = np.linspace(2e9, 16e9, 1001).tolist()
+    data = {"real": list(refl.real), "imag": list(refl.imag), "freq": freq}
+    with open("s12.json", "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)

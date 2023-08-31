@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
 )
 
 from store.base import MeasureModel, MeasureType
@@ -29,7 +30,14 @@ class BiasReflectionThread(QThread):
     progress = pyqtSignal(float)
 
     def run(self):
-        vna = VNABlock(vna_ip=state.VNA_ADDRESS)
+        vna = VNABlock(
+            vna_ip=state.VNA_ADDRESS,
+            port=state.VNA_PORT,
+            start=state.VNA_FREQ_FROM,
+            stop=state.VNA_FREQ_TO,
+            points=state.VNA_POINTS,
+            power=state.VNA_POWER,
+        )
         block = SisBlock(
             host=state.BLOCK_ADDRESS,
             port=state.BLOCK_PORT,
@@ -117,6 +125,7 @@ class VNAGetReflectionThread(QThread):
 
     def run(self):
         vna = VNABlock(vna_ip=state.VNA_ADDRESS)
+        vna.set_sweep(state.VNA_POINTS)
         reflection = vna.get_reflection()
         reflection_db = list(to_db(reflection))
         self.reflection.emit(reflection_db)
@@ -170,9 +179,8 @@ class VNATabWidget(QWidget):
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
-        self.vnaPoints = DoubleSpinBox(self)
+        self.vnaPoints = QSpinBox(self)
         self.vnaPoints.setMaximum(state.VNA_POINTS_MAX)
-        self.vnaPoints.setDecimals(0)
         self.vnaPoints.setValue(state.VNA_POINTS)
 
         self.vnaPowerLabel = QLabel(self)
