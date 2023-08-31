@@ -27,6 +27,12 @@ class SpectrumBlock(BaseInstrument):
     def reset(self) -> None:
         self.write("*RST")
 
+    def tst(self) -> bool:
+        response = self.idn()
+        if not response or "FSEK" not in response:
+            return False
+        return True
+
     @exception
     def test(self):
         """Test function: 0 - Good, 1 - Bad"""

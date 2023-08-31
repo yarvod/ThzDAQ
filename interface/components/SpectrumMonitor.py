@@ -3,16 +3,15 @@ from typing import Dict
 
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
     QGroupBox,
     QVBoxLayout,
     QPushButton,
-    QFormLayout,
     QLabel,
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
 from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.FormWidget import FormWidget
 from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
 from store.state import state
 
@@ -33,15 +32,6 @@ class StreamSpectrumThread(QThread):
                 }
             )
             time.sleep(state.SPECTRUM_STEP_DELAY)
-
-
-class FormWidget(QWidget):
-    def __init__(self, parent, label_widget_map: Dict):
-        super().__init__(parent)
-        self.layout = QFormLayout(self)
-        for label, widget in label_widget_map.items():
-            self.layout.addRow(label, widget)
-        self.setLayout(self.layout)
 
 
 class SpectrumMonitor(QGroupBox):
