@@ -6,6 +6,7 @@ from interface.views.nrxTabWidget import NRXTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
 from interface.views.GridTabWidget import GridTabWidget
+from interface.views.spectrumTabWidget import SpectrumTabWidget
 from interface.views.temperatureControllerTabWidget import (
     TemperatureControllerTabWidget,
 )
@@ -27,6 +28,7 @@ class TabsWidget(QWidget):
         self.tab_signal_generator = SignalGeneratorTabWidget(self)
         self.tab_grid = GridTabWidget(self)
         self.tab_temperature = TemperatureControllerTabWidget(self)
+        self.tab_spectrum = SpectrumTabWidget(self)
         self.tabs.resize(300, 200)
 
         # Add tabs
@@ -38,6 +40,7 @@ class TabsWidget(QWidget):
         self.tabs.addTab(self.tab_signal_generator, "Signal Generator")
         self.tabs.addTab(self.tab_grid, "GRID")
         self.tabs.addTab(self.tab_temperature, "Temperature")
+        self.tabs.addTab(self.tab_spectrum, "Spectrum")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)

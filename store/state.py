@@ -111,5 +111,8 @@ class State:
     LAKE_SHORE_MANUAL_OUTPUT = 100
     LAKE_SHORE_SETUP_POINT = 292
 
+    # Spectrum
+    SPECTRUM_STEP_DELAY = 0.5
+
 
 state = State()

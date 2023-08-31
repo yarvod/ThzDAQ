@@ -111,7 +111,7 @@ class PrologixEthernetAdapter(InstrumentAdapterInterface, metaclass=Singleton):
 
     def _recv(self, byte_num):
         value = self.socket.recv(byte_num)
-        return value.decode("ascii")
+        return value.decode("ascii").rstrip()
 
     def _setup(self):
         # set device to CONTROLLER mode
