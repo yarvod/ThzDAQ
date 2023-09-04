@@ -21,7 +21,7 @@ class SetUpSpectrumThread(QThread):
         self.status.emit(result)
 
 
-class SetupSpectrumWidget(QGroupBox):
+class SetupSpectrumGroup(QGroupBox):
     def __init__(self, parent):
         super().__init__(parent)
         self.setTitle("Spectrum analyzer")
@@ -35,7 +35,7 @@ class SetupSpectrumWidget(QGroupBox):
         self.gpibAddress.setValue(state.SPECTRUM_GPIB_ADDRESS)
 
         self.status = QLabel(self)
-        self.status.setText("Not initialized yet!")
+        self.status.setText("Doesn't initialized yet!")
 
         self.btnInitSpectrum = QPushButton("Initialize")
         self.btnInitSpectrum.clicked.connect(self.initialize_spectrum)

@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
 from interface.views.blockTabWidget import BlockTabWidget
+from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.nrxTabWidget import NRXTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
@@ -29,6 +30,7 @@ class TabsWidget(QWidget):
         self.tab_grid = GridTabWidget(self)
         self.tab_temperature = TemperatureControllerTabWidget(self)
         self.tab_spectrum = SpectrumTabWidget(self)
+        self.tab_chopper = ChopperTabWidget(self)
         self.tabs.resize(300, 200)
 
         # Add tabs
@@ -41,6 +43,7 @@ class TabsWidget(QWidget):
         self.tabs.addTab(self.tab_grid, "GRID")
         self.tabs.addTab(self.tab_temperature, "Temperature")
         self.tabs.addTab(self.tab_spectrum, "Spectrum")
+        self.tabs.addTab(self.tab_chopper, "Chopper")
 
         # Add tabs to widget
         self.layout.addWidget(self.tabs)

@@ -121,5 +121,8 @@ class State:
     SPECTRUM_STEP_DELAY = 0.5
     SPECTRUM_GPIB_ADDRESS = 20
 
+    # Chopper
+    CHOPPER_HOST = "COM16"
+
 
 state = State()

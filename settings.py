@@ -19,3 +19,6 @@ class GridPlotTypes:
         "I-V curve",
         "P-V curve",
     ]
+
+
+NOT_INITIALIZED = "Doesn't initialized yet!"

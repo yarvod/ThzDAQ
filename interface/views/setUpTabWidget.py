@@ -19,7 +19,8 @@ from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
-from interface.components.SetupSpectrum import SetupSpectrumWidget
+from interface.components.SetupChopperGroup import SetupChopperGroup
+from interface.components.SetupSpectrumGroup import SetupSpectrumGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -177,7 +178,9 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupTemperatureController)
         self.layout.addSpacing(10)
-        self.layout.addWidget(SetupSpectrumWidget(self))
+        self.layout.addWidget(SetupSpectrumGroup(self))
+        self.layout.addSpacing(10)
+        self.layout.addWidget(SetupChopperGroup(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
