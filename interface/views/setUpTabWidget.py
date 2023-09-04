@@ -37,8 +37,8 @@ class VNAThread(QThread):
         vna = VNABlock(
             vna_ip=state.VNA_ADDRESS,
             port=state.VNA_PORT,
-            start=state.VNA_FREQ_FROM,
-            stop=state.VNA_FREQ_TO,
+            start=state.VNA_FREQ_START,
+            stop=state.VNA_FREQ_STOP,
             points=state.VNA_POINTS,
             power=state.VNA_POWER,
         )

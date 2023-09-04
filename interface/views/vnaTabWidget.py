@@ -13,6 +13,9 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QFormLayout,
+    QComboBox,
+    QCheckBox,
 )
 
 from store.base import MeasureModel, MeasureType
@@ -31,12 +34,13 @@ class BiasReflectionThread(QThread):
 
     def run(self):
         vna = VNABlock(
-            vna_ip=state.VNA_ADDRESS,
+            host=state.VNA_ADDRESS,
             port=state.VNA_PORT,
-            start=state.VNA_FREQ_FROM,
-            stop=state.VNA_FREQ_TO,
-            points=state.VNA_POINTS,
+            parameter=state.VNA_SPARAM,
+            start=state.VNA_FREQ_START,
+            stop=state.VNA_FREQ_STOP,
             power=state.VNA_POWER,
+            points=state.VNA_POINTS,
         )
         block = SisBlock(
             host=state.BLOCK_ADDRESS,
@@ -46,15 +50,15 @@ class BiasReflectionThread(QThread):
         )
         block.connect()
 
-        frequencies = np.linspace(
-            state.VNA_FREQ_FROM, state.VNA_FREQ_TO, state.VNA_POINTS
+        frequencies = list(
+            np.linspace(state.VNA_FREQ_START, state.VNA_FREQ_STOP, state.VNA_POINTS)
         )
 
         results = {
             "i_get": [],
             "v_set": [],
             "v_get": [],
-            "refl": defaultdict(np.ndarray),
+            "refl": [],
             "frequencies": frequencies,
             "time": [],
         }
@@ -82,11 +86,13 @@ class BiasReflectionThread(QThread):
             if not i_get:
                 continue
             time.sleep(state.BIAS_REFL_DELAY)  # waiting for VNA averaging
-            refl = vna.get_reflection()
+            vna_data = vna.get_data()
+            vna_data.pop("array", None)
+            vna_data.pop("freq", None)
             results["v_get"].append(v_get * 1e3)
             results["v_set"].append(v_set * 1e3)
             results["i_get"].append(i_get * 1e6)
-            results["refl"][f"{v_get * 1e3};{i_get * 1e6}"] = refl
+            results["refl"].append(vna_data)
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t.total_seconds())
             logger.info(
@@ -124,10 +130,24 @@ class VNAGetReflectionThread(QThread):
     reflection = pyqtSignal(list)
 
     def run(self):
-        vna = VNABlock(vna_ip=state.VNA_ADDRESS)
-        vna.set_sweep(state.VNA_POINTS)
-        reflection = vna.get_reflection()
-        reflection_db = list(to_db(reflection))
+        vna = VNABlock(
+            host=state.VNA_ADDRESS,
+            port=state.VNA_PORT,
+            parameter=state.VNA_SPARAM,
+            start=state.VNA_FREQ_START,
+            stop=state.VNA_FREQ_STOP,
+            power=state.VNA_POWER,
+            points=state.VNA_POINTS,
+        )
+        data = vna.get_data()
+        reflection_db = list(to_db(data.pop("array", [])))
+        if state.VNA_STORE_DATA:
+            measure = MeasureModel.objects.create(
+                measure_type=MeasureType.VNA_REFLECTION,
+                data=data,
+                finished=datetime.now(),
+            )
+            measure.save()
         self.reflection.emit(reflection_db)
         self.finished.emit()
 
@@ -165,17 +185,20 @@ class VNATabWidget(QWidget):
         self.groupVNAParameters.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QFormLayout()
+
+        self.vnaParameter = QComboBox(self)
+        self.vnaParameter.addItems(state.VNA_SPARAMS)
 
         self.freqFromLabel = QLabel(self)
-        self.freqFromLabel.setText("Freq from, GHz:")
+        self.freqFromLabel.setText("Freq start, GHz:")
         self.freqFrom = DoubleSpinBox(self)
-        self.freqFrom.setValue(state.VNA_FREQ_FROM)
+        self.freqFrom.setValue(state.VNA_FREQ_START)
 
         self.freqToLabel = QLabel(self)
-        self.freqToLabel.setText("Freq to, GHz:")
+        self.freqToLabel.setText("Freq stop, GHz:")
         self.freqTo = DoubleSpinBox(self)
-        self.freqTo.setValue(state.VNA_FREQ_TO)
+        self.freqTo.setValue(state.VNA_FREQ_STOP)
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
@@ -189,18 +212,20 @@ class VNATabWidget(QWidget):
         self.vnaPower.setRange(state.VNA_POWER_MIN, state.VNA_POWER_MAX)
         self.vnaPower.setValue(state.VNA_POWER)
 
+        self.vnaStoreData = QCheckBox(self)
+        self.vnaStoreData.setText("Store Data")
+        self.vnaStoreData.setChecked(state.VNA_STORE_DATA)
+
         self.btnGetReflection = QPushButton("Get reflection")
         self.btnGetReflection.clicked.connect(self.getReflection)
 
-        layout.addWidget(self.freqFromLabel, 1, 0)
-        layout.addWidget(self.freqFrom, 1, 1)
-        layout.addWidget(self.freqToLabel, 2, 0)
-        layout.addWidget(self.freqTo, 2, 1)
-        layout.addWidget(self.vnaPointsLabel, 3, 0)
-        layout.addWidget(self.vnaPoints, 3, 1)
-        layout.addWidget(self.vnaPowerLabel, 4, 0)
-        layout.addWidget(self.vnaPower, 4, 1)
-        layout.addWidget(self.btnGetReflection, 5, 0, 1, 2)
+        layout.addRow("Parameter:", self.vnaParameter)
+        layout.addRow(self.freqFromLabel, self.freqFrom)
+        layout.addRow(self.freqToLabel, self.freqTo)
+        layout.addRow(self.vnaPointsLabel, self.vnaPoints)
+        layout.addRow(self.vnaPowerLabel, self.vnaPower)
+        layout.addRow(self.vnaStoreData)
+        layout.addRow(self.btnGetReflection)
 
         self.groupVNAParameters.setLayout(layout)
 
@@ -262,10 +287,12 @@ class VNATabWidget(QWidget):
         self.groupBiasReflScan.setLayout(layout)
 
     def update_vna_params(self):
+        state.VNA_STORE_DATA = self.vnaStoreData.isChecked()
+        state.VNA_SPARAM = self.vnaParameter.currentText()
         state.VNA_POWER = self.vnaPower.value()
         state.VNA_POINTS = int(self.vnaPoints.value())
-        state.VNA_FREQ_FROM = self.freqFrom.value() * 1e9
-        state.VNA_FREQ_TO = self.freqTo.value() * 1e9
+        state.VNA_FREQ_START = self.freqFrom.value() * 1e9
+        state.VNA_FREQ_STOP = self.freqTo.value() * 1e9
 
     def getReflection(self):
         self.vna_get_reflection_thread = VNAGetReflectionThread()
@@ -282,7 +309,7 @@ class VNATabWidget(QWidget):
 
     def plotReflection(self, reflection):
         freq_list = np.linspace(
-            state.VNA_FREQ_FROM, state.VNA_FREQ_TO, state.VNA_POINTS
+            state.VNA_FREQ_START, state.VNA_FREQ_STOP, state.VNA_POINTS
         )
         if self.vnaGraphWindow is None:
             self.vnaGraphWindow = VNAGraphWindow()

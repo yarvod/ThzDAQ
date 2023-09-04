@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from typing import Dict
 
 import numpy as np
 
@@ -26,8 +27,13 @@ class VNABlock(BaseInstrument):
     ):
         kwargs["port"] = port
         super().__init__(host, gpib, adapter, *args, **kwargs)
-        self.set_start_frequency(kwargs.get("start", state.VNA_FREQ_FROM))
-        self.set_stop_frequency(kwargs.get("stop", state.VNA_FREQ_TO))
+        self.start_freq = kwargs.get("start", state.VNA_FREQ_START)
+        self.stop_freq = kwargs.get("stop", state.VNA_FREQ_STOP)
+        self.points = kwargs.get("points", state.VNA_POINTS)
+
+        self.set_parameter(kwargs.get("parameter", state.VNA_SPARAM))
+        self.set_start_frequency(kwargs.get("start", state.VNA_FREQ_START))
+        self.set_stop_frequency(kwargs.get("stop", state.VNA_FREQ_STOP))
         self.set_sweep(kwargs.get("points", state.VNA_POINTS))
         self.set_power(kwargs.get("power", state.VNA_POWER))
         self.set_channel_format(kwargs.get("channel_format", state.VNA_CHANNEL_FORMAT))
@@ -77,7 +83,23 @@ class VNABlock(BaseInstrument):
     def set_stop_frequency(self, freq: float) -> None:
         self.write(f"SENS:FREQ:STOP {freq}")
 
-    def get_reflection(self) -> np.ndarray:
+    def set_parameter(
+        self, parameter: str = "S11", trace: str = "Trc1", channel: int = 1
+    ) -> None:
+        self.write(f"CALCulate{channel}:PARameter:DEFine {trace},{parameter}")
+
+    def get_parameter_catalog(self, channel: int = 1) -> Dict[str, str]:
+        """Current catalog of parameters
+        :returns
+        Dict of Trace and Parameter map {"Trc1": "S11"}
+        """
+        response = self.query(f"CALCulate{channel}:PARameter:CATalog?")
+        lst = response.split(",")
+        lst_traces = lst[::2]
+        lst_params = lst[1::2]
+        return dict(zip(lst_traces, lst_params))
+
+    def get_data(self) -> Dict:
         """
         Method to get reflection level from VNA
         """
@@ -90,18 +112,24 @@ class VNABlock(BaseInstrument):
             try:
                 resp = [float(i) for i in response]
             except ValueError:
-                logger.error(f"[{self.__class__.__name__}.get_reflection] Value error!")
+                logger.error(f"[{self.__class__.__name__}.get_data] Value error!")
                 continue
             if np.sum(np.abs(resp)) > 0:
                 real = resp[::2]
                 imag = resp[1::2]
-                return np.array([r + i * 1j for r, i in zip(real, imag)])
-        return np.array([])
+                freq = list(np.linspace(self.start_freq, self.stop_freq, self.points))
+                return {
+                    "array": np.array([r + i * 1j for r, i in zip(real, imag)]),
+                    "real": real,
+                    "imag": imag,
+                    "freq": freq,
+                }
+        return {}
 
 
 if __name__ == "__main__":
     vna = VNABlock(start=2e9, stop=16e9, points=1001, delay=0.4)
-    refl = vna.get_reflection()
+    refl = vna.get_data()
     freq = np.linspace(2e9, 16e9, 1001).tolist()
     data = {"real": list(refl.real), "imag": list(refl.imag), "freq": freq}
     with open("s12.json", "w", encoding="utf-8") as file:

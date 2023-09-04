@@ -39,12 +39,15 @@ class State:
     # VNA variables
     VNA_ADDRESS = "169.254.106.189"
     VNA_PORT = 5025
-    VNA_SPARAM = "S21"
+    VNA_SPARAM = "S11"
+    VNA_SPARAMS = ["S11", "S22", "S12", "S21"]
     VNA_CHANNEL_FORMAT = "COMP"
     VNA_POWER = -30
     VNA_POINTS = 300
-    VNA_FREQ_FROM = 2
-    VNA_FREQ_TO = 12
+    VNA_FREQ_START = 2
+    VNA_FREQ_STOP = 12
+
+    VNA_STORE_DATA = True
 
     # VNA constants
     VNA_POWER_MIN = -60

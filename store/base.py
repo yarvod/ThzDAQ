@@ -15,6 +15,7 @@ class MeasureType:
     BIAS_POWER = "bias_power"
     GRID_BIAS_POWER = "grid_bias_power"
     POWER_STREAM = "power_stream"
+    VNA_REFLECTION = "vna_reflection"
 
     CHOICES = dict(
         (
@@ -24,6 +25,7 @@ class MeasureType:
             (BIAS_POWER, "BIAS Power"),
             (GRID_BIAS_POWER, "GRID BIAS Power"),
             (POWER_STREAM, "Power stream"),
+            (VNA_REFLECTION, "VNA Reflection"),
         )
     )
 
@@ -65,7 +67,6 @@ class MeasureManager:
     def create(cls, *args, **kwargs) -> "MeasureModel":
         instance = MeasureModel(*args, **kwargs)
         cls._instances.append(instance)
-
         return instance
 
     @classmethod
@@ -129,6 +130,7 @@ class MeasureModel:
         self,
         measure_type: str,
         data: Dict,
+        finished: Any = "--",
     ):
         # Validation
         self.validate_type(value=measure_type)
@@ -137,7 +139,7 @@ class MeasureModel:
         self.data = data
         self.id = str(uuid.uuid4())
         self.started = datetime.now()
-        self.finished = "--"
+        self.finished = finished
         self.saved = False
 
     @staticmethod
