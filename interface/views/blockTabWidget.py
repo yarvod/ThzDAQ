@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QPushButton,
-    QFileDialog,
     QSizePolicy,
     QScrollArea,
 )
@@ -19,7 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from store.state import state
 
 from api.Scontel.sis_block import SisBlock
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.clGraphWindow import CLGraphWindow
 from store.base import MeasureModel, MeasureType

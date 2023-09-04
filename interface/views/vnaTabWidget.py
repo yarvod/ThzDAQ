@@ -1,5 +1,4 @@
 import time
-from collections import defaultdict
 from datetime import datetime
 
 import numpy as np
@@ -22,7 +21,7 @@ from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
 from utils.logger import logger

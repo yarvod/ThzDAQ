@@ -1,5 +1,5 @@
 import time
-from typing import Tuple, Dict
+from typing import Dict
 
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.LakeShore.temperature_controller import TemperatureController
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from store.state import state
 

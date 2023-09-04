@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Agilent.signal_generator import SignalGenerator
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 
 

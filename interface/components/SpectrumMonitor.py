@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
 from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
 from store.state import state

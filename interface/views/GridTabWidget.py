@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QLabel,
     QPushButton,
-    QGridLayout,
     QComboBox,
     QFormLayout,
 )
@@ -19,7 +18,8 @@ from PyQt6.QtWidgets import (
 from api.Arduino.grid import GridManager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from interface.components.GridManagingGroup import GridManagingGroup
 from interface.windows.biasPowerGraphWindow import (
     GridBiasPowerGraphWindow,
     GridBiasGraphWindow,
@@ -30,12 +30,6 @@ from store.state import state
 
 
 logger = logging.getLogger(__name__)
-
-
-class GridThread(QThread):
-    def run(self):
-        GridManager(host=state.GRID_ADDRESS).rotate(state.GRID_ANGLE)
-        self.finished.emit()
 
 
 class StepBiasPowerThread(QThread):
@@ -161,31 +155,12 @@ class GridTabWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasGraphWindow = None
-        self.createGroupGrid()
         self.createGroupGridBiasPowerScan()
-        self.layout.addWidget(self.groupGrid)
+        self.layout.addWidget(GridManagingGroup(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupGridBiasPowerScan)
         self.layout.addStretch()
         self.setLayout(self.layout)
-
-    def createGroupGrid(self):
-        self.groupGrid = QGroupBox("GRID")
-        layout = QGridLayout()
-
-        self.angleLabel = QLabel(self)
-        self.angleLabel.setText("Angle, degree")
-        self.angle = DoubleSpinBox(self)
-        self.angle.setRange(-720, 720)
-        self.angle.setValue(90)
-        self.btnRotate = QPushButton("Rotate")
-        self.btnRotate.clicked.connect(self.rotate)
-
-        layout.addWidget(self.angleLabel, 1, 0)
-        layout.addWidget(self.angle, 1, 1)
-        layout.addWidget(self.btnRotate, 1, 2)
-
-        self.groupGrid.setLayout(layout)
 
     def createGroupGridBiasPowerScan(self):
         self.groupGridBiasPowerScan = QGroupBox("Grid Power Bias Scan")
@@ -197,13 +172,13 @@ class GridTabWidget(QWidget):
         self.angleStartLabel = QLabel(self)
         self.angleStartLabel.setText("Angle start, degree")
         self.angleStart = DoubleSpinBox(self)
-        self.angleStart.setRange(-180, 180)
+        self.angleStart.setRange(-720, 720)
         self.angleStart.setValue(state.GRID_ANGLE_START)
 
         self.angleStopLabel = QLabel(self)
         self.angleStopLabel.setText("Angle stop, degree")
         self.angleStop = DoubleSpinBox(self)
-        self.angleStop.setRange(-180, 180)
+        self.angleStop.setRange(-720, 720)
         self.angleStop.setValue(state.GRID_ANGLE_STOP)
 
         self.angleStepLabel = QLabel(self)
@@ -313,10 +288,3 @@ class GridTabWidget(QWidget):
                 new_plot=results.get("new_plot", True),
             )
             self.gridBiasPowerGraphWindow.show()
-
-    def rotate(self):
-        state.GRID_ANGLE = self.angle.value()
-        self.grid_thread = GridThread()
-        self.grid_thread.start()
-        self.btnRotate.setEnabled(False)
-        self.grid_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))
