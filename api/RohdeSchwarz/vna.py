@@ -30,6 +30,7 @@ class VNABlock(BaseInstrument):
         self.set_stop_frequency(kwargs.get("stop", state.VNA_FREQ_TO))
         self.set_sweep(kwargs.get("points", state.VNA_POINTS))
         self.set_power(kwargs.get("power", state.VNA_POWER))
+        self.set_channel_format(kwargs.get("channel_format", state.VNA_CHANNEL_FORMAT))
 
     def idn(self) -> str:
         return self.query("*IDN?")
