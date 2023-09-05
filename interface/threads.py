@@ -8,7 +8,12 @@ from store.state import state
 
 class ChopperThread(QThread):
     status = pyqtSignal(bool)
-    method = "connect"
+    position = pyqtSignal(int)
+
+    CONNECT = "connect"
+    PATH0 = "path0"
+    GET_ACTUAL_POS = "get_actual_pos"
+    method = None
 
     def __init__(self):
         super().__init__()
@@ -37,6 +42,11 @@ class ChopperThread(QThread):
 
     async def path0(self):
         await self.chopper.path0()
+
+    async def get_actual_pos(self):
+        pos = await self.chopper.get_actual_pos()
+        self.position.emit(pos)
+        await asyncio.sleep(0.2)
 
 
 chopper_thread = ChopperThread()

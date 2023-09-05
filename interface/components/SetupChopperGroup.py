@@ -26,7 +26,7 @@ class SetupChopperGroup(QGroupBox):
     def initializeChopper(self):
         state.CHOPPER_HOST = self.chopperAddress.text()
         chopper_thread.init_chopper()
-        chopper_thread.method = "connect"
+        chopper_thread.method = chopper_thread.CONNECT
         chopper_thread.status.connect(self.setStatus)
         chopper_thread.start()
 
