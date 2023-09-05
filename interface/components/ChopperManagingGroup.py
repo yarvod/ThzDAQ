@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QGroupBox, QPushButton, QVBoxLayout, QLabel, QFormLayout
 
-from interface.threads import chopper_thread
+from threads.chopper_async import chopper_thread
 
 
 class ChopperManagingGroup(QGroupBox):

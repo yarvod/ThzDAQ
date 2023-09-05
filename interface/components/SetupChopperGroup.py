@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
 
-from interface.threads import chopper_thread
+from threads.chopper_async import chopper_thread
 from settings import NOT_INITIALIZED
 from store.state import state
 
