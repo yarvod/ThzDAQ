@@ -2,7 +2,8 @@ import asyncio
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from api.Chopper.chopper import chopper
+from api.Chopper.chopper import Chopper
+from store.state import state
 
 
 class ChopperThread(QThread):
@@ -11,6 +12,8 @@ class ChopperThread(QThread):
 
     def __init__(self):
         super().__init__()
+        self.chopper = None
+        self.init_chopper()
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
@@ -18,16 +21,22 @@ class ChopperThread(QThread):
         self.loop.run_until_complete(self.chopper_loop())
         self.finished.emit()
 
+    def init_chopper(self):
+        if self.chopper is not None:
+            self.chopper.close()
+            del self.chopper
+        self.chopper = Chopper(host=state.CHOPPER_HOST)
+
     async def chopper_loop(self):
-        await chopper.connect()
+        await self.chopper.connect()
         method = self.__getattribute__(self.method)
         await method()
 
     async def connect(self):
-        self.status.emit(chopper.client.connected)
+        self.status.emit(self.chopper.client.connected)
 
     async def path0(self):
-        await chopper.path0()
+        await self.chopper.path0()
 
 
 chopper_thread = ChopperThread()
