@@ -1,8 +1,19 @@
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
 
-from threads.chopper_async import chopper_thread
+from api.Chopper.chopper_sync import chopper
 from settings import NOT_INITIALIZED
 from store.state import state
+
+
+class ChopperThread(QThread):
+    status = pyqtSignal(bool)
+
+    def run(self):
+        chopper.init_client(host=state.CHOPPER_HOST)
+        status = chopper.connect()
+        self.status.emit(status)
+        self.finished.emit()
 
 
 class SetupChopperGroup(QGroupBox):
@@ -25,8 +36,7 @@ class SetupChopperGroup(QGroupBox):
 
     def initializeChopper(self):
         state.CHOPPER_HOST = self.chopperAddress.text()
-        chopper_thread.init_chopper()
-        chopper_thread.method = chopper_thread.CONNECT
+        chopper_thread = ChopperThread()
         chopper_thread.status.connect(self.setStatus)
         chopper_thread.start()
 
