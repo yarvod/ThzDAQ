@@ -7,7 +7,6 @@ from pymodbus.payload import BinaryPayloadBuilder
 from pymodbus.payload import BinaryPayloadDecoder
 
 from store.state import state
-from utils.classes import SingletonSafe
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,9 @@ class Chopper:
     async def connect(self):
         if not self.client.connected:
             await self.client.connect()
-            logger.info(f"[{[self.__class__.__name__]}.connect] Client connected")
+        logger.info(
+            f"[{[self.__class__.__name__]}.connect] Connected {self.client.connected}"
+        )
 
     def close(self):
         self.client.close()
@@ -208,6 +209,9 @@ class Chopper:
         # print("Actual position: ", actual_pos)
         target = round(actual_pos / 2500) * 2500
         await self.go_to_pos(target)
+
+
+chopper = Chopper()
 
 
 if __name__ == "__main__":
