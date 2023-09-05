@@ -50,6 +50,7 @@ class ChopperMonitorGroup(QGroupBox):
         self.currentPositionLabel.setText("Position:")
         self.currentPosition = QLabel(self)
         self.currentPosition.setText("Undefined")
+        self.currentPosition.setStyleSheet("font-size: 20px; color: #1d1128;")
         self.btnSetZero = QPushButton("New zero")
         self.btnSetZero.clicked.connect(self.setZero)
 
@@ -96,15 +97,18 @@ class ChopperMonitorGroup(QGroupBox):
         self.chopper_monitor_thread.start()
         self.btnStartMonitor.setEnabled(False)
         self.btnStopMonitor.setEnabled(True)
-        self.chopper_monitor_thread.position.connect(
-            lambda pos: self.currentPosition.setText(f"{pos}")
-        )
+        self.chopper_monitor_thread.position.connect(self.setCurrentPosition)
         self.chopper_monitor_thread.finished.connect(
             lambda: self.btnStartMonitor.setEnabled(True)
         )
         self.chopper_monitor_thread.finished.connect(
             lambda: self.btnStopMonitor.setEnabled(False)
         )
+
+    def setCurrentPosition(self, position: int):
+        degree = (360 * position // 10000) % 360
+        minutes = int(60 * (position % 10) / 10)
+        self.currentPosition.setText(f"{degree} ° {minutes} `")
 
     def stopMonitor(self):
         self.chopper_monitor_thread.terminate()
