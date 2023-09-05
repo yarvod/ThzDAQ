@@ -3,26 +3,17 @@ import time
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from PyQt6.QtWidgets import QGroupBox, QPushButton, QVBoxLayout, QLabel, QGridLayout
 
-from api.Chopper.chopper_sync import chopper
-
-
-class ChopperRotateThread(QThread):
-    def run(self):
-        if not chopper.client.connected:
-            self.finished.emit()
-            return
-        chopper.path0()
-        self.finished.emit()
+from api.Chopper.chopper_sync import ChopperManager
 
 
 class ChopperSetZeroThread(QThread):
     def run(self):
-        if not chopper.client.connected:
+        if not ChopperManager.chopper.client.connected:
             self.finished.emit()
             return
-        chopper.align()
-        chopper.set_origin()
-        chopper.go_to_pos(0)
+        ChopperManager.chopper.align()
+        ChopperManager.chopper.set_origin()
+        ChopperManager.chopper.go_to_pos(0)
         self.finished.emit()
 
 
@@ -30,11 +21,11 @@ class ChopperMonitorThread(QThread):
     position = pyqtSignal(int)
 
     def run(self):
-        if not chopper.client.connected:
+        if not ChopperManager.chopper.client.connected:
             self.finished.emit()
             return
         while 1:
-            pos = chopper.get_actual_pos()
+            pos = ChopperManager.chopper.get_actual_pos()
             self.position.emit(pos)
             time.sleep(0.2)
 
@@ -60,9 +51,6 @@ class ChopperMonitorGroup(QGroupBox):
         self.btnStopMonitor.clicked.connect(self.stopMonitor)
         self.btnStopMonitor.setEnabled(False)
 
-        self.btnRotate = QPushButton("Rotate")
-        self.btnRotate.clicked.connect(self.rotate)
-
         grid_layout.addWidget(
             self.currentPositionLabel, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -74,15 +62,7 @@ class ChopperMonitorGroup(QGroupBox):
         grid_layout.addWidget(self.btnStopMonitor, 1, 2)
         layout.addLayout(grid_layout)
 
-        layout.addWidget(self.btnRotate)
-
         self.setLayout(layout)
-
-    def rotate(self):
-        self.btnRotate.setEnabled(False)
-        self.chopper_thread = ChopperRotateThread()
-        self.chopper_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))
-        self.chopper_thread.start()
 
     def setZero(self):
         self.btnSetZero.setEnabled(False)

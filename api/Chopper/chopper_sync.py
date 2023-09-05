@@ -27,7 +27,6 @@ class Chopper:
         if self.client is not None:
             if self.client.connected:
                 self.client.close()
-            del self.client
         self.client = ModbusClient(
             method="rtu",
             port=self.host,
@@ -69,21 +68,21 @@ class Chopper:
 
     def jogCW(self):
         self.client.write_register(int(0x1801), int(0x4001), self.slave_address)
-        print("jogCW")
+        logger.info("jogCW")
 
     def jogCCW(self):
         self.client.write_register(int(0x1801), int(0x4002), self.slave_address)
-        print("jogCCW")
+        logger.info("jogCCW")
 
     def emergency_stop(self):
         self.client.write_register(int(0x6002), int(0x040), self.slave_address)
-        print("Emergency stop")
+        logger.info("Emergency stop")
 
     def set_origin(self):
         """Set current position as 'Zero'"""
         self.client.write_register(int(0x6002), int(0x021), self.slave_address)
         pos = self.get_actual_pos()
-        print("Origin set, actual position (in pulses): ", pos)
+        logger.info(f"Origin set, actual position (in pulses): {pos}")
 
     def get_actual_pos(self):
         start_address = int(0x602C)
@@ -105,7 +104,12 @@ class Chopper:
         return speed
 
     # CW by 90 deg
-    def path0(self):
+    def path0(self, angle: float = 90):
+        """Step rotation method.
+        :param
+        - angle (float): Angle in degrees
+        """
+        steps = int(angle / 360 * 10000)
         self.client.write_register(
             int(0x6200), int(0b01000001), self.slave_address
         )  # relative position mode
@@ -113,7 +117,7 @@ class Chopper:
         self.client.write_register(int(0x6201), int(0), self.slave_address)
         # position low bits
         self.client.write_register(
-            int(0x6202), int(2500), self.slave_address
+            int(0x6202), steps, self.slave_address
         )  # 10000 ppr, equals to 90 deg rotation
         # turn speed
         self.client.write_register(int(0x6203), int(25), self.slave_address)
@@ -125,10 +129,10 @@ class Chopper:
             self.align()
             time.sleep(0.3)
             self.client.write_register(int(0x6002), int(0x010), self.slave_address)
-            print("open/close")
+            logger.info("open/close")
         else:
             self.client.write_register(int(0x6002), int(0x010), self.slave_address)
-            print("open/close")
+            logger.info("open/close")
 
     # Constant speed
     def freq(self, frequency):
@@ -150,12 +154,12 @@ class Chopper:
         self.client.write_register(int(0x620D), int(5000), self.slave_address)
         # trigger PR1 motion
         self.client.write_register(int(0x6002), int(0x011), self.slave_address)
-        # print("Constant speed:", freq, "Hz")
+        # logger.info("Constant speed:", freq, "Hz")
 
     # slow down
     def path2(self):
-        print("!Axis in rotation!")
-        print("Slowing down, wait for complete stop ...")
+        logger.info("!Axis in rotation!")
+        logger.info("Slowing down, wait for complete stop ...")
         while True:
             self.client.write_register(
                 int(0x6210), int(0b01000001), self.slave_address
@@ -181,7 +185,7 @@ class Chopper:
         builder.add_32bit_int(pulse)
         registers = builder.to_registers()
         self.client.write_registers(starting_address, registers, self.slave_address)
-        # print("Moving to position: p = ", pulse, "...")
+        # logger.info("Moving to position: p = ", pulse, "...")
 
         self.client.write_register(
             int(0x6218), int(0b00000001), self.slave_address
@@ -196,12 +200,13 @@ class Chopper:
 
     def align(self):
         actual_pos = self.get_actual_pos()
-        # print("Actual position: ", actual_pos)
+        # logger.info("Actual position: ", actual_pos)
         target = round(actual_pos / 2500) * 2500
         self.go_to_pos(target)
 
 
-chopper = Chopper()
+class ChopperManager:
+    chopper = Chopper()
 
 
 if __name__ == "__main__":

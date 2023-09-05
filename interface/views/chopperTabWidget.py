@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
-from interface.components.ChopperMonitorGroup import ChopperMonitorGroup
+from interface.components.chopper.ChopperManagingGroup import ChopperManagingGroup
+from interface.components.chopper.ChopperMonitorGroup import ChopperMonitorGroup
 
 
 class ChopperTabWidget(QWidget):
@@ -8,5 +9,6 @@ class ChopperTabWidget(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.addWidget(ChopperMonitorGroup(self))
+        layout.addWidget(ChopperManagingGroup(self))
         layout.addStretch()
         self.setLayout(layout)
