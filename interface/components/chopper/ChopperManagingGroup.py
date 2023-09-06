@@ -1,4 +1,4 @@
-import time
+import logging
 
 from PyQt6.QtCore import QThread, Qt
 from PyQt6.QtWidgets import (
@@ -15,6 +15,9 @@ from interface.components.ui.Button import Button
 from store.state import state
 
 
+logger = logging.getLogger(__name__)
+
+
 class ChopperRotateCwThread(QThread):
     def __init__(self, angle: float = 90):
         super().__init__()
@@ -25,6 +28,7 @@ class ChopperRotateCwThread(QThread):
             self.finished.emit()
             return
         ChopperManager.chopper.path0(self.angle)
+        logger.info("Finish rotate cw")
         self.finished.emit()
 
 

@@ -86,7 +86,7 @@ class Chopper:
         pos = self.get_actual_pos()
         logger.info(f"Origin set, actual position (in pulses): {pos}")
 
-    def get_actual_pos(self):
+    def get_actual_pos(self) -> int:
         start_address = int(0x602C)
         count = 2
         result = self.client.read_holding_registers(start_address, count, 1)
@@ -96,7 +96,7 @@ class Chopper:
         actual_pos = decoder.decode_32bit_int()
         return actual_pos
 
-    def get_actual_speed(self):
+    def get_actual_speed(self) -> float:
         t1 = time.time()
         x1 = self.get_actual_pos()
         time.sleep(0.1)
@@ -128,13 +128,10 @@ class Chopper:
         self.client.write_register(int(0x6205), int(10000), self.slave_address)
         # trigger PR0 motion
         if abs(self.get_actual_pos() - (int(self.get_actual_pos() / 2500) * 2500)) > 50:
+            logger.info("[path0] Aligning before rotation")
             self.align()
             time.sleep(0.3)
-            self.client.write_register(int(0x6002), int(0x010), self.slave_address)
-            logger.info("open/close")
-        else:
-            self.client.write_register(int(0x6002), int(0x010), self.slave_address)
-            logger.info("open/close")
+        self.client.write_register(int(0x6002), int(0x010), self.slave_address)
 
     # Constant speed
     def set_frequency(self, frequency: float = 1):
@@ -161,8 +158,8 @@ class Chopper:
 
     # slow down
     def path2(self):
-        logger.info("!Axis in rotation!")
-        logger.info("Slowing down, wait for complete stop ...")
+        logger.info("[path2]!Axis in rotation!")
+        logger.info("[path2] Slowing down, wait for complete stop ...")
         while True:
             self.client.write_register(
                 int(0x6210), int(0b01000001), self.slave_address
@@ -181,8 +178,9 @@ class Chopper:
             if self.get_actual_speed() < 0.1:
                 self.emergency_stop()
                 break
+            time.sleep(0.1)
 
-    def go_to_pos(self, pulse):
+    def go_to_pos(self, pulse: int):
         starting_address = int(0x6219)
         builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
         builder.add_32bit_int(pulse)
@@ -203,9 +201,10 @@ class Chopper:
 
     def align(self):
         actual_pos = self.get_actual_pos()
-        # logger.info("Actual position: ", actual_pos)
-        target = round(actual_pos / 2500) * 2500
+        logger.info(f"[align] Actual position: {actual_pos}")
+        target = int(round(actual_pos / 2500) * 2500)
         self.go_to_pos(target)
+        logger.info(f"[align] Chopper aligned")
 
 
 class ChopperManager:
