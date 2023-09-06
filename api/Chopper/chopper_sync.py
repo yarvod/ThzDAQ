@@ -22,6 +22,8 @@ class Chopper:
         self.client = None
         self.init_client()
 
+        self.frequency = 1
+
     def init_client(self, host: str = state.CHOPPER_HOST):
         self.host = host
         if self.client is not None:
@@ -135,7 +137,7 @@ class Chopper:
             logger.info("open/close")
 
     # Constant speed
-    def freq(self, frequency):
+    def set_frequency(self, frequency: float = 1):
         self.frequency = frequency  # Hz
         omega = frequency * 60
         self.client.write_register(int(0x620B), int(omega), self.slave_address)
@@ -148,6 +150,7 @@ class Chopper:
         # freq = 12  # Hz
         # omega = freq * 60
         # self.client.write_register(int(0x620B), int(omega), self.slave_address)
+        self.set_frequency(self.frequency)
 
         # acc/dec (ms/1000 rpm)
         self.client.write_register(int(0x620C), int(10000), self.slave_address)

@@ -19,7 +19,7 @@ from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
-from interface.components.SetupChopperGroup import SetupChopperGroup
+from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.SetupSpectrumGroup import SetupSpectrumGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock

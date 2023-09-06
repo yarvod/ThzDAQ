@@ -1,7 +1,8 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QPushButton, QLabel
+from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QLabel
 
 from api.Chopper.chopper_sync import ChopperManager
+from interface.components.ui.Button import Button
 from settings import NOT_INITIALIZED
 from store.state import state
 
@@ -25,7 +26,7 @@ class SetupChopperGroup(QGroupBox):
         self.chopperAddress.setText(state.CHOPPER_HOST)
         self.chopperStatus = QLabel(self)
         self.chopperStatus.setText(NOT_INITIALIZED)
-        self.btnInitChopper = QPushButton("Initialize")
+        self.btnInitChopper = Button("Initialize", animate=True)
         self.btnInitChopper.clicked.connect(self.initializeChopper)
 
         layout.addRow("Address:", self.chopperAddress)
@@ -37,6 +38,10 @@ class SetupChopperGroup(QGroupBox):
     def initializeChopper(self):
         state.CHOPPER_HOST = self.chopperAddress.text()
         self.chopper_thread = ChopperThread()
+        self.btnInitChopper.setEnabled(False)
+        self.chopper_thread.finished.connect(
+            lambda: self.btnInitChopper.setEnabled(True)
+        )
         self.chopper_thread.status.connect(self.setStatus)
         self.chopper_thread.start()
 

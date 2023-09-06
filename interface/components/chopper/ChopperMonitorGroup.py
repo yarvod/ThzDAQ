@@ -1,9 +1,10 @@
 import time
 
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtWidgets import QGroupBox, QPushButton, QVBoxLayout, QLabel, QGridLayout
+from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGridLayout
 
 from api.Chopper.chopper_sync import ChopperManager
+from interface.components.ui.Button import Button
 
 
 class ChopperSetZeroThread(QThread):
@@ -42,12 +43,12 @@ class ChopperMonitorGroup(QGroupBox):
         self.currentPosition = QLabel(self)
         self.currentPosition.setText("Undefined")
         self.currentPosition.setStyleSheet("font-size: 20px; color: #1d1128;")
-        self.btnSetZero = QPushButton("New zero")
+        self.btnSetZero = Button("New zero", animate=True)
         self.btnSetZero.clicked.connect(self.setZero)
 
-        self.btnStartMonitor = QPushButton("Start monitor")
+        self.btnStartMonitor = Button("Start monitor", animate=True)
         self.btnStartMonitor.clicked.connect(self.startMonitor)
-        self.btnStopMonitor = QPushButton("Stop monitor")
+        self.btnStopMonitor = Button("Stop monitor")
         self.btnStopMonitor.clicked.connect(self.stopMonitor)
         self.btnStopMonitor.setEnabled(False)
 
