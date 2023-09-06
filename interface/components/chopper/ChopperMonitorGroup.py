@@ -20,6 +20,7 @@ class ChopperSetZeroThread(QThread):
 
 class ChopperMonitorThread(QThread):
     position = pyqtSignal(int)
+    speed = pyqtSignal(float)
 
     def run(self):
         if not ChopperManager.chopper.client.connected:
@@ -27,8 +28,10 @@ class ChopperMonitorThread(QThread):
             return
         while 1:
             pos = ChopperManager.chopper.get_actual_pos()
+            speed = ChopperManager.chopper.get_actual_speed()
             self.position.emit(pos)
-            time.sleep(0.2)
+            self.speed.emit(speed)
+            time.sleep(0.1)
 
 
 class ChopperMonitorGroup(QGroupBox):
@@ -45,6 +48,11 @@ class ChopperMonitorGroup(QGroupBox):
         self.currentPosition.setStyleSheet("font-size: 20px; color: #1d1128;")
         self.btnSetZero = Button("New zero", animate=True)
         self.btnSetZero.clicked.connect(self.setZero)
+        self.actualSpeedLabel = QLabel(self)
+        self.actualSpeedLabel.setText("Speed")
+        self.actualSpeed = QLabel(self)
+        self.actualSpeed.setStyleSheet("font-size: 20px; color: #1d1128;")
+        self.actualSpeed.setText("Unknown")
 
         self.btnStartMonitor = Button("Start monitor", animate=True)
         self.btnStartMonitor.clicked.connect(self.startMonitor)
@@ -59,8 +67,14 @@ class ChopperMonitorGroup(QGroupBox):
             self.currentPosition, 0, 1, alignment=Qt.AlignmentFlag.AlignCenter
         )
         grid_layout.addWidget(self.btnSetZero, 0, 2)
-        grid_layout.addWidget(self.btnStartMonitor, 1, 0)
-        grid_layout.addWidget(self.btnStopMonitor, 1, 2)
+        grid_layout.addWidget(
+            self.actualSpeedLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        grid_layout.addWidget(
+            self.actualSpeed, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        grid_layout.addWidget(self.btnStartMonitor, 2, 0)
+        grid_layout.addWidget(self.btnStopMonitor, 2, 2)
         layout.addLayout(grid_layout)
 
         self.setLayout(layout)
@@ -79,6 +93,7 @@ class ChopperMonitorGroup(QGroupBox):
         self.btnStartMonitor.setEnabled(False)
         self.btnStopMonitor.setEnabled(True)
         self.chopper_monitor_thread.position.connect(self.setCurrentPosition)
+        self.chopper_monitor_thread.speed.connect(self.setActualSpeed)
         self.chopper_monitor_thread.finished.connect(
             lambda: self.btnStartMonitor.setEnabled(True)
         )
@@ -90,6 +105,9 @@ class ChopperMonitorGroup(QGroupBox):
         degree = (360 * position // 10000) % 360
         minutes = int(60 * (position % 10) / 10)
         self.currentPosition.setText(f"{degree} ° {minutes} `")
+
+    def setActualSpeed(self, speed: float):
+        self.actualSpeed.setText(f"{round(speed, 1)} Hz")
 
     def stopMonitor(self):
         self.chopper_monitor_thread.terminate()

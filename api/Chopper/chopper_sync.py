@@ -148,7 +148,7 @@ class Chopper:
         # omega = freq * 60
         # self.client.write_register(int(0x620B), int(omega), self.slave_address)
         self.set_frequency(self.frequency)
-
+        # self.client.write_register(int(0x0191), 24, self.slave_address)  # set max current 2.4 A
         # acc/dec (ms/1000 rpm)
         self.client.write_register(int(0x620C), int(10000), self.slave_address)
         self.client.write_register(int(0x620D), int(5000), self.slave_address)
@@ -177,6 +177,7 @@ class Chopper:
             self.client.write_register(int(0x6002), int(0x012), self.slave_address)
             if self.get_actual_speed() < 0.1:
                 self.emergency_stop()
+                logger.info("[path2] Broke stopping")
                 break
             time.sleep(0.1)
 

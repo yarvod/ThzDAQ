@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import QThread, Qt
+from PyQt6.QtCore import QThread, Qt, QTimer
 from PyQt6.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class ChopperRotateCwThread(QThread):
+    timeout = 10
+
     def __init__(self, angle: float = 90):
         super().__init__()
         self.angle = angle
@@ -119,6 +121,13 @@ class ChopperManagingGroup(QGroupBox):
         )
         self.chopper_rotate_cw_thread.start()
 
+        self.time_rotate_cw = QTimer()
+        self.time_rotate_cw.setInterval(self.chopper_rotate_cw_thread.timeout * 1000)
+        self.time_rotate_cw.timeout.connect(
+            lambda: self.chopper_rotate_cw_thread.terminate()
+        )
+        self.time_rotate_cw.start()
+
     def startContinuesRotation(self):
         state.CHOPPER_FREQ = self.speedSlider.value()
         self.chopper_start_continues_rotation_thread = (
@@ -130,6 +139,13 @@ class ChopperManagingGroup(QGroupBox):
         )
         self.chopper_start_continues_rotation_thread.start()
 
+        self.timer_continues_rotation = QTimer()
+        self.timer_continues_rotation.setInterval(10000)
+        self.timer_continues_rotation.timeout.connect(
+            lambda: self.chopper_start_continues_rotation_thread.terminate()
+        )
+        self.timer_continues_rotation.start()
+
     def stopContinuesRotation(self):
         self.chopper_stop_continues_rotation_thread = (
             ChopperStopContinuesRotationThread()
@@ -139,6 +155,12 @@ class ChopperManagingGroup(QGroupBox):
             lambda: self.btnStopContinuesRotate.setEnabled(True)
         )
         self.chopper_stop_continues_rotation_thread.start()
+        self.timer_stop_continues_rotation = QTimer()
+        self.timer_stop_continues_rotation.setInterval(10000)
+        self.timer_stop_continues_rotation.timeout.connect(
+            lambda: self.chopper_stop_continues_rotation_thread.terminate()
+        )
+        self.timer_stop_continues_rotation.start()
 
     def chopperAlign(self):
         self.chopper_align_thread = ChopperAlignThread()
@@ -147,3 +169,10 @@ class ChopperManagingGroup(QGroupBox):
         )
         self.btnAlign.setEnabled(False)
         self.chopper_align_thread.start()
+
+        self.timer_chopper_align = QTimer()
+        self.timer_chopper_align.setInterval(10000)
+        self.timer_chopper_align.timeout.connect(
+            lambda: self.chopper_align_thread.terminate()
+        )
+        self.timer_chopper_align.start()
