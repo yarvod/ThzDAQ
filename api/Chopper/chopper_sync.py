@@ -177,7 +177,9 @@ class Chopper:
             self.client.write_register(int(0x6002), int(0x012), self.slave_address)
             if self.get_actual_speed() < 0.1:
                 self.emergency_stop()
-                logger.info("[path2] Broke stopping")
+                logger.info("[path2] Stopped")
+                self.align()
+                logger.info("[path2] Aligned")
                 break
             time.sleep(0.1)
 
