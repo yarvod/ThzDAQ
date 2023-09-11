@@ -124,6 +124,7 @@ class State:
     # Chopper
     CHOPPER_HOST = "COM16"
     CHOPPER_FREQ = 1
+    CHOPPER_SWITCH = True
 
 
 state = State()
