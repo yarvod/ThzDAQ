@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import datetime
 from typing import Dict
 
 import numpy as np
@@ -45,8 +44,27 @@ class StepBiasPowerThread(QThread):
 
     def __init__(self):
         super().__init__()
-        self.current_angle = state.GRID_ANGLE
-        self.motor = None
+        self.initial_v = 0
+        self.initial_angle = state.GRID_ANGLE
+
+        if state.CHOPPER_SWITCH:
+            self.measure = MeasureModel.objects.create(
+                measure_type=MeasureType.GRID_CHOPPER_BIAS_POWER, data={}
+            )
+        else:
+            self.measure = MeasureModel.objects.create(
+                measure_type=MeasureType.GRID_BIAS_POWER, data={}
+            )
+
+        self.motor = GridManager(host=state.GRID_ADDRESS)
+
+        self.block = SisBlock(
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
+        )
+        self.block.connect()
 
     def get_results_format(self) -> Dict:
         if state.CHOPPER_SWITCH:
@@ -81,20 +99,12 @@ class StepBiasPowerThread(QThread):
         }
 
     def run(self):
-        chopper = ChopperManager.chopper
-        self.motor = GridManager(host=state.GRID_ADDRESS)
         nrx = NRXPowerMeter(
             ip=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+
         results_list = []
         angle_range = np.arange(
             state.GRID_ANGLE_START,
@@ -106,18 +116,11 @@ class StepBiasPowerThread(QThread):
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,
         )
-        initial_v = block.get_bias_voltage()
+        self.initial_v = self.block.get_bias_voltage()
         initial_time = time.time()
-        chopper.align()
-        self.motor.rotate(state.GRID_ANGLE_START)
         if state.CHOPPER_SWITCH:
-            measure = MeasureModel.objects.create(
-                measure_type=MeasureType.GRID_CHOPPER_BIAS_POWER, data={}
-            )
-        else:
-            measure = MeasureModel.objects.create(
-                measure_type=MeasureType.GRID_BIAS_POWER, data={}
-            )
+            ChopperManager.chopper.align()
+        self.motor.rotate(state.GRID_ANGLE_START)
         time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
         for ind, angle in enumerate(angle_range):
             if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
@@ -128,26 +131,27 @@ class StepBiasPowerThread(QThread):
             results["angle"] = angle
 
             if ind != 0:
-                self.motor.rotate(state.GRID_ANGLE_STEP)
+                self.motor.rotate(angle)
             time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
 
             for switcher in range(2):
-                if not state.CHOPPER_SWITCH and not switcher:
+                if not state.CHOPPER_SWITCH and switcher == 0:
                     continue
-                chopper.path2()
-                chopper_state = "hot" if not switcher else "cold"
+                chopper_state = None
+                if state.CHOPPER_SWITCH:
+                    chopper_state = "hot" if switcher == 0 else "cold"
                 for i, voltage_set in enumerate(volt_range):
                     if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                         break
 
-                    block.set_bias_voltage(voltage_set)
-                    if i == 0:  # block need time to set first point
+                    self.block.set_bias_voltage(voltage_set)
+                    if i == 0:  # self.block need time to set first point
                         time.sleep(0.5)
                     time.sleep(state.BLOCK_BIAS_STEP_DELAY)
-                    voltage_get = block.get_bias_voltage()
+                    voltage_get = self.block.get_bias_voltage()
                     if not voltage_get:
                         continue
-                    current_get = block.get_bias_current()
+                    current_get = self.block.get_bias_current()
                     if not current_get:
                         continue
                     power = nrx.get_power()
@@ -175,45 +179,50 @@ class StepBiasPowerThread(QThread):
                         results["power"].append(power)
                         results["time"].append(time_step)
 
-                    if i == 0:
-                        results_list.append(results)
-                    else:
-                        results_list[ind] = results
+                    self.measure.data[ind] = results
 
-                    measure.data = results_list
+                if state.CHOPPER_SWITCH:
+                    ChopperManager.chopper.path0()
+                    time.sleep(2)
 
             if state.CHOPPER_SWITCH:
-                power_diff = np.array(results["hot"]["power"]) - np.array(
-                    results["cold"]["power"]
-                )
+                hot = np.array(results["hot"]["power"])
+                cold = np.array(results["cold"]["power"])
+                if not len(hot) or not len(cold):
+                    continue
+                min_ind = min([len(cold), len(hot)])
+                power_diff = hot[:min_ind] - cold[:min_ind]
                 self.stream_diff_results.emit(
                     {
                         "x": results["hot"]["voltage_get"],
-                        "y": power_diff.to_list(),
+                        "y": power_diff.tolist(),
                     }
                 )
 
-        block.set_bias_voltage(initial_v)
-        measure.finished = datetime.now()
-        measure.save()
+        self.pre_exit()
         self.results.emit(results_list)
         self.finished.emit()
 
+    def pre_exit(self):
+        self.motor.rotate(self.initial_angle, finish=True)
+        self.block.set_bias_voltage(self.initial_v)
+        self.measure.save()
+        state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
+
     def terminate(self) -> None:
+        self.pre_exit()
         super().terminate()
         logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def quit(self) -> None:
+        self.pre_exit()
         super().quit()
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        self.motor.rotate(state.GRID_ANGLE - self.current_angle)
-        state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def exit(self, returnCode: int = ...):
+        self.pre_exit()
         super().exit(returnCode)
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
 class GridTabWidget(QScrollArea):
@@ -323,8 +332,6 @@ class GridTabWidget(QScrollArea):
         self.groupGridBiasPowerScan.setLayout(layout)
 
     def start_measure_step_bias_power(self):
-        self.bias_power_thread = StepBiasPowerThread()
-
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = True
         state.GRID_ANGLE_START = self.angleStart.value()
         state.GRID_ANGLE_STOP = self.angleStop.value()
@@ -335,6 +342,8 @@ class GridTabWidget(QScrollArea):
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
         state.GRID_PLOT_TYPE = self.gridPlotType.currentIndex()
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
+
+        self.bias_power_thread = StepBiasPowerThread()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
         if state.CHOPPER_SWITCH:
@@ -354,7 +363,7 @@ class GridTabWidget(QScrollArea):
         )
 
     def stop_measure_step_bias_power(self):
-        self.bias_power_thread.quit()
+        self.bias_power_thread.terminate()
 
     def show_bias_power_graph(self, results):
         if state.GRID_PLOT_TYPE == GridPlotTypes.IV_CURVE:

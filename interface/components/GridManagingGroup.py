@@ -52,8 +52,7 @@ class GridManagingGroup(QGroupBox):
     def rotate(self):
         if state.GRID_ANGLE == self.angle.value():
             return
-        state.GRID_ANGLE_ROTATE = self.angle.value() - state.GRID_ANGLE
-        state.GRID_ANGLE = self.angle.value()
+        state.GRID_ANGLE_ROTATE = self.angle.value()
         self.grid_thread = GridThread()
         self.grid_thread.start()
         self.btnRotate.setEnabled(False)

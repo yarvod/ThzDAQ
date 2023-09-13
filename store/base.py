@@ -159,6 +159,7 @@ class MeasureModel:
             return getattr(self, attr)
 
     def save(self):
+        self.finished = datetime.now()
         self.objects.update_table()
 
 
