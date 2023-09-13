@@ -28,6 +28,7 @@ from interface.components.ui.Lines import HLine
 from interface.windows.biasPowerGraphWindow import (
     GridBiasPowerGraphWindow,
     GridBiasGraphWindow,
+    GridBiasPowerDiffGraphWindow,
 )
 from settings import GridPlotTypes
 from store.base import MeasureModel, MeasureType
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 class StepBiasPowerThread(QThread):
     results = pyqtSignal(list)
     stream_results = pyqtSignal(dict)
+    stream_diff_results = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -180,6 +182,17 @@ class StepBiasPowerThread(QThread):
 
                     measure.data = results_list
 
+            if state.CHOPPER_SWITCH:
+                power_diff = np.array(results["hot"]["power"]) - np.array(
+                    results["cold"]["power"]
+                )
+                self.stream_diff_results.emit(
+                    {
+                        "x": results["hot"]["voltage_get"],
+                        "y": power_diff.to_list(),
+                    }
+                )
+
         block.set_bias_voltage(initial_v)
         measure.finished = datetime.now()
         measure.save()
@@ -211,6 +224,7 @@ class GridTabWidget(QScrollArea):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasGraphWindow = None
+        self.gridBiasPowerDiffGraphWindow = None
         self.createGroupGridBiasPowerScan()
         self.layout.addWidget(GridManagingGroup(self))
         self.layout.addSpacing(10)
@@ -323,6 +337,10 @@ class GridTabWidget(QScrollArea):
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
+        if state.CHOPPER_SWITCH:
+            self.bias_power_thread.stream_diff_results.connect(
+                self.show_bias_power_diff_graph
+            )
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -358,3 +376,12 @@ class GridTabWidget(QScrollArea):
                 new_plot=results.get("new_plot", True),
             )
             self.gridBiasPowerGraphWindow.show()
+
+    def show_bias_power_diff_graph(self, results):
+        if self.gridBiasPowerDiffGraphWindow is None:
+            self.gridBiasPowerDiffGraphWindow = GridBiasPowerDiffGraphWindow()
+        self.gridBiasPowerDiffGraphWindow.plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+        )
+        self.gridBiasPowerDiffGraphWindow.show()
