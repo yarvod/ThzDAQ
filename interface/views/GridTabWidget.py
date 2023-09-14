@@ -230,7 +230,6 @@ class GridTabWidget(QScrollArea):
         super(QWidget, self).__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasGraphWindow = None
         self.gridBiasPowerDiffGraphWindow = None
@@ -242,8 +241,8 @@ class GridTabWidget(QScrollArea):
 
         self.widget.setLayout(self.layout)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
 

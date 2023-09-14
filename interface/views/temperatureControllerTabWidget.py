@@ -56,7 +56,6 @@ class TemperatureControllerTabWidget(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.temperatureStreamGraphWindow = None
 
         self.createGroupMonitor()

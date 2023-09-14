@@ -156,7 +156,6 @@ class SetUpTabWidget(QScrollArea):
         super().__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()

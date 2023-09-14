@@ -1,5 +1,6 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
+from interface.components.ui.DetachableTabWidget import DetachableTabWidget
 from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
@@ -18,9 +19,20 @@ class TabsWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-
+        self.tabs_list = [
+            "Set Up",
+            "Data",
+            "SIS Block",
+            "VNA",
+            "Power Meter",
+            "Signal Generator",
+            "GRID",
+            "Temperature",
+            "Spectrum",
+            "Chopper",
+        ]
         # Initialize tab screen
-        self.tabs = QTabWidget(self)
+        self.tabs = DetachableTabWidget(self, tabs_list=self.tabs_list)
         self.tab_setup = SetUpTabWidget(self)
         self.tab_data = MeasureDataTabWidget(self)
         self.tab_block = BlockTabWidget(self)

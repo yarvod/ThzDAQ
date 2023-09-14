@@ -171,7 +171,6 @@ class NRXTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.biasPowerGraphWindow = None
         self.powerStreamGraphWindow = None
         self.createGroupNRX()
