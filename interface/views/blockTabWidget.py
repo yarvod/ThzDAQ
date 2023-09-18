@@ -79,25 +79,26 @@ class BlockStreamThread(QThread):
             ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
+        i = 1
         while 1:
             if not state.BLOCK_STREAM_THREAD:
                 break
             time.sleep(0.2)
+
             bias_voltage = block.get_bias_voltage()
-            time.sleep(0.01)
-            if not bias_voltage:
-                continue
+            if bias_voltage:
+                self.bias_voltage.emit(bias_voltage)
+
             bias_current = block.get_bias_current()
-            time.sleep(0.01)
-            if not bias_current:
-                continue
-            cl_current = block.get_ctrl_current()
-            time.sleep(0.01)
-            if not cl_current:
-                continue
-            self.bias_voltage.emit(bias_voltage)
-            self.bias_current.emit(bias_current)
-            self.cl_current.emit(cl_current)
+            if bias_current:
+                self.bias_current.emit(bias_current)
+
+            if i % 2 == 0:
+                cl_current = block.get_ctrl_current()
+                if cl_current:
+                    self.cl_current.emit(cl_current)
+
+            i += 1
 
         block.disconnect()
 
@@ -226,6 +227,7 @@ class BlockBIASScanThread(QThread):
             block.set_bias_voltage(v_set)
             if i == 0:
                 time.sleep(1)
+            time.sleep(state.BLOCK_CTRL_STEP_DELAY)
             v_get = block.get_bias_voltage()
             if not v_get:
                 continue
