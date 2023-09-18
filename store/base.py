@@ -16,6 +16,7 @@ class MeasureType:
     GRID_BIAS_POWER = "grid_bias_power"
     GRID_CHOPPER_BIAS_POWER = "grid_chopper_bias_power"
     POWER_STREAM = "power_stream"
+    TEMPERATURE_STREAM = "temperature_stream"
     VNA_REFLECTION = "vna_reflection"
 
     CHOICES = dict(
@@ -27,6 +28,7 @@ class MeasureType:
             (GRID_BIAS_POWER, "GRID BIAS Power"),
             (GRID_CHOPPER_BIAS_POWER, "GRID Chopper BIAS Power"),
             (POWER_STREAM, "Power stream"),
+            (TEMPERATURE_STREAM, "Temp stream"),
             (VNA_REFLECTION, "VNA Reflection"),
         )
     )
@@ -158,8 +160,9 @@ class MeasureModel:
         if attr:
             return getattr(self, attr)
 
-    def save(self):
-        self.finished = datetime.now()
+    def save(self, finish: bool = True):
+        if finish:
+            self.finished = datetime.now()
         self.objects.update_table()
 
 
