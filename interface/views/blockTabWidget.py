@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QScrollArea,
+    QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
@@ -111,6 +112,7 @@ class BlockStreamThread(QThread):
 class BlockCLScanThread(QThread):
     results = pyqtSignal(dict)
     stream_result = pyqtSignal(dict)
+    progress = pyqtSignal(int)
 
     def run(self):
         block = SisBlock(
@@ -166,6 +168,7 @@ class BlockCLScanThread(QThread):
             )
             measure.data = results
             i += 1
+            self.progress.emit(int(proc))
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
@@ -194,6 +197,7 @@ class BlockCLScanThread(QThread):
 class BlockBIASScanThread(QThread):
     results = pyqtSignal(dict)
     stream_result = pyqtSignal(dict)
+    progress = pyqtSignal(int)
 
     def run(self):
         block = SisBlock(
@@ -248,6 +252,7 @@ class BlockBIASScanThread(QThread):
             results["time"].append(delta_t.total_seconds())
             measure.data = results
             i += 1
+            self.progress.emit(int(proc))
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
         block.disconnect()
@@ -341,6 +346,12 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.block_ctrl_scan_thread.finished.connect(
             lambda: self.btnCTRLStopScan.setEnabled(False)
         )
+        self.block_ctrl_scan_thread.finished.connect(
+            lambda: self.ctrlScanProgress.setValue(0)
+        )
+        self.block_ctrl_scan_thread.progress.connect(
+            lambda x: self.ctrlScanProgress.setValue(x)
+        )
 
     def stop_scan_ctrl_current(self):
         self.block_ctrl_scan_thread.quit()
@@ -404,6 +415,12 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.btnBiasStopScan.setEnabled(True)
         self.block_bias_scan_thread.finished.connect(
             lambda: self.btnBiasStopScan.setEnabled(False)
+        )
+        self.block_bias_scan_thread.progress.connect(
+            lambda x: self.biasScanProgress.setValue(x)
+        )
+        self.block_bias_scan_thread.finished.connect(
+            lambda: self.biasScanProgress.setValue(0)
         )
 
     def stop_scan_bias_iv(self):
@@ -581,6 +598,9 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.ctrlStepDelay.setRange(0, 10)
         self.ctrlStepDelay.setDecimals(2)
         self.ctrlStepDelay.setValue(state.BLOCK_CTRL_STEP_DELAY)
+
+        self.ctrlScanProgress = QProgressBar(self)
+        self.ctrlScanProgress.setValue(0)
         self.btnCTRLScan = QPushButton("Scan CL Current")
         self.btnCTRLScan.clicked.connect(self.scan_ctrl_current)
 
@@ -596,8 +616,9 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         layout.addWidget(self.ctrlPoints, 3, 1)
         layout.addWidget(self.ctrlStepDelayLabel, 4, 0)
         layout.addWidget(self.ctrlStepDelay, 4, 1)
-        layout.addWidget(self.btnCTRLScan, 5, 0)
-        layout.addWidget(self.btnCTRLStopScan, 5, 1)
+        layout.addWidget(self.ctrlScanProgress, 5, 0, 1, 2)
+        layout.addWidget(self.btnCTRLScan, 6, 0)
+        layout.addWidget(self.btnCTRLStopScan, 6, 1)
 
         self.groupCTRLScan.setLayout(layout)
 
@@ -626,6 +647,10 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.biasPoints.setDecimals(0)
         self.biasPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
+
+        self.biasScanProgress = QProgressBar(self)
+        self.biasScanProgress.setValue(0)
+
         self.btnBiasScan = QPushButton("Scan Bias IV")
         self.btnBiasScan.clicked.connect(self.scan_bias_iv)
 
@@ -639,7 +664,8 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         layout.addWidget(self.biasVoltageTo, 2, 1)
         layout.addWidget(self.biasPointsLabel, 3, 0)
         layout.addWidget(self.biasPoints, 3, 1)
-        layout.addWidget(self.btnBiasScan, 4, 0)
-        layout.addWidget(self.btnBiasStopScan, 4, 1)
+        layout.addWidget(self.biasScanProgress, 4, 0, 1, 2)
+        layout.addWidget(self.btnBiasScan, 5, 0)
+        layout.addWidget(self.btnBiasStopScan, 5, 1)
 
         self.groupBiasScan.setLayout(layout)
