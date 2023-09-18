@@ -42,7 +42,6 @@ class MonitorThread(QThread):
                 measure.data["temp_a"].append(temp_a)
                 measure.data["temp_c"].append(temp_c)
                 measure.data["time"].append(time.time() - start_time)
-                measure.save(finish=False)
             self.temperatures.emit(
                 {
                     "temp_a": temp_a,
