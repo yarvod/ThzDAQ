@@ -12,10 +12,11 @@ class TemperatureController(BaseInstrument):
         host: str = state.LAKE_SHORE_IP,
         gpib: int = None,
         adapter: str = SOCKET,
+        delay=0,
         *args,
         **kwargs,
     ):
-        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"))
+        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"), delay=delay)
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
     def idn(self) -> str:

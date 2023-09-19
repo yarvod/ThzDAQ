@@ -38,7 +38,7 @@ class NRXBlockStreamThread(QThread):
             measure = MeasureModel.objects.create(
                 measure_type=MeasureType.POWER_STREAM, data=data
             )
-            measure.save()
+            measure.save(False)
         i = 0
         start_time = time.time()
         while state.NRX_STREAM_THREAD:
@@ -50,14 +50,14 @@ class NRXBlockStreamThread(QThread):
 
             self.meas.emit({"power": power, "time": meas_time, "reset": i == 0})
             if state.NRX_STREAM_STORE_DATA:
-                data["power"].append(power)
-                data["time"].append(meas_time)
+                measure.data["power"].append(power)
+                measure.data["time"].append(meas_time)
+                measure.save(finish=False)
             i += 1
 
         if state.NRX_STREAM_STORE_DATA:
             measure.data = data
-            measure.finished = datetime.now()
-            measure.save()
+            measure.save(finish=True)
         self.finished.emit()
 
     def terminate(self) -> None:
@@ -108,6 +108,7 @@ class BiasPowerThread(QThread):
         measure = MeasureModel.objects.create(
             measure_type=MeasureType.BIAS_POWER, data={}
         )
+        measure.save(False)
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         for i, voltage_set in enumerate(v_range):

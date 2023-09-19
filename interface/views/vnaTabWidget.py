@@ -102,7 +102,6 @@ class BiasReflectionThread(QThread):
 
         block.set_bias_voltage(initial_v)
         block.disconnect()
-        measure.finished = datetime.now()
         measure.save()
         self.results.emit(results)
         self.finished.emit()

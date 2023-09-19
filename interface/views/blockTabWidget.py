@@ -172,7 +172,6 @@ class BlockCLScanThread(QThread):
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
-        measure.finished = datetime.now()
         measure.save()
         self.finished.emit()
 
@@ -256,7 +255,6 @@ class BlockBIASScanThread(QThread):
             logger.info(f"[scan_bias] Proc {proc} %; Time {delta_t}; V_set {v_set}")
         block.set_bias_voltage(initial_v)
         block.disconnect()
-        measure.finished = datetime.now()
         measure.save()
         self.results.emit(results)
         self.finished.emit()
