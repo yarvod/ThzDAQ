@@ -1,4 +1,4 @@
-from settings import GridPlotTypes
+from settings import GridPlotTypes, WAVESHARE_ETHERNET
 
 
 class State:
@@ -123,10 +123,18 @@ class State:
     SPECTRUM_STEP_DELAY = 0.5
     SPECTRUM_GPIB_ADDRESS = 20
 
+    # WaveShare
+    WAVESHARE_HOST = "169.254.54.24"
+    WAVESHARE_PORT = 1111
+
     # Chopper
-    CHOPPER_HOST = "COM16"
+    CHOPPER_HOST = WAVESHARE_HOST
+    CHOPPER_PORT = WAVESHARE_PORT
+    CHOPPER_ADAPTER = WAVESHARE_ETHERNET
+    CHOPPER_DEFAULT_SERIAL_PORT = "COM16"
     CHOPPER_FREQ = 1
     CHOPPER_SWITCH = True
+    CHOPPER_MONITOR = False
 
 
 state = State()

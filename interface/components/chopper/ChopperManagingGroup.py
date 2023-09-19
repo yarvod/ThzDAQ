@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
 )
 
-from api.Chopper.chopper_sync import ChopperManager
+from api.Chopper import ChopperManager, chopper_manager
 from interface.components.ui.Button import Button
 from store.state import state
 
@@ -26,39 +26,39 @@ class ChopperRotateCwThread(QThread):
         self.angle = angle
 
     def run(self):
-        if not ChopperManager.chopper.client.connected:
+        if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        ChopperManager.chopper.path0(self.angle)
+        chopper_manager.chopper.path0(self.angle)
         logger.info("Finish rotate cw")
         self.finished.emit()
 
 
 class ChopperStartContinuesRotationThread(QThread):
     def run(self):
-        if not ChopperManager.chopper.client.connected:
+        if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        ChopperManager.chopper.set_frequency(state.CHOPPER_FREQ)
-        ChopperManager.chopper.path1()
+        chopper_manager.chopper.set_frequency(state.CHOPPER_FREQ)
+        chopper_manager.chopper.path1()
         self.finished.emit()
 
 
 class ChopperStopContinuesRotationThread(QThread):
     def run(self):
-        if not ChopperManager.chopper.client.connected:
+        if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        ChopperManager.chopper.path2()
+        chopper_manager.chopper.path2()
         self.finished.emit()
 
 
 class ChopperAlignThread(QThread):
     def run(self):
-        if not ChopperManager.chopper.client.connected:
+        if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        ChopperManager.chopper.align()
+        chopper_manager.chopper.align()
         self.finished.emit()
 
 

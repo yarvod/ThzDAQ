@@ -11,6 +11,10 @@ ADAPTERS = {
 }
 
 
+WAVESHARE_ETHERNET = "WaveShare Ethernet"
+SERIAL_USB = "Serial Usb"
+
+
 class GridPlotTypes:
     IV_CURVE = 0
     PV_CURVE = 1

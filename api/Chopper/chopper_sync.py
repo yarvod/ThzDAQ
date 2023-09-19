@@ -1,5 +1,7 @@
 import logging
 import time
+from typing import Union
+
 from pymodbus.client import ModbusSerialClient as ModbusClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadBuilder, BinaryPayloadDecoder
@@ -12,11 +14,15 @@ logger = logging.getLogger(__name__)
 class Chopper:
     def __init__(
         self,
-        host: str = state.CHOPPER_HOST,
+        host: str = None,
+        port: Union[str, int] = state.CHOPPER_DEFAULT_SERIAL_PORT,
         baudrate: int = 9600,
         slave_address: int = 1,
+        *args,
+        **kwargs,
     ):
         self.host = host
+        self.port = port
         self.baudrate = baudrate
         self.slave_address = slave_address
         self.client = None
@@ -24,14 +30,13 @@ class Chopper:
 
         self.frequency = 1
 
-    def init_client(self, host: str = state.CHOPPER_HOST):
-        self.host = host
+    def init_client(self):
         if self.client is not None:
             if self.client.connected:
                 self.client.close()
         self.client = ModbusClient(
             method="rtu",
-            port=self.host,
+            port=self.port,
             baudrate=self.baudrate,
             stopbits=1,
             bytesize=8,
@@ -132,6 +137,7 @@ class Chopper:
             self.align()
             time.sleep(0.3)
         self.client.write_register(int(0x6002), int(0x010), self.slave_address)
+        time.sleep(0.3)
 
     # Constant speed
     def set_frequency(self, frequency: float = 1):
@@ -201,6 +207,7 @@ class Chopper:
         self.client.write_register(int(0x621D), int(3000), self.slave_address)
         # trigger PR2 motion
         self.client.write_register(int(0x6002), int(0x013), self.slave_address)
+        time.sleep(0.3)
 
     def align(self):
         actual_pos = self.get_actual_pos()
@@ -208,10 +215,6 @@ class Chopper:
         target = int(round(actual_pos / 2500) * 2500)
         self.go_to_pos(target)
         logger.info(f"[align] Chopper aligned")
-
-
-class ChopperManager:
-    chopper = Chopper()
 
 
 if __name__ == "__main__":
