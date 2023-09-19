@@ -11,7 +11,7 @@ class App(QMainWindow):
         self.title = "SIS manager"
         self.left = 0
         self.top = 0
-        self.width = 450
+        self.width = 650
         self.height = 700
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setStyleSheet(style.GLOBAL_STYLE)

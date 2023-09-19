@@ -169,7 +169,6 @@ class VNATabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.vnaGraphWindow = None
         self.createGroupVNAParameters()
         self.createGroupBiasReflScan()

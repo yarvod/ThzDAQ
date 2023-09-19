@@ -20,3 +20,10 @@ class GridBiasGraphWindow(GraphWindow):
     graph_title = "Current (Voltage)"
     x_label = "Voltage, mV"
     y_label = "Current, mkA"
+
+
+class GridBiasPowerDiffGraphWindow(GraphWindow):
+    window_title = "GRID Diff P-V Graphs"
+    graph_title = "Power (Voltage)"
+    x_label = "Voltage, mV"
+    y_label = "Power, dBm"

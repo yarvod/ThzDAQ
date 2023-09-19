@@ -27,6 +27,7 @@ class GridManager:
         self.adapter = HttpAdapter(host=host)
         if self.adapter is None:
             self._set_adapter(adapter, *args, **kwargs)
+        self.finish = False
 
     def _set_adapter(self, adapter: str, *args, **kwargs) -> None:
         adapter_path = ADAPTERS.get(adapter)
@@ -36,15 +37,22 @@ class GridManager:
         except (ImportError, ImportWarning) as e:
             logger.error(f"[{self.__class__.__name__}._set_adapter] {e}")
 
-    def rotate(self, angle: float = 90) -> None:
+    def rotate(self, angle: float = 90, finish: bool = False) -> None:
         """Rotate method
         Params:
             angle: float - Angle in degrees
         """
+        if self.finish:
+            return
+
+        angle_to_rotate = angle - state.GRID_ANGLE
         if self.adapter_name == SERIAL:
             self.adapter.write(f"{angle}\n".encode())
         elif self.adapter_name == HTTP:
-            self.adapter.post(url="/rotate", data={"angle": angle})
+            self.adapter.post(url="/rotate", data={"angle": angle_to_rotate})
+        state.GRID_ANGLE = angle
+
+        self.finish = finish
 
     def test(self) -> Tuple[bool, str]:
         """Simple test func"""

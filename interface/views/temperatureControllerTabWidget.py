@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 from api.LakeShore.temperature_controller import TemperatureController
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
+from store.base import MeasureModel, MeasureType
 from store.state import state
 
 
@@ -27,10 +28,20 @@ class MonitorThread(QThread):
     def run(self):
         tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
         start_time = time.time()
+        if state.LAKE_SHORE_STREAM_DATA:
+            measure = MeasureModel.objects.create(
+                measure_type=MeasureType.TEMPERATURE_STREAM,
+                data={"temp_a": [], "temp_c": [], "time": []},
+            )
+            measure.save(finish=False)
         i = 0
-        while 1:
+        while state.LAKE_SHORE_STREAM_THREAD:
             temp_a = tc.get_temperature_a()
             temp_c = tc.get_temperature_c()
+            if state.LAKE_SHORE_STREAM_DATA:
+                measure.data["temp_a"].append(temp_a)
+                measure.data["temp_c"].append(temp_c)
+                measure.data["time"].append(time.time() - start_time)
             self.temperatures.emit(
                 {
                     "temp_a": temp_a,
@@ -41,6 +52,10 @@ class MonitorThread(QThread):
             )
             time.sleep(state.LAKE_SHORE_STREAM_STEP_DELAY)
             i += 1
+
+        if state.LAKE_SHORE_STREAM_DATA:
+            measure.save()
+        self.finished.emit()
 
 
 class SetHeaterThread(QThread):
@@ -56,7 +71,6 @@ class TemperatureControllerTabWidget(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.temperatureStreamGraphWindow = None
 
         self.createGroupMonitor()
@@ -96,6 +110,9 @@ class TemperatureControllerTabWidget(QWidget):
         self.checkTemperatureStreamPlot = QCheckBox(self)
         self.checkTemperatureStreamPlot.setText("Plot stream time line")
 
+        self.checkTemperatureStoreData = QCheckBox(self)
+        self.checkTemperatureStoreData.setText("Store stream data")
+
         self.temperatureStreamTimeLabel = QLabel(self)
         self.temperatureStreamTimeLabel.setText("Time window, s")
         self.temperatureStreamTime = DoubleSpinBox(self)
@@ -117,6 +134,7 @@ class TemperatureControllerTabWidget(QWidget):
         layout.addWidget(self.temperatureStreamStepDelayLabel, 2, 0)
         layout.addWidget(self.temperatureStreamStepDelay, 2, 1)
         layout.addWidget(self.checkTemperatureStreamPlot, 3, 0)
+        layout.addWidget(self.checkTemperatureStoreData, 3, 1)
         layout.addWidget(self.temperatureStreamTimeLabel, 4, 0)
         layout.addWidget(self.temperatureStreamTime, 4, 1)
         layout.addWidget(self.btnStartMonitor, 5, 0)
@@ -126,8 +144,10 @@ class TemperatureControllerTabWidget(QWidget):
 
     def startMonitor(self):
         self.thread_monitor = MonitorThread()
+        state.LAKE_SHORE_STREAM_THREAD = True
         state.LAKE_SHORE_STREAM_TIME = self.temperatureStreamTime.value()
         state.LAKE_SHORE_STREAM_PLOT_GRAPH = self.checkTemperatureStreamPlot.isChecked()
+        state.LAKE_SHORE_STREAM_DATA = self.checkTemperatureStoreData.isChecked()
         state.LAKE_SHORE_STREAM_STEP_DELAY = self.temperatureStreamStepDelay.value()
         self.thread_monitor.start()
         self.btnStartMonitor.setEnabled(False)
@@ -141,7 +161,9 @@ class TemperatureControllerTabWidget(QWidget):
         self.thread_monitor.temperatures.connect(self.updateMonitor)
 
     def stopMonitor(self):
-        self.thread_monitor.terminate()
+        state.LAKE_SHORE_STREAM_THREAD = False
+        self.thread_monitor.quit()
+        self.thread_monitor.exit(0)
 
     def updateMonitor(self, measure: Dict):
         self.tempA.setText(f"{measure.get('temp_a')}")

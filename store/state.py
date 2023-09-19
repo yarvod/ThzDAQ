@@ -116,6 +116,8 @@ class State:
     LAKE_SHORE_HEATER_RANGE = 0
     LAKE_SHORE_MANUAL_OUTPUT = 100
     LAKE_SHORE_SETUP_POINT = 292
+    LAKE_SHORE_STREAM_DATA = False
+    LAKE_SHORE_STREAM_THREAD = False
 
     # Spectrum
     SPECTRUM_STEP_DELAY = 0.5
@@ -124,6 +126,7 @@ class State:
     # Chopper
     CHOPPER_HOST = "COM16"
     CHOPPER_FREQ = 1
+    CHOPPER_SWITCH = True
 
 
 state = State()

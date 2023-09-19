@@ -1,4 +1,5 @@
 import logging
+import textwrap
 
 from PyQt6.QtCore import pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
@@ -155,7 +156,6 @@ class SetUpTabWidget(QScrollArea):
         super().__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
@@ -448,8 +448,11 @@ class SetUpTabWidget(QScrollArea):
         self.btnInitGrid.setEnabled(False)
         self.grid_thread.finished.connect(lambda: self.btnInitGrid.setEnabled(True))
 
-    def set_grid_status(self, status):
-        self.gridStatus.setText(status)
+    def set_grid_status(self, status: str):
+        status = status.replace("'", "")
+        short_status = textwrap.shorten(status, width=40, placeholder="...")
+        self.gridStatus.setText(short_status)
+        self.gridStatus.setToolTip(status)
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()
