@@ -1,5 +1,6 @@
 import logging
 import socket
+import time
 from typing import Union
 
 from utils.classes import InstrumentAdapterInterface
@@ -9,11 +10,20 @@ logger = logging.getLogger(__name__)
 
 
 class SocketAdapter(InstrumentAdapterInterface):
-    def __init__(self, host: str, port: int, timeout: float = 2, *args, **kwargs):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        timeout: float = 2,
+        delay: float = 0.4,
+        *args,
+        **kwargs,
+    ):
         self.socket = None
         self.host = host
         self.port = port
         self.timeout = 0
+        self.delay = delay
         self.init(timeout)
 
     def init(self, timeout: float = 2):
@@ -81,6 +91,8 @@ class SocketAdapter(InstrumentAdapterInterface):
 
     def query(self, cmd: str, buffer_size=1024 * 1024, **kwargs):
         self.write(cmd, **kwargs)
+        if self.delay:
+            time.sleep(self.delay)
         return self.read(num_bytes=buffer_size)
 
     def set_timeout(self, timeout):
@@ -92,7 +104,7 @@ class SocketAdapter(InstrumentAdapterInterface):
 
     def _send(self, value):
         encoded_value = ("%s\n" % value).encode("ascii")
-        self.socket.send(encoded_value)
+        self.socket.sendall(encoded_value)
 
     def _recv(self, byte_num):
         value = self.socket.recv(byte_num)

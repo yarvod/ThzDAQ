@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Agilent.signal_generator import SignalGenerator
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 
 
@@ -18,7 +18,6 @@ class SignalGeneratorTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupSignalGeneratorConfig()
         self.createGroupSignalGenerator()
         self.layout.addWidget(self.groupSignalGeneratorConfig)

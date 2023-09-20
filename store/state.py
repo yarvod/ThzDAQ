@@ -1,4 +1,4 @@
-from settings import GridPlotTypes
+from settings import GridPlotTypes, WAVESHARE_ETHERNET
 
 
 class State:
@@ -38,12 +38,16 @@ class State:
 
     # VNA variables
     VNA_ADDRESS = "169.254.106.189"
-    VNA_SPARAM = "S21"
+    VNA_PORT = 5025
+    VNA_SPARAM = "S11"
+    VNA_SPARAMS = ["S11", "S22", "S12", "S21"]
     VNA_CHANNEL_FORMAT = "COMP"
     VNA_POWER = -30
     VNA_POINTS = 300
-    VNA_FREQ_FROM = 2
-    VNA_FREQ_TO = 12
+    VNA_FREQ_START = 2
+    VNA_FREQ_STOP = 12
+
+    VNA_STORE_DATA = True
 
     # VNA constants
     VNA_POWER_MIN = -60
@@ -63,6 +67,7 @@ class State:
     NRX_STREAM_THREAD = False
     NRX_STREAM_PLOT_GRAPH = False
     NRX_STREAM_GRAPH_TIME = 60
+    NRX_STREAM_STORE_DATA = False
 
     # NRX constants
     NRX_TEST_MAP = dict(
@@ -93,7 +98,8 @@ class State:
     GRID_ADDRESS = "169.254.0.52"
 
     GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
-    GRID_ANGLE = 90
+    GRID_ANGLE = 0
+    GRID_ANGLE_ROTATE = 0
     GRID_ANGLE_START = 0
     GRID_ANGLE_STOP = 0
     GRID_ANGLE_STEP = 10
@@ -110,6 +116,25 @@ class State:
     LAKE_SHORE_HEATER_RANGE = 0
     LAKE_SHORE_MANUAL_OUTPUT = 100
     LAKE_SHORE_SETUP_POINT = 292
+    LAKE_SHORE_STREAM_DATA = False
+    LAKE_SHORE_STREAM_THREAD = False
+
+    # Spectrum
+    SPECTRUM_STEP_DELAY = 0.5
+    SPECTRUM_GPIB_ADDRESS = 20
+
+    # WaveShare
+    WAVESHARE_HOST = "169.254.54.24"
+    WAVESHARE_PORT = 1111
+
+    # Chopper
+    CHOPPER_HOST = WAVESHARE_HOST
+    CHOPPER_PORT = WAVESHARE_PORT
+    CHOPPER_ADAPTER = WAVESHARE_ETHERNET
+    CHOPPER_DEFAULT_SERIAL_PORT = "COM16"
+    CHOPPER_FREQ = 1
+    CHOPPER_SWITCH = True
+    CHOPPER_MONITOR = False
 
 
 state = State()

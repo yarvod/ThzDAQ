@@ -1,7 +1,13 @@
+from PyQt6 import QtGui
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDoubleSpinBox
 
 
 class DoubleSpinBox(QDoubleSpinBox):
+    def __init__(self, parent, btn_return_method=None):
+        super().__init__(parent)
+        self.btn_return_method = btn_return_method
+
     def textFromValue(self, value):
         # show + sign for positive values
         text = super().textFromValue(value)
@@ -35,3 +41,10 @@ class DoubleSpinBox(QDoubleSpinBox):
         elif new_n_chars_before_sep > n_chars_before_sep:
             cursor_position += 1
         self.lineEdit().setCursorPosition(cursor_position)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Return:
+            if callable(self.btn_return_method):
+                self.btn_return_method()
+
+        super().keyPressEvent(event)

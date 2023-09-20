@@ -19,7 +19,7 @@ from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
 from utils.logger import logger
 
@@ -33,6 +33,12 @@ class NRXBlockStreamThread(QThread):
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
         )
+        data = {"power": [], "time": []}
+        if state.NRX_STREAM_STORE_DATA:
+            measure = MeasureModel.objects.create(
+                measure_type=MeasureType.POWER_STREAM, data=data
+            )
+            measure.save(False)
         i = 0
         start_time = time.time()
         while state.NRX_STREAM_THREAD:
@@ -43,7 +49,15 @@ class NRXBlockStreamThread(QThread):
                 continue
 
             self.meas.emit({"power": power, "time": meas_time, "reset": i == 0})
+            if state.NRX_STREAM_STORE_DATA:
+                measure.data["power"].append(power)
+                measure.data["time"].append(meas_time)
+                measure.save(finish=False)
             i += 1
+
+        if state.NRX_STREAM_STORE_DATA:
+            measure.data = data
+            measure.save(finish=True)
         self.finished.emit()
 
     def terminate(self) -> None:
@@ -94,6 +108,7 @@ class BiasPowerThread(QThread):
         measure = MeasureModel.objects.create(
             measure_type=MeasureType.BIAS_POWER, data={}
         )
+        measure.save(False)
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
         for i, voltage_set in enumerate(v_range):
@@ -157,7 +172,6 @@ class NRXTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.biasPowerGraphWindow = None
         self.powerStreamGraphWindow = None
         self.createGroupNRX()
@@ -190,6 +204,9 @@ class NRXTabWidget(QWidget):
         self.checkNRXStreamPlot = QCheckBox(self)
         self.checkNRXStreamPlot.setText("Plot stream time line")
 
+        self.checkNRXStoreStream = QCheckBox(self)
+        self.checkNRXStoreStream.setText("Store stream data")
+
         self.nrxStreamWindowTimeLabel = QLabel(self)
         self.nrxStreamWindowTimeLabel.setText("Time window, s")
         self.nrxStreamWindowTime = DoubleSpinBox(self)
@@ -207,15 +224,10 @@ class NRXTabWidget(QWidget):
         layout.addWidget(
             self.btnStopStreamNRX, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        layout.addWidget(
-            self.checkNRXStreamPlot, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        layout.addWidget(
-            self.nrxStreamWindowTimeLabel, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        layout.addWidget(
-            self.nrxStreamWindowTime, 4, 1, alignment=Qt.AlignmentFlag.AlignCenter
-        )
+        layout.addWidget(self.checkNRXStreamPlot, 3, 0)
+        layout.addWidget(self.checkNRXStoreStream, 3, 1)
+        layout.addWidget(self.nrxStreamWindowTimeLabel, 4, 0)
+        layout.addWidget(self.nrxStreamWindowTime, 4, 1)
         self.groupNRX.setLayout(layout)
 
     def start_stream_nrx(self):
@@ -224,6 +236,7 @@ class NRXTabWidget(QWidget):
         state.NRX_STREAM_THREAD = True
         state.NRX_STREAM_PLOT_GRAPH = self.checkNRXStreamPlot.isChecked()
         state.NRX_STREAM_GRAPH_TIME = self.nrxStreamWindowTime.value()
+        state.NRX_STREAM_STORE_DATA = self.checkNRXStoreStream.isChecked()
 
         self.nrx_stream_thread.meas.connect(self.update_nrx_stream_values)
         self.nrx_stream_thread.start()

@@ -55,35 +55,35 @@ QLineEdit:focus {
 QLineEdit::placeholder {
     color: #767e89;
 }
-QDoubleSpinBox {
+QAbstractSpinBox {
     border-radius: 5px;
     border: 1px solid #e5d4ed;
     padding: 5px 15px;
 }
-QDoubleSpinBox:focus {
+QAbstractSpinBox:focus {
     border: 1px solid #6d72c3;
 }
-QDoubleSpinBox::placeholder {
+QAbstractSpinBox::placeholder {
     color: #767e89;
 }
-QDoubleSpinBox::up-button {
+QAbstractSpinBox::up-button {
     background: #e5d4ed;
     border-bottom: 1px solid white;
     border-top-right-radius: 5px;
     image: url(assets/up-arrow.png);
     width: 25px;
 }
-QDoubleSpinBox::up-button:hover {
+QAbstractSpinBox::up-button:hover {
     background: #6d72c3;
 }
-QDoubleSpinBox::down-button {
+QAbstractSpinBox::down-button {
     background: #e5d4ed;
     border-top: 1px solid white;
     border-bottom-right-radius: 5px;
     image: url(assets/down-arrow.png);
     width: 25px;
 }
-QDoubleSpinBox::down-button:hover {
+QAbstractSpinBox::down-button:hover {
     background: #6d72c3;
 }
 """

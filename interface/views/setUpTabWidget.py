@@ -1,4 +1,5 @@
 import logging
+import textwrap
 
 from PyQt6.QtCore import pyqtSignal, QThread, Qt
 from PyQt6.QtWidgets import (
@@ -19,11 +20,13 @@ from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
+from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
+from interface.components.SetupSpectrumGroup import SetupSpectrumGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,14 @@ class VNAThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        vna = VNABlock(vna_ip=state.VNA_ADDRESS)
+        vna = VNABlock(
+            vna_ip=state.VNA_ADDRESS,
+            port=state.VNA_PORT,
+            start=state.VNA_FREQ_START,
+            stop=state.VNA_FREQ_STOP,
+            points=state.VNA_POINTS,
+            power=state.VNA_POWER,
+        )
         result = vna.test()
         self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
         self.finished.emit()
@@ -146,7 +156,6 @@ class SetUpTabWidget(QScrollArea):
         super().__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupNRX()
@@ -168,6 +177,10 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addWidget(self.groupSignalGenerator)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupTemperatureController)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(SetupSpectrumGroup(self))
+        self.layout.addSpacing(10)
+        self.layout.addWidget(SetupChopperGroup(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
@@ -435,8 +448,11 @@ class SetUpTabWidget(QScrollArea):
         self.btnInitGrid.setEnabled(False)
         self.grid_thread.finished.connect(lambda: self.btnInitGrid.setEnabled(True))
 
-    def set_grid_status(self, status):
-        self.gridStatus.setText(status)
+    def set_grid_status(self, status: str):
+        status = status.replace("'", "")
+        short_status = textwrap.shorten(status, width=40, placeholder="...")
+        self.gridStatus.setText(short_status)
+        self.gridStatus.setToolTip(status)
 
     def initialize_prologix_ethernet(self):
         self.prologix_ethernet_thread = PrologixEthernetThread()

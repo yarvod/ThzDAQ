@@ -50,12 +50,13 @@ class SisBlock(BaseInstrumentInterface):
             result (str): Block answer
         """
         cmd = bytes(cmd, "utf-8")
-        max_attempts = 5
+        max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
-                self.s.sendall(cmd)
-                data = self.s.recv(1024)
-                result = data.decode().rstrip()
+                self.s.send(cmd)
+                time.sleep(0.05)
+                data = self.s.recv(1024 * 1024)
+                result = data.decode("ISO-8859-1").rstrip()
                 logger.debug(
                     f"[Block.manipulate] Received result: {result}; attempt {attempt}"
                 )
@@ -142,10 +143,8 @@ class SisBlock(BaseInstrumentInterface):
         return self.manipulate(f"CTRL:{self.ctrl_dev}:CURR {curr}")
 
     def get_ctrl_current(self) -> Union[float, None]:
-        for attempt in range(5):
+        for attempt in range(1, 6):
             try:
-                if attempt > 1:
-                    time.sleep(0.1)
                 return float(self.manipulate(f"CTRL:{self.ctrl_dev}:CURR?"))
             except ValueError as e:
                 logger.debug(f"Exception[get_ctrl_current] {e}; attempt {attempt}")
@@ -155,14 +154,8 @@ class SisBlock(BaseInstrumentInterface):
     def get_bias_current(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
-                if attempt > 1:
-                    time.sleep(0.1)
-                result = float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
-                logger.debug(
-                    f"Success [Block.get_bias_current] received {result} current; attempt {attempt}"
-                )
-                return result
-            except Exception as e:
+                return float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
+            except ValueError as e:
                 logger.debug(
                     f"[Block.get_bias_current][Exception] {e}, attempt {attempt}"
                 )
@@ -172,14 +165,8 @@ class SisBlock(BaseInstrumentInterface):
     def get_bias_voltage(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
-                if attempt > 1:
-                    time.sleep(0.1)
-                result = float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
-                logger.debug(
-                    f"[Block.get_bias_voltage] Success received {result} voltage; attempt {attempt}"
-                )
-                return result
-            except Exception as e:
+                return float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
+            except ValueError as e:
                 logger.debug(
                     f"[Block.get_bias_voltage] Exception {e}; attempt {attempt}"
                 )

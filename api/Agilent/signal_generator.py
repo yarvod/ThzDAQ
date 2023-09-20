@@ -80,6 +80,8 @@ class SignalGenerator:
         if value > 15:
             raise Exception("Value greater then 15 dBm unsupported!")
         k = int(round((abs(value) - 10) / 10))
+        if k < 0:
+            k = 0
         attenuation = self.ATTENUATOR_RANGE[k]
         alc = value + attenuation
         self.set_alc_level(0)
