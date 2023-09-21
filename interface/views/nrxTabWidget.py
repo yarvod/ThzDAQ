@@ -14,13 +14,17 @@ from PyQt6.QtWidgets import (
     QCheckBox,
 )
 
+from api.Chopper import chopper_manager
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.windows.biasPowerGraphWindow import BiasPowerGraphWindow
+from interface.windows.biasPowerGraphWindow import (
+    BiasPowerGraphWindow,
+    GridBiasPowerDiffGraphWindow,
+)
 from utils.logger import logger
 
 
@@ -79,6 +83,34 @@ class NRXBlockStreamThread(QThread):
 class BiasPowerThread(QThread):
     results = pyqtSignal(dict)
     stream_results = pyqtSignal(dict)
+    stream_diff_results = pyqtSignal(dict)
+
+    def get_results_format(self):
+        if state.CHOPPER_SWITCH:
+            return {
+                "hot": {
+                    "current_get": [],
+                    "voltage_set": [],
+                    "voltage_get": [],
+                    "power": [],
+                    "time": [],
+                },
+                "cold": {
+                    "current_get": [],
+                    "voltage_set": [],
+                    "voltage_get": [],
+                    "power": [],
+                    "time": [],
+                },
+            }
+        else:
+            return {
+                "current_get": [],
+                "voltage_set": [],
+                "voltage_get": [],
+                "power": [],
+                "time": [],
+            }
 
     def run(self):
         nrx = NRXPowerMeter(
@@ -93,61 +125,88 @@ class BiasPowerThread(QThread):
             ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         block.connect()
-        results = {
-            "current_get": [],
-            "voltage_set": [],
-            "voltage_get": [],
-            "power": [],
-            "time": [],
-        }
+        results = self.get_results_format()
         v_range = np.linspace(
             state.BLOCK_BIAS_VOLT_FROM * 1e-3,
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,
         )
-        measure = MeasureModel.objects.create(
-            measure_type=MeasureType.BIAS_POWER, data={}
+        measure_type = (
+            MeasureType.BIAS_POWER
+            if not state.CHOPPER_SWITCH
+            else MeasureType.CHOPPER_BIAS_POWER
         )
+        measure = MeasureModel.objects.create(measure_type=measure_type, data={})
         measure.save(False)
         initial_v = block.get_bias_voltage()
         initial_time = time.time()
-        for i, voltage_set in enumerate(v_range):
-            if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
-                break
-
-            block.set_bias_voltage(voltage_set)
-
-            if i == 0:
-                time.sleep(0.5)
-                initial_time = time.time()
-
-            time.sleep(state.BLOCK_BIAS_STEP_DELAY)
-            voltage_get = block.get_bias_voltage()
-            if not voltage_get:
+        for switcher in range(2):
+            if not state.CHOPPER_SWITCH and switcher == 0:
                 continue
-            current_get = block.get_bias_current()
-            if not current_get:
-                continue
-            power = nrx.get_power()
-            time_step = time.time() - initial_time
+            chopper_state = None
+            if state.CHOPPER_SWITCH:
+                chopper_state = "hot" if switcher == 0 else "cold"
+            for i, voltage_set in enumerate(v_range):
+                if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
+                    break
 
-            self.stream_results.emit(
-                {
-                    "x": [voltage_get * 1e3],
-                    "y": [power],
-                    "new_plot": i == 0,
-                }
-            )
+                block.set_bias_voltage(voltage_set)
 
-            results["voltage_set"].append(voltage_set)
-            results["voltage_get"].append(voltage_get)
-            results["current_get"].append(current_get)
-            results["power"].append(power)
-            results["time"].append(time_step)
-            measure.data = results
+                if i == 0:
+                    time.sleep(0.5)
+                    initial_time = time.time()
+
+                time.sleep(state.BLOCK_BIAS_STEP_DELAY)
+                voltage_get = block.get_bias_voltage()
+                if not voltage_get:
+                    continue
+                current_get = block.get_bias_current()
+                if not current_get:
+                    continue
+                power = nrx.get_power()
+                time_step = time.time() - initial_time
+
+                self.stream_results.emit(
+                    {
+                        "x": [voltage_get * 1e3],
+                        "y": [power],
+                        "new_plot": i == 0,
+                    }
+                )
+
+                if state.CHOPPER_SWITCH:
+                    results[chopper_state]["voltage_set"].append(voltage_set)
+                    results[chopper_state]["voltage_get"].append(voltage_get)
+                    results[chopper_state]["current_get"].append(current_get)
+                    results[chopper_state]["power"].append(power)
+                    results[chopper_state]["time"].append(time_step)
+                else:
+                    results["voltage_set"].append(voltage_set)
+                    results["voltage_get"].append(voltage_get)
+                    results["current_get"].append(current_get)
+                    results["power"].append(power)
+                    results["time"].append(time_step)
+
+                measure.data = results
+
+            if state.CHOPPER_SWITCH:
+                chopper_manager.chopper.path0()
+                time.sleep(2)
+
+        if state.CHOPPER_SWITCH:
+            hot = np.array(results["hot"]["power"])
+            cold = np.array(results["cold"]["power"])
+            if len(hot) and len(cold):
+                min_ind = min([len(cold), len(hot)])
+                power_diff = hot[:min_ind] - cold[:min_ind]
+                self.stream_diff_results.emit(
+                    {
+                        "x": [volt * 1e3 for volt in results["hot"]["voltage_get"]],
+                        "y": power_diff.tolist(),
+                    }
+                )
 
         block.set_bias_voltage(initial_v)
-        measure.finished = datetime.now()
         measure.save()
         self.results.emit(results)
         self.finished.emit()
@@ -174,6 +233,7 @@ class NRXTabWidget(QWidget):
         self.layout = QVBoxLayout(self)
         self.biasPowerGraphWindow = None
         self.powerStreamGraphWindow = None
+        self.gridBiasPowerDiffGraphWindow = None
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
         self.layout.addWidget(self.groupNRX)
@@ -304,6 +364,10 @@ class NRXTabWidget(QWidget):
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
+        self.chopperSwitch = QCheckBox(self)
+        self.chopperSwitch.setText("Enable chopper Hot/Cold switching")
+        self.chopperSwitch.setChecked(state.CHOPPER_SWITCH)
+
         self.btnStartBiasPowerScan = QPushButton("Start Scan")
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_bias_power)
 
@@ -319,8 +383,9 @@ class NRXTabWidget(QWidget):
         layout.addWidget(self.voltPoints, 3, 1)
         layout.addWidget(self.voltStepDelayLabel, 4, 0)
         layout.addWidget(self.voltStepDelay, 4, 1)
-        layout.addWidget(self.btnStartBiasPowerScan, 5, 0)
-        layout.addWidget(self.btnStopBiasPowerScan, 5, 1)
+        layout.addWidget(self.chopperSwitch, 5, 0)
+        layout.addWidget(self.btnStartBiasPowerScan, 6, 0)
+        layout.addWidget(self.btnStopBiasPowerScan, 6, 1)
 
         self.groupBiasPowerScan.setLayout(layout)
 
@@ -332,8 +397,13 @@ class NRXTabWidget(QWidget):
         state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
+        state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
         self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
+        if state.CHOPPER_SWITCH:
+            self.bias_power_thread.stream_diff_results.connect(
+                self.show_bias_power_diff_graph
+            )
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -358,3 +428,12 @@ class NRXTabWidget(QWidget):
             new_plot=results.get("new_plot", True),
         )
         self.biasPowerGraphWindow.show()
+
+    def show_bias_power_diff_graph(self, results):
+        if self.gridBiasPowerDiffGraphWindow is None:
+            self.gridBiasPowerDiffGraphWindow = GridBiasPowerDiffGraphWindow()
+        self.gridBiasPowerDiffGraphWindow.plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+        )
+        self.gridBiasPowerDiffGraphWindow.show()

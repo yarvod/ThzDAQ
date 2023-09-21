@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
 )
 
-from api.Chopper import ChopperManager, chopper_manager
+from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button
 from store.state import state
 
