@@ -13,6 +13,7 @@ class MeasureType:
     CL_CURVE = "cl_curve"
     BIAS_VNA = "bias_vna"
     BIAS_POWER = "bias_power"
+    CHOPPER_BIAS_POWER = "chopper_bias_power"
     GRID_BIAS_POWER = "grid_bias_power"
     GRID_CHOPPER_BIAS_POWER = "grid_chopper_bias_power"
     POWER_STREAM = "power_stream"
@@ -25,6 +26,7 @@ class MeasureType:
             (CL_CURVE, "CL curve"),
             (BIAS_VNA, "BIAS VNA"),
             (BIAS_POWER, "BIAS Power"),
+            (CHOPPER_BIAS_POWER, "Chopper BIAS Power"),
             (GRID_BIAS_POWER, "GRID BIAS Power"),
             (GRID_CHOPPER_BIAS_POWER, "GRID Chopper BIAS Power"),
             (POWER_STREAM, "Power stream"),

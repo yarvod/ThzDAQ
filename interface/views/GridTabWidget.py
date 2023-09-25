@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Arduino.grid import GridManager
-from api.Chopper import ChopperManager
+from api.Chopper import chopper_manager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
@@ -119,7 +119,7 @@ class StepBiasPowerThread(QThread):
         self.initial_v = self.block.get_bias_voltage()
         initial_time = time.time()
         if state.CHOPPER_SWITCH:
-            ChopperManager._chopper.align()
+            chopper_manager.chopper.align()
         self.motor.rotate(state.GRID_ANGLE_START)
         time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
         for ind, angle in enumerate(angle_range):
@@ -182,7 +182,7 @@ class StepBiasPowerThread(QThread):
                     self.measure.data[ind] = results
 
                 if state.CHOPPER_SWITCH:
-                    ChopperManager._chopper.path0()
+                    chopper_manager.chopper.path0()
                     time.sleep(2)
 
             if state.CHOPPER_SWITCH:
@@ -194,7 +194,7 @@ class StepBiasPowerThread(QThread):
                 power_diff = hot[:min_ind] - cold[:min_ind]
                 self.stream_diff_results.emit(
                     {
-                        "x": results["hot"]["voltage_get"],
+                        "x": [volt * 1e3 for volt in results["hot"]["voltage_get"]],
                         "y": power_diff.tolist(),
                     }
                 )
