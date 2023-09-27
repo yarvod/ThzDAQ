@@ -34,6 +34,9 @@ class TemperatureController(BaseInstrument):
     def get_temperature_c(self) -> float:
         return float(self.query("KRDG? C"))
 
+    def get_temperature_b(self) -> float:
+        return float(self.query("KRDG? B"))
+
     def get_heater_output(self, output: int = 1):
         """Heater output in percent (%)"""
         return self.query(f"HTR? {output}")

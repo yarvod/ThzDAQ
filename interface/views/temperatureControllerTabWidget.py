@@ -38,14 +38,17 @@ class MonitorThread(QThread):
         while state.LAKE_SHORE_STREAM_THREAD:
             temp_a = tc.get_temperature_a()
             temp_c = tc.get_temperature_c()
+            temp_b = tc.get_temperature_b()
             if state.LAKE_SHORE_STREAM_DATA:
                 measure.data["temp_a"].append(temp_a)
                 measure.data["temp_c"].append(temp_c)
+                measure.data["temp_b"].append(temp_b)
                 measure.data["time"].append(time.time() - start_time)
             self.temperatures.emit(
                 {
                     "temp_a": temp_a,
                     "temp_c": temp_c,
+                    "temp_b": temp_b,
                     "time": time.time() - start_time,
                     "reset": i == 0,
                 }
@@ -89,12 +92,19 @@ class TemperatureControllerTabWidget(QWidget):
         self.groupMonitor.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+        control_layout = QGridLayout()
+        monitor_layout = QGridLayout()
 
         self.tempALabel = QLabel(self)
         self.tempALabel.setText("Temp A, K")
         self.tempA = QLabel(self)
         self.tempA.setText("0")
+
+        self.tempBLabel = QLabel(self)
+        self.tempBLabel.setText("Temp B, K")
+        self.tempB = QLabel(self)
+        self.tempB.setText("0")
 
         self.tempCLabel = QLabel(self)
         self.tempCLabel.setText("Temp C, K")
@@ -127,18 +137,22 @@ class TemperatureControllerTabWidget(QWidget):
         self.btnStopMonitor.clicked.connect(self.stopMonitor)
         self.btnStopMonitor.setEnabled(False)
 
-        layout.addWidget(self.tempALabel, 0, 0)
-        layout.addWidget(self.tempCLabel, 0, 1)
-        layout.addWidget(self.tempA, 1, 0)
-        layout.addWidget(self.tempC, 1, 1)
-        layout.addWidget(self.temperatureStreamStepDelayLabel, 2, 0)
-        layout.addWidget(self.temperatureStreamStepDelay, 2, 1)
-        layout.addWidget(self.checkTemperatureStreamPlot, 3, 0)
-        layout.addWidget(self.checkTemperatureStoreData, 3, 1)
-        layout.addWidget(self.temperatureStreamTimeLabel, 4, 0)
-        layout.addWidget(self.temperatureStreamTime, 4, 1)
-        layout.addWidget(self.btnStartMonitor, 5, 0)
-        layout.addWidget(self.btnStopMonitor, 5, 1)
+        monitor_layout.addWidget(self.tempALabel, 0, 0)
+        monitor_layout.addWidget(self.tempBLabel, 0, 1)
+        monitor_layout.addWidget(self.tempCLabel, 0, 2)
+        monitor_layout.addWidget(self.tempA, 1, 0)
+        monitor_layout.addWidget(self.tempB, 1, 1)
+        monitor_layout.addWidget(self.tempC, 1, 2)
+        layout.addLayout(monitor_layout)
+        control_layout.addWidget(self.temperatureStreamStepDelayLabel, 2, 0)
+        control_layout.addWidget(self.temperatureStreamStepDelay, 2, 1)
+        control_layout.addWidget(self.checkTemperatureStreamPlot, 3, 0)
+        control_layout.addWidget(self.checkTemperatureStoreData, 3, 1)
+        control_layout.addWidget(self.temperatureStreamTimeLabel, 4, 0)
+        control_layout.addWidget(self.temperatureStreamTime, 4, 1)
+        control_layout.addWidget(self.btnStartMonitor, 5, 0)
+        control_layout.addWidget(self.btnStopMonitor, 5, 1)
+        layout.addLayout(control_layout)
 
         self.groupMonitor.setLayout(layout)
 
@@ -168,6 +182,7 @@ class TemperatureControllerTabWidget(QWidget):
     def updateMonitor(self, measure: Dict):
         self.tempA.setText(f"{measure.get('temp_a')}")
         self.tempC.setText(f"{measure.get('temp_c')}")
+        self.tempB.setText(f"{measure.get('temp_b')}")
         if state.LAKE_SHORE_STREAM_PLOT_GRAPH:
             self.show_temperature_stream_graph(measure=measure)
 
@@ -178,6 +193,12 @@ class TemperatureControllerTabWidget(QWidget):
             ds_id="A",
             x=measure.get("time"),
             y=measure.get("temp_a"),
+            reset_data=measure.get("reset"),
+        )
+        self.temperatureStreamGraphWindow.plotNew(
+            ds_id="B",
+            x=measure.get("time"),
+            y=measure.get("temp_b"),
             reset_data=measure.get("reset"),
         )
         self.temperatureStreamGraphWindow.plotNew(
