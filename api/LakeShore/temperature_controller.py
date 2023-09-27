@@ -16,8 +16,8 @@ class TemperatureController(BaseInstrument):
         *args,
         **kwargs,
     ):
-        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"), delay=delay)
         super().__init__(host, gpib, adapter, *args, **kwargs)
+        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"), delay=delay)
 
     def idn(self) -> str:
         return self.query("*IDN?")
