@@ -31,7 +31,7 @@ class MonitorThread(QThread):
         if state.LAKE_SHORE_STREAM_DATA:
             measure = MeasureModel.objects.create(
                 measure_type=MeasureType.TEMPERATURE_STREAM,
-                data={"temp_a": [], "temp_c": [], "time": []},
+                data={"temp_a": [], "temp_c": [], "temp_b": [], "time": []},
             )
             measure.save(finish=False)
         i = 0
