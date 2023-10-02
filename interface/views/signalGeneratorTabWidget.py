@@ -1,7 +1,6 @@
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QSizePolicy,
     QGroupBox,
     QLabel,
     QPushButton,
