@@ -69,6 +69,7 @@ class StepBiasPowerThread(QThread):
         self.block.connect()
 
     def get_results_format(self) -> Dict:
+        # TODO: вынести в dataclass, там же можно сделать и валидацию
         if state.CHOPPER_SWITCH:
             return {
                 "id": 0,
@@ -100,6 +101,19 @@ class StepBiasPowerThread(QThread):
             "time": [],
         }
 
+    # TODO: разбить вложернность на отдельные методы и передавать агрументы в нх по очереди, делая соовтв. манипуляции.
+    #  После запусть все через (пример):
+    # download - функция, image - аргумент
+    # Код проходится по всем потокам, запускает их, дожидается завершиения
+    # "`
+    # import concurrent.futures
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     executor.map(first_run, args)
+    #     executor.map(seconds_run, args, args_from_first_run)
+    #     executor.map(third_run, args, args_from_first_run, args_from_second_run)
+    # "`
+    # Еще про Thread state:
+    # https://pythondev.readthedocs.io/pystate.html
     def run(self):
         nrx = NRXPowerMeter(
             ip=state.NRX_IP,
@@ -114,6 +128,7 @@ class StepBiasPowerThread(QThread):
             state.GRID_ANGLE_STEP,
         )
         volt_range = np.linspace(
+            # TODO: вынести magic number в константы, описание какое-либо
             state.BLOCK_BIAS_VOLT_FROM * 1e-3,
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,

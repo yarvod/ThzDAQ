@@ -46,6 +46,7 @@ class SignalGenerator:
         # return self.adapter.query("*TST?", eq_addr=self.gpib)
         result = self.idn()
         if "Agilent" in result:
+            # TODO: Enum для статусов
             return "OK"
         return "Error"
 
@@ -78,6 +79,8 @@ class SignalGenerator:
     def set_alc_level(self, value: float) -> None:
         return self.adapter.write(f":POWer:ALC:LEVel {value}", eq_addr=self.gpib)
 
+    # TODO: set_alc_level, get_frequency, set_attenuation_level - можно сделать в одном методе (Enum)
+
     def get_amplitude(self) -> float:
         attenuation = self.get_attenuation_level()
         asc = self.get_alc_level()
@@ -85,6 +88,7 @@ class SignalGenerator:
 
     def set_amplitude(self, value: float) -> None:
         if value > 15:
+            # TODO: лучше кастомный Exception
             raise Exception("Value greater then 15 dBm unsupported!")
         k = int(round((abs(value) - 10) / 10))
         if k < 0:
@@ -100,6 +104,7 @@ class SignalGenerator:
         return self.adapter.query(":SYSTem:OEMHead:SELect?")
 
     def set_oem_status(self, value: str) -> None:
+        # TODO: валидацию сделать, вызвать Exception если не подходящее значение
         """ON|OFF|NONE|REAR|FRONT"""
         self.adapter.write(f":SYSTem:OEMHead:SELect {value}")
 
