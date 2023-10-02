@@ -53,6 +53,13 @@ class SignalGenerator:
         assert self.adapter is not None, "Adapter couldn't be None"
         return self.adapter.write("*RST", eq_addr=self.gpib)
 
+    def get_rf_output_state(self) -> bool:
+        return bool(int(self.adapter.query("OUTPut?", eq_addr=self.gpib)))
+
+    def set_rf_output_state(self, value: bool) -> None:
+        output = 1 if value else 0
+        self.adapter.write(f"OUTPut {output}")
+
     def get_frequency(self) -> float:
         return float(self.adapter.query(":FREQuency:FIXed? ", eq_addr=self.gpib))
 
