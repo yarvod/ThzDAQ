@@ -6,11 +6,13 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QGridLayout,
     QComboBox,
+    QCheckBox,
 )
 
 from api.Agilent.signal_generator import SignalGenerator
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.Lines import HLine
 from store.state import state
 
 
@@ -85,13 +87,16 @@ class SignalGeneratorTabWidget(QWidget):
         self.rfOutput = QComboBox(self)
         self.rfOutput.addItems(["RF OFF", "RF ON"])
         self.btnRfOutput = Button("Set RF Output")
-        self.btnRfOutput.clicked.connect(self.setRfOutput)
+        self.btnRfOutput.clicked.connect(self.set_rf_output)
 
+        self.instantUpdateFrequency = QCheckBox(self)
+        self.instantUpdateFrequency.setText("Instant frequency set")
         self.frequencyLabel = QLabel(self)
         self.frequencyLabel.setText("Frequency, GHz")
         self.frequency = DoubleSpinBox(self)
         self.frequency.setRange(1, 300)
         self.frequency.setValue(14)
+        self.frequency.valueChanged.connect(self.update_stream_frequency)
         self.btnSetFrequency = QPushButton("Set frequency")
         self.btnSetFrequency.clicked.connect(self.set_frequency)
 
@@ -106,12 +111,15 @@ class SignalGeneratorTabWidget(QWidget):
         grid_layout.addWidget(self.rfOutputLabel, 0, 0)
         grid_layout.addWidget(self.rfOutput, 0, 1)
         grid_layout.addWidget(self.btnRfOutput, 0, 2)
-        grid_layout.addWidget(self.frequencyLabel, 1, 0)
-        grid_layout.addWidget(self.frequency, 1, 1)
-        grid_layout.addWidget(self.btnSetFrequency, 1, 2)
-        grid_layout.addWidget(self.amplitudeLabel, 2, 0)
-        grid_layout.addWidget(self.amplitude, 2, 1)
-        grid_layout.addWidget(self.btnSetAmplitude, 2, 2)
+        grid_layout.addWidget(HLine(self), 1, 0, 1, 3)
+        grid_layout.addWidget(self.instantUpdateFrequency, 2, 0)
+        grid_layout.addWidget(self.frequencyLabel, 3, 0)
+        grid_layout.addWidget(self.frequency, 3, 1)
+        grid_layout.addWidget(self.btnSetFrequency, 3, 2)
+        grid_layout.addWidget(HLine(self), 4, 0, 1, 3)
+        grid_layout.addWidget(self.amplitudeLabel, 5, 0)
+        grid_layout.addWidget(self.amplitude, 5, 1)
+        grid_layout.addWidget(self.btnSetAmplitude, 5, 2)
         layout.addLayout(grid_layout)
 
         self.groupSignalGenerator.setLayout(layout)
@@ -126,7 +134,11 @@ class SignalGeneratorTabWidget(QWidget):
         agilent = SignalGenerator(host=state.PROLOGIX_IP)
         agilent.set_amplitude(state.AGILENT_SIGNAL_GENERATOR_AMPLITUDE)
 
-    def setRfOutput(self):
+    def set_rf_output(self):
         state.AGILENT_SIGNAL_GENERATOR_OUTPUT = self.rfOutput.currentIndex() == 1
         agilent = SignalGenerator(host=state.PROLOGIX_IP)
         agilent.set_rf_output_state(state.AGILENT_SIGNAL_GENERATOR_OUTPUT)
+
+    def update_stream_frequency(self):
+        if self.instantUpdateFrequency.isChecked():
+            self.set_frequency()
