@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Iterable
 
 from PyQt6 import QtGui
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
 import pyqtgraph as pg
 
 
@@ -20,15 +20,20 @@ class GraphWindow(QWidget):
         super().__init__()
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
-        layout = QVBoxLayout()
+        vlayout = QVBoxLayout()
+        hlayout = QHBoxLayout()
         self.graphWidget = pg.PlotWidget()
         self.btnRemoveGraphs = QPushButton("Remove hidden graphs")
         self.btnRemoveGraphs.clicked.connect(self.remove_hidden_graphs)
-        layout.addWidget(self.btnRemoveGraphs)
-        layout.addWidget(self.graphWidget)
+        self.btnRemoveAllGraphs = QPushButton("Remove all graphs")
+        self.btnRemoveAllGraphs.clicked.connect(self.remove_all_graphs)
+        hlayout.addWidget(self.btnRemoveGraphs)
+        hlayout.addWidget(self.btnRemoveAllGraphs)
+        vlayout.addLayout(hlayout)
+        vlayout.addWidget(self.graphWidget)
         self.datasets = defaultdict(dict)
         self.prepare()
-        self.setLayout(layout)
+        self.setLayout(vlayout)
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
@@ -88,3 +93,10 @@ class GraphWindow(QWidget):
         for ds_id, ds in self.datasets.items():
             if ds_id not in items_to_remove.keys():
                 self.datasets[ds_id] = ds
+
+    def remove_all_graphs(self):
+        plotItem = self.graphWidget.getPlotItem()
+        items_to_remove = {int(item.name()): item for item in plotItem.items}
+        for item in items_to_remove.values():
+            plotItem.removeItem(item)
+        self.datasets = defaultdict(dict)

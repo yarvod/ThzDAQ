@@ -2,8 +2,8 @@ from interface.windows.graphWindow import GraphWindow
 
 
 class BiasPowerGraphWindow(GraphWindow):
-    window_title = "Bias Power Graphs"
-    graph_title = "Power (Bias Voltage)"
+    window_title = "P-V Graphs"
+    graph_title = "Power (Voltage)"
     x_label = "Bias Voltage, mV"
     y_label = "Power, dBm"
 
@@ -23,7 +23,7 @@ class GridBiasGraphWindow(GraphWindow):
 
 
 class GridBiasPowerDiffGraphWindow(GraphWindow):
-    window_title = "GRID Diff P-V Graphs"
-    graph_title = "Power (Voltage)"
+    window_title = "GRID Y-factor P-V Graphs"
+    graph_title = "Y-factor (Voltage)"
     x_label = "Voltage, mV"
     y_label = "Power, dBm"

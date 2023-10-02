@@ -10,17 +10,18 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QGroupBox,
     QLabel,
-    QPushButton,
     QComboBox,
     QFormLayout,
     QScrollArea,
     QCheckBox,
+    QProgressBar,
 )
 
 from api.Arduino.grid import GridManager
 from api.Chopper import chopper_manager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
+from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
@@ -41,6 +42,7 @@ class StepBiasPowerThread(QThread):
     results = pyqtSignal(list)
     stream_results = pyqtSignal(dict)
     stream_diff_results = pyqtSignal(dict)
+    progress = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -116,36 +118,35 @@ class StepBiasPowerThread(QThread):
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,
         )
+        chopper_range = range(2) if state.CHOPPER_SWITCH else range(1)
+        total_steps = len(chopper_range) * len(angle_range) * len(volt_range)
         self.initial_v = self.block.get_bias_voltage()
         initial_time = time.time()
         if state.CHOPPER_SWITCH:
             chopper_manager.chopper.align()
         self.motor.rotate(state.GRID_ANGLE_START)
         time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
-        for ind, angle in enumerate(angle_range):
+        for angle_step, angle in enumerate(angle_range):
             if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                 break
 
             results = self.get_results_format()
-            results["id"] = ind
+            results["id"] = angle_step
             results["angle"] = angle
 
-            if ind != 0:
+            if angle_step != 0:
                 self.motor.rotate(angle)
             time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
-
-            for switcher in range(2):
-                if not state.CHOPPER_SWITCH and switcher == 0:
-                    continue
+            for chopper_step in chopper_range:
                 chopper_state = None
                 if state.CHOPPER_SWITCH:
-                    chopper_state = "hot" if switcher == 0 else "cold"
-                for i, voltage_set in enumerate(volt_range):
+                    chopper_state = "hot" if chopper_step == 0 else "cold"
+                for voltage_step, voltage_set in enumerate(volt_range):
                     if not state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD:
                         break
 
                     self.block.set_bias_voltage(voltage_set)
-                    if i == 0:  # self.block need time to set first point
+                    if voltage_step == 0:  # self.block need time to set first point
                         time.sleep(0.5)
                     time.sleep(state.BLOCK_BIAS_STEP_DELAY)
                     voltage_get = self.block.get_bias_voltage()
@@ -157,13 +158,22 @@ class StepBiasPowerThread(QThread):
                     power = nrx.get_power()
                     time_step = time.time() - initial_time
 
+                    step = (
+                        (angle_step * len(chopper_range) + chopper_step)
+                        * len(volt_range)
+                        + voltage_step
+                        + 1
+                    )
+                    progress = int(step / total_steps * 100)
+                    self.progress.emit(progress)
+
                     self.stream_results.emit(
                         {
                             "x": [voltage_get * 1e3],
                             "y": [power]
                             if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE
-                            else [current_get],
-                            "new_plot": i == 0,
+                            else [current_get * 1e6],
+                            "new_plot": voltage_step == 0,
                         }
                     )
                     if state.CHOPPER_SWITCH:
@@ -179,7 +189,7 @@ class StepBiasPowerThread(QThread):
                         results["power"].append(power)
                         results["time"].append(time_step)
 
-                    self.measure.data[ind] = results
+                    self.measure.data[angle_step] = results
 
                 if state.CHOPPER_SWITCH:
                     chopper_manager.chopper.path0()
@@ -207,6 +217,7 @@ class StepBiasPowerThread(QThread):
         self.motor.rotate(self.initial_angle, finish=True)
         self.block.set_bias_voltage(self.initial_v)
         self.measure.save()
+        self.progress.emit(0)
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def terminate(self) -> None:
@@ -307,10 +318,13 @@ class GridTabWidget(QScrollArea):
         self.chopperSwitch.setText("Enable chopper Hot/Cold switching")
         self.chopperSwitch.setChecked(state.CHOPPER_SWITCH)
 
-        self.btnStartBiasPowerScan = QPushButton("Start Scan")
+        self.progress = QProgressBar(self)
+        self.progress.setValue(0)
+
+        self.btnStartBiasPowerScan = Button("Start Scan", animate=True)
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_step_bias_power)
 
-        self.btnStopBiasPowerScan = QPushButton("Stop Scan")
+        self.btnStopBiasPowerScan = Button("Stop Scan")
         self.btnStopBiasPowerScan.clicked.connect(self.stop_measure_step_bias_power)
         self.btnStopBiasPowerScan.setEnabled(False)
 
@@ -325,6 +339,7 @@ class GridTabWidget(QScrollArea):
         layout.addRow(HLine(self))
         layout.addRow(self.gridPlotTypeLabel, self.gridPlotType)
         layout.addRow(self.chopperSwitch)
+        layout.addRow(self.progress)
         layout.addRow(self.btnStartBiasPowerScan)
         layout.addRow(self.btnStopBiasPowerScan)
 
@@ -349,6 +364,9 @@ class GridTabWidget(QScrollArea):
             self.bias_power_thread.stream_diff_results.connect(
                 self.show_bias_power_diff_graph
             )
+
+        self.bias_power_thread.progress.connect(lambda x: self.progress.setValue(x))
+        self.bias_power_thread.finished.connect(lambda: self.progress.setValue(0))
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)

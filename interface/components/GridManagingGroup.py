@@ -1,7 +1,8 @@
 from PyQt6.QtCore import QThread
-from PyQt6.QtWidgets import QGroupBox, QGridLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QGroupBox, QGridLayout, QLabel
 
 from api.Arduino.grid import GridManager
+from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 
@@ -29,9 +30,9 @@ class GridManagingGroup(QGroupBox):
         self.angle = DoubleSpinBox(self, lambda: self.rotate())
         self.angle.setRange(-720, 720)
         self.angle.setValue(state.GRID_ANGLE)
-        self.btnRotate = QPushButton("Rotate")
+        self.btnRotate = Button("Rotate", animate=True)
         self.btnRotate.clicked.connect(self.rotate)
-        self.btnSetZero = QPushButton("Set new zero")
+        self.btnSetZero = Button("Set new zero", animate=True)
         self.btnSetZero.clicked.connect(self.setZero)
 
         layout.addWidget(self.angleCurrentLabel, 0, 0)
