@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.LakeShore.temperature_controller import TemperatureController
+from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from store.base import MeasureModel, MeasureType
@@ -130,10 +131,10 @@ class TemperatureControllerTabWidget(QWidget):
         self.temperatureStreamTime.setRange(10, 43200)
         self.temperatureStreamTime.setValue(state.LAKE_SHORE_STREAM_TIME)
 
-        self.btnStartMonitor = QPushButton("Start")
+        self.btnStartMonitor = Button("Start", animate=True)
         self.btnStartMonitor.clicked.connect(self.startMonitor)
 
-        self.btnStopMonitor = QPushButton("Stop")
+        self.btnStopMonitor = Button("Stop")
         self.btnStopMonitor.clicked.connect(self.stopMonitor)
         self.btnStopMonitor.setEnabled(False)
 
@@ -231,7 +232,7 @@ class TemperatureControllerTabWidget(QWidget):
         self.setupPoint.setRange(0.1, 300)
         self.setupPoint.setValue(292)
 
-        self.btnSetHeater = QPushButton("Set Heater")
+        self.btnSetHeater = Button("Set Heater", animate=True)
         self.btnSetHeater.clicked.connect(self.set_heater)
 
         layout.addRow(self.heaterRangeLabel, self.heaterRange)

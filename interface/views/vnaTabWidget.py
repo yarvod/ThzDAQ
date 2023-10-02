@@ -15,8 +15,10 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QComboBox,
     QCheckBox,
+    QProgressBar,
 )
 
+from interface.components.ui.Button import Button
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
@@ -29,7 +31,7 @@ from utils.logger import logger
 
 class BiasReflectionThread(QThread):
     results = pyqtSignal(dict)
-    progress = pyqtSignal(float)
+    progress = pyqtSignal(int)
 
     def run(self):
         vna = VNABlock(
@@ -98,7 +100,7 @@ class BiasReflectionThread(QThread):
                 f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
             )
             measure.data = results
-            self.progress.emit(proc)
+            self.progress.emit(int(proc))
 
         block.set_bias_voltage(initial_v)
         block.disconnect()
@@ -157,9 +159,7 @@ class VNAGetReflectionThread(QThread):
         super().exit(returnCode)
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
-    def quit(
-        self,
-    ):
+    def quit(self):
         super().quit()
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
@@ -213,7 +213,7 @@ class VNATabWidget(QWidget):
         self.vnaStoreData.setText("Store Data")
         self.vnaStoreData.setChecked(state.VNA_STORE_DATA)
 
-        self.btnGetReflection = QPushButton("Get reflection")
+        self.btnGetReflection = Button("Get reflection", animate=True)
         self.btnGetReflection.clicked.connect(self.getReflection)
 
         layout.addRow("Parameter:", self.vnaParameter)
@@ -259,12 +259,12 @@ class VNATabWidget(QWidget):
         self.scanStepDelay.setRange(0, 10)
         self.scanStepDelay.setValue(state.BIAS_REFL_DELAY)
 
-        self.scanProgressLabel = QLabel("Progress")
-        self.scanProgress = QLabel("0 %")
+        self.scanProgress = QProgressBar(self)
+        self.scanProgress.setValue(0)
 
-        self.btnBiasReflScan = QPushButton("Scan Bias Reflection")
+        self.btnBiasReflScan = Button("Scan Bias Reflection", animate=True)
         self.btnBiasReflScan.clicked.connect(self.scan_bias_reflection)
-        self.btnStopBiasReflScan = QPushButton("Stop Scan")
+        self.btnStopBiasReflScan = Button("Stop Scan")
         self.btnStopBiasReflScan.clicked.connect(self.stop_scan_bias_reflection)
         self.btnStopBiasReflScan.setEnabled(False)
 
@@ -276,8 +276,7 @@ class VNATabWidget(QWidget):
         layout.addWidget(self.voltPoints, 3, 1)
         layout.addWidget(self.scanStepDelayLabel, 4, 0)
         layout.addWidget(self.scanStepDelay, 4, 1)
-        layout.addWidget(self.scanProgressLabel, 5, 0)
-        layout.addWidget(self.scanProgress, 5, 1)
+        layout.addWidget(self.scanProgress, 5, 0, 1, 2)
         layout.addWidget(self.btnBiasReflScan, 6, 0)
         layout.addWidget(self.btnStopBiasReflScan, 6, 1)
 
@@ -323,7 +322,12 @@ class VNATabWidget(QWidget):
         state.BIAS_REFL_VOLT_POINTS = int(self.voltPoints.value())
         state.BIAS_REFL_DELAY = self.scanStepDelay.value()
 
-        self.bias_reflection_thread.progress.connect(self.set_bias_reflection_progress)
+        self.bias_reflection_thread.progress.connect(
+            lambda x: self.scanProgress.setValue(x)
+        )
+        self.bias_reflection_thread.finished.connect(
+            lambda: self.scanProgress.setValue(0)
+        )
         self.bias_reflection_thread.start()
 
         self.btnBiasReflScan.setEnabled(False)
@@ -338,6 +342,3 @@ class VNATabWidget(QWidget):
     def stop_scan_bias_reflection(self):
         self.bias_reflection_thread.quit()
         self.bias_reflection_thread.exit(0)
-
-    def set_bias_reflection_progress(self, progress):
-        self.scanProgress.setText(f"{progress} %")

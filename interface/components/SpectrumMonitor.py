@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
+from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
 from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
@@ -48,9 +49,9 @@ class SpectrumMonitor(QGroupBox):
         self.timeDelay.setRange(0.4, 1)
         self.timeDelay.setValue(state.SPECTRUM_STEP_DELAY)
 
-        self.btnStartSpectrum = QPushButton("Start stream spectrum")
+        self.btnStartSpectrum = Button("Start stream spectrum", animate=True)
         self.btnStartSpectrum.clicked.connect(self.startStreamSpectrum)
-        self.btnStopSpectrum = QPushButton("Stop stream spectrum")
+        self.btnStopSpectrum = Button("Stop stream spectrum")
         self.btnStopSpectrum.clicked.connect(lambda: self.spectrum_thread.terminate())
         self.btnStopSpectrum.setEnabled(False)
 

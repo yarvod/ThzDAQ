@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
+from interface.components.ui.Button import Button
 from store.state import state
 
 
@@ -37,7 +38,7 @@ class SetupSpectrumGroup(QGroupBox):
         self.status = QLabel(self)
         self.status.setText("Doesn't initialized yet!")
 
-        self.btnInitSpectrum = QPushButton("Initialize")
+        self.btnInitSpectrum = Button("Initialize", animate=True)
         self.btnInitSpectrum.clicked.connect(self.initialize_spectrum)
 
         form_layout.addRow(self.gpibAddressLabel, self.gpibAddress)

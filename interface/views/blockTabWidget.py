@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
+from interface.components.ui.Button import Button
 from store.state import state
 
 from api.Scontel.sis_block import SisBlock
@@ -478,10 +479,10 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.ctrlCurrentGet.setText("0.0")
         self.ctrlCurrentGet.setStyleSheet("font-size: 23px; font-weight: bold;")
 
-        self.btnStartStreamBlock = QPushButton("Start Stream")
+        self.btnStartStreamBlock = Button("Start Stream", animate=True)
         self.btnStartStreamBlock.clicked.connect(self.startStreamBlock)
 
-        self.btnStopStreamBlock = QPushButton("Stop Stream")
+        self.btnStopStreamBlock = Button("Stop Stream")
         self.btnStopStreamBlock.setEnabled(False)
         self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
@@ -526,7 +527,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
-        self.btn_set_voltage = QPushButton("Set BIAS voltage")
+        self.btn_set_voltage = Button("Set BIAS voltage", animate=True)
         self.btn_set_voltage.clicked.connect(lambda: self.set_voltage())
 
         self.ctrlCurrentSetLabel = QLabel(self)
@@ -536,7 +537,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
             state.BLOCK_CTRL_CURR_MIN_VALUE, state.BLOCK_CTRL_CURR_MAX_VALUE
         )
 
-        self.btnSetCTRLCurrent = QPushButton("Set CL current")
+        self.btnSetCTRLCurrent = Button("Set CL current", animate=True)
         self.btnSetCTRLCurrent.clicked.connect(self.set_ctrl_current)
 
         self.btnSetBiasShortStatusLabel = QLabel()
@@ -599,7 +600,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
 
         self.ctrlScanProgress = QProgressBar(self)
         self.ctrlScanProgress.setValue(0)
-        self.btnCTRLScan = QPushButton("Scan CL Current")
+        self.btnCTRLScan = Button("Scan CL Current", animate=True)
         self.btnCTRLScan.clicked.connect(self.scan_ctrl_current)
 
         self.btnCTRLStopScan = QPushButton("Stop Scan")
@@ -649,7 +650,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.biasScanProgress = QProgressBar(self)
         self.biasScanProgress.setValue(0)
 
-        self.btnBiasScan = QPushButton("Scan Bias IV")
+        self.btnBiasScan = Button("Scan Bias IV", animate=True)
         self.btnBiasScan.clicked.connect(self.scan_bias_iv)
 
         self.btnBiasStopScan = QPushButton("Stop Scan")

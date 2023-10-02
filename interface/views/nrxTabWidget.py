@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from api.Chopper import chopper_manager
+from interface.components.ui.Button import Button
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from store.base import MeasureModel, MeasureType
 from store.state import state
@@ -254,10 +255,10 @@ class NRXTabWidget(QWidget):
         self.nrxPower.setText("0.0")
         self.nrxPower.setStyleSheet("font-size: 23px; font-weight: bold;")
 
-        self.btnStartStreamNRX = QPushButton("Start Stream")
+        self.btnStartStreamNRX = Button("Start Stream", animate=True)
         self.btnStartStreamNRX.clicked.connect(self.start_stream_nrx)
 
-        self.btnStopStreamNRX = QPushButton("Stop Stream")
+        self.btnStopStreamNRX = Button("Stop Stream")
         self.btnStopStreamNRX.setEnabled(False)
         self.btnStopStreamNRX.clicked.connect(self.stop_stream_nrx)
 
@@ -368,10 +369,10 @@ class NRXTabWidget(QWidget):
         self.chopperSwitch.setText("Enable chopper Hot/Cold switching")
         self.chopperSwitch.setChecked(state.CHOPPER_SWITCH)
 
-        self.btnStartBiasPowerScan = QPushButton("Start Scan")
+        self.btnStartBiasPowerScan = Button("Start Scan", animate=True)
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_bias_power)
 
-        self.btnStopBiasPowerScan = QPushButton("Stop Scan")
+        self.btnStopBiasPowerScan = Button("Stop Scan")
         self.btnStopBiasPowerScan.clicked.connect(self.stop_measure_bias_power)
         self.btnStopBiasPowerScan.setEnabled(False)
 

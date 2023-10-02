@@ -22,6 +22,7 @@ from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.SetupSpectrumGroup import SetupSpectrumGroup
+from interface.components.ui.Button import Button
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -226,7 +227,7 @@ class SetUpTabWidget(QScrollArea):
         self.sisBlockStatus = QLabel(self)
         self.sisBlockStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitBlock = QPushButton("Initialize")
+        self.btnInitBlock = Button("Initialize", animate=True)
         self.btnInitBlock.clicked.connect(self.initialize_block)
 
         layout.addWidget(self.blockIPLabel, 1, 0)
@@ -261,7 +262,7 @@ class SetUpTabWidget(QScrollArea):
         self.vnaStatus = QLabel(self)
         self.vnaStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitVna = QPushButton("Initialize")
+        self.btnInitVna = Button("Initialize", animate=True)
         self.btnInitVna.clicked.connect(self.initialize_vna)
 
         layout.addWidget(self.vnaIPLabel, 1, 0)
@@ -297,7 +298,7 @@ class SetUpTabWidget(QScrollArea):
         self.nrxStatus = QLabel(self)
         self.nrxStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitNRX = QPushButton("Initialize")
+        self.btnInitNRX = Button("Initialize", animate=True)
         self.btnInitNRX.clicked.connect(self.initialize_nrx)
 
         layout.addWidget(self.nrxIPLabel, 1, 0)
@@ -327,7 +328,7 @@ class SetUpTabWidget(QScrollArea):
         self.prologixEthernetStatus = QLabel(self)
         self.prologixEthernetStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitPrologixEthernet = QPushButton("Initialize Prologix")
+        self.btnInitPrologixEthernet = Button("Initialize Prologix", animate=True)
         self.btnInitPrologixEthernet.clicked.connect(self.initialize_prologix_ethernet)
 
         layout.addWidget(self.prologixIPAdressLabel, 1, 0)
@@ -355,7 +356,7 @@ class SetUpTabWidget(QScrollArea):
         self.gridStatus = QLabel(self)
         self.gridStatus.setText("Doesn't initialized yet!")
 
-        self.btnInitGrid = QPushButton("Initialize")
+        self.btnInitGrid = Button("Initialize", animate=True)
         self.btnInitGrid.clicked.connect(self.initialize_grid)
 
         layout.addWidget(self.gridAddressLabel, 1, 0)
@@ -385,7 +386,7 @@ class SetUpTabWidget(QScrollArea):
         self.signalGeneratorStatus = QLabel(self)
         self.signalGeneratorStatus.setText("Doesn't initialized yet!")
 
-        self.btnSignalGeneratorInit = QPushButton("Initialize")
+        self.btnSignalGeneratorInit = Button("Initialize", animate=True)
         self.btnSignalGeneratorInit.clicked.connect(self.initialize_signal_generator)
 
         layout.addWidget(self.signalGeneratorAddressLabel, 1, 0)
@@ -413,7 +414,7 @@ class SetUpTabWidget(QScrollArea):
         self.temperatureControllerStatus = QLabel(self)
         self.temperatureControllerStatus.setText("Doesn't initialized yet!")
 
-        self.btnTemperatureControllerInit = QPushButton("Initialize")
+        self.btnTemperatureControllerInit = Button("Initialize", animate=True)
         self.btnTemperatureControllerInit.clicked.connect(
             self.initialize_temperature_controller
         )

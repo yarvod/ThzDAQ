@@ -55,7 +55,7 @@ class SignalGeneratorTabWidget(QWidget):
         self.OemMultiplier.setRange(1, 40)
         self.OemMultiplier.setValue(18)
 
-        self.btnApplyConfig = QPushButton("Apply")
+        self.btnApplyConfig = Button("Apply", animate=True)
         self.btnApplyConfig.clicked.connect(self.apply_config)
 
         layout.addWidget(self.OemStatusLabel, 1, 0)
@@ -97,7 +97,7 @@ class SignalGeneratorTabWidget(QWidget):
         self.frequency.setRange(1, 300)
         self.frequency.setValue(14)
         self.frequency.valueChanged.connect(self.update_stream_frequency)
-        self.btnSetFrequency = QPushButton("Set frequency")
+        self.btnSetFrequency = Button("Set frequency")
         self.btnSetFrequency.clicked.connect(self.set_frequency)
 
         self.amplitudeLabel = QLabel(self)
@@ -105,7 +105,7 @@ class SignalGeneratorTabWidget(QWidget):
         self.amplitude = DoubleSpinBox(self)
         self.amplitude.setRange(-90, 15)
         self.amplitude.setValue(-20)
-        self.btnSetAmplitude = QPushButton("Set amplitude")
+        self.btnSetAmplitude = Button("Set amplitude")
         self.btnSetAmplitude.clicked.connect(self.set_amplitude)
 
         grid_layout.addWidget(self.rfOutputLabel, 0, 0)
