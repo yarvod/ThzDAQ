@@ -23,7 +23,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.components.GridManagingGroup import GridManagingGroup
+from interface.components.grid.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
 from interface.windows.biasPowerGraphWindow import (
     GridBiasPowerGraphWindow,

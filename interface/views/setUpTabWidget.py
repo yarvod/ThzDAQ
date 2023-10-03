@@ -9,11 +9,12 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QDoubleSpinBox,
     QSizePolicy,
     QComboBox,
     QScrollArea,
+    QSpinBox,
+    QFormLayout,
 )
 
 from api.Agilent.signal_generator import SignalGenerator
@@ -21,7 +22,7 @@ from api.LakeShore.temperature_controller import TemperatureController
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
-from interface.components.SetupSpectrumGroup import SetupSpectrumGroup
+from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
 from interface.components.ui.Button import Button
 from store.state import state
 from api.Scontel.sis_block import SisBlock
@@ -372,14 +373,13 @@ class SetUpTabWidget(QScrollArea):
         self.groupGrid.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QFormLayout()
 
         self.signalGeneratorAddressLabel = QLabel(self)
         self.signalGeneratorAddressLabel.setText("GPIB Address:")
-        self.signalGeneratorAddress = QDoubleSpinBox(self)
+        self.signalGeneratorAddress = QSpinBox(self)
         self.signalGeneratorAddress.setRange(1, 32)
         self.signalGeneratorAddress.setValue(state.AGILENT_SIGNAL_GENERATOR_GPIB)
-        self.signalGeneratorAddress.setDecimals(0)
 
         self.signalGeneratorStatusLabel = QLabel(self)
         self.signalGeneratorStatusLabel.setText("Status:")
@@ -389,11 +389,9 @@ class SetUpTabWidget(QScrollArea):
         self.btnSignalGeneratorInit = Button("Initialize", animate=True)
         self.btnSignalGeneratorInit.clicked.connect(self.initialize_signal_generator)
 
-        layout.addWidget(self.signalGeneratorAddressLabel, 1, 0)
-        layout.addWidget(self.signalGeneratorAddress, 1, 1)
-        layout.addWidget(self.signalGeneratorStatusLabel, 2, 0)
-        layout.addWidget(self.signalGeneratorStatus, 2, 1)
-        layout.addWidget(self.btnSignalGeneratorInit, 3, 0, 1, 2)
+        layout.addRow(self.signalGeneratorAddressLabel, self.signalGeneratorAddress)
+        layout.addRow(self.signalGeneratorStatusLabel, self.signalGeneratorStatus)
+        layout.addRow(self.btnSignalGeneratorInit)
 
         self.groupSignalGenerator.setLayout(layout)
 
@@ -474,9 +472,6 @@ class SetUpTabWidget(QScrollArea):
         else:
             self.prologixEthernetStatus.setText("Error!")
 
-    def set_sis_block_status(self, status: str):
-        self.sisBlockStatus.setText(status)
-
     def initialize_block(self):
         self.sis_block_thread = SISBlockThread()
 
@@ -485,7 +480,9 @@ class SetUpTabWidget(QScrollArea):
         state.BLOCK_BIAS_DEV = self.biasDev.currentText()
         state.BLOCK_CTRL_DEV = self.ctrlDev.currentText()
 
-        self.sis_block_thread.status.connect(self.set_sis_block_status)
+        self.sis_block_thread.status.connect(
+            lambda status: self.sisBlockStatus.setText(status)
+        )
         self.sis_block_thread.start()
 
         self.btnInitBlock.setEnabled(False)
@@ -493,12 +490,9 @@ class SetUpTabWidget(QScrollArea):
             lambda: self.btnInitBlock.setEnabled(True)
         )
 
-    def set_vna_status(self, status: str):
-        self.vnaStatus.setText(status)
-
     def initialize_vna(self):
         self.vna_thread = VNAThread()
-        self.vna_thread.status.connect(self.set_vna_status)
+        self.vna_thread.status.connect(lambda x: self.vnaStatus.setText(x))
 
         state.VNA_ADDRESS = self.vna_ip.text()
         self.vna_thread.start()
@@ -506,12 +500,9 @@ class SetUpTabWidget(QScrollArea):
         self.btnInitVna.setEnabled(False)
         self.vna_thread.finished.connect(lambda: self.btnInitVna.setEnabled(True))
 
-    def set_nrx_status(self, status: str):
-        self.nrxStatus.setText(status)
-
     def initialize_nrx(self):
         self.nrx_thread = NRXBlockThread()
-        self.nrx_thread.status.connect(self.set_nrx_status)
+        self.nrx_thread.status.connect(lambda x: self.nrxStatus.setText(x))
         state.NRX_IP = self.nrxIP.text()
         state.NRX_APER_TIME = self.nrxAperTime.value()
         self.nrx_thread.start()

@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import datetime
 from typing import Union, Dict, Any
@@ -107,7 +108,7 @@ class MeasureManager:
     @classmethod
     def save_by_index(cls, index: int) -> None:
         measure = cls.all()[index]
-        results = measure.data
+        results = measure.to_json()
         caption = f"Saving {measure.type_display}_{measure.finished.__str__()}"
         try:
             filepath = QFileDialog.getSaveFileName(filter="*.json", caption=caption)[0]
@@ -121,6 +122,17 @@ class MeasureManager:
             measure.save()
         except (IndexError, FileNotFoundError):
             pass
+
+    @classmethod
+    def save_all(cls):
+        data = [m.to_json() for m in cls.all()]
+        if not data:
+            return
+        if not os.path.exists("dumps"):
+            os.mkdir("dumps")
+        filepath = f"dumps/dump_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        with open(filepath, "w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=4)
 
 
 class MeasureModel:
@@ -166,6 +178,16 @@ class MeasureModel:
         if finish:
             self.finished = datetime.now()
         self.objects.update_table()
+
+    def to_json(self):
+        if self.finished == "--":
+            self.finished = datetime.now()
+        return {
+            "measure": self.type_display,
+            "started": self.started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished": self.finished.strftime("%Y-%m-%d %H:%M:%S"),
+            "data": self.data,
+        }
 
 
 class MeasureTableModel(QAbstractTableModel):

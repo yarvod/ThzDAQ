@@ -1,8 +1,9 @@
-from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import QMainWindow, QMessageBox, QCheckBox, QApplication
 from PyQt6 import QtGui
 
 from interface import style
 from interface.views.index import TabsWidget
+from store.base import MeasureManager
 
 
 class App(QMainWindow):
@@ -23,3 +24,28 @@ class App(QMainWindow):
         self.setFixedWidth(self.width)
 
         self.show()
+
+    def closeEvent(self, event):
+        reply = QMessageBox(self)
+        reply.setWindowTitle("Exit")
+        reply.setText("Are you sure you want to exit?")
+        reply.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        reply.setDefaultButton(QMessageBox.StandardButton.No)
+        reply.setIcon(QMessageBox.Icon.Question)
+        layout = reply.layout()
+        dumpDataCheck = QCheckBox(reply)
+        dumpDataCheck.setChecked(True)
+        dumpDataCheck.setText("Dump all data on exit")
+        layout.addWidget(dumpDataCheck)
+        reply.setLayout(layout)
+        button = reply.exec()
+        if button == QMessageBox.StandardButton.Yes:
+            if dumpDataCheck.isChecked():
+                MeasureManager.save_all()
+            for window in QApplication.topLevelWidgets():
+                window.close()
+            event.accept()
+        else:
+            event.ignore()

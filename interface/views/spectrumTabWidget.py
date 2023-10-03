@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from interface.components.SpectrumMonitor import SpectrumMonitor
+from interface.components.Spectrum.SpectrumMonitor import SpectrumMonitor
 
 
 class SpectrumTabWidget(QWidget):
