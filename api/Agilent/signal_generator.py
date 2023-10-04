@@ -84,10 +84,10 @@ class SignalGenerator:
         return asc - attenuation
 
     def set_amplitude(self, value: float) -> None:
-        if value > 15:
-            raise Exception("Value greater then 15 dBm unsupported!")
+        if value > 25:
+            raise Exception("Value greater then 25 dBm unsupported!")
         k = int(round((abs(value) - 10) / 10))
-        if k < 0:
+        if k < 0 or value > 0:
             k = 0
         attenuation = self.ATTENUATOR_RANGE[k]
         alc = value + attenuation

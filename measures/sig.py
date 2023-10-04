@@ -1,3 +1,5 @@
+# Measuring SIs Block current versus Signal generator frequency
+
 import json
 
 import numpy as np
