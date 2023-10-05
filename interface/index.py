@@ -9,6 +9,7 @@ from store.base import MeasureManager
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+        state.EVENT_LOOP = asyncio.get_event_loop()
         self.title = "SIS manager"
         self.left = 0
         self.top = 0

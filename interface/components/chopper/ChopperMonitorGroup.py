@@ -1,3 +1,5 @@
+import asyncio
+import qasync
 import time
 
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
@@ -13,10 +15,15 @@ class ChopperSetZeroThread(QThread):
         if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        chopper_manager.chopper.align()
-        chopper_manager.chopper.set_origin()
-        chopper_manager.chopper.go_to_pos(0)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self.task())
+
         self.finished.emit()
+
+    async def task(self):
+        await chopper_manager.chopper.align()
+        await chopper_manager.chopper.set_origin()
+        await chopper_manager.chopper.go_to_pos(0)
 
 
 class ChopperMonitorThread(QThread):
@@ -24,14 +31,14 @@ class ChopperMonitorThread(QThread):
     speed = pyqtSignal(float)
 
     def run(self):
-        if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
-            return
+        loop = qasync.QEventLoop(self)
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.task())
+
+    async def task(self):
+        chopper = await chopper_manager.async_chopper
         while state.CHOPPER_MONITOR:
-            if not chopper_manager.chopper.client.connected:
-                self.finished.emit()
-                return
-            pos = chopper_manager.chopper.get_actual_pos()
+            pos = await chopper.get_actual_pos()
             # speed = chopper_manager.chopper.get_actual_speed()
             self.position.emit(pos)
             # self.speed.emit(speed)

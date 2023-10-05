@@ -1,11 +1,12 @@
+import asyncio
 import time
 
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client import AsyncModbusTcpClient
 
-from api.Chopper.chopper_sync import Chopper
+from api.Chopper.chopper_async import ChopperAsync
 
 
-class ChopperEthernet(Chopper):
+class ChopperAsyncEthernet(ChopperAsync):
     def __init__(
         self,
         host: str = "169.254.54.24",
@@ -20,7 +21,7 @@ class ChopperEthernet(Chopper):
         if self.client is not None:
             if self.client.connected:
                 self.client.close()
-        self.client = ModbusTcpClient(
+        self.client = AsyncModbusTcpClient(
             method="rtu",
             host=self.host,
             port=self.port,
@@ -32,8 +33,15 @@ class ChopperEthernet(Chopper):
 
 
 if __name__ == "__main__":
-    chopper = ChopperEthernet()
-    chopper.connect()
-    t = time.time()
-    chopper.path0()
-    print(time.time() - t)
+
+    async def main():
+        chopper = ChopperAsyncEthernet()
+        await chopper.connect()
+        # t = time.time()
+        # await chopper.path0()
+        # print(time.time() - t)
+        # await chopper.freq(15)
+        # await chopper.path1()
+        await chopper.path2()
+
+    asyncio.run(main())

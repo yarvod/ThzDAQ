@@ -137,5 +137,7 @@ class State:
     CHOPPER_SWITCH = True
     CHOPPER_MONITOR = False
 
+    EVENT_LOOP = None
+
 
 state = State()

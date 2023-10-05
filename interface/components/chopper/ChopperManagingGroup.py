@@ -1,6 +1,7 @@
+import asyncio
 import logging
 
-from PyQt6.QtCore import QThread, Qt, QTimer
+from PyQt6.QtCore import QThread, Qt, QTimer, QObject, pyqtSlot, pyqtSignal
 from PyQt6.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -21,17 +22,14 @@ logger = logging.getLogger(__name__)
 class ChopperRotateCwThread(QThread):
     timeout = 10
 
-    def __init__(self, angle: float = 90):
-        super().__init__()
-        self.angle = angle
-
     def run(self):
-        if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
-            return
-        chopper_manager.chopper.path0(self.angle)
-        logger.info("Finish rotate cw")
+        state.EVENT_LOOP.run_until_complete(self.process())
+
+    async def process(self):
+        chopper = await chopper_manager.async_chopper
+        await chopper.path0()
         self.finished.emit()
+        await asyncio.sleep(0.1)
 
 
 class ChopperStartContinuesRotationThread(QThread):
@@ -115,7 +113,10 @@ class ChopperManagingGroup(QGroupBox):
     # Buttons methods
     def rotateCw(self, angle: float):
         self.btnRotateCw.setEnabled(False)
-        self.chopper_rotate_cw_thread = ChopperRotateCwThread(angle=angle)
+        self.chopper_rotate_cw_thread = ChopperRotateCwThread()
+        logic = Logic()
+        logic.moveToThread(self.chopper_rotate_cw_thread)
+        logic.finished.connect(self.chopper_rotate_cw_thread.quit)
         self.chopper_rotate_cw_thread.finished.connect(
             lambda: self.btnRotateCw.setEnabled(True)
         )

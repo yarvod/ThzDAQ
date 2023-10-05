@@ -2,6 +2,7 @@ import logging
 
 from api.Chopper.chopper_ethernet import ChopperEthernet
 from api.Chopper.chopper_sync import Chopper
+from api.Chopper.chopper_old import Chopper as ChopperAsync
 from settings import SERIAL_USB, WAVESHARE_ETHERNET
 
 
@@ -33,6 +34,12 @@ class ChopperManager:
         if not self.adapters[self.adapter].client.connected:
             self.adapters[self.adapter].connect()
         return self.adapters[self.adapter]
+
+    @property
+    async def async_chopper(self):
+        chopper = ChopperAsync()
+        await chopper.client.connect()
+        return chopper
 
 
 chopper_manager = ChopperManager()
