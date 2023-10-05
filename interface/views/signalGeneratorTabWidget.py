@@ -103,7 +103,7 @@ class SignalGeneratorTabWidget(QWidget):
         self.amplitudeLabel = QLabel(self)
         self.amplitudeLabel.setText("Amplitude, dBm")
         self.amplitude = DoubleSpinBox(self)
-        self.amplitude.setRange(-90, 15)
+        self.amplitude.setRange(-90, 25)
         self.amplitude.setValue(-20)
         self.btnSetAmplitude = Button("Set amplitude")
         self.btnSetAmplitude.clicked.connect(self.set_amplitude)
