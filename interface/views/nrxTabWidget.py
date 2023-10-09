@@ -2,8 +2,8 @@ import time
 from datetime import datetime
 
 import numpy as np
-from PyQt6.QtCore import pyqtSignal, Qt, QThread
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import pyqtSignal, Qt, QThread
+from PyQt5.QtWidgets import (
     QGroupBox,
     QGridLayout,
     QVBoxLayout,

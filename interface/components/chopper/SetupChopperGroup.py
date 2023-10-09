@@ -1,5 +1,5 @@
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QLabel, QComboBox
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import QGroupBox, QFormLayout, QLineEdit, QLabel, QComboBox
 
 from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button

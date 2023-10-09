@@ -2,8 +2,8 @@ import logging
 from collections import defaultdict
 from typing import Iterable
 
-from PyQt6 import QtGui
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
 import pyqtgraph as pg
 
 

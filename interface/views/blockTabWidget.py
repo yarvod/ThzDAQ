@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 import numpy as np
-from PyQt6.QtWidgets import (
+from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QProgressBar,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
 from interface.components.ui.Button import Button
 from store.state import state

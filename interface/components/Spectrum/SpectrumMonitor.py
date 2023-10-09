@@ -1,8 +1,8 @@
 import time
 from typing import Dict
 
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
     QPushButton,

@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QMainWindow, QMessageBox, QCheckBox, QApplication
-from PyQt6 import QtGui
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QCheckBox, QApplication
+from PyQt5 import QtGui
 
 from interface import style
 from interface.views.index import TabsWidget

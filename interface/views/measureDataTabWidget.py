@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHeaderView
 
 from interface.components.TableView import TableView
 from store.base import MeasureTableModel, MeasureManager

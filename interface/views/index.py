@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
 from interface.components.ui.DetachableTabWidget import DetachableTabWidget
 from interface.views.blockTabWidget import BlockTabWidget

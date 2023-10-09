@@ -1,8 +1,8 @@
 import logging
 import textwrap
 
-from PyQt6.QtCore import pyqtSignal, QThread, Qt
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import pyqtSignal, QThread, Qt
+from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,

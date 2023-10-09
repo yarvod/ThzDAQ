@@ -1,5 +1,5 @@
-from PyQt6 import QtCore, QtGui
-from PyQt6.QtWidgets import QPushButton
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtWidgets import QPushButton
 
 
 class Button(QPushButton):
