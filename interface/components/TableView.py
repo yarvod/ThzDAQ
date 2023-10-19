@@ -1,5 +1,5 @@
-from PyQt6 import QtGui, QtWidgets, QtCore
-from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
+from PyQt5 import QtGui, QtWidgets, QtCore
+from PyQt5.QtWidgets import QAbstractItemView, QMessageBox
 
 
 class TableView(QtWidgets.QTableView):
@@ -9,8 +9,8 @@ class TableView(QtWidgets.QTableView):
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.menu = QtWidgets.QMenu(self)
 
-        self.action_save = QtGui.QAction("Save", self)
-        self.action_delete = QtGui.QAction("Delete", self)
+        self.action_save = QtWidgets.QAction("Save", self)
+        self.action_delete = QtWidgets.QAction("Delete", self)
 
         self.action_save.setIcon(QtGui.QIcon("assets/save-icon.png"))
         self.action_delete.setIcon(QtGui.QIcon("assets/delete-icon.png"))

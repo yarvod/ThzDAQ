@@ -3,8 +3,8 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QSizePolicy,

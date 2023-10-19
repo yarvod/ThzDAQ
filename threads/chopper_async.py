@@ -1,6 +1,6 @@
 # import asyncio
 #
-# from PyQt6.QtCore import QThread, pyqtSignal
+# from PyQt5.QtCore import QThread, pyqtSignal
 #
 # from api.Chopper.chopper_async import Chopper
 # from store.state import state

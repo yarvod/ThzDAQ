@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
 
 from interface.components.chopper.ChopperManagingGroup import ChopperManagingGroup
 from interface.components.chopper.ChopperMonitorGroup import ChopperMonitorGroup

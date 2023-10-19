@@ -1,7 +1,7 @@
 import time
 
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGridLayout
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGridLayout
 
 from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button

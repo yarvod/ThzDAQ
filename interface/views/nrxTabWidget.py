@@ -1,15 +1,13 @@
 import time
-from datetime import datetime
 
 import numpy as np
-from PyQt6.QtCore import pyqtSignal, Qt, QThread
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import pyqtSignal, Qt, QThread
+from PyQt5.QtWidgets import (
     QGroupBox,
     QGridLayout,
     QVBoxLayout,
     QWidget,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QCheckBox,
 )
@@ -57,7 +55,6 @@ class NRXBlockStreamThread(QThread):
             if state.NRX_STREAM_STORE_DATA:
                 measure.data["power"].append(power)
                 measure.data["time"].append(meas_time)
-                measure.save(finish=False)
             i += 1
 
         if state.NRX_STREAM_STORE_DATA:

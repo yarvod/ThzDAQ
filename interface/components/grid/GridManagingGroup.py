@@ -1,5 +1,5 @@
-from PyQt6.QtCore import QThread
-from PyQt6.QtWidgets import QGroupBox, QGridLayout, QLabel
+from PyQt5.QtCore import QThread
+from PyQt5.QtWidgets import QGroupBox, QGridLayout, QLabel
 
 from api.Arduino.grid import GridManager
 from interface.components.ui.Button import Button

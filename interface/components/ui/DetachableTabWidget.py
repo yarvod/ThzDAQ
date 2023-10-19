@@ -1,7 +1,7 @@
-from PyQt6 import QtCore
-from PyQt6.QtCore import pyqtSlot, QPoint, pyqtSignal, Qt, QMimeData, QEvent
-from PyQt6.QtGui import QIcon, QCursor, QMouseEvent, QDrag, QPixmap, QColor, QPainter
-from PyQt6.QtWidgets import (
+from PyQt5 import QtCore
+from PyQt5.QtCore import pyqtSlot, QPoint, pyqtSignal, Qt, QMimeData, QEvent
+from PyQt5.QtGui import QIcon, QCursor, QMouseEvent, QDrag, QPixmap, QColor, QPainter
+from PyQt5.QtWidgets import (
     QTabWidget,
     QWidget,
     QDialog,
