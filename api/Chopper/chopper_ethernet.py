@@ -1,4 +1,5 @@
 import time
+from typing import Tuple
 
 from pymodbus.client import ModbusTcpClient
 
@@ -30,9 +31,17 @@ class ChopperEthernet(Chopper):
             parity="N",
         )
 
+    def read_di23(self) -> Tuple[bool, bool]:
+        results = self.client.read_holding_registers(
+            int(0x0179), count=1, slave=self.slave_address
+        ).registers
+        num = next((result for result in results), None)
+        bits_str = "{0:08b}".format(num)
+        return bits_str[-2] == "1", bits_str[-3] == "1"
+
 
 if __name__ == "__main__":
     chopper = ChopperEthernet()
     chopper.connect()
-    chopper.path0()
-    chopper.path0()
+    print(chopper.read_di23())
+    chopper.client.close()
