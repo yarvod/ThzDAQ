@@ -1,6 +1,6 @@
 import logging
 import socket
-from typing import Union
+from typing import Union, Dict
 
 from utils.classes import InstrumentAdapterInterface, Singleton
 
@@ -128,6 +128,22 @@ class PrologixEthernetAdapter(InstrumentAdapterInterface, metaclass=Singleton):
 
     def __del__(self):
         self.close()
+
+    def scan_gpib(self) -> Dict:
+        devices = {}
+        for gpib in range(1, 32):
+            try:
+                resp = self.query("*IDN?", gpib)
+                devices[gpib] = resp
+                logger.info(
+                    f"[{self.__class__.__name__}.scan_gpib] GPIB: {gpib}; Device: {resp}"
+                )
+            except (TimeoutError, ConnectionResetError) as e:
+                logger.info(
+                    f"[{self.__class__.__name__}.scan_gpib] GPIB: {gpib}; Device: Not found; Error {e}"
+                )
+
+        return devices
 
 
 if __name__ == "__main__":
