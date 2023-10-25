@@ -21,7 +21,7 @@ class App(QMainWindow):
 
         self.table_widget = TabsWidget(self)
         self.setCentralWidget(self.table_widget)
-        self.setFixedWidth(self.width)
+        # self.setFixedWidth(self.width)
 
         self.show()
 
