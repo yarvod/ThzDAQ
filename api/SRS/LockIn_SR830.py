@@ -7,9 +7,9 @@ class LockIn(BaseInstrument):
     def __init__(
         self,
         host: str = state.PROLOGIX_IP,
-        gpib: int = None,
+        gpib: int = 8,
         adapter: str = settings.PROLOGIX_ETHERNET,
-        port: int = state.VNA_PORT,
+        port: int = None,
         *args,
         **kwargs,
     ):
@@ -19,8 +19,11 @@ class LockIn(BaseInstrument):
     def idn(self):
         return self.query("*IDN?")
 
+    def get_out3(self):
+        return float(self.query("OUTP? 3"))
+
 
 if __name__ == "__main__":
     lockin = LockIn()
-    lockin.adapter.scan_gpib()
-    # print(lockin.idn())
+    print(lockin.idn())
+    print(lockin.get_out3())
