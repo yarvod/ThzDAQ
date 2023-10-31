@@ -279,12 +279,12 @@ class BlockBIASScanThread(QThread):
 
 
 class BlockTabWidget(QScrollArea, UtilsMixin):
-    def __init__(self, parent):
+    def __init__(self, parent, biasGraphWindow=None, ctrlGraphWindow=None):
         super().__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.ctrlGraphWindow = None
-        self.biasGraphWindow = None
+        self.ctrlGraphWindow = ctrlGraphWindow
+        self.biasGraphWindow = biasGraphWindow
         self.createGroupMonitor()
         self.createGroupValuesSet()
         self.createGroupCTRLScan()

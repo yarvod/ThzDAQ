@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSignalBlocker, QSettings
 from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
@@ -45,6 +45,8 @@ class App(QMainWindow):
         self.setStyleSheet(style.GLOBAL_STYLE)
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
+
+        self.settings = QSettings("ASC", self.title)
 
         QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
         QtAds.CDockManager.setConfigFlag(
@@ -138,10 +140,17 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.chopper_dock_widget
         )
 
+        self.setup_dock_widget.raise_()
+        self.sis_block_dock_widget.raise_()
+
         self.toolBar = QToolBar("Main ToolBar")
         self.addToolBar(self.toolBar)
 
         self.create_perspective_ui()
+        saved_state = self.settings.value("dock_manager_state")
+        if saved_state:
+            self.dock_manager.restoreState(saved_state)
+
         self.show()
 
     def create_perspective_ui(self):
@@ -190,6 +199,7 @@ class App(QMainWindow):
         layout.addWidget(dumpDataCheck)
         reply.setLayout(layout)
         button = reply.exec()
+        self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
         if button == QMessageBox.StandardButton.Yes:
             if dumpDataCheck.isChecked():
                 MeasureManager.save_all()
@@ -199,4 +209,3 @@ class App(QMainWindow):
             event.accept()
         else:
             event.ignore()
-        super().closeEvent(event)
