@@ -33,6 +33,9 @@ from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.biasPowerGraphWindow import (
     BiasPowerGraphWindow,
     BiasPowerDiffGraphWindow,
+    GridBiasPowerGraphWindow,
+    GridBiasCurrentGraphWindow,
+    GridBiasPowerDiffGraphWindow,
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
@@ -151,7 +154,7 @@ class App(QMainWindow):
         )
 
         # Add graph widgets
-        self.graph_iv_curve_dock_widget = QtAds.CDockWidget("Graph I-V curve")
+        self.graph_iv_curve_dock_widget = QtAds.CDockWidget("I-V curve")
         self.tab_graph_iv_curve = BiasGraphWindow(self)
         self.graph_iv_curve_dock_widget.setWidget(self.tab_graph_iv_curve)
         self.menuGraph.addAction(self.graph_iv_curve_dock_widget.toggleViewAction())
@@ -160,7 +163,7 @@ class App(QMainWindow):
         )
         self.tab_sis_block.biasGraphDockWidget = self.graph_iv_curve_dock_widget
 
-        self.graph_cli_curve_dock_widget = QtAds.CDockWidget("Graph CL-I curve")
+        self.graph_cli_curve_dock_widget = QtAds.CDockWidget("CL-I curve")
         self.tab_graph_cli_curve = CLGraphWindow(self)
         self.graph_cli_curve_dock_widget.setWidget(self.tab_graph_cli_curve)
         self.menuGraph.addAction(self.graph_cli_curve_dock_widget.toggleViewAction())
@@ -169,7 +172,7 @@ class App(QMainWindow):
         )
         self.tab_sis_block.ctrlGraphDockWidget = self.graph_cli_curve_dock_widget
 
-        self.graph_power_stream_curve_dock_widget = QtAds.CDockWidget("Graph P-t curve")
+        self.graph_power_stream_curve_dock_widget = QtAds.CDockWidget("P-t curve")
         self.tab_graph_power_stream_curve = NRXStreamGraphWindow(self)
         self.graph_power_stream_curve_dock_widget.setWidget(
             self.tab_graph_power_stream_curve
@@ -184,7 +187,7 @@ class App(QMainWindow):
             self.graph_power_stream_curve_dock_widget
         )
 
-        self.graph_pv_curve_dock_widget = QtAds.CDockWidget("Graph P-V curve")
+        self.graph_pv_curve_dock_widget = QtAds.CDockWidget("P-V curve")
         self.tab_graph_pv_curve = BiasPowerGraphWindow(self)
         self.graph_pv_curve_dock_widget.setWidget(self.tab_graph_pv_curve)
         self.menuGraph.addAction(self.graph_pv_curve_dock_widget.toggleViewAction())
@@ -193,7 +196,7 @@ class App(QMainWindow):
         )
         self.tab_nrx.biasPowerGraphWindow = self.graph_pv_curve_dock_widget
 
-        self.graph_yv_curve_dock_widget = QtAds.CDockWidget("Graph Y-V curve")
+        self.graph_yv_curve_dock_widget = QtAds.CDockWidget("Y-V curve")
         self.tab_graph_yv_curve = BiasPowerDiffGraphWindow(self)
         self.graph_yv_curve_dock_widget.setWidget(self.tab_graph_yv_curve)
         self.menuGraph.addAction(self.graph_yv_curve_dock_widget.toggleViewAction())
@@ -201,6 +204,41 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_yv_curve_dock_widget
         )
         self.tab_nrx.biasPowerDiffGraphWindow = self.graph_yv_curve_dock_widget
+
+        self.graph_grid_pv_curve_dock_widget = QtAds.CDockWidget("GRID P-V curve")
+        self.tab_graph_grid_pv_curve = GridBiasPowerGraphWindow(self)
+        self.graph_grid_pv_curve_dock_widget.setWidget(self.tab_graph_grid_pv_curve)
+        self.menuGraph.addAction(
+            self.graph_grid_pv_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_grid_pv_curve_dock_widget
+        )
+        self.tab_grid.gridBiasPowerGraphWindow = self.graph_grid_pv_curve_dock_widget
+
+        self.graph_grid_iv_curve_dock_widget = QtAds.CDockWidget("GRID I-V curve")
+        self.tab_graph_grid_iv_curve = GridBiasCurrentGraphWindow(self)
+        self.graph_grid_iv_curve_dock_widget.setWidget(self.tab_graph_grid_iv_curve)
+        self.menuGraph.addAction(
+            self.graph_grid_iv_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_grid_iv_curve_dock_widget
+        )
+        self.tab_grid.gridBiasCurrentGraphWindow = self.graph_grid_iv_curve_dock_widget
+
+        self.graph_grid_yv_curve_dock_widget = QtAds.CDockWidget("GRID Y-V curve")
+        self.tab_graph_grid_yv_curve = GridBiasPowerDiffGraphWindow(self)
+        self.graph_grid_yv_curve_dock_widget.setWidget(self.tab_graph_grid_yv_curve)
+        self.menuGraph.addAction(
+            self.graph_grid_yv_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_grid_yv_curve_dock_widget
+        )
+        self.tab_grid.gridBiasPowerDiffGraphWindow = (
+            self.graph_grid_yv_curve_dock_widget
+        )
 
         # Set widgets active
         self.setup_dock_widget.raise_()

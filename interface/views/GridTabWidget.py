@@ -386,28 +386,28 @@ class GridTabWidget(QScrollArea):
         if state.GRID_PLOT_TYPE == GridPlotTypes.IV_CURVE:
             if self.gridBiasCurrentGraphWindow is None:
                 self.gridBiasCurrentGraphWindow = GridBiasCurrentGraphWindow(self)
-            self.gridBiasCurrentGraphWindow.plotNew(
+            self.gridBiasCurrentGraphWindow.widget().plotNew(
                 x=results.get("x", []),
                 y=results.get("y", []),
                 new_plot=results.get("new_plot", True),
             )
-            self.gridBiasCurrentGraphWindow.show()
+            self.gridBiasCurrentGraphWindow.widget().show()
 
         if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE:
             if self.gridBiasPowerGraphWindow is None:
                 self.gridBiasPowerGraphWindow = GridBiasPowerGraphWindow(self)
-            self.gridBiasPowerGraphWindow.plotNew(
+            self.gridBiasPowerGraphWindow.widget().plotNew(
                 x=results.get("x", []),
                 y=results.get("y", []),
                 new_plot=results.get("new_plot", True),
             )
-            self.gridBiasPowerGraphWindow.show()
+            self.gridBiasPowerGraphWindow.widget().show()
 
     def show_bias_power_diff_graph(self, results):
         if self.gridBiasPowerDiffGraphWindow is None:
             self.gridBiasPowerDiffGraphWindow = GridBiasPowerDiffGraphWindow(self)
-        self.gridBiasPowerDiffGraphWindow.plotNew(
+        self.gridBiasPowerDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
         )
-        self.gridBiasPowerDiffGraphWindow.show()
+        self.gridBiasPowerDiffGraphWindow.widget().show()
