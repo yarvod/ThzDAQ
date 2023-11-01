@@ -226,12 +226,18 @@ class BiasPowerThread(QThread):
 
 
 class NRXTabWidget(QWidget):
-    def __init__(self, parent):
+    def __init__(
+        self,
+        parent,
+        powerStreamGraphDockWidget=None,
+        biasPowerGraphWindow=None,
+        biasPowerDiffGraphWindow=None,
+    ):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.biasPowerGraphWindow = None
-        self.powerStreamGraphWindow = None
-        self.gridBiasPowerDiffGraphWindow = None
+        self.biasPowerGraphWindow = biasPowerGraphWindow
+        self.powerStreamGraphDockWidget = powerStreamGraphDockWidget
+        self.biasPowerDiffGraphWindow = biasPowerDiffGraphWindow
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
         self.layout.addWidget(self.groupNRX)
@@ -310,10 +316,10 @@ class NRXTabWidget(QWidget):
         )
 
     def show_power_stream_graph(self, x: float, y: float, reset: bool = True):
-        if self.powerStreamGraphWindow is None:
-            self.powerStreamGraphWindow = NRXStreamGraphWindow()
-        self.powerStreamGraphWindow.plotNew(x=x, y=y, reset_data=reset)
-        self.powerStreamGraphWindow.show()
+        if self.powerStreamGraphDockWidget is None:
+            return
+        self.powerStreamGraphDockWidget.widget().plotNew(x=x, y=y, reset_data=reset)
+        self.powerStreamGraphDockWidget.widget().show()
 
     def update_nrx_stream_values(self, measure: dict):
         self.nrxPower.setText(f"{round(measure.get('power'), 3)}")
@@ -419,19 +425,19 @@ class NRXTabWidget(QWidget):
 
     def show_bias_power_graph(self, results):
         if self.biasPowerGraphWindow is None:
-            self.biasPowerGraphWindow = BiasPowerGraphWindow()
-        self.biasPowerGraphWindow.plotNew(
+            return
+        self.biasPowerGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
         )
-        self.biasPowerGraphWindow.show()
+        self.biasPowerGraphWindow.widget().show()
 
     def show_bias_power_diff_graph(self, results):
-        if self.gridBiasPowerDiffGraphWindow is None:
-            self.gridBiasPowerDiffGraphWindow = GridBiasPowerDiffGraphWindow()
-        self.gridBiasPowerDiffGraphWindow.plotNew(
+        if self.biasPowerDiffGraphWindow is None:
+            return
+        self.biasPowerDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
         )
-        self.gridBiasPowerDiffGraphWindow.show()
+        self.biasPowerDiffGraphWindow.widget().show()

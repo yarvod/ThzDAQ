@@ -30,7 +30,12 @@ from interface.views.temperatureControllerTabWidget import (
 )
 from interface.views.vnaTabWidget import VNATabWidget
 from interface.windows.biasGraphWindow import BiasGraphWindow
+from interface.windows.biasPowerGraphWindow import (
+    BiasPowerGraphWindow,
+    BiasPowerDiffGraphWindow,
+)
 from interface.windows.clGraphWindow import CLGraphWindow
+from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from store.base import MeasureManager
 
 
@@ -163,6 +168,39 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_cli_curve_dock_widget
         )
         self.tab_sis_block.ctrlGraphDockWidget = self.graph_cli_curve_dock_widget
+
+        self.graph_power_stream_curve_dock_widget = QtAds.CDockWidget("Graph P-t curve")
+        self.tab_graph_power_stream_curve = NRXStreamGraphWindow(self)
+        self.graph_power_stream_curve_dock_widget.setWidget(
+            self.tab_graph_power_stream_curve
+        )
+        self.menuGraph.addAction(
+            self.graph_power_stream_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_power_stream_curve_dock_widget
+        )
+        self.tab_nrx.powerStreamGraphDockWidget = (
+            self.graph_power_stream_curve_dock_widget
+        )
+
+        self.graph_pv_curve_dock_widget = QtAds.CDockWidget("Graph P-V curve")
+        self.tab_graph_pv_curve = BiasPowerGraphWindow(self)
+        self.graph_pv_curve_dock_widget.setWidget(self.tab_graph_pv_curve)
+        self.menuGraph.addAction(self.graph_pv_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_pv_curve_dock_widget
+        )
+        self.tab_nrx.biasPowerGraphWindow = self.graph_pv_curve_dock_widget
+
+        self.graph_yv_curve_dock_widget = QtAds.CDockWidget("Graph Y-V curve")
+        self.tab_graph_yv_curve = BiasPowerDiffGraphWindow(self)
+        self.graph_yv_curve_dock_widget.setWidget(self.tab_graph_yv_curve)
+        self.menuGraph.addAction(self.graph_yv_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_yv_curve_dock_widget
+        )
+        self.tab_nrx.biasPowerDiffGraphWindow = self.graph_yv_curve_dock_widget
 
         # Set widgets active
         self.setup_dock_widget.raise_()
