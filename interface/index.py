@@ -40,6 +40,7 @@ from interface.windows.biasPowerGraphWindow import (
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
+from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from interface.windows.vnaGraphWindow import VNAGraphWindow
 from store.base import MeasureManager
 
@@ -261,6 +262,17 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_vna_dock_widget
         )
         self.tab_vna.vnaGraphWindow = self.graph_vna_dock_widget
+
+        self.graph_temperature_dock_widget = QtAds.CDockWidget("Temperature curve")
+        self.tab_graph_temperature_curve = TemperatureGraphWindow(self)
+        self.graph_temperature_dock_widget.setWidget(self.tab_graph_temperature_curve)
+        self.menuGraph.addAction(self.graph_temperature_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_temperature_dock_widget
+        )
+        self.tab_temperature.temperatureStreamGraphWindow = (
+            self.graph_temperature_dock_widget
+        )
 
         # Set widgets active
         self.setup_dock_widget.raise_()

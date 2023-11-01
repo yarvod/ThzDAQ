@@ -189,26 +189,26 @@ class TemperatureControllerTabWidget(QWidget):
 
     def show_temperature_stream_graph(self, measure: Dict):
         if self.temperatureStreamGraphWindow is None:
-            self.temperatureStreamGraphWindow = TemperatureGraphWindow()
-        self.temperatureStreamGraphWindow.plotNew(
+            return
+        self.temperatureStreamGraphWindow.widget().plotNew(
             ds_id="A",
             x=measure.get("time"),
             y=measure.get("temp_a"),
             reset_data=measure.get("reset"),
         )
-        self.temperatureStreamGraphWindow.plotNew(
+        self.temperatureStreamGraphWindow.widget().plotNew(
             ds_id="B",
             x=measure.get("time"),
             y=measure.get("temp_b"),
             reset_data=measure.get("reset"),
         )
-        self.temperatureStreamGraphWindow.plotNew(
+        self.temperatureStreamGraphWindow.widget().plotNew(
             ds_id="C",
             x=measure.get("time"),
             y=measure.get("temp_c"),
             reset_data=measure.get("reset"),
         )
-        self.temperatureStreamGraphWindow.show()
+        self.temperatureStreamGraphWindow.widget().show()
 
     def createGroupHeater(self):
         self.groupHeater = QGroupBox(self)
