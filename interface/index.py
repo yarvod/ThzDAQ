@@ -294,9 +294,9 @@ class App(QMainWindow):
         self.dock_manager.loadPerspectives(self.settings)
         self.perspective_combobox.addItems(self.dock_manager.perspectiveNames())
         try:
-            last_perspective = self.dock_manager.perspectiveNames()[-1]
-            self.perspective_combobox.setCurrentText(last_perspective)
-        except IndexError:
+            self.dock_manager.perspectiveNames().index("SIS measuring")
+            self.perspective_combobox.setCurrentText("SIS measuring")
+        except ValueError:
             pass
 
     def store_state(self):
