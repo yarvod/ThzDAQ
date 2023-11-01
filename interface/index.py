@@ -2,7 +2,6 @@ from PyQt5.QtCore import QSignalBlocker, QSettings
 from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
-    QCheckBox,
     QApplication,
     QMenu,
     QAction,
@@ -17,6 +16,7 @@ from PyQtAds import ads as QtAds
 
 
 from interface import style
+from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
 from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.chopperTabWidget import ChopperTabWidget
@@ -29,6 +29,8 @@ from interface.views.temperatureControllerTabWidget import (
     TemperatureControllerTabWidget,
 )
 from interface.views.vnaTabWidget import VNATabWidget
+from interface.windows.biasGraphWindow import BiasGraphWindow
+from interface.windows.clGraphWindow import CLGraphWindow
 from store.base import MeasureManager
 
 
@@ -55,11 +57,14 @@ class App(QMainWindow):
         QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.FocusHighlighting, True)
 
         self.menuBar = self.menuBar()
-        self.menuView = QMenu("View", self)
+        self.menuView = QMenu("Views", self)
+        self.menuGraph = QMenu("Graphs", self)
         self.menuBar.addMenu(self.menuView)
+        self.menuBar.addMenu(self.menuGraph)
 
         self.dock_manager = QtAds.CDockManager(self)
 
+        # Add base widgets
         self.setup_dock_widget = QtAds.CDockWidget("SetUp")
         self.tab_setup = SetUpTabWidget(self)
         self.setup_dock_widget.setWidget(self.tab_setup)
@@ -140,37 +145,75 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.chopper_dock_widget
         )
 
+        # Add graph widgets
+        self.graph_iv_curve_dock_widget = QtAds.CDockWidget("Graph I-V curve")
+        self.tab_graph_iv_curve = BiasGraphWindow(self)
+        self.graph_iv_curve_dock_widget.setWidget(self.tab_graph_iv_curve)
+        self.menuGraph.addAction(self.graph_iv_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_iv_curve_dock_widget
+        )
+        self.tab_sis_block.biasGraphDockWidget = self.graph_iv_curve_dock_widget
+
+        self.graph_cli_curve_dock_widget = QtAds.CDockWidget("Graph CL-I curve")
+        self.tab_graph_cli_curve = CLGraphWindow(self)
+        self.graph_cli_curve_dock_widget.setWidget(self.tab_graph_cli_curve)
+        self.menuGraph.addAction(self.graph_cli_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_cli_curve_dock_widget
+        )
+        self.tab_sis_block.ctrlGraphDockWidget = self.graph_cli_curve_dock_widget
+
+        # Set widgets active
         self.setup_dock_widget.raise_()
         self.sis_block_dock_widget.raise_()
 
+        # Add toolbar
         self.toolBar = QToolBar("Main ToolBar")
         self.addToolBar(self.toolBar)
 
         self.create_perspective_ui()
-        saved_state = self.settings.value("dock_manager_state")
-        if saved_state:
-            self.dock_manager.restoreState(saved_state)
+        self.restore_state()
 
         self.show()
 
+    def restore_state(self):
+        # dock_manager_state = self.settings.value("dock_manager_state")
+        # if dock_manager_state:
+        #     self.dock_manager.restoreState(dock_manager_state)
+        self.dock_manager.loadPerspectives(self.settings)
+        self.perspective_combobox.addItems(self.dock_manager.perspectiveNames())
+        try:
+            last_perspective = self.dock_manager.perspectiveNames()[-1]
+            self.perspective_combobox.setCurrentText(last_perspective)
+        except IndexError:
+            pass
+
+    def store_state(self):
+        # self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
+        self.dock_manager.savePerspectives(self.settings)
+
     def create_perspective_ui(self):
-        save_perspective_action = QAction("Create Perspective", self)
-        save_perspective_action.triggered.connect(self.save_perspective)
+        create_perspective_action = QAction("Create Perspective", self)
+        create_perspective_action.triggered.connect(self.create_perspective)
+        update_perspective_action = QAction("Update Perspective", self)
+        update_perspective_action.triggered.connect(self.update_perspective)
         perspective_list_action = QWidgetAction(self)
         self.perspective_combobox = QComboBox(self)
         self.perspective_combobox.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.perspective_combobox.setSizePolicy(
             QSizePolicy.Preferred, QSizePolicy.Preferred
         )
-        self.perspective_combobox.activated[str].connect(
+        self.perspective_combobox.currentTextChanged.connect(
             self.dock_manager.openPerspective
         )
         perspective_list_action.setDefaultWidget(self.perspective_combobox)
         self.toolBar.addSeparator()
         self.toolBar.addAction(perspective_list_action)
-        self.toolBar.addAction(save_perspective_action)
+        self.toolBar.addAction(create_perspective_action)
+        self.toolBar.addAction(update_perspective_action)
 
-    def save_perspective(self):
+    def create_perspective(self):
         perspective_name, ok = QInputDialog.getText(
             self, "Save Perspective", "Enter Unique name:"
         )
@@ -183,26 +226,18 @@ class App(QMainWindow):
         self.perspective_combobox.addItems(self.dock_manager.perspectiveNames())
         self.perspective_combobox.setCurrentText(perspective_name)
 
+    def update_perspective(self):
+        perspective_name = self.perspective_combobox.currentText()
+        self.dock_manager.addPerspective(perspective_name)
+
     def closeEvent(self, event):
-        reply = QMessageBox(self)
-        reply.setWindowTitle("Exit")
-        reply.setText("Are you sure you want to exit?")
-        reply.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        reply.setDefaultButton(QMessageBox.StandardButton.No)
-        reply.setIcon(QMessageBox.Icon.Question)
-        layout = reply.layout()
-        dumpDataCheck = QCheckBox(reply)
-        dumpDataCheck.setChecked(True)
-        dumpDataCheck.setText("Dump all data on exit")
-        layout.addWidget(dumpDataCheck)
-        reply.setLayout(layout)
+        reply = ExitMessageBox(self)
         button = reply.exec()
-        self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
         if button == QMessageBox.StandardButton.Yes:
-            if dumpDataCheck.isChecked():
+            if reply.dumpDataCheck.isChecked():
                 MeasureManager.save_all()
+            if reply.storeStateCheck.isChecked():
+                self.store_state()
             for window in QApplication.topLevelWidgets():
                 window.close()
             self.dock_manager.deleteLater()

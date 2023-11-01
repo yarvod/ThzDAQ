@@ -16,8 +16,8 @@ class GraphWindow(QWidget):
     y_label = "y label"
     x_label = "x label"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent):
+        super().__init__(parent)
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
         vlayout = QVBoxLayout()
