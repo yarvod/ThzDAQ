@@ -385,7 +385,7 @@ class GridTabWidget(QScrollArea):
     def show_bias_power_graph(self, results):
         if state.GRID_PLOT_TYPE == GridPlotTypes.IV_CURVE:
             if self.gridBiasCurrentGraphWindow is None:
-                self.gridBiasCurrentGraphWindow = GridBiasCurrentGraphWindow(self)
+                return
             self.gridBiasCurrentGraphWindow.widget().plotNew(
                 x=results.get("x", []),
                 y=results.get("y", []),
@@ -395,7 +395,7 @@ class GridTabWidget(QScrollArea):
 
         if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE:
             if self.gridBiasPowerGraphWindow is None:
-                self.gridBiasPowerGraphWindow = GridBiasPowerGraphWindow(self)
+                return
             self.gridBiasPowerGraphWindow.widget().plotNew(
                 x=results.get("x", []),
                 y=results.get("y", []),
@@ -405,7 +405,7 @@ class GridTabWidget(QScrollArea):
 
     def show_bias_power_diff_graph(self, results):
         if self.gridBiasPowerDiffGraphWindow is None:
-            self.gridBiasPowerDiffGraphWindow = GridBiasPowerDiffGraphWindow(self)
+            return
         self.gridBiasPowerDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),

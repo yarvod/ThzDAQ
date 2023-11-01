@@ -76,7 +76,7 @@ class SpectrumMonitor(QGroupBox):
 
     def show_spectrum(self, data: Dict):
         if self.spectrumStreamGraphWindow is None:
-            self.spectrumStreamGraphWindow = SpectrumGraphWindow()
+            return
 
-        self.spectrumStreamGraphWindow.plotNew(x=data["x"], y=data["y"])
-        self.spectrumStreamGraphWindow.show()
+        self.spectrumStreamGraphWindow.widget().plotNew(x=data["x"], y=data["y"])
+        self.spectrumStreamGraphWindow.widget().show()

@@ -39,6 +39,7 @@ from interface.windows.biasPowerGraphWindow import (
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
+from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
 from store.base import MeasureManager
 
 
@@ -238,6 +239,17 @@ class App(QMainWindow):
         )
         self.tab_grid.gridBiasPowerDiffGraphWindow = (
             self.graph_grid_yv_curve_dock_widget
+        )
+
+        self.graph_spectrum_dock_widget = QtAds.CDockWidget("Spectrum curve")
+        self.tab_graph_spectrum_curve = SpectrumGraphWindow(self)
+        self.graph_spectrum_dock_widget.setWidget(self.tab_graph_spectrum_curve)
+        self.menuGraph.addAction(self.graph_spectrum_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_spectrum_dock_widget
+        )
+        self.tab_spectrum.spectrum_monitor.spectrumStreamGraphWindow = (
+            self.graph_spectrum_dock_widget
         )
 
         # Set widgets active
