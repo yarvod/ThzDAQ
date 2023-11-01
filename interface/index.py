@@ -40,6 +40,7 @@ from interface.windows.biasPowerGraphWindow import (
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
+from interface.windows.vnaGraphWindow import VNAGraphWindow
 from store.base import MeasureManager
 
 
@@ -251,6 +252,15 @@ class App(QMainWindow):
         self.tab_spectrum.spectrum_monitor.spectrumStreamGraphWindow = (
             self.graph_spectrum_dock_widget
         )
+
+        self.graph_vna_dock_widget = QtAds.CDockWidget("VNA curve")
+        self.tab_graph_vna_curve = VNAGraphWindow(self)
+        self.graph_vna_dock_widget.setWidget(self.tab_graph_vna_curve)
+        self.menuGraph.addAction(self.graph_vna_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_vna_dock_widget
+        )
+        self.tab_vna.vnaGraphWindow = self.graph_vna_dock_widget
 
         # Set widgets active
         self.setup_dock_widget.raise_()
