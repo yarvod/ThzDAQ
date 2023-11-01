@@ -39,7 +39,7 @@ from interface.windows.biasPowerGraphWindow import (
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
-from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
+from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from store.base import MeasureManager
 
 
