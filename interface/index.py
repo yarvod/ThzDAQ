@@ -18,6 +18,7 @@ from PyQtAds import ads as QtAds
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
+from interface.views.YIG.YigWidget import YIGWidget
 from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
@@ -42,6 +43,7 @@ from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from interface.windows.vnaGraphWindow import VNAGraphWindow
+from interface.windows.yigGraphWindow import PowerIFGraphWindow, PowerIFDiffGraphWindow
 from store.base import MeasureManager
 
 
@@ -154,6 +156,14 @@ class App(QMainWindow):
         self.menuView.addAction(self.chopper_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.chopper_dock_widget
+        )
+
+        self.yig_dock_widget = QtAds.CDockWidget("YIG filter")
+        self.yig_widget = YIGWidget(self)
+        self.yig_dock_widget.setWidget(self.yig_widget)
+        self.menuView.addAction(self.yig_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.yig_dock_widget
         )
 
         # Add graph widgets
@@ -273,6 +283,24 @@ class App(QMainWindow):
         self.tab_temperature.temperatureStreamGraphWindow = (
             self.graph_temperature_dock_widget
         )
+
+        self.pif_curve_dock_widget = QtAds.CDockWidget("P-IF curve")
+        self.pif_curve_widget = PowerIFGraphWindow(self)
+        self.pif_curve_dock_widget.setWidget(self.pif_curve_widget)
+        self.menuGraph.addAction(self.pif_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.pif_curve_dock_widget
+        )
+        self.yig_widget.powerIfGraphWindow = self.pif_curve_dock_widget
+
+        self.pif_diff_curve_dock_widget = QtAds.CDockWidget("Diff P-IF curve")
+        self.pif_diff_curve_widget = PowerIFDiffGraphWindow(self)
+        self.pif_diff_curve_dock_widget.setWidget(self.pif_diff_curve_widget)
+        self.menuGraph.addAction(self.pif_diff_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.pif_diff_curve_dock_widget
+        )
+        self.yig_widget.powerIfDiffGraphWindow = self.pif_diff_curve_dock_widget
 
         # Set widgets active
         self.setup_dock_widget.raise_()
