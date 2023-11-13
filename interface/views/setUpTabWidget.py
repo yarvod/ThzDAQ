@@ -24,6 +24,7 @@ from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
 from interface.components.ui.Button import Button
+from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -183,12 +184,14 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addWidget(SetupSpectrumGroup(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(SetupChopperGroup(self))
+        self.layout.addSpacing(10)
+        self.layout.addWidget(SetUpDigitalYigGroup(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
 

@@ -16,19 +16,19 @@ class GraphWindow(QWidget):
     y_label = "y label"
     x_label = "x label"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent):
+        super().__init__(parent)
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
         vlayout = QVBoxLayout()
         hlayout = QHBoxLayout()
         self.graphWidget = pg.PlotWidget()
-        self.btnRemoveGraphs = QPushButton("Remove hidden graphs")
-        self.btnRemoveGraphs.clicked.connect(self.remove_hidden_graphs)
-        self.btnRemoveAllGraphs = QPushButton("Remove all graphs")
-        self.btnRemoveAllGraphs.clicked.connect(self.remove_all_graphs)
-        hlayout.addWidget(self.btnRemoveGraphs)
-        hlayout.addWidget(self.btnRemoveAllGraphs)
+        self.btnRemoveHiddenCurves = QPushButton("Remove hidden curves")
+        self.btnRemoveHiddenCurves.clicked.connect(self.remove_hidden_graphs)
+        self.btnRemoveAllCurves = QPushButton("Remove all curves")
+        self.btnRemoveAllCurves.clicked.connect(self.remove_all_graphs)
+        hlayout.addWidget(self.btnRemoveHiddenCurves)
+        hlayout.addWidget(self.btnRemoveAllCurves)
         vlayout.addLayout(hlayout)
         vlayout.addWidget(self.graphWidget)
         self.datasets = defaultdict(dict)

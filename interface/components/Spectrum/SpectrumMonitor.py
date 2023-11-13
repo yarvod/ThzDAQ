@@ -13,7 +13,7 @@ from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
-from interface.windows.spectrumGrpahWindow import SpectrumGraphWindow
+from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from store.state import state
 
 
@@ -76,7 +76,7 @@ class SpectrumMonitor(QGroupBox):
 
     def show_spectrum(self, data: Dict):
         if self.spectrumStreamGraphWindow is None:
-            self.spectrumStreamGraphWindow = SpectrumGraphWindow()
+            return
 
-        self.spectrumStreamGraphWindow.plotNew(x=data["x"], y=data["y"])
-        self.spectrumStreamGraphWindow.show()
+        self.spectrumStreamGraphWindow.widget().plotNew(x=data["x"], y=data["y"])
+        self.spectrumStreamGraphWindow.widget().show()

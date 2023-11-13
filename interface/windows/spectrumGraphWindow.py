@@ -13,8 +13,8 @@ class SpectrumGraphWindow(QWidget):
     y_label = "Power, dB"
     x_label = "Frequency, Hz"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent):
+        super().__init__(parent)
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
         layout = QVBoxLayout()

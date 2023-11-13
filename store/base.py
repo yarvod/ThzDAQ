@@ -20,6 +20,8 @@ class MeasureType:
     POWER_STREAM = "power_stream"
     TEMPERATURE_STREAM = "temperature_stream"
     VNA_REFLECTION = "vna_reflection"
+    IF_POWER = "if_power"
+    CHOPPER_IF_POWER = "chopper_if_power"
 
     CHOICES = dict(
         (
@@ -33,6 +35,8 @@ class MeasureType:
             (POWER_STREAM, "Power stream"),
             (TEMPERATURE_STREAM, "Temp stream"),
             (VNA_REFLECTION, "VNA Reflection"),
+            (IF_POWER, "IF Power"),
+            (CHOPPER_IF_POWER, "Chopper IF Power"),
         )
     )
 
@@ -109,7 +113,7 @@ class MeasureManager:
     def save_by_index(cls, index: int) -> None:
         measure = cls.all()[index]
         results = measure.to_json()
-        caption = f"Saving {measure.type_display}_{measure.finished.__str__()}"
+        caption = f"Saving {measure.type_display} started at {measure.started.strftime('%Y-%m-%d %H:%M:%S')}"
         try:
             filepath = QFileDialog.getSaveFileName(filter="*.json", caption=caption)[0]
             if not filepath:
@@ -119,7 +123,7 @@ class MeasureManager:
             with open(filepath, "w", encoding="utf-8") as file:
                 json.dump(results, file, ensure_ascii=False, indent=4)
             measure.saved = True
-            measure.save()
+            measure.save(finish=False)
         except (IndexError, FileNotFoundError):
             pass
 
@@ -143,6 +147,7 @@ class MeasureModel:
         2: "finished",
         3: "saved",
     }
+    type_class = MeasureType
 
     def __init__(
         self,
@@ -180,12 +185,14 @@ class MeasureModel:
         self.objects.update_table()
 
     def to_json(self):
-        if self.finished == "--":
-            self.finished = datetime.now()
+        finished = self.finished
+        if finished == "--":
+            finished = datetime.now()
         return {
+            "type": self.measure_type,
             "measure": self.type_display,
             "started": self.started.strftime("%Y-%m-%d %H:%M:%S"),
-            "finished": self.finished.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished": finished.strftime("%Y-%m-%d %H:%M:%S"),
             "data": self.data,
         }
 

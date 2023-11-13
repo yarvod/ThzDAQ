@@ -12,8 +12,8 @@ class NRXStreamGraphWindow(QWidget):
     y_label = "Power, dBm"
     x_label = "Time, s"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent):
+        super().__init__(parent)
         self.setWindowTitle(self.window_title)
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         layout = QVBoxLayout()

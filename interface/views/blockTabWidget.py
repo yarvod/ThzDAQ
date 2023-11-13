@@ -279,23 +279,23 @@ class BlockBIASScanThread(QThread):
 
 
 class BlockTabWidget(QScrollArea, UtilsMixin):
-    def __init__(self, parent):
+    def __init__(self, parent, biasGraphDockWidget=None, ctrlGraphDockWidget=None):
         super().__init__(parent)
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
-        self.ctrlGraphWindow = None
-        self.biasGraphWindow = None
+        self.biasGraphDockWidget = biasGraphDockWidget
+        self.ctrlGraphDockWidget = ctrlGraphDockWidget
         self.createGroupMonitor()
         self.createGroupValuesSet()
-        self.createGroupCTRLScan()
         self.createGroupBiasScan()
+        self.createGroupCTRLScan()
         self.layout.addWidget(self.groupMonitor)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.rowValuesSet)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupCTRLScan)
-        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupBiasScan)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.groupCTRLScan)
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
@@ -306,24 +306,24 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.setWidget(self.widget)
 
     def show_ctrl_graph_window(self, results: dict):
-        if self.ctrlGraphWindow is None:
-            self.ctrlGraphWindow = CLGraphWindow()
-        self.ctrlGraphWindow.plotNew(
+        if self.ctrlGraphDockWidget is None:
+            return
+        self.ctrlGraphDockWidget.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
         )
-        self.ctrlGraphWindow.show()
+        self.ctrlGraphDockWidget.widget().show()
 
     def show_bias_graph_window(self, results):
-        if self.biasGraphWindow is None:
-            self.biasGraphWindow = BiasGraphWindow()
-        self.biasGraphWindow.plotNew(
+        if self.biasGraphDockWidget is None:
+            return
+        self.biasGraphDockWidget.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
         )
-        self.biasGraphWindow.show()
+        self.biasGraphDockWidget.widget().show()
 
     def scan_ctrl_current(self):
         self.block_ctrl_scan_thread = BlockCLScanThread()

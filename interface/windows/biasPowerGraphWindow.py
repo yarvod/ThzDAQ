@@ -8,6 +8,13 @@ class BiasPowerGraphWindow(GraphWindow):
     y_label = "Power, dBm"
 
 
+class BiasPowerDiffGraphWindow(GraphWindow):
+    window_title = "Y-factor P-V Graphs"
+    graph_title = "Y-factor (Voltage)"
+    x_label = "Voltage, mV"
+    y_label = "Power, dBm"
+
+
 class GridBiasPowerGraphWindow(GraphWindow):
     window_title = "GRID P-V Graphs"
     graph_title = "Power (Voltage)"
@@ -15,7 +22,7 @@ class GridBiasPowerGraphWindow(GraphWindow):
     y_label = "Power, dBm"
 
 
-class GridBiasGraphWindow(GraphWindow):
+class GridBiasCurrentGraphWindow(GraphWindow):
     window_title = "GRID I-V Graphs"
     graph_title = "Current (Voltage)"
     x_label = "Voltage, mV"

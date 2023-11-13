@@ -1,3 +1,5 @@
+import os
+
 from settings import GridPlotTypes, WAVESHARE_ETHERNET
 
 
@@ -136,6 +138,25 @@ class State:
     CHOPPER_FREQ = 1
     CHOPPER_SWITCH = True
     CHOPPER_MONITOR = False
+
+    # National Instruments
+    NI_PREFIX = "http://"
+    NI_IP = "169.254.0.86"
+
+    NI_FREQ_TO = 13
+    NI_FREQ_FROM = 3
+    NI_FREQ_POINTS = 300
+    NI_STABILITY_MEAS = False
+    DIGITAL_YIG_FREQ = 8
+    NRX_POINTS = 20
+
+    CALIBRATION_CURR_2_FREQ = [3.49015508e10, 1.14176903e08]
+    CALIBRATION_FREQ_2_CURR = [2.86513427e-11, -3.26694024e-03]
+    CALIBRATION_FILE = os.path.join(os.getcwd(), "calibration.csv")
+    CALIBRATION_STEP_DELAY = 0.1
+
+    CALIBRATION_DIGITAL_POINT_2_FREQ = [2478826.8559771227, 2937630021.5301304]
+    CALIBRATION_DIGITAL_FREQ_2_POINT = [4.03405867562004e-07, -1185.002515827086]
 
 
 state = State()

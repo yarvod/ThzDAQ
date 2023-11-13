@@ -308,9 +308,9 @@ class VNATabWidget(QWidget):
             state.VNA_FREQ_START, state.VNA_FREQ_STOP, state.VNA_POINTS
         )
         if self.vnaGraphWindow is None:
-            self.vnaGraphWindow = VNAGraphWindow()
-        self.vnaGraphWindow.plotNew(x=freq_list, y=reflection)
-        self.vnaGraphWindow.show()
+            return
+        self.vnaGraphWindow.widget().plotNew(x=freq_list, y=reflection)
+        self.vnaGraphWindow.widget().show()
 
     def scan_bias_reflection(self):
         self.bias_reflection_thread = BiasReflectionThread()
