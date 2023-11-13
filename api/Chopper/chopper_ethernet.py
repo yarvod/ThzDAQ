@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from typing import Tuple
 
 from pymodbus.client import ModbusTcpClient
@@ -43,5 +44,9 @@ class ChopperEthernet(Chopper):
 if __name__ == "__main__":
     chopper = ChopperEthernet()
     chopper.connect()
-    print(chopper.read_di23())
-    chopper.client.close()
+    try:
+        while 1:
+            print(f"[{datetime.now()}]{chopper.read_di23()}")
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        chopper.client.close()
