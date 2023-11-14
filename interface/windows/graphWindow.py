@@ -31,9 +31,12 @@ class GraphWindow(QWidget):
         hlayout.addWidget(self.btnRemoveAllCurves)
         vlayout.addLayout(hlayout)
         vlayout.addWidget(self.graphWidget)
-        self.datasets = defaultdict(dict)
         self.prepare()
         self.setLayout(vlayout)
+
+    def get_plot_items(self):
+        plotItem = self.graphWidget.getPlotItem()
+        return {int(item.name()): item for item in plotItem.items}
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
@@ -44,24 +47,26 @@ class GraphWindow(QWidget):
         self.graphWidget.addLegend()
         self.graphWidget.showGrid(x=True, y=True)
 
-    def plotGraph(self, ds_id: int = 1):
-        try:
-            x = self.datasets[ds_id]["x"]
-            y = self.datasets[ds_id]["y"]
-        except (IndexError, KeyError) as e:
-            logger.error(f"Plot graph Error: {e}")
-            return
+    def plotGraph(self, x: Iterable, y: Iterable, new_plot: bool = True):
+        items = self.get_plot_items()
+        ds_id = max(items.keys(), default=0)
+        if new_plot:
+            ds_id += 1
 
-        plotItem = self.graphWidget.getPlotItem()
-        items = {int(item.name()): item for item in plotItem.items}
         if items.get(ds_id):
-            items.get(ds_id).setData(x, y)
-            return
+            item = items.get(ds_id)
+            x_data = list(item.xData)
+            x_data.extend(x)
+            y_data = list(item.yData)
+            y_data.extend(y)
+            items.get(ds_id).setData(x_data, y_data)
+            return ds_id
 
         pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100), width=2)
         self.graphWidget.plot(
             x, y, name=f"{ds_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
+        return ds_id
 
     def addData(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
         ds_id = max(self.datasets.keys(), default=0)
@@ -78,9 +83,7 @@ class GraphWindow(QWidget):
         return ds_id
 
     def plotNew(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
-        ds_id = self.addData(x, y, new_plot)
-        self.plotGraph(ds_id)
-        return ds_id
+        return self.plotGraph(x, y, new_plot)
 
     def remove_hidden_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
@@ -89,14 +92,9 @@ class GraphWindow(QWidget):
         }
         for item in items_to_remove.values():
             plotItem.removeItem(item)
-        self.datasets = defaultdict(dict)
-        for ds_id, ds in self.datasets.items():
-            if ds_id not in items_to_remove.keys():
-                self.datasets[ds_id] = ds
 
     def remove_all_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
         items_to_remove = {int(item.name()): item for item in plotItem.items}
         for item in items_to_remove.values():
             plotItem.removeItem(item)
-        self.datasets = defaultdict(dict)
