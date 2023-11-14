@@ -15,6 +15,13 @@ class BiasPowerDiffGraphWindow(GraphWindow):
     y_label = "Power, dBm"
 
 
+class TnGraphWindow(GraphWindow):
+    window_title = "Tn-V Graphs"
+    graph_title = "Tn (Voltage)"
+    x_label = "Voltage, mV"
+    y_label = "Tn, K"
+
+
 class GridBiasPowerGraphWindow(GraphWindow):
     window_title = "GRID P-V Graphs"
     graph_title = "Power (Voltage)"

@@ -37,6 +37,7 @@ from interface.windows.biasPowerGraphWindow import (
     GridBiasPowerGraphWindow,
     GridBiasCurrentGraphWindow,
     GridBiasPowerDiffGraphWindow,
+    TnGraphWindow,
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
@@ -217,6 +218,15 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_yv_curve_dock_widget
         )
         self.tab_nrx.biasPowerDiffGraphWindow = self.graph_yv_curve_dock_widget
+
+        self.graph_tnv_curve_dock_widget = QtAds.CDockWidget("Tn-V curve")
+        self.tab_graph_tnv_curve = TnGraphWindow(self)
+        self.graph_tnv_curve_dock_widget.setWidget(self.tab_graph_tnv_curve)
+        self.menuGraph.addAction(self.graph_tnv_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_tnv_curve_dock_widget
+        )
+        self.tab_nrx.biasTnGraphWindow = self.graph_tnv_curve_dock_widget
 
         self.graph_grid_pv_curve_dock_widget = QtAds.CDockWidget("GRID P-V curve")
         self.tab_graph_grid_pv_curve = GridBiasPowerGraphWindow(self)

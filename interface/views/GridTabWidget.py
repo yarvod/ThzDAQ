@@ -25,11 +25,6 @@ from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.grid.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
-from interface.windows.biasPowerGraphWindow import (
-    GridBiasPowerGraphWindow,
-    GridBiasCurrentGraphWindow,
-    GridBiasPowerDiffGraphWindow,
-)
 from settings import GridPlotTypes
 from store.base import MeasureModel, MeasureType
 from store.state import state

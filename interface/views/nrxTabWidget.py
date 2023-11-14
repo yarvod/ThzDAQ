@@ -14,16 +14,12 @@ from PyQt5.QtWidgets import (
 
 from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button
-from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.windows.biasPowerGraphWindow import (
-    BiasPowerGraphWindow,
-    GridBiasPowerDiffGraphWindow,
-)
+from utils.functions import get_y_tn
 from utils.logger import logger
 
 
@@ -80,8 +76,9 @@ class NRXBlockStreamThread(QThread):
 
 class BiasPowerThread(QThread):
     results = pyqtSignal(dict)
-    stream_results = pyqtSignal(dict)
-    stream_diff_results = pyqtSignal(dict)
+    stream_power = pyqtSignal(dict)
+    stream_y_factor = pyqtSignal(dict)
+    stream_tn = pyqtSignal(dict)
 
     def get_results_format(self):
         if state.CHOPPER_SWITCH:
@@ -100,6 +97,8 @@ class BiasPowerThread(QThread):
                     "power": [],
                     "time": [],
                 },
+                "y_factor": [],
+                "t_noise": [],
             }
         else:
             return {
@@ -164,7 +163,7 @@ class BiasPowerThread(QThread):
                 power = nrx.get_power()
                 time_step = time.time() - initial_time
 
-                self.stream_results.emit(
+                self.stream_power.emit(
                     {
                         "x": [voltage_get * 1e3],
                         "y": [power],
@@ -192,15 +191,26 @@ class BiasPowerThread(QThread):
                 time.sleep(2)
 
         if state.CHOPPER_SWITCH:
-            hot = np.array(results["hot"]["power"])
-            cold = np.array(results["cold"]["power"])
-            if len(hot) and len(cold):
-                min_ind = min([len(cold), len(hot)])
-                power_diff = hot[:min_ind] - cold[:min_ind]
-                self.stream_diff_results.emit(
+            if len(results["hot"]["power"]) and len(results["cold"]["power"]):
+                volt_diff, power_diff, tn = get_y_tn(
+                    hot_power=results["hot"]["power"],
+                    cold_power=results["cold"]["power"],
+                    hot_voltage=results["hot"]["voltage_get"],
+                    cold_voltage=results["cold"]["voltage_get"],
+                )
+                volt_diff_mv = [volt * 1e3 for volt in volt_diff]
+                results["y_factor"] = power_diff
+                results["t_noise"] = tn
+                self.stream_y_factor.emit(
                     {
-                        "x": [volt * 1e3 for volt in results["hot"]["voltage_get"]],
-                        "y": power_diff.tolist(),
+                        "x": volt_diff_mv,
+                        "y": power_diff,
+                    }
+                )
+                self.stream_tn.emit(
+                    {
+                        "x": volt_diff_mv,
+                        "y": tn,
                     }
                 )
 
@@ -226,18 +236,13 @@ class BiasPowerThread(QThread):
 
 
 class NRXTabWidget(QWidget):
-    def __init__(
-        self,
-        parent,
-        powerStreamGraphDockWidget=None,
-        biasPowerGraphWindow=None,
-        biasPowerDiffGraphWindow=None,
-    ):
+    def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)
-        self.biasPowerGraphWindow = biasPowerGraphWindow
-        self.powerStreamGraphDockWidget = powerStreamGraphDockWidget
-        self.biasPowerDiffGraphWindow = biasPowerDiffGraphWindow
+        self.biasPowerGraphWindow = None
+        self.powerStreamGraphDockWidget = None
+        self.biasPowerDiffGraphWindow = None
+        self.biasTnGraphWindow = None
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
         self.layout.addWidget(self.groupNRX)
@@ -403,11 +408,12 @@ class NRXTabWidget(QWidget):
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
-        self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
+        self.bias_power_thread.stream_power.connect(self.show_bias_power_graph)
         if state.CHOPPER_SWITCH:
-            self.bias_power_thread.stream_diff_results.connect(
+            self.bias_power_thread.stream_y_factor.connect(
                 self.show_bias_power_diff_graph
             )
+            self.bias_power_thread.stream_tn.connect(self.show_tn_graph)
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)
@@ -441,3 +447,12 @@ class NRXTabWidget(QWidget):
             y=results.get("y", []),
         )
         self.biasPowerDiffGraphWindow.widget().show()
+
+    def show_tn_graph(self, results):
+        if self.biasTnGraphWindow is None:
+            return
+        self.biasTnGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+        )
+        self.biasTnGraphWindow.widget().show()
