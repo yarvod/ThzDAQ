@@ -58,9 +58,9 @@ class GraphWindow(QWidget):
             items.get(ds_id).setData(x, y)
             return
 
-        pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100))
+        pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100), width=2)
         self.graphWidget.plot(
-            x, y, name=f"{ds_id}", pen=pen, symbolSize=5, symbolBrush=pen.color()
+            x, y, name=f"{ds_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
 
     def addData(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:

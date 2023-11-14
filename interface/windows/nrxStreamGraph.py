@@ -46,9 +46,9 @@ class NRXStreamGraphWindow(QWidget):
             items.get("Stream").setData(x, y)
             return
 
-        pen = pg.mkPen(color="#0000FF")
+        pen = pg.mkPen(color="#0000FF", width=2)
         self.graphWidget.plot(
-            x, y, name="Stream", pen=pen, symbolSize=5, symbolBrush=pen.color()
+            x, y, name="Stream", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
 
     def addData(self, x: float, y: float, reset_data: bool = True) -> None:
