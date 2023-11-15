@@ -22,7 +22,7 @@ from interface.views.YIG.YigWidget import YIGWidget
 from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
-from interface.views.nrxTabWidget import NRXTabWidget
+from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
 from interface.views.spectrumTabWidget import SpectrumTabWidget
@@ -38,6 +38,7 @@ from interface.windows.biasPowerGraphWindow import (
     GridBiasCurrentGraphWindow,
     GridBiasPowerDiffGraphWindow,
     TnGraphWindow,
+    GridTnGraphWindow,
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
@@ -112,7 +113,7 @@ class App(QMainWindow):
         )
 
         self.nrx_dock_widget = QtAds.CDockWidget("Power Meter")
-        self.tab_nrx = NRXTabWidget(self)
+        self.tab_nrx = PowerMeterTabWidget(self)
         self.nrx_dock_widget.setWidget(self.tab_nrx)
         self.menuView.addAction(self.nrx_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
@@ -262,6 +263,17 @@ class App(QMainWindow):
         self.tab_grid.gridBiasPowerDiffGraphWindow = (
             self.graph_grid_yv_curve_dock_widget
         )
+
+        self.graph_grid_tnv_curve_dock_widget = QtAds.CDockWidget("GRID Tn-V curve")
+        self.tab_graph_grid_tnv_curve = GridTnGraphWindow(self)
+        self.graph_grid_tnv_curve_dock_widget.setWidget(self.tab_graph_grid_tnv_curve)
+        self.menuGraph.addAction(
+            self.graph_grid_tnv_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_grid_tnv_curve_dock_widget
+        )
+        self.tab_grid.biasTnGraphWindow = self.graph_grid_tnv_curve_dock_widget
 
         self.graph_spectrum_dock_widget = QtAds.CDockWidget("Spectrum curve")
         self.tab_graph_spectrum_curve = SpectrumGraphWindow(self)

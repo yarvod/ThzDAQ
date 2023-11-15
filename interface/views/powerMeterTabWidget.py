@@ -235,7 +235,7 @@ class BiasPowerThread(QThread):
         state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
-class NRXTabWidget(QWidget):
+class PowerMeterTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.layout = QVBoxLayout(self)

@@ -4,7 +4,7 @@ from interface.components.ui.DetachableTabWidget import DetachableTabWidget
 from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
-from interface.views.nrxTabWidget import NRXTabWidget
+from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
 from interface.views.GridTabWidget import GridTabWidget
@@ -37,7 +37,7 @@ class TabsWidget(QWidget):
         self.tab_data = MeasureDataTabWidget(self)
         self.tab_block = BlockTabWidget(self)
         self.tab_vna = VNATabWidget(self)
-        self.tab_nrx = NRXTabWidget(self)
+        self.tab_nrx = PowerMeterTabWidget(self)
         self.tab_signal_generator = SignalGeneratorTabWidget(self)
         self.tab_grid = GridTabWidget(self)
         self.tab_temperature = TemperatureControllerTabWidget(self)

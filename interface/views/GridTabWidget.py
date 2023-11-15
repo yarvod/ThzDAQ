@@ -28,15 +28,17 @@ from interface.components.ui.Lines import HLine
 from settings import GridPlotTypes
 from store.base import MeasureModel, MeasureType
 from store.state import state
-
+from utils.functions import get_y_tn
 
 logger = logging.getLogger(__name__)
 
 
 class StepBiasPowerThread(QThread):
     results = pyqtSignal(list)
-    stream_results = pyqtSignal(dict)
-    stream_diff_results = pyqtSignal(dict)
+    stream_pv = pyqtSignal(dict)
+    stream_y_factor = pyqtSignal(dict)
+    stream_iv = pyqtSignal(dict)
+    stream_tn = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
     def __init__(self):
@@ -83,6 +85,8 @@ class StepBiasPowerThread(QThread):
                     "power": [],
                     "time": [],
                 },
+                "y_factor": [],
+                "t_noise": [],
             }
         return {
             "id": 0,
@@ -162,12 +166,17 @@ class StepBiasPowerThread(QThread):
                     progress = int(step / total_steps * 100)
                     self.progress.emit(progress)
 
-                    self.stream_results.emit(
+                    self.stream_pv.emit(
                         {
                             "x": [voltage_get * 1e3],
-                            "y": [power]
-                            if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE
-                            else [current_get * 1e6],
+                            "y": [power],
+                            "new_plot": voltage_step == 0,
+                        }
+                    )
+                    self.stream_iv.emit(
+                        {
+                            "x": [voltage_get * 1e3],
+                            "y": [current_get * 1e6],
                             "new_plot": voltage_step == 0,
                         }
                     )
@@ -191,18 +200,28 @@ class StepBiasPowerThread(QThread):
                     time.sleep(2)
 
             if state.CHOPPER_SWITCH:
-                hot = np.array(results["hot"]["power"])
-                cold = np.array(results["cold"]["power"])
-                if not len(hot) or not len(cold):
-                    continue
-                min_ind = min([len(cold), len(hot)])
-                power_diff = hot[:min_ind] - cold[:min_ind]
-                self.stream_diff_results.emit(
-                    {
-                        "x": [volt * 1e3 for volt in results["hot"]["voltage_get"]],
-                        "y": power_diff.tolist(),
-                    }
-                )
+                if len(results["hot"]["power"]) and len(results["cold"]["power"]):
+                    volt_diff, power_diff, tn = get_y_tn(
+                        hot_power=results["hot"]["power"],
+                        cold_power=results["cold"]["power"],
+                        hot_voltage=results["hot"]["voltage_get"],
+                        cold_voltage=results["cold"]["voltage_get"],
+                    )
+                    volt_diff_mv = [volt * 1e3 for volt in volt_diff]
+                    results["y_factor"] = power_diff
+                    results["t_noise"] = tn
+                    self.stream_y_factor.emit(
+                        {
+                            "x": volt_diff_mv,
+                            "y": power_diff,
+                        }
+                    )
+                    self.stream_tn.emit(
+                        {
+                            "x": volt_diff_mv,
+                            "y": tn,
+                        }
+                    )
 
         self.pre_exit()
         self.results.emit(results_list)
@@ -239,6 +258,7 @@ class GridTabWidget(QScrollArea):
         self.gridBiasPowerGraphWindow = None
         self.gridBiasCurrentGraphWindow = None
         self.gridBiasPowerDiffGraphWindow = None
+        self.biasTnGraphWindow = None
         self.createGroupGridBiasPowerScan()
         self.layout.addWidget(GridManagingGroup(self))
         self.layout.addSpacing(10)
@@ -304,11 +324,6 @@ class GridTabWidget(QScrollArea):
         self.voltStepDelay.setRange(0.01, 10)
         self.voltStepDelay.setValue(state.BLOCK_BIAS_STEP_DELAY)
 
-        self.gridPlotTypeLabel = QLabel(self)
-        self.gridPlotTypeLabel.setText("Plot type")
-        self.gridPlotType = QComboBox(self)
-        self.gridPlotType.addItems(GridPlotTypes.CHOICES)
-
         self.chopperSwitch = QCheckBox(self)
         self.chopperSwitch.setText("Enable chopper Hot/Cold switching")
         self.chopperSwitch.setChecked(state.CHOPPER_SWITCH)
@@ -332,7 +347,6 @@ class GridTabWidget(QScrollArea):
         layout.addRow(self.voltPointsLabel, self.voltPoints)
         layout.addRow(self.voltStepDelayLabel, self.voltStepDelay)
         layout.addRow(HLine(self))
-        layout.addRow(self.gridPlotTypeLabel, self.gridPlotType)
         layout.addRow(self.chopperSwitch)
         layout.addRow(self.progress)
         layout.addRow(self.btnStartBiasPowerScan)
@@ -349,16 +363,17 @@ class GridTabWidget(QScrollArea):
         state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
-        state.GRID_PLOT_TYPE = self.gridPlotType.currentIndex()
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
         self.bias_power_thread = StepBiasPowerThread()
 
-        self.bias_power_thread.stream_results.connect(self.show_bias_power_graph)
+        self.bias_power_thread.stream_pv.connect(self.show_bias_power_graph)
+        self.bias_power_thread.stream_iv.connect(self.show_bias_current_graph)
         if state.CHOPPER_SWITCH:
-            self.bias_power_thread.stream_diff_results.connect(
+            self.bias_power_thread.stream_y_factor.connect(
                 self.show_bias_power_diff_graph
             )
+            self.bias_power_thread.stream_tn.connect(self.show_tn_graph)
 
         self.bias_power_thread.progress.connect(lambda x: self.progress.setValue(x))
         self.bias_power_thread.finished.connect(lambda: self.progress.setValue(0))
@@ -378,25 +393,24 @@ class GridTabWidget(QScrollArea):
         self.bias_power_thread.terminate()
 
     def show_bias_power_graph(self, results):
-        if state.GRID_PLOT_TYPE == GridPlotTypes.IV_CURVE:
-            if self.gridBiasCurrentGraphWindow is None:
-                return
-            self.gridBiasCurrentGraphWindow.widget().plotNew(
-                x=results.get("x", []),
-                y=results.get("y", []),
-                new_plot=results.get("new_plot", True),
-            )
-            self.gridBiasCurrentGraphWindow.widget().show()
+        if self.gridBiasPowerGraphWindow is None:
+            return
+        self.gridBiasPowerGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot", True),
+        )
+        self.gridBiasPowerGraphWindow.widget().show()
 
-        if state.GRID_PLOT_TYPE == GridPlotTypes.PV_CURVE:
-            if self.gridBiasPowerGraphWindow is None:
-                return
-            self.gridBiasPowerGraphWindow.widget().plotNew(
-                x=results.get("x", []),
-                y=results.get("y", []),
-                new_plot=results.get("new_plot", True),
-            )
-            self.gridBiasPowerGraphWindow.widget().show()
+    def show_bias_current_graph(self, results):
+        if self.gridBiasCurrentGraphWindow is None:
+            return
+        self.gridBiasCurrentGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot", True),
+        )
+        self.gridBiasCurrentGraphWindow.widget().show()
 
     def show_bias_power_diff_graph(self, results):
         if self.gridBiasPowerDiffGraphWindow is None:
@@ -406,3 +420,12 @@ class GridTabWidget(QScrollArea):
             y=results.get("y", []),
         )
         self.gridBiasPowerDiffGraphWindow.widget().show()
+
+    def show_tn_graph(self, results):
+        if self.biasTnGraphWindow is None:
+            return
+        self.biasTnGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+        )
+        self.biasTnGraphWindow.widget().show()

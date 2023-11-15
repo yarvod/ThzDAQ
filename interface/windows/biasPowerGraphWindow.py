@@ -41,3 +41,10 @@ class GridBiasPowerDiffGraphWindow(GraphWindow):
     graph_title = "Y-factor (Voltage)"
     x_label = "Voltage, mV"
     y_label = "Power, dBm"
+
+
+class GridTnGraphWindow(GraphWindow):
+    window_title = "GRID Tn-V Graphs"
+    graph_title = "Tn (Voltage)"
+    x_label = "Voltage, mV"
+    y_label = "Tn, K"
