@@ -2,9 +2,14 @@
 #include <Ethernet2.h>
 #include <ArduinoJson.h>
 
-const int dirPin = 4;
-const int stepPin = 3;
-const int stepsPerRevolution = 1000;
+const int dirPin = 1;
+const int stepPin = 2;
+const int resetPin = 3;
+const int sleepPin = 4;
+const int ms1Pin = 5;
+const int ms2Pin = 6;
+const int ms3Pin = 7;
+const int stepsPerRevolution = 4000;
 const int stepDelay = 700;
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
@@ -110,10 +115,20 @@ void stepperRotate(float angle) {
 
 // Set Up
 void setup() {
+  // Init serial
   Serial.begin(9600);
   Serial.print("Serial init OK\r\n");
+  // Set pins outs
   pinMode(dirPin, OUTPUT);
   pinMode(stepPin, OUTPUT);
+  // pinMode(resetPin, OUTPUT);
+  // pinMode(sleepPin, OUTPUT);
+  pinMode(ms1Pin, OUTPUT);
+  pinMode(ms2Pin, OUTPUT);
+  pinMode(ms3Pin, OUTPUT);
+  // Init default pins values
+  digitalWrite(ms2Pin, HIGH);
+  // Init ethernet
   Ethernet.begin(mac, ip);
   server.begin();
   Serial.print("Server is at ");
