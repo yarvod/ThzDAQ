@@ -217,7 +217,7 @@ class YIGWidget(QScrollArea):
         self.niFreqPointsLabel = QLabel(self)
         self.niFreqPointsLabel.setText("Freq points")
         self.niFreqPoints = DoubleSpinBox(self)
-        self.niFreqPoints.setRange(0, 1001)
+        self.niFreqPoints.setRange(0, 100000)
         self.niFreqPoints.setDecimals(0)
         self.niFreqPoints.setValue(state.NI_FREQ_POINTS)
 
