@@ -28,9 +28,10 @@ class NRXBlockStreamThread(QThread):
 
     def run(self):
         nrx = NRXPowerMeter(
-            ip=state.NRX_IP,
+            host=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
+            delay=0,
         )
         data = {"power": [], "time": []}
         if state.NRX_STREAM_STORE_DATA:
@@ -111,9 +112,10 @@ class BiasPowerThread(QThread):
 
     def run(self):
         nrx = NRXPowerMeter(
-            ip=state.NRX_IP,
+            host=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
+            delay=0,
         )
         block = SisBlock(
             host=state.BLOCK_ADDRESS,

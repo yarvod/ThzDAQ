@@ -68,9 +68,10 @@ class MeasureThread(QThread):
     def run(self):
         ni = NiYIGManager()
         self.nrx = NRXPowerMeter(
-            ip=state.NRX_IP,
+            host=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
+            delay=0,
         )
         if state.CHOPPER_SWITCH:
             self.measure = MeasureModel.objects.create(

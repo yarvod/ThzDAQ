@@ -1,105 +1,100 @@
-from RsInstrument import *
+from typing import Literal
 
-from store.state import state
-from utils.classes import BaseInstrumentInterface
+from settings import SOCKET
+from utils.classes import BaseInstrument
 from utils.decorators import exception
-from utils.logger import logger
 
 
-class NRXPowerMeter(BaseInstrumentInterface):
+class NRXPowerMeter(BaseInstrument):
     def __init__(
         self,
-        ip: str = state.NRX_IP,
-        aperture_time: float = state.NRX_APER_TIME,
-        filter_time: float = state.NRX_FILTER_TIME,
+        host: str = "169.254.2.20",
+        gpib: int = None,
+        adapter: str = SOCKET,
+        port: int = 5025,
+        aperture_time: float = 0.05,
+        filter_time: float = 0.01,
+        *args,
+        **kwargs,
     ):
-        self.address = f"TCPIP::{ip}::INSTR"
-        self.instr = None
-
-        self.connect()
+        kwargs["port"] = port
+        super().__init__(host, gpib, adapter, *args, **kwargs)
         # self.set_filter_time(filter_time)
         self.set_filter_state(0)
         self.set_aperture_time(aperture_time)
 
     @exception
-    def connect(self):
-        self.instr = RsInstrument(self.address, reset=False)
-
-    @exception
-    def disconnect(self):
-        self.instr.close()
-        logger.info(f"[NRXBlock.close] NRX block closed")
-
-    @exception
     def reset(self):
-        self.instr.write("*RST")
+        self.write("*RST")
 
     def configure(self):
-        self.instr.write("CONF1 -50,3,(@1)")
+        self.write("CONF1 -50,3,(@1)")
 
     @exception
     def idn(self):
         """Method to get power meter name"""
-        return self.instr.query("*IDN?")
+        return self.query("*IDN?")
 
     @exception
     def test(self):
         """Method to test power meter"""
-        return self.instr.query("*TST?")
+        return self.query("*TST?")
 
     @exception
     def get_power(self):
         """Main method to get power from power meter"""
-        return self.instr.query_float("READ?")
+        return float(self.query("READ?"))
 
     @exception
     def get_conf(self):
         """Get current power meter config"""
-        return self.instr.query("CONF?")
+        return self.query("CONF?")
 
     @exception
     def fetch(self):
         """Get data without new measure, it will return old measured value"""
-        return self.instr.query_float("FETCH?")
+        return float(self.query("FETCH?"))
 
     @exception
     def set_lower_limit(self, limit: float):
         """Set lower measurement limit"""
-        self.instr.write(f"CALCulate1:LIMit1:LOWer:DATA {limit}")
+        self.write(f"CALCulate1:LIMit1:LOWer:DATA {limit}")
 
     @exception
     def set_upper_limit(self, limit: float):
         """Set upper measurement limit"""
-        self.instr.write(f"CALCulate1:LIMit1:UPPer:DATA {limit}")
+        self.write(f"CALCulate1:LIMit1:UPPer:DATA {limit}")
 
     @exception
-    def set_filter_state(self, state: int = 0):
+    def set_filter_state(self, value: int = 0):
         """Filter state: On - 1, Off - 0"""
-        self.instr.write(f"CALC:CHAN:AVER:STAT {state}")
+        self.write(f"CALC:CHAN:AVER:STAT {value}")
 
     @exception
-    def set_filter_time(self, time: float = state.NRX_FILTER_TIME):
+    def set_filter_time(self, time: float = 0.05):
         """
         Setting filter time
         :param time: seconds
         :return:
         """
-        self.instr.write(f"CALCulate:CHANnel:AVERage:COUNt:AUTO:MTIMe {time}")
+        self.write(f"CALCulate:CHANnel:AVERage:COUNt:AUTO:MTIMe {time}")
 
     @exception
-    def set_aperture_time(self, time: float = state.NRX_APER_TIME):
+    def set_aperture_time(self, time: float = 0.01):
         """
         Setting averaging time
         :param time: seconds
         :return:
         """
-        self.instr.write(f"CALC:APER {time}")
+        self.write(f"CALC:APER {time}")
 
-    def __del__(self):
-        self.disconnect()
-        logger.info(f"[NRXBlock.__del__] Instance {self} deleted")
+    def set_power_units(self, value=Literal["DBM", "DBUV", "W"]):
+        self.write(f"UNIT1:POWer {value}")
+
+    def get_power_units(self):
+        return self.query("UNIT1:POWer?")
 
 
 if __name__ == "__main__":
-    nrx = NRXPowerMeter()
-    nrx.instr.write(f"CALC:APER 0.2")
+    nrx = NRXPowerMeter(delay=0)
+    nrx.write(f"CALC:APER 0.2")

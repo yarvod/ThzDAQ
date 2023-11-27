@@ -100,9 +100,10 @@ class NRXBlockThread(QThread):
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = NRXPowerMeter(
-            ip=state.NRX_IP,
+            host=state.NRX_IP,
             filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
+            delay=0,
         )
         result = block.test()
         self.status.emit(state.NRX_TEST_MAP.get(result, "Error"))

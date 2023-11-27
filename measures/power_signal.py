@@ -8,7 +8,7 @@ from api.Keithley.power_supply import PowerSupply
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from store.state import state
 
-nrx = NRXPowerMeter()
+nrx = NRXPowerMeter(delay=0)
 keithley = PowerSupply()
 signal = SignalGenerator(host=state.PROLOGIX_IP)
 
