@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button
 from store.base import MeasureModel, MeasureType
+from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -260,7 +261,9 @@ class PowerMeterTabWidget(QWidget):
         )
         layout = QGridLayout()
 
-        self.nrxPowerLabel = QLabel("<h4>Power, dBm</h4>")
+        self.nrxPowerLabel = QLabel(self)
+        self.nrxPowerLabel.setText("<h4>Power, dBm</h4>")
+        power_meter_unit_model.value.connect(self.unit_changed)
         self.nrxPower = QLabel(self)
         self.nrxPower.setText("0.0")
         self.nrxPower.setStyleSheet("font-size: 23px; font-weight: bold;")
@@ -301,6 +304,11 @@ class PowerMeterTabWidget(QWidget):
         layout.addWidget(self.nrxStreamWindowTime, 4, 1)
         self.groupNRX.setLayout(layout)
 
+    def unit_changed(self, unit: str):
+        self.nrxPowerLabel.setText(
+            f"<h4>Power, {power_meter_unit_model.val_pretty}</h4>"
+        )
+
     def start_stream_nrx(self):
         self.nrx_stream_thread = NRXBlockStreamThread()
 
@@ -329,7 +337,7 @@ class PowerMeterTabWidget(QWidget):
         self.powerStreamGraphDockWidget.widget().show()
 
     def update_nrx_stream_values(self, measure: dict):
-        self.nrxPower.setText(f"{round(measure.get('power'), 3)}")
+        self.nrxPower.setText(f"{measure.get('power'):.3E}")
         if state.NRX_STREAM_PLOT_GRAPH:
             self.show_power_stream_graph(
                 x=measure.get("time"),

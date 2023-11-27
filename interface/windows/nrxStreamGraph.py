@@ -2,6 +2,7 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
+from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
 from utils.logger import logger
 
@@ -22,13 +23,16 @@ class NRXStreamGraphWindow(QWidget):
         self.dataset = {"y": [], "x": []}
         self.prepare()
         self.setLayout(layout)
+        power_meter_unit_model.value_pretty.connect(
+            lambda x: self.graphWidget.setLabel("left", f"Power, {x}", **self.styles)
+        )
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
         self.graphWidget.setTitle(self.graph_title, color="#413C58", size="20pt")
-        styles = {"color": "#413C58", "font-size": "15px"}
-        self.graphWidget.setLabel("left", self.y_label, **styles)
-        self.graphWidget.setLabel("bottom", self.x_label, **styles)
+        self.styles = {"color": "#413C58", "font-size": "15px"}
+        self.graphWidget.setLabel("left", self.y_label, **self.styles)
+        self.graphWidget.setLabel("bottom", self.x_label, **self.styles)
         self.graphWidget.addLegend()
         self.graphWidget.showGrid(x=True, y=True)
 

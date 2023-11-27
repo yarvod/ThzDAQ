@@ -73,6 +73,7 @@ class MeasureList(list):
 class MeasureManager:
     table: "MeasureTableModel" = None
     _instances: MeasureList["MeasureModel"] = MeasureList()
+    latest_id = 0
 
     @classmethod
     def create(cls, *args, **kwargs) -> "MeasureModel":
@@ -142,10 +143,11 @@ class MeasureManager:
 class MeasureModel:
     objects = MeasureManager
     ind_attr_map = {
-        0: "measure_type",
-        1: "started",
-        2: "finished",
-        3: "saved",
+        0: "id",
+        1: "measure_type",
+        2: "started",
+        3: "finished",
+        4: "saved",
     }
     type_class = MeasureType
 
@@ -160,7 +162,8 @@ class MeasureModel:
         # Setting attrs
         self.measure_type = measure_type
         self.data = data
-        self.id = str(uuid.uuid4())
+        self.objects.latest_id += 1
+        self.id = self.objects.latest_id
         self.started = datetime.now()
         self.finished = finished
         self.saved = False
@@ -189,6 +192,7 @@ class MeasureModel:
         if finished == "--":
             finished = datetime.now()
         return {
+            "id": self.id,
             "type": self.measure_type,
             "measure": self.type_display,
             "started": self.started.strftime("%Y-%m-%d %H:%M:%S"),
@@ -203,7 +207,7 @@ class MeasureTableModel(QAbstractTableModel):
     def __init__(self, data=None):
         super().__init__()
         self._data = []
-        self._headers = ["Type", "Started", "Finished", "Saved"]
+        self._headers = ["Id", "Type", "Started", "Finished", "Saved"]
 
     def data(self, index, role):
         if not self._data:
@@ -235,7 +239,7 @@ class MeasureTableModel(QAbstractTableModel):
         self.beginResetModel()
         measures = self.manager.all()
         self._data = [
-            [m.type_display, m.started, m.finished, m.saved] for m in measures
+            [m.id, m.type_display, m.started, m.finished, m.saved] for m in measures
         ]
         self.endResetModel()
 

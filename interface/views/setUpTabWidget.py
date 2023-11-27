@@ -23,13 +23,12 @@ from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
+from interface.components.power_meter.setUpPowerMeter import SetUpPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
-from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.vna import VNABlock
-from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 
 logger = logging.getLogger(__name__)
 
@@ -94,34 +93,6 @@ class SISBlockThread(QThread):
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
-class NRXBlockThread(QThread):
-    status = pyqtSignal(str)
-
-    def run(self):
-        logger.info(f"[{self.__class__.__name__}.run] Running...")
-        block = NRXPowerMeter(
-            host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
-            aperture_time=state.NRX_APER_TIME,
-            delay=0,
-        )
-        result = block.test()
-        self.status.emit(state.NRX_TEST_MAP.get(result, "Error"))
-        self.finished.emit()
-
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def quit(self) -> None:
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-
-
 class PrologixEthernetThread(QThread):
     status = pyqtSignal(bool)
 
@@ -162,7 +133,6 @@ class SetUpTabWidget(QScrollArea):
         self.layout = QVBoxLayout(self)
         self.createGroupBlock()
         self.createGroupVna()
-        self.createGroupNRX()
         self.createGroupPrologixEthernet()
         self.createGroupGrid()
         self.createGroupSignalGenerator()
@@ -172,7 +142,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupNRX)
+        self.layout.addWidget(SetUpPowerMeter(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupPrologixEthernet)
         self.layout.addSpacing(10)
@@ -277,44 +247,6 @@ class SetUpTabWidget(QScrollArea):
         layout.addWidget(self.btnInitVna, 3, 0, 1, 2)
 
         self.groupVna.setLayout(layout)
-
-    def createGroupNRX(self):
-        self.groupNRX = QGroupBox(self)
-        self.groupNRX.setTitle("Power meter")
-        self.groupNRX.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.nrxIPLabel = QLabel(self)
-        self.nrxIPLabel.setText("IP Address:")
-        self.nrxIP = QLineEdit(self)
-        self.nrxIP.setText(state.NRX_IP)
-
-        self.nrxAperTimeLabel = QLabel(self)
-        self.nrxAperTimeLabel.setText("Averaging time, s:")
-        self.nrxAperTime = DoubleSpinBox(self)
-        self.nrxAperTime.setDecimals(2)
-        self.nrxAperTime.setRange(0.01, 1000)
-        self.nrxAperTime.setValue(state.NRX_APER_TIME)
-
-        self.nrxStatusLabel = QLabel(self)
-        self.nrxStatusLabel.setText("Status:")
-        self.nrxStatus = QLabel(self)
-        self.nrxStatus.setText("Doesn't initialized yet!")
-
-        self.btnInitNRX = Button("Initialize", animate=True)
-        self.btnInitNRX.clicked.connect(self.initialize_nrx)
-
-        layout.addWidget(self.nrxIPLabel, 1, 0)
-        layout.addWidget(self.nrxIP, 1, 1)
-        layout.addWidget(self.nrxAperTimeLabel, 2, 0)
-        layout.addWidget(self.nrxAperTime, 2, 1)
-        layout.addWidget(self.nrxStatusLabel, 3, 0)
-        layout.addWidget(self.nrxStatus, 3, 1)
-        layout.addWidget(self.btnInitNRX, 4, 0, 1, 2)
-
-        self.groupNRX.setLayout(layout)
 
     def createGroupPrologixEthernet(self):
         self.groupPrologixEthernet = QGroupBox("Prologix Ethernet")
@@ -503,13 +435,3 @@ class SetUpTabWidget(QScrollArea):
 
         self.btnInitVna.setEnabled(False)
         self.vna_thread.finished.connect(lambda: self.btnInitVna.setEnabled(True))
-
-    def initialize_nrx(self):
-        self.nrx_thread = NRXBlockThread()
-        self.nrx_thread.status.connect(lambda x: self.nrxStatus.setText(x))
-        state.NRX_IP = self.nrxIP.text()
-        state.NRX_APER_TIME = self.nrxAperTime.value()
-        self.nrx_thread.start()
-
-        self.btnInitNRX.setEnabled(False)
-        self.nrx_thread.finished.connect(lambda: self.btnInitNRX.setEnabled(True))

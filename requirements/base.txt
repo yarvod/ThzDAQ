@@ -17,11 +17,8 @@ pyqtgraph==0.13.2
 pyserial==3.5
 python-dateutil==2.8.2
 pytz==2023.3
-PyVISA==1.13.0
-PyVISA-py==0.6.3
 pywin32-ctypes==0.2.2
 requests==2.31.0
-RsInstrument==1.53.0
 six==1.16.0
 typing_extensions==4.7.1
 urllib3==2.0.4

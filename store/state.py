@@ -70,6 +70,9 @@ class State:
     NRX_STREAM_PLOT_GRAPH = False
     NRX_STREAM_GRAPH_TIME = 60
     NRX_STREAM_STORE_DATA = False
+    NRX_UNITS = {"DBM": "dBm", "W": "W", "DBUV": "dBμV"}
+    NRX_UNITS_REVERSE = {v: k for k, v in NRX_UNITS.items()}
+    NRX_UNIT = "DBM"
 
     # NRX constants
     NRX_TEST_MAP = dict(
