@@ -10,7 +10,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QGroupBox,
     QLabel,
-    QComboBox,
     QFormLayout,
     QScrollArea,
     QCheckBox,
@@ -21,11 +20,11 @@ from api.Arduino.grid import GridManager
 from api.Chopper import chopper_manager
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
+from interface.components.grid.GridBiasCurrentAngleScan import GridBiasCurrentScan
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.grid.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
-from settings import GridPlotTypes
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from utils.functions import get_y_tn
@@ -261,9 +260,12 @@ class GridTabWidget(QScrollArea):
         self.gridBiasPowerDiffGraphWindow = None
         self.biasTnGraphWindow = None
         self.createGroupGridBiasPowerScan()
+        self.gridAngleCurrentScan = GridBiasCurrentScan(self)
         self.layout.addWidget(GridManagingGroup(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupGridBiasPowerScan)
+        self.layout.addSpacing(10)
+        self.layout.addWidget(self.gridAngleCurrentScan)
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)

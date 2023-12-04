@@ -34,11 +34,14 @@ from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.biasPowerGraphWindow import (
     BiasPowerGraphWindow,
     BiasPowerDiffGraphWindow,
+    TnGraphWindow,
+)
+from interface.windows.gridGraphs import (
     GridBiasPowerGraphWindow,
     GridBiasCurrentGraphWindow,
     GridBiasPowerDiffGraphWindow,
-    TnGraphWindow,
     GridTnGraphWindow,
+    GridAngleCurrentGraphWindow,
 )
 from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
@@ -274,6 +277,19 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_grid_tnv_curve_dock_widget
         )
         self.tab_grid.biasTnGraphWindow = self.graph_grid_tnv_curve_dock_widget
+
+        self.graph_grid_ia_curve_dock_widget = QtAds.CDockWidget("GRID I-A curve")
+        self.tab_graph_grid_ia_curve = GridAngleCurrentGraphWindow(self)
+        self.graph_grid_ia_curve_dock_widget.setWidget(self.tab_graph_grid_ia_curve)
+        self.menuGraph.addAction(
+            self.graph_grid_ia_curve_dock_widget.toggleViewAction()
+        )
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_grid_ia_curve_dock_widget
+        )
+        self.tab_grid.gridAngleCurrentScan.gridBiasCurrentAngleGraphWindow = (
+            self.graph_grid_ia_curve_dock_widget
+        )
 
         self.graph_spectrum_dock_widget = QtAds.CDockWidget("Spectrum curve")
         self.tab_graph_spectrum_curve = SpectrumGraphWindow(self)

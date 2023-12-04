@@ -17,6 +17,7 @@ class MeasureType:
     CHOPPER_BIAS_POWER = "chopper_bias_power"
     GRID_BIAS_POWER = "grid_bias_power"
     GRID_CHOPPER_BIAS_POWER = "grid_chopper_bias_power"
+    GRID_BIAS_ANGLE = "grid_bias_angle"
     POWER_STREAM = "power_stream"
     TEMPERATURE_STREAM = "temperature_stream"
     VNA_REFLECTION = "vna_reflection"
@@ -32,6 +33,7 @@ class MeasureType:
             (CHOPPER_BIAS_POWER, "Chopper BIAS Power"),
             (GRID_BIAS_POWER, "GRID BIAS Power"),
             (GRID_CHOPPER_BIAS_POWER, "GRID Chopper BIAS Power"),
+            (GRID_BIAS_ANGLE, "I-A curve"),
             (POWER_STREAM, "Power stream"),
             (TEMPERATURE_STREAM, "Temp stream"),
             (VNA_REFLECTION, "VNA Reflection"),
