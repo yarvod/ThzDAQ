@@ -45,12 +45,12 @@ class GridManager:
         if self.finish:
             return
 
-        angle_to_rotate = angle - state.GRID_ANGLE
+        angle_to_rotate = angle - float(state.GRID_ANGLE.val)
         if self.adapter_name == SERIAL:
             self.adapter.write(f"{angle}\n".encode())
         elif self.adapter_name == HTTP:
             self.adapter.post(url="/rotate", data={"angle": angle_to_rotate})
-        state.GRID_ANGLE = angle
+        state.GRID_ANGLE.val = str(angle)
 
         self.finish = finish
 

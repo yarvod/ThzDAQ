@@ -24,12 +24,13 @@ class GridManagingGroup(QGroupBox):
         self.angleCurrentLabel = QLabel(self)
         self.angleCurrentLabel.setText("Current angle")
         self.angleCurrent = QLabel(self)
-        self.angleCurrent.setText(f"{state.GRID_ANGLE} °")
+        self.angleCurrent.setText(f"{state.GRID_ANGLE.val} °")
+        state.GRID_ANGLE.value.connect(lambda x: self.angleCurrent.setText(f"{x} °"))
         self.angleLabel = QLabel(self)
         self.angleLabel.setText("Angle, °")
         self.angle = DoubleSpinBox(self, lambda: self.rotate())
         self.angle.setRange(-720, 720)
-        self.angle.setValue(state.GRID_ANGLE)
+        self.angle.setValue(float(state.GRID_ANGLE.val))
         self.btnRotate = Button("Rotate", animate=True)
         self.btnRotate.clicked.connect(self.rotate)
         self.btnSetZero = Button("Set new zero", animate=True)
@@ -45,19 +46,16 @@ class GridManagingGroup(QGroupBox):
         self.setLayout(layout)
 
     def setZero(self):
-        state.GRID_ANGLE = 0
+        state.GRID_ANGLE.val = "0"
         state.GRID_ANGLE_ROTATE = 0
         self.angle.setValue(0)
         self.angleCurrent.setText("0 °")
 
     def rotate(self):
-        if state.GRID_ANGLE == self.angle.value():
+        if float(state.GRID_ANGLE.val) == self.angle.value():
             return
         state.GRID_ANGLE_ROTATE = self.angle.value()
         self.grid_thread = GridThread()
         self.grid_thread.start()
         self.btnRotate.setEnabled(False)
         self.grid_thread.finished.connect(lambda: self.btnRotate.setEnabled(True))
-        self.grid_thread.finished.connect(
-            lambda: self.angleCurrent.setText(f"{state.GRID_ANGLE} °")
-        )

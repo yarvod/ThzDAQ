@@ -30,7 +30,7 @@ class MeasureThread(Thread):
         self.block = SisBlock(host=state.BLOCK_ADDRESS, port=state.BLOCK_PORT)
         self.block.connect()
         self.grid = GridManager(host=state.GRID_ADDRESS)
-        self.initial_angle = state.GRID_ANGLE
+        self.initial_angle = float(state.GRID_ANGLE.val)
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.GRID_BIAS_ANGLE, data={}
         )
@@ -162,7 +162,7 @@ class GridBiasCurrentScan(QGroupBox):
         self.thread.finished.connect(lambda: self.btnStop.setEnabled(False))
 
     def stop_measure(self):
-        self.thread.terminate()
+        self.thread.exit(0)
 
     def show_graph(self, results):
         if self.gridBiasCurrentAngleGraphWindow is None:

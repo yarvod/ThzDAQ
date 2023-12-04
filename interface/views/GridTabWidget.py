@@ -3,7 +3,7 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -27,12 +27,13 @@ from interface.components.grid.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
 from store.base import MeasureModel, MeasureType
 from store.state import state
+from threads import Thread
 from utils.functions import get_y_tn
 
 logger = logging.getLogger(__name__)
 
 
-class StepBiasPowerThread(QThread):
+class StepBiasPowerThread(Thread):
     results = pyqtSignal(list)
     stream_pv = pyqtSignal(dict)
     stream_y_factor = pyqtSignal(dict)
@@ -43,7 +44,7 @@ class StepBiasPowerThread(QThread):
     def __init__(self):
         super().__init__()
         self.initial_v = 0
-        self.initial_angle = state.GRID_ANGLE
+        self.initial_angle = float(state.GRID_ANGLE.val)
 
         if state.CHOPPER_SWITCH:
             self.measure = MeasureModel.objects.create(
@@ -234,21 +235,6 @@ class StepBiasPowerThread(QThread):
         self.progress.emit(0)
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
-    def terminate(self) -> None:
-        self.pre_exit()
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def quit(self) -> None:
-        self.pre_exit()
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-
-    def exit(self, returnCode: int = ...):
-        self.pre_exit()
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-
 
 class GridTabWidget(QScrollArea):
     def __init__(self, parent):
@@ -393,7 +379,7 @@ class GridTabWidget(QScrollArea):
         )
 
     def stop_measure_step_bias_power(self):
-        self.bias_power_thread.terminate()
+        self.bias_power_thread.exit(0)
 
     def show_bias_power_graph(self, results):
         if self.gridBiasPowerGraphWindow is None:

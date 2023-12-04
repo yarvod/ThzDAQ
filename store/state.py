@@ -1,6 +1,7 @@
 import os
 
 from settings import GridPlotTypes, WAVESHARE_ETHERNET
+from store.gridAngleModel import GridAngleModel
 
 
 class State:
@@ -105,7 +106,7 @@ class State:
 
     GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
     GRID_CURRENT_ANGLE_THREAD = False
-    GRID_ANGLE = 0
+    GRID_ANGLE = GridAngleModel()
     GRID_ANGLE_ROTATE = 0
     GRID_ANGLE_START = 0
     GRID_ANGLE_STOP = 0
