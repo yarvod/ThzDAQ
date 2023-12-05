@@ -80,7 +80,6 @@ class SocketAdapter(InstrumentAdapterInterface):
             logger.warning(f"[{self.__class__.__name__}.close] Socket is None")
             return
         self.socket.close()
-        del self.socket
         logger.info(f"[{self.__class__.__name__}.close] Socket has been closed.")
 
     def write(self, cmd: str, **kwargs):

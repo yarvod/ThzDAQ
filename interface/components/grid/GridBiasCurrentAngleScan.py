@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QTimer
 from PyQt5.QtWidgets import (
     QGroupBox,
     QSizePolicy,
@@ -89,6 +89,7 @@ class MeasureThread(Thread):
         self.grid.rotate(self.initial_angle)
         self.measure.save()
         self.progress.emit(0)
+        self.block.disconnect()
         state.GRID_CURRENT_ANGLE_THREAD = False
 
 
@@ -162,7 +163,7 @@ class GridBiasCurrentScan(QGroupBox):
         self.thread.finished.connect(lambda: self.btnStop.setEnabled(False))
 
     def stop_measure(self):
-        self.thread.exit(0)
+        state.GRID_CURRENT_ANGLE_THREAD = False
 
     def show_graph(self, results):
         if self.gridBiasCurrentAngleGraphWindow is None:

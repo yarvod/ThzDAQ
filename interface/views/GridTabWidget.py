@@ -3,7 +3,7 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt, QTimer
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 class StepBiasPowerThread(Thread):
-    results = pyqtSignal(list)
     stream_pv = pyqtSignal(dict)
     stream_y_factor = pyqtSignal(dict)
     stream_iv = pyqtSignal(dict)
@@ -64,6 +63,13 @@ class StepBiasPowerThread(Thread):
             ctrl_dev=state.BLOCK_CTRL_DEV,
         )
         self.block.connect()
+
+        self.nrx = NRXPowerMeter(
+            host=state.NRX_IP,
+            filter_time=state.NRX_FILTER_TIME,
+            aperture_time=state.NRX_APER_TIME,
+            delay=0,
+        )
 
     def get_results_format(self) -> Dict:
         if state.CHOPPER_SWITCH:
@@ -100,14 +106,6 @@ class StepBiasPowerThread(Thread):
         }
 
     def run(self):
-        nrx = NRXPowerMeter(
-            host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
-            aperture_time=state.NRX_APER_TIME,
-            delay=0,
-        )
-
-        results_list = []
         angle_range = np.arange(
             state.GRID_ANGLE_START,
             state.GRID_ANGLE_STOP + state.GRID_ANGLE_STEP,
@@ -155,7 +153,7 @@ class StepBiasPowerThread(Thread):
                     current_get = self.block.get_bias_current()
                     if not current_get:
                         continue
-                    power = nrx.get_power()
+                    power = self.nrx.get_power()
                     time_step = time.time() - initial_time
 
                     step = (
@@ -225,7 +223,6 @@ class StepBiasPowerThread(Thread):
                     )
 
         self.pre_exit()
-        self.results.emit(results_list)
         self.finished.emit()
 
     def pre_exit(self):
@@ -233,6 +230,8 @@ class StepBiasPowerThread(Thread):
         self.block.set_bias_voltage(self.initial_v)
         self.measure.save()
         self.progress.emit(0)
+        self.block.disconnect()
+        self.nrx.adapter.close()
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
@@ -379,7 +378,7 @@ class GridTabWidget(QScrollArea):
         )
 
     def stop_measure_step_bias_power(self):
-        self.bias_power_thread.exit(0)
+        state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def show_bias_power_graph(self, results):
         if self.gridBiasPowerGraphWindow is None:
