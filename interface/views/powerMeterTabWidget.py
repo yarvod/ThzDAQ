@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import (
     QLabel,
     QSizePolicy,
     QCheckBox,
+    QFormLayout,
+    QHBoxLayout,
+    QProgressBar,
 )
 
 from api.Chopper import chopper_manager
@@ -20,6 +23,7 @@ from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from threads import Thread
 from utils.functions import get_y_tn
 from utils.logger import logger
 
@@ -76,11 +80,35 @@ class NRXBlockStreamThread(QThread):
         logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
 
-class BiasPowerThread(QThread):
-    results = pyqtSignal(dict)
+class BiasPowerThread(Thread):
     stream_power = pyqtSignal(dict)
     stream_y_factor = pyqtSignal(dict)
     stream_tn = pyqtSignal(dict)
+    progress = pyqtSignal(int)
+
+    def __init__(self):
+        super().__init__()
+        self.nrx = NRXPowerMeter(
+            host=state.NRX_IP,
+            filter_time=state.NRX_FILTER_TIME,
+            aperture_time=state.NRX_APER_TIME,
+            delay=0,
+        )
+        self.block = SisBlock(
+            host=state.BLOCK_ADDRESS,
+            port=state.BLOCK_PORT,
+            bias_dev=state.BLOCK_BIAS_DEV,
+            ctrl_dev=state.BLOCK_CTRL_DEV,
+        )
+        self.block.connect()
+        measure_type = (
+            MeasureType.BIAS_POWER
+            if not state.CHOPPER_SWITCH
+            else MeasureType.CHOPPER_BIAS_POWER
+        )
+        self.measure = MeasureModel.objects.create(measure_type=measure_type, data={})
+        self.measure.save(False)
+        self.initial_v = self.block.get_bias_voltage()
 
     def get_results_format(self):
         if state.CHOPPER_SWITCH:
@@ -112,65 +140,48 @@ class BiasPowerThread(QThread):
             }
 
     def run(self):
-        nrx = NRXPowerMeter(
-            host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
-            aperture_time=state.NRX_APER_TIME,
-            delay=0,
-        )
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
         results = self.get_results_format()
         v_range = np.linspace(
             state.BLOCK_BIAS_VOLT_FROM * 1e-3,
             state.BLOCK_BIAS_VOLT_TO * 1e-3,
             state.BLOCK_BIAS_VOLT_POINTS,
         )
-        measure_type = (
-            MeasureType.BIAS_POWER
-            if not state.CHOPPER_SWITCH
-            else MeasureType.CHOPPER_BIAS_POWER
-        )
-        measure = MeasureModel.objects.create(measure_type=measure_type, data={})
-        measure.save(False)
-        initial_v = block.get_bias_voltage()
+        chopper_range = range(2) if state.CHOPPER_SWITCH else range(1)
+        total_steps = len(chopper_range) * len(v_range)
         initial_time = time.time()
-        for switcher in range(2):
-            if not state.CHOPPER_SWITCH and switcher == 0:
-                continue
+        for chopper_step in chopper_range:
             chopper_state = None
             if state.CHOPPER_SWITCH:
-                chopper_state = "hot" if switcher == 0 else "cold"
-            for i, voltage_set in enumerate(v_range):
+                chopper_state = "hot" if chopper_step == 0 else "cold"
+            for voltage_step, voltage_set in enumerate(v_range):
                 if not state.BLOCK_BIAS_POWER_MEASURE_THREAD:
                     break
 
-                block.set_bias_voltage(voltage_set)
+                self.block.set_bias_voltage(voltage_set)
 
-                if i == 0:
+                if voltage_step == 0:
                     time.sleep(0.5)
                     initial_time = time.time()
 
                 time.sleep(state.BLOCK_BIAS_STEP_DELAY)
-                voltage_get = block.get_bias_voltage()
+                voltage_get = self.block.get_bias_voltage()
                 if not voltage_get:
                     continue
-                current_get = block.get_bias_current()
+                current_get = self.block.get_bias_current()
                 if not current_get:
                     continue
-                power = nrx.get_power()
+                power = self.nrx.get_power()
                 time_step = time.time() - initial_time
+
+                step = chopper_step * len(v_range) + voltage_step + 1
+                progress = int(step / total_steps * 100)
+                self.progress.emit(progress)
 
                 self.stream_power.emit(
                     {
                         "x": [voltage_get * 1e3],
                         "y": [power],
-                        "new_plot": i == 0,
+                        "new_plot": voltage_step == 0,
                     }
                 )
 
@@ -187,7 +198,7 @@ class BiasPowerThread(QThread):
                     results["power"].append(power)
                     results["time"].append(time_step)
 
-                measure.data = results
+                self.measure.data = results
 
             if state.CHOPPER_SWITCH:
                 chopper_manager.chopper.path0()
@@ -217,25 +228,16 @@ class BiasPowerThread(QThread):
                     }
                 )
 
-        block.set_bias_voltage(initial_v)
-        measure.save()
-        self.results.emit(results)
+        self.pre_exit()
         self.finished.emit()
 
-    def terminate(self) -> None:
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
+    def pre_exit(self, *args, **kwargs):
         state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
-
-    def quit(self) -> None:
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+        self.block.set_bias_voltage(self.initial_v)
+        self.measure.save()
+        self.block.disconnect()
+        self.nrx.adapter.close()
+        self.progress.emit(0)
 
 
 class PowerMeterTabWidget(QWidget):
@@ -354,7 +356,9 @@ class PowerMeterTabWidget(QWidget):
         self.groupBiasPowerScan.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+        flayout = QFormLayout()
+        hlayout = QHBoxLayout()
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
@@ -387,6 +391,9 @@ class PowerMeterTabWidget(QWidget):
         self.chopperSwitch.setText("Enable chopper Hot/Cold switching")
         self.chopperSwitch.setChecked(state.CHOPPER_SWITCH)
 
+        self.progress = QProgressBar(self)
+        self.progress.setValue(0)
+
         self.btnStartBiasPowerScan = Button("Start Scan", animate=True)
         self.btnStartBiasPowerScan.clicked.connect(self.start_measure_bias_power)
 
@@ -394,29 +401,27 @@ class PowerMeterTabWidget(QWidget):
         self.btnStopBiasPowerScan.clicked.connect(self.stop_measure_bias_power)
         self.btnStopBiasPowerScan.setEnabled(False)
 
-        layout.addWidget(self.voltFromLabel, 1, 0)
-        layout.addWidget(self.voltFrom, 1, 1)
-        layout.addWidget(self.voltToLabel, 2, 0)
-        layout.addWidget(self.voltTo, 2, 1)
-        layout.addWidget(self.voltPointsLabel, 3, 0)
-        layout.addWidget(self.voltPoints, 3, 1)
-        layout.addWidget(self.voltStepDelayLabel, 4, 0)
-        layout.addWidget(self.voltStepDelay, 4, 1)
-        layout.addWidget(self.chopperSwitch, 5, 0)
-        layout.addWidget(self.btnStartBiasPowerScan, 6, 0)
-        layout.addWidget(self.btnStopBiasPowerScan, 6, 1)
-
+        flayout.addRow(self.voltFromLabel, self.voltFrom)
+        flayout.addRow(self.voltToLabel, self.voltTo)
+        flayout.addRow(self.voltPointsLabel, self.voltPoints)
+        flayout.addRow(self.voltStepDelayLabel, self.voltStepDelay)
+        flayout.addRow(self.chopperSwitch)
+        flayout.addRow(self.progress)
+        hlayout.addWidget(self.btnStartBiasPowerScan)
+        hlayout.addWidget(self.btnStopBiasPowerScan)
+        layout.addLayout(flayout)
+        layout.addLayout(hlayout)
         self.groupBiasPowerScan.setLayout(layout)
 
     def start_measure_bias_power(self):
-        self.bias_power_thread = BiasPowerThread()
-
         state.BLOCK_BIAS_POWER_MEASURE_THREAD = True
         state.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
         state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
         state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
+
+        self.bias_power_thread = BiasPowerThread()
 
         self.bias_power_thread.stream_power.connect(self.show_bias_power_graph)
         if state.CHOPPER_SWITCH:
@@ -435,6 +440,8 @@ class PowerMeterTabWidget(QWidget):
         self.bias_power_thread.finished.connect(
             lambda: self.btnStopBiasPowerScan.setEnabled(False)
         )
+
+        self.bias_power_thread.progress.connect(lambda x: self.progress.setValue(x))
 
     def stop_measure_bias_power(self):
         self.bias_power_thread.exit(0)
