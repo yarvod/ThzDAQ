@@ -64,7 +64,7 @@ class State:
     )
 
     # NRX variables
-    NRX_APER_TIME = 0.05
+    NRX_APER_TIME = 50  # ms
     NRX_FILTER_TIME = 0.01
     NRX_IP = "169.254.2.20"
     NRX_STREAM_THREAD = False

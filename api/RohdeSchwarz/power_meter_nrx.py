@@ -13,10 +13,20 @@ class NRXPowerMeter(BaseInstrument):
         adapter: str = SOCKET,
         port: int = 5025,
         aperture_time: float = 0.05,
-        filter_time: float = 0.01,
+        filter_time: float = 100,
         *args,
         **kwargs,
     ):
+        """
+        :param host:
+        :param gpib:
+        :param adapter:
+        :param port:
+        :param aperture_time: ms
+        :param filter_time: s
+        :param args:
+        :param kwargs:
+        """
         kwargs["port"] = port
         super().__init__(host, gpib, adapter, *args, **kwargs)
         # self.set_filter_time(filter_time)
@@ -80,13 +90,13 @@ class NRXPowerMeter(BaseInstrument):
         self.write(f"CALCulate:CHANnel:AVERage:COUNt:AUTO:MTIMe {time}")
 
     @exception
-    def set_aperture_time(self, time: float = 0.01):
+    def set_aperture_time(self, time: float = 50):
         """
         Setting averaging time
         :param time: seconds
         :return:
         """
-        self.write(f"CALC:APER {time}")
+        self.write(f"CALC:APER {time / 1e3}")
 
     def set_power_units(self, value=Literal["DBM", "DBUV", "W"]):
         self.write(f"UNIT1:POWer {value}")

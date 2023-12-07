@@ -62,10 +62,10 @@ class SetUpPowerMeter(QGroupBox):
         self.nrxIP.setText(state.NRX_IP)
 
         self.nrxAperTimeLabel = QLabel(self)
-        self.nrxAperTimeLabel.setText("Averaging time, s:")
+        self.nrxAperTimeLabel.setText("Averaging time, ms:")
         self.nrxAperTime = DoubleSpinBox(self)
         self.nrxAperTime.setDecimals(2)
-        self.nrxAperTime.setRange(0.01, 1000)
+        self.nrxAperTime.setRange(0.01, 10000)
         self.nrxAperTime.setValue(state.NRX_APER_TIME)
 
         self.nrxUnitsLabel = QLabel(self)
