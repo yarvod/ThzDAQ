@@ -46,7 +46,7 @@ class SocketAdapter(InstrumentAdapterInterface):
                 f"[{self.__class__.__name__}.connect]Socket has been connected {self.socket}."
             )
         except OSError as e:
-            logger.error(f"[{self.__class__.__name__}.connect] {e}")
+            logger.error(f"[{self.__class__.__name__}.connect] OSError: {e}")
 
     def is_socket_closed(self) -> Union[bool, None]:
         try:
