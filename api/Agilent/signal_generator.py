@@ -95,6 +95,9 @@ class SignalGenerator:
         self.set_attenuation_level(attenuation)
         self.set_alc_level(alc)
 
+    def set_power(self, value: float) -> None:
+        self.adapter.write(f"POW {value}dBm", eq_addr=self.gpib)
+
     def get_oem_status(self) -> str:
         """ON|OFF|NONE|REAR|FRONT"""
         return self.adapter.query(":SYSTem:OEMHead:SELect?")
@@ -126,4 +129,4 @@ if __name__ == "__main__":
     dev = SignalGenerator(host="169.254.156.103", gpib=19)
     print("Power:")
     power = float(input())
-    dev.set_amplitude(power)
+    dev.adapter.write("POW -30dBm", eq_addr=19)
