@@ -358,7 +358,20 @@ class App(QMainWindow):
         # if dock_manager_state:
         #     self.dock_manager.restoreState(dock_manager_state)
         self.dock_manager.loadPerspectives(self.settings)
+        if not len(self.dock_manager.perspectiveNames()):
+            settings = QSettings("settings.ini", QSettings.IniFormat)
+            self.dock_manager.loadPerspectives(settings)
         self.perspective_combobox.addItems(self.dock_manager.perspectiveNames())
+        try:
+            self.dock_manager.perspectiveNames().index("SIS measuring")
+            self.perspective_combobox.setCurrentText("SIS measuring")
+        except ValueError:
+            pass
+
+    def restore_from_ini_file(self):
+        settings = QSettings("settings.ini", QSettings.IniFormat)
+        self.dock_manager.loadPerspectives(settings)
+        self.store_state()
         try:
             self.dock_manager.perspectiveNames().index("SIS measuring")
             self.perspective_combobox.setCurrentText("SIS measuring")
@@ -374,6 +387,10 @@ class App(QMainWindow):
         create_perspective_action.triggered.connect(self.create_perspective)
         update_perspective_action = QAction("Update Perspective", self)
         update_perspective_action.triggered.connect(self.update_perspective)
+        restore_default_perspectives_action = QAction("!Restore Defaults!", self)
+        restore_default_perspectives_action.triggered.connect(
+            self.restore_from_ini_file
+        )
         perspective_list_action = QWidgetAction(self)
         self.perspective_combobox = QComboBox(self)
         self.perspective_combobox.setSizeAdjustPolicy(QComboBox.AdjustToContents)
@@ -388,6 +405,7 @@ class App(QMainWindow):
         self.toolBar.addAction(perspective_list_action)
         self.toolBar.addAction(create_perspective_action)
         self.toolBar.addAction(update_perspective_action)
+        self.toolBar.addAction(restore_default_perspectives_action)
 
     def create_perspective(self):
         perspective_name, ok = QInputDialog.getText(
