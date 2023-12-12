@@ -6,11 +6,10 @@ import numpy as np
 from api.Agilent.signal_generator import SignalGenerator
 from api.Keithley.power_supply import PowerSupply
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from store.state import state
 
 nrx = NRXPowerMeter(delay=0)
-keithley = PowerSupply()
-signal = SignalGenerator(host=state.PROLOGIX_IP)
+keithley = PowerSupply(host="169.254.156.103", gpib=22)
+signal = SignalGenerator(host="169.254.156.103", gpib=19)
 
 
 amp_range = np.linspace(-49, 25, 100)
