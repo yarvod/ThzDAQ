@@ -23,6 +23,7 @@ from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
+from interface.components.keithley.setUpKeithley import SetUpKeithley
 from interface.components.power_meter.setUpPowerMeter import SetUpPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
@@ -157,6 +158,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addWidget(SetupChopperGroup(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(SetUpDigitalYigGroup(self))
+        self.layout.addWidget(SetUpKeithley(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
