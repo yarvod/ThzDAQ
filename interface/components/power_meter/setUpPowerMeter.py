@@ -27,7 +27,6 @@ class NRXBlockThread(QThread):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
         block = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )

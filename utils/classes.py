@@ -1,5 +1,6 @@
 import logging
 import threading
+from typing import Union
 
 from settings import ADAPTERS
 from utils.functions import import_class
@@ -45,7 +46,7 @@ class BaseInstrument:
         self.host = host
         self.gpib = gpib
         self.adapter_name = adapter
-        self.adapter = None
+        self.adapter: Union["InstrumentAdapterInterface", None] = None
 
         if self.adapter is None:
             self._set_adapter(adapter, *args, **kwargs)

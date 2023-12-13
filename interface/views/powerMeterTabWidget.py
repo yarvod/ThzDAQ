@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt, QThread
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QGroupBox,
     QGridLayout,
@@ -28,13 +28,12 @@ from utils.functions import get_y_tn
 from utils.logger import logger
 
 
-class NRXBlockStreamThread(QThread):
+class NRXBlockStreamThread(Thread):
     meas = pyqtSignal(dict)
 
     def run(self):
         nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
@@ -62,22 +61,12 @@ class NRXBlockStreamThread(QThread):
         if state.NRX_STREAM_STORE_DATA:
             measure.data = data
             measure.save(finish=True)
+
+        self.pre_exit()
         self.finished.emit()
 
-    def terminate(self) -> None:
+    def pre_exit(self, *args, **kwargs):
         state.NRX_STREAM_THREAD = False
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def exit(self, returnCode: int = ...) -> None:
-        state.NRX_STREAM_THREAD = False
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-
-    def quit(self) -> None:
-        state.NRX_STREAM_THREAD = False
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
 
 class BiasPowerThread(Thread):
@@ -90,7 +79,6 @@ class BiasPowerThread(Thread):
         super().__init__()
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
@@ -233,7 +221,13 @@ class BiasPowerThread(Thread):
 
     def pre_exit(self, *args, **kwargs):
         state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
+        logger.info(
+            f"[{self.__class__.__name__}.pre_exit] Setting SIS block initial voltage ..."
+        )
         self.block.set_bias_voltage(self.initial_v)
+        logger.info(
+            f"[{self.__class__.__name__}.pre_exit] Finish setting SIS block initial voltage ..."
+        )
         self.measure.save()
         self.block.disconnect()
         self.nrx.adapter.close()
@@ -444,7 +438,7 @@ class PowerMeterTabWidget(QWidget):
         self.bias_power_thread.progress.connect(lambda x: self.progress.setValue(x))
 
     def stop_measure_bias_power(self):
-        self.bias_power_thread.exit(0)
+        state.BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
     def show_bias_power_graph(self, results):
         if self.biasPowerGraphWindow is None:

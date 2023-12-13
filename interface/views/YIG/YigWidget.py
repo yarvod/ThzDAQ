@@ -2,7 +2,7 @@ import logging
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, QThread, Qt
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -23,12 +23,13 @@ from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 from store.base import MeasureModel
+from threads import Thread
 from utils.functions import linear
 
 logger = logging.getLogger(__name__)
 
 
-class DigitalYigThread(QThread):
+class DigitalYigThread(Thread):
     response = pyqtSignal(str)
 
     def run(self):
@@ -50,26 +51,16 @@ class DigitalYigThread(QThread):
         logger.info(f"[setNiYigFreq] {resp}")
 
 
-class MeasureThread(QThread):
-    results = pyqtSignal(list)
+class MeasureThread(Thread):
     stream_result = pyqtSignal(dict)
     stream_diff_results = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
-    def get_results_format(self):
-        if not state.CHOPPER_SWITCH:
-            return []
-        return {
-            "hot": {"data": [], "power": [], "frequency": []},
-            "cold": {"data": [], "power": [], "frequency": []},
-            "diff": [],
-        }
-
-    def run(self):
-        ni = NiYIGManager()
+    def __init__(self):
+        super().__init__()
+        self.ni = NiYIGManager()
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
@@ -83,6 +74,16 @@ class MeasureThread(QThread):
             )
         self.measure.save(finish=False)
 
+    def get_results_format(self):
+        if not state.CHOPPER_SWITCH:
+            return []
+        return {
+            "hot": {"data": [], "power": [], "frequency": []},
+            "cold": {"data": [], "power": [], "frequency": []},
+            "diff": [],
+        }
+
+    def run(self):
         results = self.get_results_format()
         freq_range = np.linspace(
             state.NI_FREQ_FROM,
@@ -105,7 +106,7 @@ class MeasureThread(QThread):
                 if not state.NI_STABILITY_MEAS:
                     break
                 freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
-                ni.write_task(freq_point)
+                self.ni.write_task(freq_point)
                 time.sleep(0.01)
                 if freq_step == 1:
                     time.sleep(0.4)
@@ -163,16 +164,11 @@ class MeasureThread(QThread):
                 self.measure.data["diff"] = power_diff.tolist()
 
         self.pre_exit()
-        self.results.emit(results)
         self.finished.emit()
 
     def pre_exit(self):
-        self.nrx.disconnect()
+        self.nrx.adapter.close()
         self.measure.save()
-
-    def terminate(self) -> None:
-        self.pre_exit()
-        super().terminate()
 
 
 class YIGWidget(QScrollArea):
@@ -311,7 +307,7 @@ class YIGWidget(QScrollArea):
 
     def stop_meas(self):
         state.NI_STABILITY_MEAS = False
-        self.meas_thread.terminate()
+        self.meas_thread.exit(0)
 
     def show_measure_graph_window(self, results: dict):
         if self.powerIfGraphWindow is None:

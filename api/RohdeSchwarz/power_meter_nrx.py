@@ -12,8 +12,7 @@ class NRXPowerMeter(BaseInstrument):
         gpib: int = None,
         adapter: str = SOCKET,
         port: int = 5025,
-        aperture_time: float = 0.05,
-        filter_time: float = 100,
+        aperture_time: float = 50,
         *args,
         **kwargs,
     ):
@@ -29,7 +28,6 @@ class NRXPowerMeter(BaseInstrument):
         """
         kwargs["port"] = port
         super().__init__(host, gpib, adapter, *args, **kwargs)
-        # self.set_filter_time(filter_time)
         self.set_filter_state(0)
         self.set_aperture_time(aperture_time)
 
