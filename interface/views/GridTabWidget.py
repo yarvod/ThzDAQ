@@ -3,7 +3,7 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt, QTimer
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -227,11 +227,17 @@ class StepBiasPowerThread(Thread):
 
     def pre_exit(self):
         self.motor.rotate(self.initial_angle, finish=True)
+        logger.info(
+            f"[{self.__class__.__name__}.pre_exit] Setting SIS block initial voltage ..."
+        )
         self.block.set_bias_voltage(self.initial_v)
+        logger.info(
+            f"[{self.__class__.__name__}.pre_exit] Finish setting SIS block initial voltage"
+        )
         self.measure.save()
-        self.progress.emit(0)
         self.block.disconnect()
         self.nrx.adapter.close()
+        self.progress.emit(0)
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
