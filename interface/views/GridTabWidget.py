@@ -53,6 +53,7 @@ class StepBiasPowerThread(Thread):
             self.measure = MeasureModel.objects.create(
                 measure_type=MeasureType.GRID_BIAS_POWER, data={}
             )
+        self.measure.save(finish=False)
 
         self.motor = GridManager(host=state.GRID_ADDRESS)
 
@@ -66,7 +67,6 @@ class StepBiasPowerThread(Thread):
 
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )

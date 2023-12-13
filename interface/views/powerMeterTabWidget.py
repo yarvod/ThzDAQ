@@ -34,7 +34,6 @@ class NRXBlockStreamThread(QThread):
     def run(self):
         nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
@@ -90,7 +89,6 @@ class BiasPowerThread(Thread):
         super().__init__()
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
-            filter_time=state.NRX_FILTER_TIME,
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
