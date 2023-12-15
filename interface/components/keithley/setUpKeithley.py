@@ -1,61 +1,67 @@
+from typing import Union
+
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
-    QWidget,
-    QSpinBox,
-    QLabel,
-    QDialog,
     QVBoxLayout,
-    QFormLayout,
-    QHBoxLayout,
+    QWidget,
 )
 
-import settings
+from api.Keithley import KeithleyPowerSupplyManager, PowerSupply
+from interface.components.deviceAddForm import DeviceAddForm
+from interface.components.deviceInfo import DeviceInfo
 from interface.components.ui.Button import Button
+from interface.components.ui.Lines import HLine
+from threads import Thread
 
 
-class KeithleyForm(QDialog):
-    def __init__(self, parent):
-        super().__init__(parent)
+class DeviceInitThread(Thread):
+    status = pyqtSignal(str)
 
-        layout = QVBoxLayout()
-        flayout = QFormLayout()
-        hlayout = QHBoxLayout()
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.kwargs = kwargs
 
-        self.gpibAddressLabel = QLabel(self)
-        self.gpibAddressLabel.setText("GPIB address:")
-        self.gpibAddress = QSpinBox(self)
-        self.gpibAddress.setRange(1, 31)
-        self.gpibAddress.setValue(20)
-        self.statusLabel = QLabel(self)
-        self.statusLabel.setText("Status:")
-        self.status = QLabel(self)
-        self.status.setText(settings.NOT_INITIALIZED)
-
-        flayout.addRow(self.gpibAddressLabel, self.gpibAddress)
-        flayout.addRow(self.statusLabel, self.status)
-
-        self.btnSubmit = Button(self)
-        self.btnSubmit.setText("Initialize")
-
-        self.setLayout(layout)
-
-    def initSignal(self):
-        ...
-
-    def initilize(self):
-        ...
+    def run(self) -> None:
+        device = PowerSupply(**self.kwargs)
+        if device.test():
+            self.status.emit("OK")
+        else:
+            self.status.emit("Error!")
+        self.finished.emit()
 
 
 class SetUpKeithley(QGroupBox):
     def __init__(self, parent):
         super().__init__(parent)
+        self.setTitle("Keithley Power Supply")
+        self.device_init_thread: Union[None, DeviceInitThread] = None
+        self.form: Union[None, DeviceAddForm] = None
+        self.instances = {}
         self.layout = QVBoxLayout()
-        self.btn = Button("Add")
-        self.btn.clicked.connect(self.show_dialog)
+        self.btn = Button("Add Device")
+        self.btn.clicked.connect(self.open_form_add_device)
 
         self.layout.addWidget(self.btn)
+        self.layout.addWidget(HLine(self))
         self.setLayout(self.layout)
 
-    def show_dialog(self):
-        form = KeithleyForm(self)
-        form.show()
+    def open_form_add_device(self):
+        self.form = DeviceAddForm(self)
+        self.form.init.connect(self.init_device)
+        self.form.show()
+
+    def add_device_info_widget(self, cid, dev_info):
+        self.instances[cid] = dev_info
+        self.layout.addWidget(dev_info)
+        self.layout.addWidget(HLine(self))
+
+    def init_device(self, kwargs):
+        cid = KeithleyPowerSupplyManager.add_config(**kwargs)
+        config = KeithleyPowerSupplyManager.get_config(cid)
+        dev_info = DeviceInfo(self, config, **kwargs)
+        self.add_device_info_widget(cid, dev_info)
+
+        self.device_init_thread = DeviceInitThread(**kwargs)
+        self.device_init_thread.status.connect(config.set_status)
+        self.device_init_thread.start()

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class GridManager:
-    MAX_STEPS = 1000
+    MAX_STEPS = 4000
 
     def __init__(
         self,

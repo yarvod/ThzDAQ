@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SignalGenerator:
+    model = "E8247C"
     ALC_RANGE = [-7.9, 2]
     ATTENUATOR_RANGE = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
 

@@ -4,6 +4,8 @@ from utils.classes import BaseInstrument
 
 
 class PowerSupply(BaseInstrument):
+    model = "2200-30-5"
+
     def __init__(
         self,
         host: str = state.PROLOGIX_IP,
