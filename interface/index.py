@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from PyQt5 import QtGui
 from PyQtAds import ads as QtAds
 
-
+from api.Keithley import KeithleyPowerSupplyManager
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
@@ -53,9 +53,14 @@ from store.base import MeasureManager
 
 
 class App(QMainWindow):
-    def __init__(self):
+    def __init__(
+        self,
+        title: str = "SIS manager",
+        company: str = "ASC",
+    ):
         super().__init__()
-        self.title = "SIS manager"
+        self.title = title
+        self.company = company
         self.left = 0
         self.top = 0
         self.width = 1300
@@ -66,7 +71,7 @@ class App(QMainWindow):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
 
-        self.settings = QSettings("ASC", self.title)
+        self.settings = QSettings(self.company, self.title)
 
         QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
         QtAds.CDockManager.setConfigFlag(
@@ -381,6 +386,8 @@ class App(QMainWindow):
     def store_state(self):
         # self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
         self.dock_manager.savePerspectives(self.settings)
+        KeithleyPowerSupplyManager.store_config()
+        self.settings.sync()
 
     def create_perspective_ui(self):
         create_perspective_action = QAction("Create Perspective", self)

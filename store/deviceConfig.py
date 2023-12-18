@@ -1,6 +1,8 @@
 from typing import Union
 
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal, QSettings
+
+import settings
 
 # Developers
 AGILENT = "Agilent"
@@ -35,7 +37,7 @@ class DeviceConfig(QObject):
         host: str = None,
         port: Union[str, int] = None,
         gpib: int = None,
-        status: str = "",
+        status: str = settings.NOT_INITIALIZED,
     ):
         super().__init__()
         self._name = name
@@ -103,6 +105,16 @@ class DeviceConfig(QObject):
     def set_status(self, status: str):
         self.status = status
 
+    def dict(self):
+        return dict(
+            _name=self._name,
+            cid=self.cid,
+            adapter=self._adapter,
+            host=self._host,
+            port=self._port,
+            gpib=self._gpib,
+        )
+
 
 class DeviceConfigList(list):
     def first(self) -> Union["DeviceConfig", None]:
@@ -138,6 +150,7 @@ class DeviceManager:
     last_id = 0
     config_class: DeviceConfig = DeviceConfig
     configs: DeviceConfigList[DeviceConfig] = DeviceConfigList()
+    setup_widget = None
 
     @classmethod
     def add_config(cls, *args, **kwargs) -> int:
@@ -150,3 +163,28 @@ class DeviceManager:
     @classmethod
     def get_config(cls, cid: int) -> Union[DeviceConfig, None]:
         return cls.configs.filter(cid=cid).first()
+
+    @classmethod
+    def store_config(cls):
+        configs = [c.dict() for c in cls.configs]
+        qsettings = QSettings("ASC", "SIS manager")
+        qsettings.setValue(f"Configs/{cls.name}", configs)
+        qsettings.sync()
+
+    @classmethod
+    def restore_config(cls):
+        qsettings = QSettings("ASC", "SIS manager")
+        configs = qsettings.value(f"Configs/{cls.name}", None)
+        if not configs:
+            return
+        for config in configs:
+            config.pop("cid", None)
+            config.pop("_name", None)
+            cls.add_config(**config)
+        cls.add_configs_to_setup_widget()
+
+    @classmethod
+    def add_configs_to_setup_widget(cls):
+        assert cls.setup_widget is not None, "You must set SetUpWidget reference"
+        for config in cls.configs:
+            cls.setup_widget.create_device_info_widget(config, **config.dict())

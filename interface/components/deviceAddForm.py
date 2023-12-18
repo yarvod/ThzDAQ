@@ -58,7 +58,7 @@ class DeviceAddForm(QDialog):
         self.gpibLabel.setText("GPIB:")
         self.gpib = QSpinBox(self)
         self.gpib.setRange(1, 31)
-        self.gpib.setValue(gpib)
+        self.gpib.setValue(int(gpib))
 
         flayout.addRow(self.adapterLabel, self.adapter)
         flayout.addRow(self.hostLabel, self.host)

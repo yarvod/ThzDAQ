@@ -21,7 +21,7 @@ class SocketAdapter(InstrumentAdapterInterface):
     ):
         self.socket = None
         self.host = host
-        self.port = port
+        self.port = int(port)
         self.timeout = 0
         self.delay = delay
         self.init(timeout)

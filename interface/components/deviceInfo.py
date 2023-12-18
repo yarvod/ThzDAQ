@@ -1,8 +1,12 @@
+from typing import Union
+
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLabel
 
 import settings
+from interface.components.deviceAddForm import DeviceAddForm
 from interface.components.ui.Button import Button
 from store.deviceConfig import DeviceConfig
+from threads import Thread
 
 
 class DeviceInfo(QWidget):
@@ -10,15 +14,23 @@ class DeviceInfo(QWidget):
         self,
         parent,
         config: DeviceConfig,
+        thread_class=None,
+        device_api_class=None,
         adapter: str = settings.SOCKET,
         host: str = "",
         port: str = "",
         gpib: int = 0,
         status: str = settings.NOT_INITIALIZED,
+        **kwargs,
     ):
         super().__init__(parent)
 
         self.config: DeviceConfig = config
+        self.thread_class = thread_class
+        self.init_thread: Union[None, Thread] = None
+        self.device_api_class = device_api_class
+
+        self.form = None
 
         layout = QVBoxLayout()
         flayout = QFormLayout()
@@ -66,7 +78,7 @@ class DeviceInfo(QWidget):
         flayout.addRow(self.gpibLabel, self.gpib)
         flayout.addRow(self.statusLabel, self.status)
 
-        self.btnInitialize = Button("Initialize")
+        self.btnInitialize = Button("Initialize", animate=True)
         self.btnInitialize.clicked.connect(self.initialize)
         self.btnEdit = Button("Edit")
         self.btnEdit.clicked.connect(self.edit)
@@ -79,7 +91,25 @@ class DeviceInfo(QWidget):
         self.setLayout(layout)
 
     def initialize(self):
-        ...
+        self.init_thread = self.thread_class(
+            self.device_api_class,
+            adapter=self.adapter.text(),
+            host=self.host.text(),
+            port=self.port.text(),
+            gpib=self.gpib.text(),
+        )
+        self.init_thread.status.connect(self.config.set_status)
+        self.init_thread.finished.connect(lambda: self.btnInitialize.setEnabled(True))
+        self.init_thread.start()
+        self.btnInitialize.setEnabled(False)
 
     def edit(self):
-        ...
+        self.form = DeviceAddForm(
+            self,
+            adapter=self.adapter.text(),
+            host=self.host.text(),
+            port=self.port.text(),
+            gpib=self.gpib.text(),
+        )
+        self.form.init.connect(self.initialize)
+        self.form.show()
