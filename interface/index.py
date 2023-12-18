@@ -10,11 +10,12 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QInputDialog,
     QToolBar,
+    QWidget,
 )
 from PyQt5 import QtGui
 from PyQtAds import ads as QtAds
 
-from api.Keithley import KeithleyPowerSupplyManager
+from store import KeithleyPowerSupplyManager
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
@@ -72,12 +73,7 @@ class App(QMainWindow):
         self.setGeometry(self.left, self.top, self.width, self.height)
 
         self.settings = QSettings(self.company, self.title)
-
-        QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
-        QtAds.CDockManager.setConfigFlag(
-            QtAds.CDockManager.XmlCompressionEnabled, False
-        )
-        QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.FocusHighlighting, True)
+        self.dock_manager = None
 
         self.menuBar = self.menuBar()
         self.menuView = QMenu("Views", self)
@@ -85,8 +81,15 @@ class App(QMainWindow):
         self.menuBar.addMenu(self.menuView)
         self.menuBar.addMenu(self.menuGraph)
 
-        self.dock_manager = QtAds.CDockManager(self)
+        # Add toolbar
+        self.toolBar = QToolBar("Main ToolBar")
+        self.addToolBar(self.toolBar)
 
+        self.dock_widgets = {}
+
+        self.show()
+
+    def add_views(self):
         # Add base widgets
         self.setup_dock_widget = QtAds.CDockWidget("SetUp")
         self.tab_setup = SetUpTabWidget(self)
@@ -349,14 +352,18 @@ class App(QMainWindow):
         self.setup_dock_widget.raise_()
         self.sis_block_dock_widget.raise_()
 
-        # Add toolbar
-        self.toolBar = QToolBar("Main ToolBar")
-        self.addToolBar(self.toolBar)
-
-        self.create_perspective_ui()
-        self.restore_state()
-
-        self.show()
+    def add_dock_widget(
+        self,
+        name: str,
+        widget_class,
+        **kwargs,
+    ):
+        dock_widget = QtAds.CDockWidget(name)
+        widget = widget_class(self, **kwargs)
+        dock_widget.setWidget(widget)
+        self.menuView.addAction(dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock_widget)
+        dock_widget.closeDockWidget()
 
     def restore_state(self):
         # dock_manager_state = self.settings.value("dock_manager_state")

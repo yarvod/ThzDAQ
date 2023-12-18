@@ -3,6 +3,8 @@ from typing import Union
 from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal, QSettings
 
 import settings
+from utils.dock import Dock
+from utils.functions import import_class
 
 # Developers
 AGILENT = "Agilent"
@@ -47,6 +49,8 @@ class DeviceConfig(QObject):
         self.port = port
         self.gpib = gpib
         self.status = status
+
+        self.thread_stream = False
 
     def __str__(self):
         return f"DeviceConfig(cid={self.cid}, adapter={self._adapter}, host={self._host}, port={self._port}, gpib={self._gpib}, status={self._status})"
@@ -151,12 +155,17 @@ class DeviceManager:
     config_class: DeviceConfig = DeviceConfig
     configs: DeviceConfigList[DeviceConfig] = DeviceConfigList()
     setup_widget = None
+    main_widget_class = None
 
     @classmethod
-    def add_config(cls, *args, **kwargs) -> int:
+    def add_config(cls, **kwargs) -> int:
         cls.last_id += 1
-        cls.configs.append(
-            cls.config_class(name=cls.name, cid=cls.last_id, *args, **kwargs)
+        config = cls.config_class(name=cls.name, cid=cls.last_id, **kwargs)
+        cls.configs.append(config)
+        Dock.add_widget_to_dock(
+            name=config.name,
+            widget_class=import_class(cls.main_widget_class),
+            cid=config.cid,
         )
         return cls.last_id
 

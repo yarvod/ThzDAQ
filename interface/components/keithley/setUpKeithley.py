@@ -5,7 +5,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from api.Keithley import KeithleyPowerSupplyManager, PowerSupply
+from api.Keithley import PowerSupply
+from store import KeithleyPowerSupplyManager
 from interface.components.deviceAddForm import DeviceAddForm
 from interface.components.deviceInfo import DeviceInfo
 from interface.components.ui.Button import Button

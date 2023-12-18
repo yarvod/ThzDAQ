@@ -2,13 +2,13 @@ import logging
 import socket
 from typing import Union, Dict
 
-from utils.classes import InstrumentAdapterInterface, Singleton
+from utils.classes import InstrumentAdapterInterface
 
 
 logger = logging.getLogger(__name__)
 
 
-class PrologixEthernetAdapter(InstrumentAdapterInterface, metaclass=Singleton):
+class PrologixEthernetAdapter(InstrumentAdapterInterface):
     PORT = 1234
     socket = None
     host = None
@@ -125,6 +125,8 @@ class PrologixEthernetAdapter(InstrumentAdapterInterface, metaclass=Singleton):
 
         # do not require CR or LF appended to GPIB data
         self._send("++eos 3")
+
+        self._send("++savecfg 0")
 
     def __del__(self):
         self.close()

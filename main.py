@@ -2,9 +2,11 @@ import sys
 
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
+from PyQtAds import ads as QtAds
 
-from api.Keithley import KeithleyPowerSupplyManager
+from store import restore_configs
 from interface.index import App
+from utils.dock import Dock
 
 
 def init_settings():
@@ -23,13 +25,22 @@ def init_settings():
     settings.sync()
 
 
-def restore_configs():
-    KeithleyPowerSupplyManager.restore_config()
+def get_dock_manager(main_app):
+    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
+    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.XmlCompressionEnabled, False)
+    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.FocusHighlighting, True)
+    return QtAds.CDockManager(main_app)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     init_settings()
     ex = App()
+    dock_manager = get_dock_manager(ex)
+    ex.dock_manager = dock_manager
+    Dock.ex = ex
+    ex.add_views()
+    ex.create_perspective_ui()
+    ex.restore_state()
     restore_configs()
     sys.exit(app.exec())
