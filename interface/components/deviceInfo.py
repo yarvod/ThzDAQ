@@ -103,6 +103,11 @@ class DeviceInfo(QWidget):
         self.init_thread.start()
         self.btnInitialize.setEnabled(False)
 
+    def update_config_initialize(self, kwargs):
+        for k, v in kwargs.items():
+            self.config.__setattr__(k, v)
+        self.initialize()
+
     def edit(self):
         self.form = DeviceAddForm(
             self,
@@ -111,5 +116,5 @@ class DeviceInfo(QWidget):
             port=self.port.text(),
             gpib=self.gpib.text(),
         )
-        self.form.init.connect(self.initialize)
+        self.form.init.connect(self.update_config_initialize)
         self.form.show()

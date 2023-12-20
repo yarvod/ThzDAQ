@@ -1,11 +1,13 @@
 SOCKET = "SOCKET"
 PROLOGIX_ETHERNET = "PROLOGIX_ETHERNET"
+PROLOGIX = "PROLOGIX NEW"
 HTTP = "HTTP"
 SERIAL = "SERIAL"
 
 ADAPTERS = {
     SOCKET: "api.adapters.socket_adapter.SocketAdapter",
     PROLOGIX_ETHERNET: "api.adapters.prologix_ethernet_adapter.PrologixEthernetAdapter",
+    PROLOGIX: "api.adapters.prologix.Prologix",
     HTTP: "api.adapters.http_adapter.HttpAdapter",
     SERIAL: "serial.Serial",
 }

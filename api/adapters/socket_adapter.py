@@ -115,11 +115,11 @@ class SocketAdapter(InstrumentAdapterInterface):
 
 if __name__ == "__main__":
     print("IP address:")
-    host = input()
+    h = input()
     print("Port:")
-    port = int(input())
+    p = int(input())
     print("Cmd:")
     cmd = input()
-    sock = SocketAdapter(host=host, port=port)
+    sock = SocketAdapter(host=h, port=p)
     sock.connect()
     print(sock.query(cmd))

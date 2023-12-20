@@ -91,10 +91,8 @@ class PrologixEthernetAdapter(InstrumentAdapterInterface):
         return self._recv(num_bytes)
 
     def query(self, cmd, eq_addr: int = None, buffer_size=1024 * 1024):
-        if eq_addr:
-            self.select(eq_addr)
-        self.write(cmd)
-        return self.read(num_bytes=buffer_size)
+        self.write(cmd, eq_addr)
+        return self.read(eq_addr, num_bytes=buffer_size)
 
     def set_timeout(self, timeout):
         # see user manual for details on accepted timeout values
@@ -152,7 +150,6 @@ if __name__ == "__main__":
     print("IP address:")
     host = input()
     dev = PrologixEthernetAdapter(host=host)
-    dev.connect()
     print("GPIB address:")
     gpib = int(input())
     dev.select(gpib)
