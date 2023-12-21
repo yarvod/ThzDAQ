@@ -162,11 +162,12 @@ class DeviceManager:
         cls.last_id += 1
         config = cls.config_class(name=cls.name, cid=cls.last_id, **kwargs)
         cls.configs.append(config)
-        Dock.add_widget_to_dock(
-            name=config.name,
-            widget_class=import_class(cls.main_widget_class),
-            cid=config.cid,
-        )
+        if cls.main_widget_class:
+            Dock.add_widget_to_dock(
+                name=config.name,
+                widget_class=import_class(cls.main_widget_class),
+                cid=config.cid,
+            )
         return cls.last_id
 
     @classmethod

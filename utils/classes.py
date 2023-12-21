@@ -40,13 +40,14 @@ class BaseInstrument:
         host: str,
         gpib: int,
         adapter: str,
+        adapter_instance: "InstrumentAdapterInterface" = None,
         *args,
         **kwargs,
     ):
         self.host = host
         self.gpib = gpib
         self.adapter_name = adapter
-        self.adapter: Union["InstrumentAdapterInterface", None] = None
+        self.adapter: Union["InstrumentAdapterInterface", None] = adapter_instance
 
         if self.adapter is None:
             self._set_adapter(adapter, *args, **kwargs)

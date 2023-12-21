@@ -1,18 +1,21 @@
 from api.adapters.socket_adapter import SocketAdapter
+from utils.classes import Singleton
 
 
-class Prologix(SocketAdapter):
+class Prologix(SocketAdapter, metaclass=Singleton):
     def __init__(
         self,
         host: str,
         port: int = 1234,
         timeout: float = 2,
         delay: float = 0,
+        setup: bool = False,
         *args,
         **kwargs,
     ):
         super().__init__(host, port, timeout, delay, *args, **kwargs)
-        self._setup()
+        if setup:
+            self._setup()
 
     def _setup(self):
         # set device to CONTROLLER mode

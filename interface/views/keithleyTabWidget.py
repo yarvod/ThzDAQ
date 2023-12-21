@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
+from interface.components.keithley.keithleyManager import KeitleyManagerWidget
 from interface.components.keithley.keithleyMonitor import KeithleyMonitor
 
 
@@ -12,6 +13,7 @@ class KeithleyTabWidget(QScrollArea):
 
         layout = QVBoxLayout()
         layout.addWidget(KeithleyMonitor(self, cid=self.cid))
+        layout.addWidget(KeitleyManagerWidget(self, cid=self.cid))
         layout.addStretch()
 
         self.widget.setLayout(layout)

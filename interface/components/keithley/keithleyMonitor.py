@@ -60,15 +60,15 @@ class KeithleyStreamThread(Thread):
             if output:
                 self.output.emit(output)
 
-            if not (sour_voltage, voltage, sour_current, current):
+            if not any((sour_voltage, voltage, sour_current, current)):
                 break
 
         self.pre_exit()
         self.finished.emit()
 
-    def pre_exit(self, *args, **kwargs):
-        if self.keithley:
-            self.keithley.adapter.close()
+    # def pre_exit(self, *args, **kwargs):
+    #     if self.keithley:
+    #         self.keithley.adapter.close()
 
 
 class KeithleyMonitor(QGroupBox):
