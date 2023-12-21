@@ -4,7 +4,7 @@ import time
 from typing import Union
 
 from utils.classes import InstrumentAdapterInterface
-
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class SocketAdapter(InstrumentAdapterInterface):
             )
         except OSError as e:
             logger.error(f"[{self.__class__.__name__}.connect] OSError: {e}")
+            raise DeviceConnectionError("Unable to connect socket")
 
     def is_socket_closed(self) -> Union[bool, None]:
         try:

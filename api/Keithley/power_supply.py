@@ -8,7 +8,7 @@ class PowerSupply(BaseInstrument):
 
     def __init__(
         self,
-        host: str = state.PROLOGIX_IP,
+        host: str = "169.254.156.103",
         gpib: int = 22,
         adapter: str = settings.PROLOGIX_ETHERNET,
         *args,
@@ -36,27 +36,41 @@ class PowerSupply(BaseInstrument):
         return self.query(f"OUTPUT?").strip()
 
     def get_current(self):
-        return float(self.query("MEAS:CURR?"))
+        response = self.query("MEAS:CURR?")
+        try:
+            return float(response)
+        except ValueError:
+            return None
 
-    def get_set_current(self):
-        return float(self.query("SOUR:CURR?"))
+    def get_sour_current(self):
+        response = self.query("SOUR:CURR?")
+        try:
+            return float(response)
+        except ValueError:
+            return None
 
     def get_voltage(self):
-        return float(self.query("MEAS:VOLT?"))
+        response = self.query("MEAS:VOLT?")
+        try:
+            return float(response)
+        except ValueError:
+            return None
 
-    def get_set_voltage(self):
-        return float(self.query("SOUR:VOLT?"))
+    def get_sour_voltage(self):
+        response = self.query("SOUR:VOLT?")
+        try:
+            return float(response)
+        except ValueError:
+            return None
 
-    def set_current(self, current: float) -> float:
+    def set_current(self, current: float) -> None:
         self.write(f"SOUR:CURR {current}A")
-        return float(self.query(f"SOUR:CURR?"))
 
-    def set_voltage(self, voltage: float) -> float:
+    def set_voltage(self, voltage: float) -> None:
         self.write(f"SOUR:VOLT {voltage}V")
-        return float(self.query(f"SOUR:VOLT?"))
 
 
 if __name__ == "__main__":
     block = PowerSupply()
     print(block.test())
-    print(block.get_set_voltage())
+    print(block.get_sour_voltage())
