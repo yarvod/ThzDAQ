@@ -1,5 +1,4 @@
 import settings
-from store.state import state
 from utils.classes import BaseInstrument
 
 
@@ -10,7 +9,7 @@ class PowerSupply(BaseInstrument):
         self,
         host: str = "169.254.156.103",
         gpib: int = 22,
-        adapter: str = settings.PROLOGIX_ETHERNET,
+        adapter: str = settings.PROLOGIX,
         *args,
         **kwargs,
     ):

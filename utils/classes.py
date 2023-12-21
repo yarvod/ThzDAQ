@@ -1,5 +1,4 @@
 import logging
-import threading
 from typing import Union
 
 from settings import ADAPTERS
@@ -18,20 +17,16 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-lock = threading.Lock()
-
-
-class SingletonSafe(type):
+class PrologixMeta(type):
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            with lock:
-                if cls not in cls._instances:
-                    cls._instances[cls] = super(SingletonSafe, cls).__call__(
-                        *args, **kwargs
-                    )
-        return cls._instances[cls]
+        host = kwargs.get("host", None)
+        if not host:
+            host = args[0]  # FIXME: improve later
+        if host not in cls._instances:
+            cls._instances[host] = super(PrologixMeta, cls).__call__(*args, **kwargs)
+        return cls._instances[host]
 
 
 class BaseInstrument:

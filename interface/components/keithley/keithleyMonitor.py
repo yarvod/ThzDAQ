@@ -39,7 +39,7 @@ class KeithleyStreamThread(Thread):
             return
 
         while self.config.thread_stream:
-            time.sleep(0.2)
+            time.sleep(0.5)
             sour_voltage = self.keithley.get_sour_voltage()
             if sour_voltage:
                 self.sour_voltage.emit(sour_voltage)

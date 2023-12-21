@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 from PyQt5 import QtGui
 from PyQtAds import ads as QtAds
 
+from api.adapters import PrologixManager
 from store import KeithleyPowerSupplyManager
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
@@ -394,6 +395,7 @@ class App(QMainWindow):
         # self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
         self.dock_manager.savePerspectives(self.settings)
         KeithleyPowerSupplyManager.store_config()
+        PrologixManager.store_config()
         self.settings.sync()
 
     def create_perspective_ui(self):

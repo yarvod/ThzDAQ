@@ -1,23 +1,23 @@
 from api.adapters.socket_adapter import SocketAdapter
-from utils.classes import Singleton
+from utils.classes import PrologixMeta
 
 
-class Prologix(SocketAdapter, metaclass=Singleton):
+class Prologix(SocketAdapter, metaclass=PrologixMeta):
+    __metaclass__ = PrologixMeta
+
     def __init__(
         self,
         host: str,
         port: int = 1234,
         timeout: float = 2,
         delay: float = 0,
-        setup: bool = False,
         *args,
         **kwargs,
     ):
         super().__init__(host, port, timeout, delay, *args, **kwargs)
-        if setup:
-            self._setup()
+        self.setup()
 
-    def _setup(self):
+    def setup(self):
         # set device to CONTROLLER mode
         self._send("++mode 1")
 
@@ -52,5 +52,5 @@ class Prologix(SocketAdapter, metaclass=Singleton):
 
 
 if __name__ == "__main__":
-    p = Prologix("169.254.156.103", 1234)
+    p = Prologix("169.254.156.103", port=1234)
     print(p.query("*IDN?", eq_addr=20))

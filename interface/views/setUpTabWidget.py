@@ -19,12 +19,12 @@ from PyQt5.QtWidgets import (
 
 from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
-from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from api.Arduino.grid import GridManager
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
 from interface.components.keithley.setUpKeithley import SetUpKeithley
 from interface.components.power_meter.setUpPowerMeter import SetUpPowerMeter
+from interface.components.prologix.setUpPrologix import SetUpPrologix
 from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
@@ -94,30 +94,6 @@ class SISBlockThread(QThread):
         logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
-class PrologixEthernetThread(QThread):
-    status = pyqtSignal(bool)
-
-    def run(self):
-        try:
-            # define and close existing prologix instance
-            prologix = PrologixEthernetAdapter(host=state.PROLOGIX_IP)
-            prologix.close()
-            # Set new IP for prologix and connect again
-            prologix.host = state.PROLOGIX_IP
-            prologix.init()
-            logger.info(
-                f"[{self.__class__.__name__}.run] Prologix Ethernet Initialized"
-            )
-            self.status.emit(True)
-        except:
-            logger.error(
-                f"[{self.__class__.__name__}.run] Prologix Ethernet unable to initialize"
-            )
-            self.status.emit(False)
-
-        self.finished.emit()
-
-
 class GridThread(QThread):
     status = pyqtSignal(str)
 
@@ -134,7 +110,6 @@ class SetUpTabWidget(QScrollArea):
         self.layout = QVBoxLayout(self)
         self.createGroupBlock()
         self.createGroupVna()
-        self.createGroupPrologixEthernet()
         self.createGroupGrid()
         self.createGroupSignalGenerator()
         self.createGroupTemperatureController()
@@ -145,7 +120,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(SetUpPowerMeter(self))
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupPrologixEthernet)
+        self.layout.addWidget(SetUpPrologix(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupGrid)
         self.layout.addSpacing(10)
@@ -249,34 +224,6 @@ class SetUpTabWidget(QScrollArea):
         layout.addWidget(self.btnInitVna, 3, 0, 1, 2)
 
         self.groupVna.setLayout(layout)
-
-    def createGroupPrologixEthernet(self):
-        self.groupPrologixEthernet = QGroupBox("Prologix Ethernet")
-        self.groupPrologixEthernet.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.prologixIPAdressLabel = QLabel(self)
-        self.prologixIPAdressLabel.setText("IP Address:")
-        self.prologixIPAdress = QLineEdit(self)
-        self.prologixIPAdress.setText(state.PROLOGIX_IP)
-
-        self.prologixEthernetStatusLabel = QLabel(self)
-        self.prologixEthernetStatusLabel.setText("Status:")
-        self.prologixEthernetStatus = QLabel(self)
-        self.prologixEthernetStatus.setText("Doesn't initialized yet!")
-
-        self.btnInitPrologixEthernet = Button("Initialize Prologix", animate=True)
-        self.btnInitPrologixEthernet.clicked.connect(self.initialize_prologix_ethernet)
-
-        layout.addWidget(self.prologixIPAdressLabel, 1, 0)
-        layout.addWidget(self.prologixIPAdress, 1, 1)
-        layout.addWidget(self.prologixEthernetStatusLabel, 2, 0)
-        layout.addWidget(self.prologixEthernetStatus, 2, 1)
-        layout.addWidget(self.btnInitPrologixEthernet, 3, 0, 1, 2)
-
-        self.groupPrologixEthernet.setLayout(layout)
 
     def createGroupGrid(self):
         self.groupGrid = QGroupBox("GRID")
@@ -390,25 +337,6 @@ class SetUpTabWidget(QScrollArea):
         short_status = textwrap.shorten(status, width=40, placeholder="...")
         self.gridStatus.setText(short_status)
         self.gridStatus.setToolTip(status)
-
-    def initialize_prologix_ethernet(self):
-        self.prologix_ethernet_thread = PrologixEthernetThread()
-
-        state.PROLOGIX_IP = self.prologixIPAdress.text()
-
-        self.prologix_ethernet_thread.status.connect(self.set_prologix_ethernet_status)
-        self.prologix_ethernet_thread.start()
-
-        self.btnInitPrologixEthernet.setEnabled(False)
-        self.prologix_ethernet_thread.finished.connect(
-            lambda: self.btnInitPrologixEthernet.setEnabled(True)
-        )
-
-    def set_prologix_ethernet_status(self, status: bool):
-        if status:
-            self.prologixEthernetStatus.setText("Ok")
-        else:
-            self.prologixEthernetStatus.setText("Error!")
 
     def initialize_block(self):
         self.sis_block_thread = SISBlockThread()
