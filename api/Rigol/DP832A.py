@@ -1,10 +1,11 @@
 from typing import List, Literal
 
-from settings import SOCKET
+import settings
 from utils.classes import BaseInstrument
 
 
 class PowerSupplyDP832A(BaseInstrument):
+    model = "DP832A"
     """
     Default port 5555
     Default host 169.254.0.14
@@ -14,7 +15,7 @@ class PowerSupplyDP832A(BaseInstrument):
         self,
         host: str = "169.254.0.14",
         gpib: int = None,
-        adapter: str = SOCKET,
+        adapter: str = settings.SOCKET,
         *args,
         **kwargs,
     ):
@@ -22,6 +23,10 @@ class PowerSupplyDP832A(BaseInstrument):
 
     def idn(self):
         return self.query("*IDN?")
+
+    def test(self) -> bool:
+        result = self.query("*TST?")
+        return "TopBoard:PASS,BottomBoard:PASS,Fan:PASS" in result
 
     def set_current(self, channel: int, current: float):
         self.write(f":SOURce{channel}:CURRent {current}")
@@ -56,6 +61,10 @@ class PowerSupplyDP832A(BaseInstrument):
         self.write(f":OUTP CH{channel},{output}")
 
     def get_output(self, channel: int) -> str:
+        """
+        :param channel: channel number
+        :return: OFF or ON
+        """
         return self.query(f":OUTP? CH{channel}")
 
 

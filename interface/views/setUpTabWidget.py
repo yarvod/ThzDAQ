@@ -23,6 +23,7 @@ from api.Arduino.grid import GridManager
 from interface.components.Agilent.setUpSignalGenerator import (
     SetUpAgilentSignalGenerator,
 )
+from interface.components.Rigol.setUpRigolPowerSupply import SetUpRigolPowerSupplyWidget
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
 from interface.components.keithley.setUpKeithley import SetUpKeithley
@@ -136,6 +137,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(SetUpDigitalYigGroup(self))
         self.layout.addWidget(SetUpKeithley(self))
+        self.layout.addWidget(SetUpRigolPowerSupplyWidget(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)

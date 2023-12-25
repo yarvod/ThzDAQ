@@ -34,7 +34,14 @@ class DeviceAddForm(QDialog):
         self.adapterLabel = QLabel(self)
         self.adapterLabel.setText("Adapter:")
         self.adapter = QComboBox(self)
-        self.adapter.addItems(settings.ADAPTERS.keys())
+        self.adapter.addItems(
+            [
+                settings.SOCKET,
+                settings.PROLOGIX,
+                settings.SERIAL,
+                settings.HTTP,
+            ]
+        )
         self.adapter.setCurrentText(adapter)
 
         self.hostLabel = QLabel(self)

@@ -15,8 +15,12 @@ from PyQt5.QtWidgets import (
 from PyQt5 import QtGui
 from PyQtAds import ads as QtAds
 
-from api.adapters import PrologixManager
-from store import KeithleyPowerSupplyManager, AgilentSignalGeneratorManager
+from store import (
+    KeithleyPowerSupplyManager,
+    AgilentSignalGeneratorManager,
+    PrologixManager,
+    RigolPowerSupplyManager,
+)
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
@@ -387,6 +391,7 @@ class App(QMainWindow):
         KeithleyPowerSupplyManager.store_config()
         PrologixManager.store_config()
         AgilentSignalGeneratorManager.store_config()
+        RigolPowerSupplyManager.store_config()
         self.settings.sync()
 
     def create_perspective_ui(self):

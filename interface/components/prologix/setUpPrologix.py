@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
-from api.adapters import PrologixManager
+from store import PrologixManager
 from api.adapters.prologix import Prologix
 from interface.components.adapterAddForm import AdapterAddForm
 from interface.components.adapterInfo import AdapterInfo
