@@ -4,7 +4,7 @@ from store.deviceConfig import DeviceManager
 
 class KeithleyPowerSupplyManager(DeviceManager):
     name = "Keithley Power Supply"
-    main_widget_class = "interface.views.keithleyTabWidget.KeithleyTabWidget"
+    main_widget_class = "interface.views.KeithleyTabWidget"
 
 
 def restore_configs():
