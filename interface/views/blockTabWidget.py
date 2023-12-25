@@ -16,13 +16,13 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
+from interface.components.Scontel.sisDemagnetisationWidget import (
+    SisDemagnetisationWidget,
+)
 from interface.components.ui.Button import Button
 from store.state import state
-
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.windows.biasGraphWindow import BiasGraphWindow
-from interface.windows.clGraphWindow import CLGraphWindow
 from store.base import MeasureModel, MeasureType
 
 logger = logging.getLogger(__name__)
@@ -296,6 +296,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         self.layout.addWidget(self.groupBiasScan)
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupCTRLScan)
+        self.layout.addWidget(SisDemagnetisationWidget(self))
         self.layout.addStretch()
 
         self.widget.setLayout(self.layout)
