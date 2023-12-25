@@ -1,1 +1,2 @@
 from .keithleyTabWidget import KeithleyTabWidget
+from .signalGeneratorTabWidget import SignalGeneratorTabWidget

@@ -53,7 +53,7 @@ class DeviceConfig(QObject):
         self.thread_stream = False
 
     def __str__(self):
-        return f"DeviceConfig(cid={self.cid}, adapter={self._adapter}, host={self._host}, port={self._port}, gpib={self._gpib}, status={self._status})"
+        return f"{self.__class__.__name__}(cid={self.cid}, adapter={self._adapter}, host={self._host}, port={self._port}, gpib={self._gpib}, status={self._status})"
 
     __repr__ = __str__
 

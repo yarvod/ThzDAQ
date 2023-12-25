@@ -28,12 +28,10 @@ class SignalGenerator(BaseInstrument):
     def idn(self) -> str:
         return self.adapter.query("*IDN?", eq_addr=self.gpib)
 
-    def test(self) -> str:
+    def test(self) -> bool:
         # return self.adapter.query("*TST?", eq_addr=self.gpib)
         result = self.idn()
-        if "Agilent" in result:
-            return "OK"
-        return "Error"
+        return "Agilent" in result
 
     def reset(self) -> str:
         assert self.adapter is not None, "Adapter couldn't be None"
@@ -44,7 +42,7 @@ class SignalGenerator(BaseInstrument):
 
     def set_rf_output_state(self, value: bool) -> None:
         output = 1 if value else 0
-        self.adapter.write(f"OUTPut {output}")
+        self.adapter.write(f"OUTPut {output}", eq_addr=self.gpib)
 
     def get_frequency(self) -> float:
         return float(self.adapter.query(":FREQuency:FIXed? ", eq_addr=self.gpib))
@@ -86,29 +84,35 @@ class SignalGenerator(BaseInstrument):
 
     def get_oem_status(self) -> str:
         """ON|OFF|NONE|REAR|FRONT"""
-        return self.adapter.query(":SYSTem:OEMHead:SELect?")
+        return self.adapter.query(":SYSTem:OEMHead:SELect?", eq_addr=self.gpib)
 
     def set_oem_status(self, value: str) -> None:
         """ON|OFF|NONE|REAR|FRONT"""
-        self.adapter.write(f":SYSTem:OEMHead:SELect {value}")
+        self.adapter.write(f":SYSTem:OEMHead:SELect {value}", eq_addr=self.gpib)
 
     def get_oem_frequency_start(self) -> float:
-        return float(self.adapter.query(":SYSTem:OEMHead:FREQuency:STARt?"))
+        return float(
+            self.adapter.query(":SYSTem:OEMHead:FREQuency:STARt?", eq_addr=self.gpib)
+        )
 
     def set_oem_frequency_start(self, value: float) -> None:
-        self.adapter.write(f":SYSTem:OEMHead:FREQuency:STARt {value}")
+        self.adapter.write(
+            f":SYSTem:OEMHead:FREQuency:STARt {value}", eq_addr=self.gpib
+        )
 
     def get_oem_frequency_stop(self) -> float:
-        return float(self.adapter.query(":SYSTem:OEMHead:FREQuency:STOP?"))
+        return float(
+            self.adapter.query(":SYSTem:OEMHead:FREQuency:STOP?", eq_addr=self.gpib)
+        )
 
     def set_oem_frequency_stop(self, value: float) -> None:
-        self.adapter.write(f":SYSTem:OEMHead:FREQuency:STOP {value}")
+        self.adapter.write(f":SYSTem:OEMHead:FREQuency:STOP {value}", eq_addr=self.gpib)
 
     def get_oem_multiplier(self) -> float:
-        return float(self.adapter.query(":SYST:OEMH:FREQ:MULT?"))
+        return float(self.adapter.query(":SYST:OEMH:FREQ:MULT?", eq_addr=self.gpib))
 
     def set_oem_multiplier(self, value: float) -> None:
-        self.adapter.write(f":SYST:OEMH:FREQ:MULT {value}")
+        self.adapter.write(f":SYST:OEMH:FREQ:MULT {value}", eq_addr=self.gpib)
 
 
 if __name__ == "__main__":

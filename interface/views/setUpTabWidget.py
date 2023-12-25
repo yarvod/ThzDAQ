@@ -20,6 +20,9 @@ from PyQt5.QtWidgets import (
 from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.Arduino.grid import GridManager
+from interface.components.Agilent.setUpSignalGenerator import (
+    SetUpAgilentSignalGenerator,
+)
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
 from interface.components.keithley.setUpKeithley import SetUpKeithley
@@ -111,7 +114,6 @@ class SetUpTabWidget(QScrollArea):
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupGrid()
-        self.createGroupSignalGenerator()
         self.createGroupTemperatureController()
 
         self.layout.addWidget(self.groupBlock)
@@ -124,7 +126,7 @@ class SetUpTabWidget(QScrollArea):
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupGrid)
         self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupSignalGenerator)
+        self.layout.addWidget(SetUpAgilentSignalGenerator(self))
         self.layout.addSpacing(10)
         self.layout.addWidget(self.groupTemperatureController)
         self.layout.addSpacing(10)
@@ -253,33 +255,6 @@ class SetUpTabWidget(QScrollArea):
 
         self.groupGrid.setLayout(layout)
 
-    def createGroupSignalGenerator(self):
-        self.groupSignalGenerator = QGroupBox("Signal generator")
-        self.groupGrid.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QFormLayout()
-
-        self.signalGeneratorAddressLabel = QLabel(self)
-        self.signalGeneratorAddressLabel.setText("GPIB Address:")
-        self.signalGeneratorAddress = QSpinBox(self)
-        self.signalGeneratorAddress.setRange(1, 32)
-        self.signalGeneratorAddress.setValue(state.AGILENT_SIGNAL_GENERATOR_GPIB)
-
-        self.signalGeneratorStatusLabel = QLabel(self)
-        self.signalGeneratorStatusLabel.setText("Status:")
-        self.signalGeneratorStatus = QLabel(self)
-        self.signalGeneratorStatus.setText("Doesn't initialized yet!")
-
-        self.btnSignalGeneratorInit = Button("Initialize", animate=True)
-        self.btnSignalGeneratorInit.clicked.connect(self.initialize_signal_generator)
-
-        layout.addRow(self.signalGeneratorAddressLabel, self.signalGeneratorAddress)
-        layout.addRow(self.signalGeneratorStatusLabel, self.signalGeneratorStatus)
-        layout.addRow(self.btnSignalGeneratorInit)
-
-        self.groupSignalGenerator.setLayout(layout)
-
     def createGroupTemperatureController(self):
         self.groupTemperatureController = QGroupBox("Temperature controller")
         self.groupGrid.setSizePolicy(
@@ -315,14 +290,6 @@ class SetUpTabWidget(QScrollArea):
         tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
         result = tc.test()
         self.temperatureControllerStatus.setText(result)
-
-    def initialize_signal_generator(self):
-        state.AGILENT_SIGNAL_GENERATOR_GPIB = self.signalGeneratorAddress.value()
-        sg = SignalGenerator(
-            host=state.PROLOGIX_IP, gpib=state.AGILENT_SIGNAL_GENERATOR_GPIB
-        )
-        result = sg.test()
-        self.signalGeneratorStatus.setText(result)
 
     def initialize_grid(self):
         state.GRID_ADDRESS = self.gridAddress.text()

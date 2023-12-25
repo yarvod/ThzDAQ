@@ -16,7 +16,7 @@ from PyQt5 import QtGui
 from PyQtAds import ads as QtAds
 
 from api.adapters import PrologixManager
-from store import KeithleyPowerSupplyManager
+from store import KeithleyPowerSupplyManager, AgilentSignalGeneratorManager
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
@@ -86,8 +86,6 @@ class App(QMainWindow):
         self.toolBar = QToolBar("Main ToolBar")
         self.addToolBar(self.toolBar)
 
-        self.dock_widgets = {}
-
         self.show()
 
     def add_views(self):
@@ -130,14 +128,6 @@ class App(QMainWindow):
         self.menuView.addAction(self.nrx_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.nrx_dock_widget
-        )
-
-        self.signal_generator_dock_widget = QtAds.CDockWidget("Signal Generator")
-        self.tab_signal_generator = SignalGeneratorTabWidget(self)
-        self.signal_generator_dock_widget.setWidget(self.tab_signal_generator)
-        self.menuView.addAction(self.signal_generator_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.signal_generator_dock_widget
         )
 
         self.grid_dock_widget = QtAds.CDockWidget("GRID")
@@ -396,6 +386,7 @@ class App(QMainWindow):
         self.dock_manager.savePerspectives(self.settings)
         KeithleyPowerSupplyManager.store_config()
         PrologixManager.store_config()
+        AgilentSignalGeneratorManager.store_config()
         self.settings.sync()
 
     def create_perspective_ui(self):
