@@ -35,7 +35,8 @@ class DigitalYigThread(Thread):
     def run(self):
         value = int(
             linear(
-                state.DIGITAL_YIG_FREQ * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT
+                state.DIGITAL_YIG_FREQ.value * 1e9,
+                *state.CALIBRATION_DIGITAL_FREQ_2_POINT,
             )
         )
         ni_yig = NiYIGManager(host=state.NI_IP)
@@ -47,7 +48,7 @@ class DigitalYigThread(Thread):
             freq = round(
                 linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9, 2
             )
-            self.response.emit(f"{freq} GHz")
+            state.DIGITAL_YIG_FREQ.value = freq
         logger.info(f"[setNiYigFreq] {resp}")
 
 
@@ -106,7 +107,17 @@ class MeasureThread(Thread):
                 if not state.NI_STABILITY_MEAS:
                     break
                 freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
-                self.ni.write_task(freq_point)
+                resp = self.ni.write_task(freq_point)
+                resp_int = resp.get("result", None)
+                if resp_int:
+                    freq = round(
+                        linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ)
+                        * 1e-9,
+                        2,
+                    )
+                    state.DIGITAL_YIG_FREQ.value = freq
+                else:
+                    break
                 time.sleep(0.01)
                 if freq_step == 1:
                     time.sleep(0.4)
@@ -264,12 +275,15 @@ class YIGWidget(QScrollArea):
         self.niYigFreqLabel.setText("Freq, GHz")
         self.niYigFreq = DoubleSpinBox(self)
         self.niYigFreq.setRange(2.94, 13)
-        self.niYigFreq.setValue(state.DIGITAL_YIG_FREQ)
+        self.niYigFreq.setValue(8)
 
         self.niDigitalResponseLabel = QLabel(self)
         self.niDigitalResponseLabel.setText("Actual:")
         self.niDigitalResponse = QLabel(self)
         self.niDigitalResponse.setText("Unknown")
+        state.DIGITAL_YIG_FREQ.signal_value.connect(
+            lambda x: self.niDigitalResponse.setText(f"{x}")
+        )
 
         self.btnSetNiYigFreq = Button("Set frequency", animate=True)
         self.btnSetNiYigFreq.clicked.connect(self.set_ni_yig_freq)
@@ -329,7 +343,7 @@ class YIGWidget(QScrollArea):
         self.powerIfDiffGraphWindow.widget().show()
 
     def set_ni_yig_freq(self):
-        state.DIGITAL_YIG_FREQ = self.niYigFreq.value()
+        state.DIGITAL_YIG_FREQ.value = self.niYigFreq.value()
         self.set_digital_yig_freq_thread = DigitalYigThread()
         self.set_digital_yig_freq_thread.finished.connect(
             lambda: self.btnSetNiYigFreq.setEnabled(True)

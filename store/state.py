@@ -2,6 +2,7 @@ import os
 
 from settings import GridPlotTypes, WAVESHARE_ETHERNET
 from store.gridAngleModel import GridAngleModel
+from store.yigFreqModel import YigFrequencyModel
 
 
 class State:
@@ -153,7 +154,7 @@ class State:
     NI_FREQ_FROM = 3
     NI_FREQ_POINTS = 300
     NI_STABILITY_MEAS = False
-    DIGITAL_YIG_FREQ = 8
+    DIGITAL_YIG_FREQ = YigFrequencyModel()
     NRX_POINTS = 20
 
     CALIBRATION_CURR_2_FREQ = [3.49015508e10, 1.14176903e08]
