@@ -50,3 +50,7 @@ class SetUpPrologix(QGroupBox):
         dev_info = AdapterInfo(self, config, AdapterInitThread, Prologix, **kwargs)
         self.add_adapter_info_widget(config.cid, dev_info)
         return dev_info
+
+    def delete_adapter_info(self, cid: int):
+        self.layout.removeWidget(self.instances[cid])
+        del self.instances[cid]

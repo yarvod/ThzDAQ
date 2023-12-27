@@ -343,10 +343,6 @@ class App(QMainWindow):
         )
         self.yig_widget.powerIfDiffGraphWindow = self.pif_diff_curve_dock_widget
 
-        # Set widgets active
-        self.setup_dock_widget.raise_()
-        self.sis_block_dock_widget.raise_()
-
     def add_dock_widget(
         self,
         name: str,
@@ -359,6 +355,11 @@ class App(QMainWindow):
         self.menuView.addAction(dock_widget.toggleViewAction())
         self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock_widget)
         dock_widget.closeDockWidget()
+
+    def delete_dock_widget(self, name: str):
+        dock_widget = self.dock_manager.findDockWidget(name)
+        self.menuView.removeAction(dock_widget.toggleViewAction())
+        self.dock_manager.removeDockWidget(dock_widget)
 
     def restore_state(self):
         # dock_manager_state = self.settings.value("dock_manager_state")

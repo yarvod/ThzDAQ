@@ -17,6 +17,7 @@ class AdapterConfig(QObject):
         host: str = None,
         port: Union[str, int] = None,
         status: str = settings.NOT_INITIALIZED,
+        config_manager=None,
     ):
         super().__init__()
         self._name = name
@@ -24,6 +25,7 @@ class AdapterConfig(QObject):
         self.host = host
         self.port = port
         self.status = status
+        self.config_manager = config_manager
 
     def __str__(self):
         return f"AdapterConfig(cid={self.cid}, host={self._host}, port={self._port}, status={self._status})"
@@ -101,8 +103,8 @@ class AdapterConfigList(list):
     def delete_by_index(self, index: int) -> None:
         del self[index]
 
-    def delete_by_cid(self, cid: int) -> None:
-        del self.filter(cid=cid)[0]
+    def get_index_by_cid(self, cid: int) -> int:
+        return next((i for i, item in enumerate(self) if item.cid == cid), None)
 
 
 class AdapterManager:
@@ -115,7 +117,9 @@ class AdapterManager:
     @classmethod
     def add_config(cls, **kwargs) -> int:
         cls.last_id += 1
-        config = cls.config_class(name=cls.name, cid=cls.last_id, **kwargs)
+        config = cls.config_class(
+            name=cls.name, cid=cls.last_id, config_manager=cls, **kwargs
+        )
         cls.configs.append(config)
         return cls.last_id
 
@@ -149,5 +153,7 @@ class AdapterManager:
             cls.setup_widget.create_adapter_info_widget(config, **config.dict())
 
     @classmethod
-    def remove_config(cls, cid: int):
-        cls.configs.delete_by_cid(cid=cid)
+    def delete_config(cls, cid: int):
+        index = cls.configs.get_index_by_cid(cid=cid)
+        if index:
+            cls.configs.delete_by_index(index)

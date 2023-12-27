@@ -1,7 +1,14 @@
 from typing import Union
 
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+)
 
 import settings
 from interface.components.adapterAddForm import AdapterAddForm
@@ -106,4 +113,15 @@ class AdapterInfo(QWidget):
         self.form.show()
 
     def delete(self):
-        ...
+        box = QMessageBox(self)
+        box.setWindowTitle(f"Deleting adapter '{self.config.name}'")
+        box.setText(f"Are you sure want to delete adapter '{self.config.name}' ?")
+        box.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        action = box.exec()
+        if action == QMessageBox.StandardButton.Yes:
+            self.config.config_manager.delete_config(self.config.cid)
+            self.parent().delete_adapter_info(self.config.cid)
+            self.deleteLater()

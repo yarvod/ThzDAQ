@@ -21,8 +21,9 @@ class AgilentSignalGeneratorConfig(DeviceConfig):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status)
+        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
         self.thread_set_config = False
 
 
@@ -43,8 +44,9 @@ class RigolPowerSupplyConfig(DeviceConfig):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status)
+        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
         self.monitor_ch1 = True
         self.monitor_ch2 = True
         self.monitor_ch3 = True

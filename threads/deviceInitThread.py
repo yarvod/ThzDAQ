@@ -3,7 +3,7 @@ import logging
 from PyQt5.QtCore import pyqtSignal
 
 from threads import Thread
-
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class DeviceInitThread(Thread):
                 self.status.emit("OK")
             else:
                 self.status.emit("Error!")
-        except TimeoutError as e:
-            logger.warning(f"[{self.__class__.__name__}.run] Timeout error")
-            self.status.emit("Timeout Error")
+        except (TimeoutError, DeviceConnectionError) as e:
+            logger.warning(f"[{self.__class__.__name__}.run] Error: {e}")
+            self.status.emit(f"Connection Error!")
         self.finished.emit()

@@ -3,7 +3,7 @@ import logging
 from PyQt5.QtCore import pyqtSignal
 
 from threads import Thread
-
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class AdapterInitThread(Thread):
                 f"[{self.__class__.__name__}.run] Prologix Ethernet Initialized"
             )
             self.status.emit("OK")
-        except (TimeoutError, OSError) as e:
+        except (TimeoutError, OSError, DeviceConnectionError) as e:
             logger.warning(f"[{self.__class__.__name__}.run] Error: {e}")
-            self.status.emit("Error!")
+            self.status.emit("Connection Error!")
         self.finished.emit()

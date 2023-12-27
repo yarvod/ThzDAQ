@@ -24,13 +24,13 @@ class SetUpDeviceWidget(QGroupBox):
         self.setTitle(self.title)
         self.form: Union[None, DeviceAddForm] = None
         self.instances = {}
-        self.layout = QVBoxLayout()
+        self._layout = QVBoxLayout()
         self.btn = Button("Add Device", icon=QIcon("assets/add-icon.png"))
         self.btn.clicked.connect(self.open_form_add_device)
 
-        self.layout.addWidget(self.btn)
-        self.layout.addWidget(HLine(self))
-        self.setLayout(self.layout)
+        self._layout.addWidget(self.btn)
+        self._layout.addWidget(HLine(self))
+        self.setLayout(self._layout)
 
     def open_form_add_device(self):
         self.form = DeviceAddForm(self)
@@ -39,8 +39,8 @@ class SetUpDeviceWidget(QGroupBox):
 
     def add_device_info_widget(self, cid, dev_info):
         self.instances[cid] = dev_info
-        self.layout.addWidget(dev_info)
-        self.layout.addWidget(HLine(self))
+        self.layout().addWidget(dev_info)
+        self.layout().addWidget(HLine(self))
 
     def init_device(self, kwargs):
         cid = self.manager_class.add_config(**kwargs)
@@ -54,3 +54,7 @@ class SetUpDeviceWidget(QGroupBox):
         )
         self.add_device_info_widget(config.cid, dev_info)
         return dev_info
+
+    def delete_device_info(self, cid: int):
+        self.layout().removeWidget(self.instances[cid])
+        del self.instances[cid]

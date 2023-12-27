@@ -40,6 +40,7 @@ class DeviceConfig(QObject):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        config_manager=None,
     ):
         super().__init__()
         self._name = name
@@ -49,6 +50,7 @@ class DeviceConfig(QObject):
         self.port = port
         self.gpib = gpib
         self.status = status
+        self.config_manager = config_manager
 
         self.thread_stream = False
 
@@ -148,6 +150,9 @@ class DeviceConfigList(list):
     def delete_by_index(self, index: int) -> None:
         del self[index]
 
+    def get_index_by_cid(self, cid: int) -> int:
+        return next((i for i, item in enumerate(self) if item.cid == cid), None)
+
 
 class DeviceManager:
     name = ""
@@ -160,7 +165,9 @@ class DeviceManager:
     @classmethod
     def add_config(cls, **kwargs) -> int:
         cls.last_id += 1
-        config = cls.config_class(name=cls.name, cid=cls.last_id, **kwargs)
+        config = cls.config_class(
+            name=cls.name, cid=cls.last_id, config_manager=cls, **kwargs
+        )
         cls.configs.append(config)
         if cls.main_widget_class:
             Dock.add_widget_to_dock(
@@ -198,3 +205,12 @@ class DeviceManager:
         assert cls.setup_widget is not None, "You must set SetUpWidget reference"
         for config in cls.configs:
             cls.setup_widget.create_device_info_widget(config, **config.dict())
+
+    @classmethod
+    def delete_config(cls, cid: int):
+        Dock.delete_widget_from_dock(
+            name=cls.configs.filter(cid=cid).first().name,
+        )
+        index = cls.configs.get_index_by_cid(cid=cid)
+        if index:
+            cls.configs.delete_by_index(index)
