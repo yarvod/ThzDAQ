@@ -5,9 +5,14 @@ from PyQt5.QtWidgets import QPushButton
 class Button(QPushButton):
     loading_gif = "./assets/loading.gif"
 
-    def __init__(self, *args, animate: bool = False, **kwargs):
+    def __init__(
+        self, *args, animate: bool = False, icon: QtGui.QIcon = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.animate = animate
+        self._icon = icon
+        if icon:
+            self.setIcon(icon)
         if self.animate:
             self.setGif(self.loading_gif)
 
@@ -29,7 +34,10 @@ class Button(QPushButton):
     def stop(self):
         if hasattr(self, "_movie"):
             self._movie.stop()
-            self.setIcon(QtGui.QIcon())
+            if self._icon:
+                self.setIcon(QtGui.QIcon(self._icon))
+            else:
+                self.setIcon(QtGui.QIcon())
 
     def setGif(self, filename: str):
         if not hasattr(self, "_movie"):

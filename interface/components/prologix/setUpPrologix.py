@@ -1,5 +1,6 @@
 from typing import Union
 
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -22,7 +23,7 @@ class SetUpPrologix(QGroupBox):
         self.form: Union[None, AdapterAddForm] = None
         self.instances = {}
         self.layout = QVBoxLayout()
-        self.btn = Button("Add Adapter")
+        self.btn = Button("Add Adapter", icon=QIcon("assets/add-icon.png"))
         self.btn.clicked.connect(self.open_form_add_adapter)
 
         self.layout.addWidget(self.btn)

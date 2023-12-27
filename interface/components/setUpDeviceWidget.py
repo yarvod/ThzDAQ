@@ -1,5 +1,6 @@
 from typing import Union
 
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -24,7 +25,7 @@ class SetUpDeviceWidget(QGroupBox):
         self.form: Union[None, DeviceAddForm] = None
         self.instances = {}
         self.layout = QVBoxLayout()
-        self.btn = Button("Add Device")
+        self.btn = Button("Add Device", icon=QIcon("assets/add-icon.png"))
         self.btn.clicked.connect(self.open_form_add_device)
 
         self.layout.addWidget(self.btn)

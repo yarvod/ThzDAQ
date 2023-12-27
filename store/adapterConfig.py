@@ -101,6 +101,9 @@ class AdapterConfigList(list):
     def delete_by_index(self, index: int) -> None:
         del self[index]
 
+    def delete_by_cid(self, cid: int) -> None:
+        del self.filter(cid=cid)[0]
+
 
 class AdapterManager:
     name = ""
@@ -144,3 +147,7 @@ class AdapterManager:
         assert cls.setup_widget is not None, "You must set SetUpWidget reference"
         for config in cls.configs:
             cls.setup_widget.create_adapter_info_widget(config, **config.dict())
+
+    @classmethod
+    def remove_config(cls, cid: int):
+        cls.configs.delete_by_cid(cid=cid)

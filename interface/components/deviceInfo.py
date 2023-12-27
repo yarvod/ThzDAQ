@@ -1,5 +1,6 @@
 from typing import Union
 
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QHBoxLayout, QLabel
 
 import settings
@@ -78,13 +79,18 @@ class DeviceInfo(QWidget):
         flayout.addRow(self.gpibLabel, self.gpib)
         flayout.addRow(self.statusLabel, self.status)
 
-        self.btnInitialize = Button("Initialize", animate=True)
+        self.btnInitialize = Button(
+            "Initialize", icon=QIcon("assets/init-icon.png"), animate=True
+        )
         self.btnInitialize.clicked.connect(self.initialize)
-        self.btnEdit = Button("Edit")
+        self.btnEdit = Button("Edit", icon=QIcon("assets/edit-icon.png"))
         self.btnEdit.clicked.connect(self.edit)
+        self.btnDelete = Button("Delete", icon=QIcon("assets/delete-icon.png"))
+        self.btnDelete.clicked.connect(self.delete)
 
         hlayout.addWidget(self.btnInitialize)
         hlayout.addWidget(self.btnEdit)
+        hlayout.addWidget(self.btnDelete)
 
         layout.addLayout(flayout)
         layout.addLayout(hlayout)
@@ -118,3 +124,6 @@ class DeviceInfo(QWidget):
         )
         self.form.init.connect(self.update_config_initialize)
         self.form.show()
+
+    def delete(self):
+        ...

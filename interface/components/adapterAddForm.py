@@ -1,4 +1,5 @@
 from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -43,7 +44,7 @@ class AdapterAddForm(QDialog):
         flayout.addRow(self.hostLabel, self.host)
         flayout.addRow(self.portLabel, self.port)
 
-        self.btnSubmit = Button(self)
+        self.btnSubmit = Button(self, icon=QIcon("assets/init-icon.png"))
         self.btnSubmit.setText("Initialize")
         self.btnSubmit.clicked.connect(self.initilize)
         hlayout.addWidget(self.btnSubmit)
