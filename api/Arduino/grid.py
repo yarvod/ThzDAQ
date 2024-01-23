@@ -69,8 +69,8 @@ class GridManager:
                 status, response = self.adapter.post(url="/test", data={})
                 return status == 200, "Ok"
             except Exception as e:
-                logger.error(f"[{self.__class__.__name__}.test] {e}")
-                return False, f"{e}"
+                logger.error(f"[{self.__class__.__name__}.test] {e.__str__()}")
+                return False, f"Connection Error!"
 
     @staticmethod
     def scan_ports():

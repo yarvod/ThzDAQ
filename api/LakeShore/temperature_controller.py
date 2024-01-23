@@ -28,6 +28,14 @@ class TemperatureController(BaseInstrument):
             return "OK"
         return "ERROR"
 
+    def get_mode(self) -> str:
+        """0 = local, 1 = remote, 2 = remote with local lockout."""
+        return self.query("MODE?")
+
+    def set_mode(self, value: int):
+        """0 = local, 1 = remote, 2 = remote with local lockout."""
+        self.write(f"MODE {value}")
+
     def get_temperature_a(self) -> float:
         return float(self.query("KRDG? A"))
 
@@ -94,3 +102,4 @@ if __name__ == "__main__":
     tc = TemperatureController(port=state.LAKE_SHORE_PORT)
     print(tc.get_heater_output())
     print(tc.get_manual_output())
+    print(tc.get_mode())

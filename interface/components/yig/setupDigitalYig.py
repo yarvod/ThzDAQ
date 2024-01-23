@@ -1,5 +1,6 @@
+import requests.exceptions
 from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import QWidget, QGroupBox, QFormLayout, QLabel, QLineEdit
+from PyQt5.QtWidgets import QGroupBox, QFormLayout, QLabel, QLineEdit
 
 from api.NationalInstruments.yig_filter import NiYIGManager
 from interface.components.ui.Button import Button
@@ -11,8 +12,11 @@ class DigitalYigTestThread(QThread):
 
     def run(self):
         ni = NiYIGManager(host=state.NI_IP)
-        test = ni.test()
-        self.status.emit(test)
+        try:
+            test = ni.test()
+            self.status.emit(test)
+        except requests.exceptions.ConnectTimeout:
+            self.status.emit(False)
         self.finished.emit()
 
 

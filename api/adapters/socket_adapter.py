@@ -45,8 +45,8 @@ class SocketAdapter(InstrumentAdapterInterface):
             logger.info(
                 f"[{self.__class__.__name__}.connect]Socket has been connected {self.socket}."
             )
-        except OSError as e:
-            logger.error(f"[{self.__class__.__name__}.connect] OSError: {e}")
+        except (OSError, TimeoutError) as e:
+            logger.error(f"[{self.__class__.__name__}.connect] Error: {e}")
             raise DeviceConnectionError("Unable to connect socket")
 
     def is_socket_closed(self) -> Union[bool, None]:

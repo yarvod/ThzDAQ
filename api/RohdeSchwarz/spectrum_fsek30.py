@@ -1,7 +1,7 @@
 from typing import List
 
 from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
-from settings import PROLOGIX_ETHERNET
+from settings import PROLOGIX
 from store.state import state
 from utils.classes import BaseInstrument
 from utils.decorators import exception
@@ -12,11 +12,10 @@ class SpectrumBlock(BaseInstrument):
         self,
         host: str = state.PROLOGIX_IP,
         gpib: int = None,
-        adapter: str = PROLOGIX_ETHERNET,
+        adapter: str = PROLOGIX,
         *args,
         **kwargs,
     ):
-        self.adapter = PrologixEthernetAdapter(host=host)
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
     @exception

@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QFormLayout,
 )
 
+import settings
 from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.Arduino.grid import GridManager
@@ -34,6 +35,7 @@ from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +45,19 @@ class VNAThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        vna = VNABlock(
-            vna_ip=state.VNA_ADDRESS,
-            port=state.VNA_PORT,
-            start=state.VNA_FREQ_START,
-            stop=state.VNA_FREQ_STOP,
-            points=state.VNA_POINTS,
-            power=state.VNA_POWER,
-        )
-        result = vna.test()
-        self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
+        try:
+            vna = VNABlock(
+                vna_ip=state.VNA_ADDRESS,
+                port=state.VNA_PORT,
+                start=state.VNA_FREQ_START,
+                stop=state.VNA_FREQ_STOP,
+                points=state.VNA_POINTS,
+                power=state.VNA_POWER,
+            )
+            result = vna.test()
+            self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
+        except DeviceConnectionError:
+            self.status.emit("Connection Error!")
         self.finished.emit()
 
     def terminate(self):
@@ -289,9 +294,14 @@ class SetUpTabWidget(QScrollArea):
 
     def initialize_temperature_controller(self):
         state.LAKE_SHORE_IP = self.temperatureControllerAddress.text()
-        tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
-        result = tc.test()
-        self.temperatureControllerStatus.setText(result)
+        try:
+            tc = TemperatureController(
+                host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT
+            )
+            result = tc.test()
+            self.temperatureControllerStatus.setText(result)
+        except DeviceConnectionError:
+            self.temperatureControllerStatus.setText("Connection Error!")
 
     def initialize_grid(self):
         state.GRID_ADDRESS = self.gridAddress.text()

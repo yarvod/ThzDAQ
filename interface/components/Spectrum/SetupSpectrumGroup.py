@@ -11,15 +11,21 @@ from PyQt5.QtWidgets import (
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
 from interface.components.ui.Button import Button
 from store.state import state
+from utils.exceptions import DeviceConnectionError
 
 
 class SetUpSpectrumThread(QThread):
     status = pyqtSignal(bool)
 
     def run(self):
-        block = SpectrumBlock(host=state.PROLOGIX_IP, gpib=state.SPECTRUM_GPIB_ADDRESS)
-        result = block.tst()
-        self.status.emit(result)
+        try:
+            block = SpectrumBlock(
+                host=state.PROLOGIX_IP, gpib=state.SPECTRUM_GPIB_ADDRESS
+            )
+            result = block.tst()
+            self.status.emit(result)
+        except DeviceConnectionError:
+            self.status.emit(False)
 
 
 class SetupSpectrumGroup(QGroupBox):

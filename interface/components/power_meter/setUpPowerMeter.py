@@ -15,7 +15,7 @@ from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
-
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,17 @@ class NRXBlockThread(QThread):
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
-        block = NRXPowerMeter(
-            host=state.NRX_IP,
-            aperture_time=state.NRX_APER_TIME,
-            delay=0,
-        )
-        block.set_power_units(state.NRX_UNIT)
-        result = block.test()
-        self.status.emit(state.NRX_TEST_MAP.get(result, "Error"))
+        try:
+            block = NRXPowerMeter(
+                host=state.NRX_IP,
+                aperture_time=state.NRX_APER_TIME,
+                delay=0,
+            )
+            block.set_power_units(state.NRX_UNIT)
+            result = block.test()
+            self.status.emit(state.NRX_TEST_MAP.get(result, "Error"))
+        except DeviceConnectionError:
+            self.status.emit("Connection Error!")
         self.finished.emit()
 
     def terminate(self):
