@@ -56,9 +56,12 @@ class GraphWindow(QWidget):
         legend_postfix="",
     ) -> str:
         items = self.get_plot_items()
-        plot_num = max(
-            [int(re.findall(r"№ (\d+);", item.name())[0]) for item in items], default=0
-        )
+
+        def get_id(name: str):
+            val = next((_ for _ in re.findall(r"№ (\d+);", name)), 0)
+            return int(val)
+
+        plot_num = max([get_id(name) for name in items.keys()], default=0)
         if new_plot:
             plot_num += 1
         graph_id = f"id {measure_id}; № {plot_num}; {legend_postfix}"

@@ -75,6 +75,8 @@ class MeasureThread(Thread):
             )
         self.measure.save(finish=False)
 
+        self.initial_freq = state.DIGITAL_YIG_FREQ.value
+
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
             return []
@@ -96,8 +98,12 @@ class MeasureThread(Thread):
         total_steps = state.NI_FREQ_POINTS * state.NRX_POINTS * len(chopper_range)
         for chopper_step in chopper_range:
             chop_state = "hot" if chopper_step == 1 else "cold"
+            if not state.NI_STABILITY_MEAS:
+                break
 
             for freq_step, freq in enumerate(freq_range, 1):
+                if not state.NI_STABILITY_MEAS:
+                    break
                 result = {
                     "frequency": freq,
                     "power": [],
@@ -134,7 +140,7 @@ class MeasureThread(Thread):
                         f"[{proc} %][Time {round(time.time() - start_time, 1)} s][Freq {freq}]"
                     )
                     self.progress.emit(int(proc))
-
+                logger.info(f"Power {result['power'][-1]}")
                 power_mean = np.mean(result["power"])
                 result["power_mean"] = power_mean
                 self.stream_result.emit(
@@ -142,6 +148,7 @@ class MeasureThread(Thread):
                         "x": [freq],
                         "y": [power_mean],
                         "new_plot": freq_step == 1,
+                        "measure_id": self.measure.id,
                     }
                 )
 
@@ -170,6 +177,7 @@ class MeasureThread(Thread):
                     {
                         "x": results["hot"]["frequency"],
                         "y": power_diff.tolist(),
+                        "measure_id": self.measure.id,
                     }
                 )
                 self.measure.data["diff"] = power_diff.tolist()
@@ -178,6 +186,17 @@ class MeasureThread(Thread):
         self.finished.emit()
 
     def pre_exit(self):
+        state.NI_STABILITY_MEAS = False
+        freq_point = linear(
+            self.initial_freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT
+        )
+        resp = self.ni.write_task(freq_point)
+        resp_freq_int = resp.get("result", None)
+        if resp_freq_int:
+            state.DIGITAL_YIG_FREQ.value = round(
+                linear(resp_freq_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9,
+                2,
+            )
         self.nrx.adapter.close()
         self.measure.save()
 
@@ -282,7 +301,7 @@ class YIGWidget(QScrollArea):
         self.niDigitalResponse = QLabel(self)
         self.niDigitalResponse.setText("Unknown")
         state.DIGITAL_YIG_FREQ.signal_value.connect(
-            lambda x: self.niDigitalResponse.setText(f"{x}")
+            lambda x: self.niDigitalResponse.setText(f"{x} GHz")
         )
 
         self.btnSetNiYigFreq = Button("Set frequency", animate=True)
@@ -321,7 +340,6 @@ class YIGWidget(QScrollArea):
 
     def stop_meas(self):
         state.NI_STABILITY_MEAS = False
-        self.meas_thread.exit(0)
 
     def show_measure_graph_window(self, results: dict):
         if self.powerIfGraphWindow is None:
@@ -330,6 +348,7 @@ class YIGWidget(QScrollArea):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
         )
         self.powerIfGraphWindow.widget().show()
 
@@ -339,6 +358,7 @@ class YIGWidget(QScrollArea):
         self.powerIfDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
+            measure_id=results.get("measure_id"),
         )
         self.powerIfDiffGraphWindow.widget().show()
 
