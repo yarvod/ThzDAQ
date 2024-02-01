@@ -170,6 +170,8 @@ class StepBiasPowerThread(Thread):
                             "x": [voltage_get * 1e3],
                             "y": [power],
                             "new_plot": voltage_step == 0,
+                            "measure_id": self.measure.id,
+                            "legend_postfix": f"angle {angle} °",
                         }
                     )
                     self.stream_iv.emit(
@@ -177,6 +179,8 @@ class StepBiasPowerThread(Thread):
                             "x": [voltage_get * 1e3],
                             "y": [current_get * 1e6],
                             "new_plot": voltage_step == 0,
+                            "measure_id": self.measure.id,
+                            "legend_postfix": f"angle {angle} °",
                         }
                     )
                     if state.CHOPPER_SWITCH:
@@ -213,12 +217,16 @@ class StepBiasPowerThread(Thread):
                         {
                             "x": volt_diff_mv,
                             "y": power_diff,
+                            "measure_id": self.measure.id,
+                            "legend_postfix": f"angle {angle} °",
                         }
                     )
                     self.stream_tn.emit(
                         {
                             "x": volt_diff_mv,
                             "y": tn,
+                            "measure_id": self.measure.id,
+                            "legend_postfix": f"angle {angle} °",
                         }
                     )
 
@@ -393,6 +401,8 @@ class GridTabWidget(QScrollArea):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix"),
         )
         self.gridBiasPowerGraphWindow.widget().show()
 
@@ -403,6 +413,8 @@ class GridTabWidget(QScrollArea):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix"),
         )
         self.gridBiasCurrentGraphWindow.widget().show()
 
@@ -412,6 +424,8 @@ class GridTabWidget(QScrollArea):
         self.gridBiasPowerDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix"),
         )
         self.gridBiasPowerDiffGraphWindow.widget().show()
 
@@ -421,5 +435,7 @@ class GridTabWidget(QScrollArea):
         self.biasTnGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix"),
         )
         self.biasTnGraphWindow.widget().show()

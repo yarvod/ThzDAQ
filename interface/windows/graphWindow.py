@@ -1,5 +1,5 @@
 import logging
-from collections import defaultdict
+import re
 from typing import Iterable
 
 from PyQt5 import QtGui
@@ -36,7 +36,7 @@ class GraphWindow(QWidget):
 
     def get_plot_items(self):
         plotItem = self.graphWidget.getPlotItem()
-        return {int(item.name()): item for item in plotItem.items}
+        return {item.name(): item for item in plotItem.items}
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
@@ -47,54 +47,47 @@ class GraphWindow(QWidget):
         self.graphWidget.addLegend()
         self.graphWidget.showGrid(x=True, y=True)
 
-    def plotGraph(self, x: Iterable, y: Iterable, new_plot: bool = True):
+    def plotNew(
+        self,
+        x: Iterable,
+        y: Iterable,
+        new_plot: bool = True,
+        measure_id=None,
+        legend_postfix="",
+    ) -> str:
         items = self.get_plot_items()
-        ds_id = max(items.keys(), default=0)
+        plot_num = max(
+            [int(re.findall(r"№ (\d+);", item.name())[0]) for item in items], default=0
+        )
         if new_plot:
-            ds_id += 1
+            plot_num += 1
+        graph_id = f"id {measure_id}; № {plot_num}; {legend_postfix}"
 
-        if items.get(ds_id):
-            item = items.get(ds_id)
+        if items.get(graph_id):
+            item = items.get(graph_id)
             x_data = list(item.xData)
             x_data.extend(x)
             y_data = list(item.yData)
             y_data.extend(y)
-            items.get(ds_id).setData(x_data, y_data)
-            return ds_id
+            items.get(graph_id).setData(x_data, y_data)
+            return graph_id
 
-        pen = pg.mkPen(color=pg.intColor(ds_id * 10, 100), width=2)
+        pen = pg.mkPen(color=pg.intColor(plot_num * 10, 100), width=2)
         self.graphWidget.plot(
-            x, y, name=f"{ds_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
+            x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
-        return ds_id
-
-    def addData(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
-        ds_id = max(self.datasets.keys(), default=0)
-        if new_plot:
-            ds_id += 1
-        if not self.datasets[ds_id].get("x"):
-            self.datasets[ds_id]["x"] = x
-        else:
-            self.datasets[ds_id]["x"].extend(x)
-        if not self.datasets[ds_id].get("y"):
-            self.datasets[ds_id]["y"] = y
-        else:
-            self.datasets[ds_id]["y"].extend(y)
-        return ds_id
-
-    def plotNew(self, x: Iterable, y: Iterable, new_plot: bool = True) -> int:
-        return self.plotGraph(x, y, new_plot)
+        return graph_id
 
     def remove_hidden_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
         items_to_remove = {
-            int(item.name()): item for item in plotItem.items if not item.isVisible()
+            item.name(): item for item in plotItem.items if not item.isVisible()
         }
         for item in items_to_remove.values():
             plotItem.removeItem(item)
 
     def remove_all_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
-        items_to_remove = {int(item.name()): item for item in plotItem.items}
+        items_to_remove = {item.name(): item for item in plotItem.items}
         for item in items_to_remove.values():
             plotItem.removeItem(item)

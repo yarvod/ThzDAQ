@@ -187,6 +187,13 @@ class SisBlock(BaseInstrumentInterface):
             continue
         return
 
+    def get_resistance(self) -> float:
+        """
+        Getting the equivalent resistance used for current measurement in a 5-point bias circuit [Ohm]
+        :return:
+        """
+        return float(self.manipulate(f"BIAS:{self.bias_dev}:CMRE?"))
+
     def __del__(self):
         self.disconnect()
         logger.info(f"[Block.__del__] Instance {self} deleted")

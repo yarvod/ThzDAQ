@@ -73,6 +73,7 @@ class BiasPowerThread(Thread):
     stream_power = pyqtSignal(dict)
     stream_y_factor = pyqtSignal(dict)
     stream_tn = pyqtSignal(dict)
+    stream_iv = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
     def __init__(self):
@@ -170,6 +171,16 @@ class BiasPowerThread(Thread):
                         "x": [voltage_get * 1e3],
                         "y": [power],
                         "new_plot": voltage_step == 0,
+                        "measure_id": self.measure.id,
+                    }
+                )
+
+                self.stream_iv.emit(
+                    {
+                        "x": [voltage_get * 1e3],
+                        "y": [current_get * 1e6],
+                        "new_plot": voltage_step == 0,
+                        "measure_id": self.measure.id,
                     }
                 )
 
@@ -204,16 +215,10 @@ class BiasPowerThread(Thread):
                 results["y_factor"] = power_diff
                 results["t_noise"] = tn
                 self.stream_y_factor.emit(
-                    {
-                        "x": volt_diff_mv,
-                        "y": power_diff,
-                    }
+                    {"x": volt_diff_mv, "y": power_diff, "measure_id": self.measure.id}
                 )
                 self.stream_tn.emit(
-                    {
-                        "x": volt_diff_mv,
-                        "y": tn,
-                    }
+                    {"x": volt_diff_mv, "y": tn, "measure_id": self.measure.id}
                 )
 
         self.pre_exit()
@@ -447,6 +452,7 @@ class PowerMeterTabWidget(QWidget):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
         )
         self.biasPowerGraphWindow.widget().show()
 
@@ -456,6 +462,7 @@ class PowerMeterTabWidget(QWidget):
         self.biasPowerDiffGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
+            measure_id=results.get("measure_id"),
         )
         self.biasPowerDiffGraphWindow.widget().show()
 
@@ -465,5 +472,6 @@ class PowerMeterTabWidget(QWidget):
         self.biasTnGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
+            measure_id=results.get("measure_id"),
         )
         self.biasTnGraphWindow.widget().show()

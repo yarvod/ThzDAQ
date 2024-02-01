@@ -139,6 +139,7 @@ class BlockCLScanThread(QThread):
         measure = MeasureModel.objects.create(
             measure_type=MeasureType.CL_CURVE, data={}
         )
+        measure.save(False)
         for ctrl_i in ctrl_i_range:
             if not state.BLOCK_CTRL_SCAN_THREAD:
                 break
@@ -161,6 +162,7 @@ class BlockCLScanThread(QThread):
                     "x": [ctrl_current],
                     "y": [bias_current],
                     "new_plot": i == 0,
+                    "measure_id": measure.id,
                 }
             )
             delta_t = datetime.now() - start_t
@@ -224,6 +226,7 @@ class BlockBIASScanThread(QThread):
         measure = MeasureModel.objects.create(
             measure_type=MeasureType.IV_CURVE, data={}
         )
+        measure.save(False)
         for v_set in v_range:
             if not state.BLOCK_BIAS_SCAN_THREAD:
                 break
@@ -246,6 +249,7 @@ class BlockBIASScanThread(QThread):
                     "x": [v_get * 1e3],
                     "y": [i_get * 1e6],
                     "new_plot": i == 0,
+                    "measure_id": measure.id,
                 }
             )
             delta_t = datetime.now() - start_t
@@ -313,6 +317,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
         )
         self.ctrlGraphDockWidget.widget().show()
 
@@ -323,6 +328,7 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
             x=results.get("x", []),
             y=results.get("y", []),
             new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
         )
         self.biasGraphDockWidget.widget().show()
 

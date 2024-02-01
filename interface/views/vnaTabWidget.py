@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QGridLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QSpinBox,
     QFormLayout,
@@ -24,7 +23,6 @@ from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.windows.vnaGraphWindow import VNAGraphWindow
 from utils.functions import to_db
 from utils.logger import logger
 
@@ -72,6 +70,7 @@ class BiasReflectionThread(QThread):
         measure = MeasureModel.objects.create(
             measure_type=MeasureType.BIAS_VNA, data={}
         )
+        measure.save(False)
         start_t = datetime.now()
         for i, v_set in enumerate(v_range, 1):
             if not state.BIAS_REFL_SCAN_THREAD:
