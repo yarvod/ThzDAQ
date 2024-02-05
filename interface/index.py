@@ -10,10 +10,9 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QInputDialog,
     QToolBar,
-    QWidget,
 )
 from PyQt5 import QtGui
-from PyQtAds import ads as QtAds
+import PyQtAds as QtAds
 
 from store import (
     KeithleyPowerSupplyManager,
@@ -30,7 +29,6 @@ from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
-from interface.views.signalGeneratorTabWidget import SignalGeneratorTabWidget
 from interface.views.spectrumTabWidget import SpectrumTabWidget
 from interface.views.temperatureControllerTabWidget import (
     TemperatureControllerTabWidget,
@@ -98,16 +96,16 @@ class App(QMainWindow):
         self.tab_setup = SetUpTabWidget(self)
         self.setup_dock_widget.setWidget(self.tab_setup)
         self.menuView.addAction(self.setup_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidget(
-            QtAds.LeftDockWidgetArea, self.setup_dock_widget
+        self.dock_manager.addAutoHideDockWidget(
+            QtAds.SideBarLeft, self.setup_dock_widget
         )
 
         self.data_dock_widget = QtAds.CDockWidget("Data")
         self.tab_data = MeasureDataTabWidget(self)
         self.data_dock_widget.setWidget(self.tab_data)
         self.menuView.addAction(self.data_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.LeftDockWidgetArea, self.data_dock_widget
+        self.dock_manager.addAutoHideDockWidget(
+            QtAds.SideBarLeft, self.data_dock_widget
         )
 
         self.sis_block_dock_widget = QtAds.CDockWidget("SIS Block")

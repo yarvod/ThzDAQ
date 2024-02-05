@@ -2,7 +2,7 @@ import sys
 
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
-from PyQtAds import ads as QtAds
+import PyQtAds as QtAds
 
 from store import restore_configs
 from interface.index import App
@@ -29,6 +29,7 @@ def get_dock_manager(main_app):
     QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
     QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.XmlCompressionEnabled, False)
     QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.FocusHighlighting, True)
+    QtAds.CDockManager.setAutoHideConfigFlags(QtAds.CDockManager.DefaultAutoHideConfig)
     return QtAds.CDockManager(main_app)
 
 
