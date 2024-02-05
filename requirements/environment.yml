@@ -1,4 +1,4 @@
-name: cl-manager
+name: thz-daq
 channels:
   - conda-forge
   - defaults
