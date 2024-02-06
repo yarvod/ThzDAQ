@@ -23,11 +23,12 @@ from store.state import state
 from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from threads import Thread
 from utils.functions import to_db
 from utils.logger import logger
 
 
-class BiasReflectionThread(QThread):
+class BiasReflectionThread(Thread):
     results = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
@@ -40,6 +41,8 @@ class BiasReflectionThread(QThread):
             stop=state.VNA_FREQ_STOP,
             power=state.VNA_POWER,
             points=state.VNA_POINTS,
+            delay=1,
+            timeout=3,
         )
         block = SisBlock(
             host=state.BLOCK_ADDRESS,
@@ -105,28 +108,12 @@ class BiasReflectionThread(QThread):
         block.disconnect()
         measure.save()
         self.results.emit(results)
+        self.pre_exit()
         self.finished.emit()
 
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        state.BIAS_REFL_SCAN_THREAD = False
 
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        state.BIAS_REFL_SCAN_THREAD = False
-
-    def quit(
-        self,
-    ):
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        state.BIAS_REFL_SCAN_THREAD = False
-
-
-class VNAGetReflectionThread(QThread):
-    reflection = pyqtSignal(list)
+class VNAGetReflectionThread(Thread):
+    results = pyqtSignal(dict)
 
     def run(self):
         vna = VNABlock(
@@ -137,9 +124,14 @@ class VNAGetReflectionThread(QThread):
             stop=state.VNA_FREQ_STOP,
             power=state.VNA_POWER,
             points=state.VNA_POINTS,
+            delay=1,
+            timeout=3,
         )
         data = vna.get_data()
-        reflection_db = list(to_db(data.pop("array", [])))
+        results = {
+            "reflection": list(to_db(data.pop("array", []))),
+            "freq": data["freq"],
+        }
         if state.VNA_STORE_DATA:
             measure = MeasureModel.objects.create(
                 measure_type=MeasureType.VNA_REFLECTION,
@@ -147,20 +139,10 @@ class VNAGetReflectionThread(QThread):
                 finished=datetime.now(),
             )
             measure.save()
-        self.reflection.emit(reflection_db)
+            results["measure_id"] = measure.id
+        self.results.emit(results)
+        self.pre_exit()
         self.finished.emit()
-
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-
-    def quit(self):
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
 
 
 class VNATabWidget(QWidget):
@@ -294,7 +276,7 @@ class VNATabWidget(QWidget):
 
         self.update_vna_params()
 
-        self.vna_get_reflection_thread.reflection.connect(self.plotReflection)
+        self.vna_get_reflection_thread.results.connect(self.plotReflection)
         self.vna_get_reflection_thread.start()
 
         self.btnGetReflection.setEnabled(False)
@@ -302,13 +284,14 @@ class VNATabWidget(QWidget):
             lambda: self.btnGetReflection.setEnabled(True)
         )
 
-    def plotReflection(self, reflection):
-        freq_list = np.linspace(
-            state.VNA_FREQ_START, state.VNA_FREQ_STOP, state.VNA_POINTS
-        )
+    def plotReflection(self, data):
         if self.vnaGraphWindow is None:
             return
-        self.vnaGraphWindow.widget().plotNew(x=freq_list, y=reflection)
+        self.vnaGraphWindow.widget().plotNew(
+            x=data.get("freq"),
+            y=data.get("reflection"),
+            measure_id=data.get("measure_id"),
+        )
         self.vnaGraphWindow.widget().show()
 
     def scan_bias_reflection(self):
@@ -339,5 +322,4 @@ class VNATabWidget(QWidget):
         )
 
     def stop_scan_bias_reflection(self):
-        self.bias_reflection_thread.quit()
-        self.bias_reflection_thread.exit(0)
+        state.BIAS_REFL_SCAN_THREAD = False
