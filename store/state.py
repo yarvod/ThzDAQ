@@ -51,11 +51,12 @@ class State:
     VNA_POINTS = 300
     VNA_FREQ_START = 2
     VNA_FREQ_STOP = 12
+    VNA_SAMPLES_COUNT = 1
 
     VNA_STORE_DATA = True
 
     # VNA constants
-    VNA_POWER_MIN = -60
+    VNA_POWER_MIN = -100
     VNA_POWER_MAX = 0
     VNA_POINTS_MAX = 2000
     VNA_TEST_MAP = dict(

@@ -78,7 +78,6 @@ class BiasReflectionThread(Thread):
         for i, v_set in enumerate(v_range, 1):
             if not state.BIAS_REFL_SCAN_THREAD:
                 break
-            proc = round((i / state.BIAS_REFL_VOLT_POINTS) * 100, 2)
             block.set_bias_voltage(v_set)
             if i == 0:
                 time.sleep(1)
@@ -89,13 +88,24 @@ class BiasReflectionThread(Thread):
             if not i_get:
                 continue
             time.sleep(state.BIAS_REFL_DELAY)  # waiting for VNA averaging
-            vna_data = vna.get_data()
-            vna_data.pop("array", None)
-            vna_data.pop("freq", None)
+            vna_samples = []
+            for sample in range(state.VNA_SAMPLES_COUNT):
+                vna_data = vna.get_data()
+                vna_data.pop("array", None)
+                vna_data.pop("freq", None)
+                vna_samples.append(vna_data)
+                proc = round(
+                    (
+                        (i * state.VNA_SAMPLES_COUNT + sample)
+                        / (state.BIAS_REFL_VOLT_POINTS * state.VNA_SAMPLES_COUNT)
+                    )
+                    * 100,
+                    2,
+                )
             results["v_get"].append(v_get * 1e3)
             results["v_set"].append(v_set * 1e3)
             results["i_get"].append(i_get * 1e6)
-            results["refl"].append(vna_data)
+            results["refl"].append(vna_samples)
             delta_t = datetime.now() - start_t
             results["time"].append(delta_t.total_seconds())
             logger.info(
@@ -240,6 +250,11 @@ class VNATabWidget(QWidget):
         self.scanStepDelay.setRange(0, 10)
         self.scanStepDelay.setValue(state.BIAS_REFL_DELAY)
 
+        self.vnaSamplesCountLabel = QLabel("VNA samples count")
+        self.vnaSamplesCount = QSpinBox(self)
+        self.vnaSamplesCount.setRange(1, 1000)
+        self.vnaSamplesCount.setValue(state.VNA_SAMPLES_COUNT)
+
         self.scanProgress = QProgressBar(self)
         self.scanProgress.setValue(0)
 
@@ -257,9 +272,11 @@ class VNATabWidget(QWidget):
         layout.addWidget(self.voltPoints, 3, 1)
         layout.addWidget(self.scanStepDelayLabel, 4, 0)
         layout.addWidget(self.scanStepDelay, 4, 1)
-        layout.addWidget(self.scanProgress, 5, 0, 1, 2)
-        layout.addWidget(self.btnBiasReflScan, 6, 0)
-        layout.addWidget(self.btnStopBiasReflScan, 6, 1)
+        layout.addWidget(self.vnaSamplesCountLabel, 5, 0)
+        layout.addWidget(self.vnaSamplesCount, 5, 1)
+        layout.addWidget(self.scanProgress, 6, 0, 1, 2)
+        layout.addWidget(self.btnBiasReflScan, 7, 0)
+        layout.addWidget(self.btnStopBiasReflScan, 7, 1)
 
         self.groupBiasReflScan.setLayout(layout)
 
@@ -270,6 +287,7 @@ class VNATabWidget(QWidget):
         state.VNA_POINTS = int(self.vnaPoints.value())
         state.VNA_FREQ_START = self.freqFrom.value() * 1e9
         state.VNA_FREQ_STOP = self.freqTo.value() * 1e9
+        state.VNA_SAMPLES_COUNT = self.vnaSamplesCount.value()
 
     def getReflection(self):
         self.vna_get_reflection_thread = VNAGetReflectionThread()
