@@ -22,7 +22,7 @@ class Compressor(metaclass=Singleton):
         )
 
     def read_all_temperatures(self):
-        self.ser.write(str("$TEAA4B9\x0D").encode("ascii"))
+        self.ser.write("$TEAA4B9\x0D".encode("ascii"))
         serial_response = self.ser.readline()
         res = serial_response.decode("utf-8").rstrip().split(",")
         print(res)

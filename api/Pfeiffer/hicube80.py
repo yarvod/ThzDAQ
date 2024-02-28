@@ -82,7 +82,7 @@ class HiCube:
         return data
 
     def read_data(self) -> Union[Dict, None]:
-        raw_data = self.client.read(2048)
+        raw_data = self.client.read(int(1.5 * 2048))
         print(f"[{self.__class__.__name__}.read_data] Raw Data {raw_data}")
         raw_data_decoded = raw_data.decode("ascii")
         raw_data_split = raw_data_decoded.split("\r")
@@ -131,7 +131,7 @@ class HiCube:
     def get_data(self, reg: int, slv: int):
         telegram = self.get_query_telegram(reg=reg, slv=slv)
         self.client.write(telegram.encode("ascii"))
-        raw_data = self.client.read(1024)
+        raw_data = self.client.read(2 * 1024)
         # raw_data = self.client.readline()
         print(raw_data)
         raw_data_decoded = re.sub(r"\\[xX][a-z0-9a-z]+", "", f"{raw_data}")[2:-1].split(
@@ -153,9 +153,11 @@ class HiCube:
 
 
 if __name__ == "__main__":
-    pump = HiCube()
+    pump = HiCube(port="COM14")
     # print(pump.read_data())
     # pump.write_register("010", True, "042")
-    dd = pump.get_data(340, 2)
+    # dd = pump.get_data(340, 1)
+    dd = pump.read_data()
+    print(dd)
     with open("dd.json", "w") as f:
         json.dump(dd, f, indent=4)
