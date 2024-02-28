@@ -59,6 +59,12 @@ class RigolPowerSupplyManager(DeviceManager):
     config_class = RigolPowerSupplyConfig
 
 
+class SumitomoF70Manager(DeviceManager):
+    name = "Sumitomo F70 Compressor"
+    main_widget_class = "interface.views.SumitomoF70TabWidget"
+    configs = DeviceConfigList()
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -68,3 +74,4 @@ def restore_configs():
     KeithleyPowerSupplyManager.restore_config()
     AgilentSignalGeneratorManager.restore_config()
     RigolPowerSupplyManager.restore_config()
+    SumitomoF70Manager.restore_config()

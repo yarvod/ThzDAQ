@@ -1,0 +1,2 @@
+from .sumitomoF70ManagerWidget import SumitomoF70ManagerWidget
+from .setUpSumitomoF70Widget import SetUpSumitomoF70Widget

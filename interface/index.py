@@ -19,6 +19,7 @@ from store import (
     AgilentSignalGeneratorManager,
     PrologixManager,
     RigolPowerSupplyManager,
+    SumitomoF70Manager,
 )
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
@@ -391,6 +392,7 @@ class App(QMainWindow):
         PrologixManager.store_config()
         AgilentSignalGeneratorManager.store_config()
         RigolPowerSupplyManager.store_config()
+        SumitomoF70Manager.store_config()
         self.settings.sync()
 
     def create_perspective_ui(self):

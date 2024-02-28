@@ -14,15 +14,18 @@ class HttpAdapter:
     def __init__(
         self,
         host: str,
+        port: int = None,
         *args,
         **kwargs,
     ):
         self.host = host
         self.url = self.schema + self.host
+        if port:
+            self.url += f":{port}"
         self.headers = {"Content-Type": "application/json"}
         self.timeout = kwargs.get("timeout", 10)
 
-    def post(self, url: str, data: Dict) -> Tuple[int, Dict]:
+    def post(self, url: str, data: Dict = None) -> Tuple[int, Dict]:
         full_url = self.url + url
         response = requests.post(
             full_url, data=json.dumps(data), headers=self.headers, timeout=self.timeout
@@ -34,7 +37,7 @@ class HttpAdapter:
             return response.status_code, {"error": "Json Decode error"}
         return response.status_code, response_dict
 
-    def get(self, params: Dict, url: str) -> Tuple[int, Dict]:
+    def get(self, url: str, params: Dict = None) -> Tuple[int, Dict]:
         full_url = self.url + url
         response = requests.get(
             full_url, params=params, headers=self.headers, timeout=self.timeout
