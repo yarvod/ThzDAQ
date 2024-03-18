@@ -20,3 +20,10 @@ class TnGraphWindow(GraphWindow):
     graph_title = "Tn (Voltage)"
     x_label = "Voltage, mV"
     y_label = "Tn, K"
+
+
+class BiasCurrentGraphWindow(GraphWindow):
+    window_title = "I-V Graphs"
+    graph_title = "Current (Voltage)"
+    x_label = "Bias Voltage, mV"
+    y_label = "Current, mkA"

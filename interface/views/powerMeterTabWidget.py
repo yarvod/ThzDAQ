@@ -247,6 +247,7 @@ class PowerMeterTabWidget(QWidget):
         self.powerStreamGraphDockWidget = None
         self.biasPowerDiffGraphWindow = None
         self.biasTnGraphWindow = None
+        self.biasCurrentGraphWindow = None
         self.createGroupNRX()
         self.createGroupBiasPowerScan()
         self.layout.addWidget(self.groupNRX)
@@ -423,6 +424,7 @@ class PowerMeterTabWidget(QWidget):
         self.bias_power_thread = BiasPowerThread()
 
         self.bias_power_thread.stream_power.connect(self.show_bias_power_graph)
+        self.bias_power_thread.stream_iv.connect(self.show_bias_current_graph)
         if state.CHOPPER_SWITCH:
             self.bias_power_thread.stream_y_factor.connect(
                 self.show_bias_power_diff_graph
@@ -455,6 +457,18 @@ class PowerMeterTabWidget(QWidget):
             measure_id=results.get("measure_id"),
         )
         self.biasPowerGraphWindow.widget().show()
+
+    def show_bias_current_graph(self, results):
+        if self.biasCurrentGraphWindow is None:
+            return
+        self.biasCurrentGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot", True),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix", ""),
+        )
+        self.biasCurrentGraphWindow.widget().show()
 
     def show_bias_power_diff_graph(self, results):
         if self.biasPowerDiffGraphWindow is None:

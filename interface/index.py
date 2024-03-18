@@ -40,6 +40,7 @@ from interface.windows.biasPowerGraphWindow import (
     BiasPowerGraphWindow,
     BiasPowerDiffGraphWindow,
     TnGraphWindow,
+    BiasCurrentGraphWindow,
 )
 from interface.windows.gridGraphs import (
     GridBiasPowerGraphWindow,
@@ -215,6 +216,15 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.graph_pv_curve_dock_widget
         )
         self.tab_nrx.biasPowerGraphWindow = self.graph_pv_curve_dock_widget
+
+        self.graph_p_iv_curve_dock_widget = QtAds.CDockWidget("Power I-V curve")
+        self.tab_graph_p_iv_curve = BiasCurrentGraphWindow(self)
+        self.graph_p_iv_curve_dock_widget.setWidget(self.tab_graph_p_iv_curve)
+        self.menuGraph.addAction(self.graph_p_iv_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.graph_p_iv_curve_dock_widget
+        )
+        self.tab_nrx.biasCurrentGraphWindow = self.graph_p_iv_curve_dock_widget
 
         self.graph_yv_curve_dock_widget = QtAds.CDockWidget("Y-V curve")
         self.tab_graph_yv_curve = BiasPowerDiffGraphWindow(self)
