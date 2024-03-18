@@ -67,11 +67,11 @@ class MeasureThread(Thread):
         )
         if state.CHOPPER_SWITCH:
             self.measure = MeasureModel.objects.create(
-                measure_type=MeasureModel.type_class.CHOPPER_IF_POWER, data=[]
+                measure_type=MeasureModel.type_class.PIF_CURVE_HOT_COLD, data=[]
             )
         else:
             self.measure = MeasureModel.objects.create(
-                measure_type=MeasureModel.type_class.IF_POWER, data=[]
+                measure_type=MeasureModel.type_class.PIF_CURVE, data=[]
             )
         self.measure.save(finish=False)
 

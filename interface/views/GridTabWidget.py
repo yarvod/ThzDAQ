@@ -47,11 +47,11 @@ class StepBiasPowerThread(Thread):
 
         if state.CHOPPER_SWITCH:
             self.measure = MeasureModel.objects.create(
-                measure_type=MeasureType.GRID_CHOPPER_BIAS_POWER, data={}
+                measure_type=MeasureType.GRID_PV_CURVE_HOT_COLD, data={}
             )
         else:
             self.measure = MeasureModel.objects.create(
-                measure_type=MeasureType.GRID_BIAS_POWER, data={}
+                measure_type=MeasureType.GRID_PV_CURVE, data={}
             )
         self.measure.save(finish=False)
 

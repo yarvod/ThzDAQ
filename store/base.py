@@ -1,6 +1,5 @@
 import json
 import os
-import uuid
 from datetime import datetime
 from typing import Union, Dict, Any
 
@@ -12,33 +11,33 @@ from PyQt5.QtWidgets import QFileDialog
 class MeasureType:
     IV_CURVE = "iv_curve"
     CL_CURVE = "cl_curve"
-    BIAS_VNA = "bias_vna"
-    BIAS_POWER = "bias_power"
-    CHOPPER_BIAS_POWER = "chopper_bias_power"
-    GRID_BIAS_POWER = "grid_bias_power"
-    GRID_CHOPPER_BIAS_POWER = "grid_chopper_bias_power"
-    GRID_BIAS_ANGLE = "grid_bias_angle"
+    SV_VNA = "sv_vna"
+    PV_CURVE = "pv_curve"
+    PV_CURVE_HOT_COLD = "pv_curve_hot_cold"
+    GRID_PV_CURVE = "grid_pv_curve"
+    GRID_PV_CURVE_HOT_COLD = "grid_pv_curve_hot_cold"
+    GRID_IA_CURVE = "grid_ia_curve"
     POWER_STREAM = "power_stream"
     TEMPERATURE_STREAM = "temperature_stream"
-    VNA_REFLECTION = "vna_reflection"
-    IF_POWER = "if_power"
-    CHOPPER_IF_POWER = "chopper_if_power"
+    SIF_VNA = "sif_vna"
+    PIF_CURVE = "pif_curve"
+    PIF_CURVE_HOT_COLD = "pif_curve_hot_cold"
 
     CHOICES = dict(
         (
             (IV_CURVE, "I-V curve"),
-            (CL_CURVE, "CL curve"),
-            (BIAS_VNA, "BIAS VNA"),
-            (BIAS_POWER, "BIAS Power"),
-            (CHOPPER_BIAS_POWER, "Chopper BIAS Power"),
-            (GRID_BIAS_POWER, "GRID BIAS Power"),
-            (GRID_CHOPPER_BIAS_POWER, "GRID Chopper BIAS Power"),
-            (GRID_BIAS_ANGLE, "I-A curve"),
-            (POWER_STREAM, "Power stream"),
-            (TEMPERATURE_STREAM, "Temp stream"),
-            (VNA_REFLECTION, "VNA Reflection"),
-            (IF_POWER, "IF Power"),
-            (CHOPPER_IF_POWER, "Chopper IF Power"),
+            (CL_CURVE, "CL-I curve"),
+            (SV_VNA, "S-V VNA curve"),
+            (PV_CURVE, "P-V curve"),
+            (PV_CURVE_HOT_COLD, "P-V curve hot/cold"),
+            (GRID_PV_CURVE, "GRID P-V curve"),
+            (GRID_PV_CURVE_HOT_COLD, "GRID P-V curve hot/cold"),
+            (GRID_IA_CURVE, "I-A curve"),
+            (POWER_STREAM, "P-t curve"),
+            (TEMPERATURE_STREAM, "T-t curve"),
+            (SIF_VNA, "S-IF VNA curve"),
+            (PIF_CURVE, "P-IF curve"),
+            (PIF_CURVE_HOT_COLD, "P-IF curve hot/cold"),
         )
     )
 

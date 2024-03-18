@@ -70,9 +70,7 @@ class BiasReflectionThread(Thread):
             state.BIAS_REFL_VOLT_TO * 1e-3,
             state.BIAS_REFL_VOLT_POINTS,
         )
-        measure = MeasureModel.objects.create(
-            measure_type=MeasureType.BIAS_VNA, data={}
-        )
+        measure = MeasureModel.objects.create(measure_type=MeasureType.SV_VNA, data={})
         measure.save(False)
         start_t = datetime.now()
         for i, v_set in enumerate(v_range, 1):
@@ -144,7 +142,7 @@ class VNAGetReflectionThread(Thread):
         }
         if state.VNA_STORE_DATA:
             measure = MeasureModel.objects.create(
-                measure_type=MeasureType.VNA_REFLECTION,
+                measure_type=MeasureType.SIF_VNA,
                 data=data,
                 finished=datetime.now(),
             )

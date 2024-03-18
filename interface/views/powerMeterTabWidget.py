@@ -91,9 +91,9 @@ class BiasPowerThread(Thread):
         )
         self.block.connect()
         measure_type = (
-            MeasureType.BIAS_POWER
+            MeasureType.PV_CURVE
             if not state.CHOPPER_SWITCH
-            else MeasureType.CHOPPER_BIAS_POWER
+            else MeasureType.PV_CURVE_HOT_COLD
         )
         self.measure = MeasureModel.objects.create(measure_type=measure_type, data={})
         self.measure.save(False)

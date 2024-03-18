@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, QTimer
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
     QSizePolicy,
@@ -32,7 +32,7 @@ class MeasureThread(Thread):
         self.grid = GridManager(host=state.GRID_ADDRESS)
         self.initial_angle = float(state.GRID_ANGLE.val)
         self.measure = MeasureModel.objects.create(
-            measure_type=MeasureModel.type_class.GRID_BIAS_ANGLE, data={}
+            measure_type=MeasureModel.type_class.GRID_IA_CURVE, data={}
         )
         self.measure.save(False)
 
