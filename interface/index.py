@@ -54,7 +54,11 @@ from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
 from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from interface.windows.vnaGraphWindow import VNAGraphWindow
-from interface.windows.yigGraphWindow import PowerIFGraphWindow, PowerIFDiffGraphWindow
+from interface.windows.yigGraphWindow import (
+    PowerIFGraphWindow,
+    YIFGraphWindow,
+    TnIFGraphWindow,
+)
 from store.base import MeasureManager
 
 
@@ -343,14 +347,23 @@ class App(QMainWindow):
         )
         self.yig_widget.powerIfGraphWindow = self.pif_curve_dock_widget
 
-        self.pif_diff_curve_dock_widget = QtAds.CDockWidget("Diff P-IF curve")
-        self.pif_diff_curve_widget = PowerIFDiffGraphWindow(self)
-        self.pif_diff_curve_dock_widget.setWidget(self.pif_diff_curve_widget)
-        self.menuGraph.addAction(self.pif_diff_curve_dock_widget.toggleViewAction())
+        self.yif_curve_dock_widget = QtAds.CDockWidget("Y-IF curve")
+        self.yif_curve_widget = YIFGraphWindow(self)
+        self.yif_curve_dock_widget.setWidget(self.yif_curve_widget)
+        self.menuGraph.addAction(self.yif_curve_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.pif_diff_curve_dock_widget
+            QtAds.RightDockWidgetArea, self.yif_curve_dock_widget
         )
-        self.yig_widget.powerIfDiffGraphWindow = self.pif_diff_curve_dock_widget
+        self.yig_widget.yIfGraphWindow = self.yif_curve_dock_widget
+
+        self.tnif_curve_dock_widget = QtAds.CDockWidget("Tn-IF curve")
+        self.tnif_curve_widget = TnIFGraphWindow(self)
+        self.tnif_curve_dock_widget.setWidget(self.tnif_curve_widget)
+        self.menuGraph.addAction(self.tnif_curve_dock_widget.toggleViewAction())
+        self.dock_manager.addDockWidgetTab(
+            QtAds.RightDockWidgetArea, self.tnif_curve_dock_widget
+        )
+        self.yig_widget.tnIfGraphWindow = self.tnif_curve_dock_widget
 
     def add_dock_widget(
         self,

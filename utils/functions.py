@@ -26,7 +26,13 @@ def get_tn(y: np.ndarray, th: float = 300, tc: float = 77):
     return (th - tc * y) / (y - 1)
 
 
-def get_y_tn(
+def get_if_tn(hot_power, cold_power, th=300, tc=77):
+    y_w = db_to_absolute(hot_power) / db_to_absolute(cold_power)
+    t = get_tn(y=y_w, th=th, tc=tc)
+    return t
+
+
+def get_voltage_tn(
     hot_power: List,
     cold_power: List,
     hot_voltage: List,

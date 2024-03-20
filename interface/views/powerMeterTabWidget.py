@@ -24,7 +24,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from threads import Thread
-from utils.functions import get_y_tn
+from utils.functions import get_voltage_tn
 from utils.logger import logger
 
 
@@ -205,7 +205,7 @@ class BiasPowerThread(Thread):
 
         if state.CHOPPER_SWITCH:
             if len(results["hot"]["power"]) and len(results["cold"]["power"]):
-                volt_diff, power_diff, tn = get_y_tn(
+                volt_diff, power_diff, tn = get_voltage_tn(
                     hot_power=results["hot"]["power"],
                     cold_power=results["cold"]["power"],
                     hot_voltage=results["hot"]["voltage_get"],

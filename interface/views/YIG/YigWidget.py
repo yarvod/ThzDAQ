@@ -24,7 +24,7 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 from store.base import MeasureModel
 from threads import Thread
-from utils.functions import linear
+from utils.functions import linear, get_if_tn
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,8 @@ class DigitalYigThread(Thread):
 
 class MeasureThread(Thread):
     stream_result = pyqtSignal(dict)
-    stream_diff_results = pyqtSignal(dict)
+    stream_y_results = pyqtSignal(dict)
+    stream_tn_results = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
     def __init__(self):
@@ -172,15 +173,24 @@ class MeasureThread(Thread):
             if len(hot) and len(cold):
 
                 min_ind = min([len(cold), len(hot)])
-                power_diff = hot[:min_ind] - cold[:min_ind]
-                self.stream_diff_results.emit(
+                y_factor = hot[:min_ind] - cold[:min_ind]
+                tn = get_if_tn(hot_power=hot[:min_ind], cold_power=cold[:min_ind])
+                self.stream_y_results.emit(
                     {
                         "x": results["hot"]["frequency"],
-                        "y": power_diff.tolist(),
+                        "y": y_factor.tolist(),
                         "measure_id": self.measure.id,
                     }
                 )
-                self.measure.data["diff"] = power_diff.tolist()
+                self.stream_tn_results.emit(
+                    {
+                        "x": results["hot"]["frequency"],
+                        "y": tn.tolist(),
+                        "measure_id": self.measure.id,
+                    }
+                )
+                self.measure.data["y_factor"] = y_factor.tolist()
+                self.measure.data["tn"] = tn.tolist()
 
         self.pre_exit()
         self.finished.emit()
@@ -207,7 +217,8 @@ class YIGWidget(QScrollArea):
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.powerIfGraphWindow = None
-        self.powerIfDiffGraphWindow = None
+        self.yIfGraphWindow = None
+        self.tnIfGraphWindow = None
         self.createGroupNiYig()
         self.createGroupMeas()
         self.layout.addWidget(self.groupNiYig)
@@ -323,13 +334,12 @@ class YIGWidget(QScrollArea):
         state.NRX_POINTS = int(self.nrxPoints.value())
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
-        self.meas_thread.stream_result.connect(self.show_measure_graph_window)
+        self.meas_thread.stream_result.connect(self.show_p_if_graph_window)
         self.meas_thread.progress.connect(lambda x: self.progress.setValue(x))
         self.meas_thread.finished.connect(lambda: self.progress.setValue(0))
         if state.CHOPPER_SWITCH:
-            self.meas_thread.stream_diff_results.connect(
-                self.show_bias_power_diff_graph
-            )
+            self.meas_thread.stream_y_results.connect(self.show_y_if_graph)
+            self.meas_thread.stream_tn_results.connect(self.show_tn_if_graph)
         self.meas_thread.start()
 
         self.btnStartMeas.setEnabled(False)
@@ -341,7 +351,7 @@ class YIGWidget(QScrollArea):
     def stop_meas(self):
         state.NI_STABILITY_MEAS = False
 
-    def show_measure_graph_window(self, results: dict):
+    def show_p_if_graph_window(self, results: dict):
         if self.powerIfGraphWindow is None:
             return
         self.powerIfGraphWindow.widget().plotNew(
@@ -352,15 +362,25 @@ class YIGWidget(QScrollArea):
         )
         self.powerIfGraphWindow.widget().show()
 
-    def show_bias_power_diff_graph(self, results):
-        if self.powerIfDiffGraphWindow is None:
+    def show_y_if_graph(self, results):
+        if self.yIfGraphWindow is None:
             return
-        self.powerIfDiffGraphWindow.widget().plotNew(
+        self.yIfGraphWindow.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
             measure_id=results.get("measure_id"),
         )
-        self.powerIfDiffGraphWindow.widget().show()
+        self.yIfGraphWindow.widget().show()
+
+    def show_tn_if_graph(self, results):
+        if self.tnIfGraphWindow is None:
+            return
+        self.tnIfGraphWindow.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            measure_id=results.get("measure_id"),
+        )
+        self.tnIfGraphWindow.widget().show()
 
     def set_ni_yig_freq(self):
         state.DIGITAL_YIG_FREQ.value = self.niYigFreq.value()

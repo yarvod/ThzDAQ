@@ -8,8 +8,15 @@ class PowerIFGraphWindow(GraphWindow):
     x_label = "IF, GHz"
 
 
-class PowerIFDiffGraphWindow(GraphWindow):
-    window_title = "Diff P-IF Graphs"
-    graph_title = "Power (IF)"
+class YIFGraphWindow(GraphWindow):
+    window_title = "Y-IF Graphs"
+    graph_title = "Y (IF)"
     x_label = "IF, GHz"
-    y_label = "Power, dBm"
+    y_label = "Y, dBm"
+
+
+class TnIFGraphWindow(GraphWindow):
+    window_title = "Tn-IF Graphs"
+    graph_title = "Tn (IF)"
+    x_label = "IF, GHz"
+    y_label = "Tn, K"

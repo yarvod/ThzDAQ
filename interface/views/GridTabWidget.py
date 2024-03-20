@@ -28,7 +28,7 @@ from interface.components.ui.Lines import HLine
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from threads import Thread
-from utils.functions import get_y_tn
+from utils.functions import get_voltage_tn
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class StepBiasPowerThread(Thread):
 
             if state.CHOPPER_SWITCH:
                 if len(results["hot"]["power"]) and len(results["cold"]["power"]):
-                    volt_diff, power_diff, tn = get_y_tn(
+                    volt_diff, power_diff, tn = get_voltage_tn(
                         hot_power=results["hot"]["power"],
                         cold_power=results["cold"]["power"],
                         hot_voltage=results["hot"]["voltage_get"],
