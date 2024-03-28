@@ -83,7 +83,7 @@ class SignalGenerator(BaseInstrument):
         self.adapter.write(f"POW {value}dBm", eq_addr=self.gpib)
 
     def get_power(self) -> float:
-        return self.adapter.query("POW?", eq_addr=self.gpib)
+        return float(self.adapter.query("POW?", eq_addr=self.gpib))
 
     def get_oem_status(self) -> str:
         """ON|OFF|NONE|REAR|FRONT"""
