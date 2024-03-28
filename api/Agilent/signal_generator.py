@@ -82,6 +82,9 @@ class SignalGenerator(BaseInstrument):
     def set_power(self, value: float) -> None:
         self.adapter.write(f"POW {value}dBm", eq_addr=self.gpib)
 
+    def get_power(self) -> float:
+        return self.adapter.query("POW?", eq_addr=self.gpib)
+
     def get_oem_status(self) -> str:
         """ON|OFF|NONE|REAR|FRONT"""
         return self.adapter.query(":SYSTem:OEMHead:SELect?", eq_addr=self.gpib)
@@ -116,5 +119,6 @@ class SignalGenerator(BaseInstrument):
 
 
 if __name__ == "__main__":
-    dev = SignalGenerator(host="169.254.156.103", gpib=19)
+    dev = SignalGenerator(host="169.254.156.103", gpib=18)
     print(dev.idn())
+    print(float(dev.adapter.query(f"POW?", eq_addr=dev.gpib)))

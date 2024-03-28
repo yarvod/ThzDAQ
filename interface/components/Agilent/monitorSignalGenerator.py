@@ -42,7 +42,7 @@ class StreamThread(Thread):
             if frequency:
                 self.frequency.emit(frequency)
 
-            amplitude = self.signal.get_amplitude()
+            amplitude = self.signal.get_power()
             if amplitude:
                 self.amplitude.emit(amplitude)
 
