@@ -111,7 +111,7 @@ class Chopper:
         return speed
 
     # CW by 90 deg
-    def path0(self, angle: float = 90):
+    def path0(self, angle: float = 90, align: bool = True):
         """Step rotation method.
         :param
         - angle (float): Angle in degrees
@@ -132,7 +132,11 @@ class Chopper:
         self.client.write_register(int(0x6204), int(5000), self.slave_address)
         self.client.write_register(int(0x6205), int(10000), self.slave_address)
         # trigger PR0 motion
-        if abs(self.get_actual_pos() - (int(self.get_actual_pos() / 2500) * 2500)) > 50:
+        if (
+            align
+            and abs(self.get_actual_pos() - (int(self.get_actual_pos() / 2500) * 2500))
+            > 50
+        ):
             logger.info("[path0] Aligning before rotation")
             self.align()
             time.sleep(0.3)
