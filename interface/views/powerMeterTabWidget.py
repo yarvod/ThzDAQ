@@ -137,6 +137,8 @@ class BiasPowerThread(Thread):
         )
         chopper_range = range(2) if state.CHOPPER_SWITCH else range(1)
         total_steps = len(chopper_range) * len(v_range)
+        if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_hot()
         initial_time = time.time()
         for chopper_step in chopper_range:
             chopper_state = None

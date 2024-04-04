@@ -121,7 +121,8 @@ class StepBiasPowerThread(Thread):
         self.initial_v = self.block.get_bias_voltage()
         initial_time = time.time()
         if state.CHOPPER_SWITCH:
-            chopper_manager.chopper.align()
+            # chopper_manager.chopper.align()
+            chopper_manager.chopper.align_to_hot()
         self.motor.rotate(state.GRID_ANGLE_START)
         time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
         for angle_step, angle in enumerate(angle_range):
