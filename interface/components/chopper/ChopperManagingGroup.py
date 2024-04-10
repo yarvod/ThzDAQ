@@ -58,7 +58,7 @@ class ChopperAlignThread(QThread):
         if not chopper_manager.chopper.client.connected:
             self.finished.emit()
             return
-        chopper_manager.chopper.align()
+        chopper_manager.chopper.align_to_hot()
         self.finished.emit()
 
 
@@ -73,7 +73,7 @@ class ChopperManagingGroup(QGroupBox):
 
         self.btnRotateCw = Button("Rotate Hot/Cold", animate=True)
         self.btnRotateCw.clicked.connect(lambda: self.rotateCw(90))
-        self.btnAlign = Button("Align", animate=True)
+        self.btnAlign = Button("Align to Hot", animate=True)
         self.btnAlign.clicked.connect(self.chopperAlign)
 
         horizontal_layout.addWidget(self.btnRotateCw)

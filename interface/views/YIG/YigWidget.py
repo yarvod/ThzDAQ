@@ -94,6 +94,8 @@ class MeasureThread(Thread):
             state.NI_FREQ_TO,
             int(state.NI_FREQ_POINTS),
         )
+        if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_hot()
         start_time = time.time()
         chopper_range = list(range(1, 3) if state.CHOPPER_SWITCH else range(1, 2))
         total_steps = state.NI_FREQ_POINTS * state.NRX_POINTS * len(chopper_range)
