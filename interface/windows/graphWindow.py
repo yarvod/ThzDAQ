@@ -15,6 +15,18 @@ class GraphWindow(QWidget):
     graph_title = "Base Graph"
     y_label = "y label"
     x_label = "x label"
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -47,6 +59,10 @@ class GraphWindow(QWidget):
         self.graphWidget.addLegend()
         self.graphWidget.showGrid(x=True, y=True)
 
+    def get_color(self, ind):
+        number = ind % len(self.colors) - 1 if ind >= 1 else 0
+        return self.colors[number]
+
     def plotNew(
         self,
         x: Iterable,
@@ -75,7 +91,7 @@ class GraphWindow(QWidget):
             items.get(graph_id).setData(x_data, y_data)
             return graph_id
 
-        pen = pg.mkPen(color=pg.intColor(plot_num * 10, 100), width=2)
+        pen = pg.mkPen(color=self.get_color(plot_num), width=2)
         self.graphWidget.plot(
             x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
