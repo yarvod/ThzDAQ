@@ -143,6 +143,30 @@ class Chopper:
         self.client.write_register(int(0x6002), int(0x010), self.slave_address)
         time.sleep(0.3)
 
+    def path0_slow(self, angle: float = 90):
+        """Step rotation method.
+        :param
+        - angle (float): Angle in degrees
+        """
+        steps = int(angle / 360 * 10000)
+        self.client.write_register(
+            int(0x6200), int(0b01000001), self.slave_address
+        )  # relative position mode
+        # position high bits
+        self.client.write_register(int(0x6201), int(0), self.slave_address)
+        # position low bits
+        self.client.write_register(
+            int(0x6202), steps, self.slave_address
+        )  # 10000 ppr, equals to 90 deg rotation
+        # turn speed
+        self.client.write_register(int(0x6203), int(25), self.slave_address)
+        # acc/decc time
+        self.client.write_register(int(0x6204), int(10000), self.slave_address)
+        self.client.write_register(int(0x6205), int(10000), self.slave_address)
+
+        self.client.write_register(int(0x6002), int(0x010), self.slave_address)
+        time.sleep(0.3)
+
     # Constant speed
     def set_frequency(self, frequency: float = 1):
         self.frequency = frequency  # Hz
