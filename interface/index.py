@@ -424,6 +424,9 @@ class App(QMainWindow):
         update_perspective_action = QAction("Update Perspective", self)
         update_perspective_action.triggered.connect(self.update_perspective)
         restore_default_perspectives_action = QAction("!Restore Defaults!", self)
+        restore_default_perspectives_action.setToolTip(
+            "DANGER! Restoring default perspectives!\nOnly for those in the know!"
+        )
         restore_default_perspectives_action.triggered.connect(
             self.restore_from_ini_file
         )

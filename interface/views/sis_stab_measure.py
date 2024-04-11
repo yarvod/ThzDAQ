@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QScrollArea,
     QWidget,
@@ -20,6 +20,9 @@ from threads import Thread
 
 
 class InitialCalibrationThread(Thread):
+    rn1 = pyqtSignal(float)
+    rn2 = pyqtSignal(float)
+
     def __init__(
         self,
         voltage1,
@@ -44,14 +47,26 @@ class InitialCalibrationThread(Thread):
         )
         sis.connect()
 
-        voltage_range = np.linspace(self.voltage1, self.voltage2, 20)
-        voltage_get = []
-        current_get = []
-        for voltage in voltage_range:
+        # measure iv curve rn
+        voltage1_range = np.linspace(self.voltage1 * 0.95, self.voltage1 * 1.05, 20)
+        voltage1_get = []
+        current1_get = []
+        for voltage in voltage1_range:
             sis.set_bias_voltage(voltage)
             time.sleep(0.05)
-            voltage_get.append(sis.get_bias_voltage())
-            current_get.append(sis.get_bias_current())
+            voltage1_get.append(sis.get_bias_voltage())
+            current1_get.append(sis.get_bias_current())
+
+        voltage2_range = np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, 20)
+        voltage2_get = []
+        current2_get = []
+        for voltage in voltage2_range:
+            sis.set_bias_voltage(voltage)
+            time.sleep(0.05)
+            voltage2_get.append(sis.get_bias_voltage())
+            current2_get.append(sis.get_bias_current())
+
+        self.finished.emit(0)
 
 
 class SisRnPowerMeasureTabWidget(QScrollArea):
