@@ -22,6 +22,7 @@ class MeasureType:
     SIF_VNA = "sif_vna"
     PIF_CURVE = "pif_curve"
     PIF_CURVE_HOT_COLD = "pif_curve_hot_cold"
+    TA_SIS_CALIBRATION = "ta_sis_calibration"
 
     CHOICES = dict(
         (
@@ -38,6 +39,7 @@ class MeasureType:
             (SIF_VNA, "S-IF VNA curve"),
             (PIF_CURVE, "P-IF curve"),
             (PIF_CURVE_HOT_COLD, "P-IF curve hot/cold"),
+            (TA_SIS_CALIBRATION, "Ta SIS calibration"),
         )
     )
 
