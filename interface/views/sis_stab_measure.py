@@ -15,8 +15,10 @@ from PyQt5.QtWidgets import (
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.Lines import HLine
 from store.state import state
 from threads import Thread
+from utils.functions import linear_fit
 
 
 class InitialCalibrationThread(Thread):
@@ -57,6 +59,8 @@ class InitialCalibrationThread(Thread):
             voltage1_get.append(sis.get_bias_voltage())
             current1_get.append(sis.get_bias_current())
 
+        current1 = current1_get[10]
+
         voltage2_range = np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, 20)
         voltage2_get = []
         current2_get = []
@@ -65,6 +69,13 @@ class InitialCalibrationThread(Thread):
             time.sleep(0.05)
             voltage2_get.append(sis.get_bias_voltage())
             current2_get.append(sis.get_bias_current())
+
+        current2 = current2_get[10]
+
+        rn1, _ = linear_fit(voltage1_get, current1_get)
+        self.rn1.emit(rn1)
+        rn2, _ = linear_fit(voltage2_get, current2_get)
+        self.rn2.emit(rn2)
 
         self.finished.emit(0)
 
@@ -75,6 +86,11 @@ class SisRnPowerMeasureTabWidget(QScrollArea):
         self.widget = QWidget()
         self.layout = QVBoxLayout(self)
         self.layout.addStretch()
+
+        self.groupInitialCalibration = None
+        self.createGroupInitialCalibration()
+        self.layout.addWidget(self.groupInitialCalibration)
+
         self.widget.setLayout(self.layout)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -97,6 +113,14 @@ class SisRnPowerMeasureTabWidget(QScrollArea):
         self.voltage2.setRange(-30, 30)
         self.voltage2.setValue(20)
 
+        self.rn1 = DoubleSpinBox(self)
+        self.rn1.setRange(0, 100)
+        self.rn1.setValue(0)
+
+        self.rn2 = DoubleSpinBox(self)
+        self.rn2.setRange(0, 100)
+        self.rn2.setValue(0)
+
         self.frequencyStart = DoubleSpinBox(self)
         self.frequencyStart.setRange(3, 13)
         self.frequencyStart.setValue(3)
@@ -109,22 +133,26 @@ class SisRnPowerMeasureTabWidget(QScrollArea):
         self.frequencyPoints.setRange(1, 5000)
         self.frequencyPoints.setValue(300)
 
-        self.btnStartInitialCalibration = Button("Start", animate=True)
-        self.btnStartInitialCalibration.clicked.connect(self.start_initial_calibration)
-        self.btnStopInitialCalibration = Button("Stop")
-        self.btnStopInitialCalibration.clicked.connect(self.stop_initial_calibration)
+        self.btnStartCalculateRn = Button("Start Calculate Rn", animate=True)
+        self.btnStartCalculateRn.clicked.connect(self.start_initial_calibration)
+        self.btnStopCalculateRn = Button("Start Calculate Rn")
+        self.btnStopCalculateRn.clicked.connect(self.stop_initial_calibration)
 
         flayout.addRow("Voltage 1, mV", self.voltage1)
         flayout.addRow("Voltage 2, mV", self.voltage2)
+        flayout.addRow("Rn 1, Ohm", self.rn1)
+        flayout.addRow("Rn 2, Ohm", self.rn2)
+        flayout.addRow(HLine(self))
         flayout.addRow("Frequency start, GHz", self.frequencyStart)
         flayout.addRow("Frequency stop, GHz", self.frequencyStop)
         flayout.addRow("Frequency points", self.frequencyPoints)
 
-        hlayout.addWidget(self.btnStartInitialCalibration)
-        hlayout.addWidget(self.btnStopInitialCalibration)
+        hlayout.addWidget(self.btnStartCalculateRn)
+        hlayout.addWidget(self.btnStopCalculateRn)
 
         layout.addLayout(flayout)
         layout.addLayout(hlayout)
+        self.groupInitialCalibration.setLayout(layout)
 
     def start_initial_calibration(self):
         ...

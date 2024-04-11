@@ -1,3 +1,4 @@
+from typing import Literal
 from PyQt5.QtCore import QSignalBlocker, QSettings
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -60,6 +61,7 @@ from interface.windows.yigGraphWindow import (
     TnIFGraphWindow,
 )
 from store.base import MeasureManager
+from utils.functions import import_class
 
 
 class App(QMainWindow):
@@ -87,8 +89,10 @@ class App(QMainWindow):
         self.menuBar = self.menuBar()
         self.menuView = QMenu("Views", self)
         self.menuGraph = QMenu("Graphs", self)
+        self.menuMeasure = QMenu("Measures", self)
         self.menuBar.addMenu(self.menuView)
         self.menuBar.addMenu(self.menuGraph)
+        self.menuBar.addMenu(self.menuMeasure)
 
         # Add toolbar
         self.toolBar = QToolBar("Main ToolBar")
@@ -176,6 +180,13 @@ class App(QMainWindow):
         self.menuView.addAction(self.yig_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.yig_dock_widget
+        )
+
+        # Add measures widgets
+        self.add_dock_widget(
+            "Sis power Rn measure",
+            import_class("interface.views.SisRnPowerMeasureTabWidget"),
+            "measure",
         )
 
         # Add graph widgets
@@ -369,12 +380,18 @@ class App(QMainWindow):
         self,
         name: str,
         widget_class,
+        menu: Literal["view", "graph", "measure"] = "view",
         **kwargs,
     ):
         dock_widget = QtAds.CDockWidget(name)
         widget = widget_class(self, **kwargs)
         dock_widget.setWidget(widget)
-        self.menuView.addAction(dock_widget.toggleViewAction())
+        if menu == "view":
+            self.menuView.addAction(dock_widget.toggleViewAction())
+        elif menu == "graph":
+            self.menuGraph.addAction(dock_widget.toggleViewAction())
+        elif menu == "measure":
+            self.menuMeasure.addAction(dock_widget.toggleViewAction())
         self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock_widget)
         dock_widget.closeDockWidget()
 
