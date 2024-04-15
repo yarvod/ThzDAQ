@@ -88,9 +88,12 @@ class App(QMainWindow):
 
         self.menuBar = self.menuBar()
         self.menuView = QMenu("Views", self)
+        self.menuDevice = QMenu("Devices", self)
         self.menuGraph = QMenu("Graphs", self)
         self.menuMeasure = QMenu("Measures", self)
+
         self.menuBar.addMenu(self.menuView)
+        self.menuBar.addMenu(self.menuDevice)
         self.menuBar.addMenu(self.menuGraph)
         self.menuBar.addMenu(self.menuMeasure)
 
@@ -158,20 +161,13 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.temperature_dock_widget
         )
 
-        self.spectrum_dock_widget = QtAds.CDockWidget("Spectrum")
-        self.tab_spectrum = SpectrumTabWidget(self)
-        self.spectrum_dock_widget.setWidget(self.tab_spectrum)
-        self.menuView.addAction(self.spectrum_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.spectrum_dock_widget
+        self.add_dock_widget(
+            "Rohde Schwarz Spectrum",
+            import_class("interface.views.SpectrumTabWidget"),
+            "device",
         )
-
-        self.chopper_dock_widget = QtAds.CDockWidget("Chopper")
-        self.tab_chopper = ChopperTabWidget(self)
-        self.chopper_dock_widget.setWidget(self.tab_chopper)
-        self.menuView.addAction(self.chopper_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.chopper_dock_widget
+        self.add_dock_widget(
+            "Chopper", import_class("interface.views.ChopperTabWidget"), "device"
         )
 
         self.yig_dock_widget = QtAds.CDockWidget("YIG filter")
@@ -318,15 +314,10 @@ class App(QMainWindow):
             self.graph_grid_ia_curve_dock_widget
         )
 
-        self.graph_spectrum_dock_widget = QtAds.CDockWidget("Spectrum curve")
-        self.tab_graph_spectrum_curve = SpectrumGraphWindow(self)
-        self.graph_spectrum_dock_widget.setWidget(self.tab_graph_spectrum_curve)
-        self.menuGraph.addAction(self.graph_spectrum_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_spectrum_dock_widget
-        )
-        self.tab_spectrum.spectrum_monitor.spectrumStreamGraphWindow = (
-            self.graph_spectrum_dock_widget
+        self.add_dock_widget(
+            "Spectrum curve",
+            import_class("interface.windows.SpectrumGraphWindow"),
+            "graph",
         )
 
         self.graph_vna_dock_widget = QtAds.CDockWidget("VNA curve")
@@ -380,7 +371,7 @@ class App(QMainWindow):
         self,
         name: str,
         widget_class,
-        menu: Literal["view", "graph", "measure"] = "view",
+        menu: Literal["view", "device", "graph", "measure"] = "view",
         **kwargs,
     ):
         dock_widget = QtAds.CDockWidget(name)
@@ -392,6 +383,8 @@ class App(QMainWindow):
             self.menuGraph.addAction(dock_widget.toggleViewAction())
         elif menu == "measure":
             self.menuMeasure.addAction(dock_widget.toggleViewAction())
+        elif menu == "device":
+            self.menuDevice.addAction(dock_widget.toggleViewAction())
         self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock_widget)
         dock_widget.closeDockWidget()
 

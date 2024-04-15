@@ -15,6 +15,7 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
 from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from store.state import state
+from utils.dock import Dock
 
 
 class StreamSpectrumThread(QThread):
@@ -40,8 +41,6 @@ class SpectrumMonitor(QGroupBox):
         super().__init__(parent)
         self.setTitle("Monitor")
         layout = QVBoxLayout()
-
-        self.spectrumStreamGraphWindow = None
 
         self.timeDelayLabel = QLabel(self)
         self.timeDelayLabel.setText("Step delay, s")
@@ -75,8 +74,10 @@ class SpectrumMonitor(QGroupBox):
         )
 
     def show_spectrum(self, data: Dict):
-        if self.spectrumStreamGraphWindow is None:
+        spectrumStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "Spectrum curve"
+        ).widget()
+        if spectrumStreamGraphWindow is None:
             return
-
-        self.spectrumStreamGraphWindow.widget().plotNew(x=data["x"], y=data["y"])
-        self.spectrumStreamGraphWindow.widget().show()
+        spectrumStreamGraphWindow.plotNew(x=data["x"], y=data["y"])
+        spectrumStreamGraphWindow.show()
