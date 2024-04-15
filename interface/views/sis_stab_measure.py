@@ -21,6 +21,7 @@ from store.base import MeasureModel
 from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
 from threads import Thread
+from utils.dock import Dock
 from utils.functions import linear_fit, linear, calc_tta
 
 
@@ -45,7 +46,9 @@ class MeasureRnThread(Thread):
 
         steps = 42
         step = 0
-        voltage1_range = np.linspace(self.voltage1 * 0.95, self.voltage1 * 1.05, 20)
+        voltage1_range = (
+            np.linspace(self.voltage1 * 0.95, self.voltage1 * 1.05, 20) * 1e-3
+        )
         voltage1_get = []
         current1_get = []
         for voltage in voltage1_range:
@@ -54,9 +57,11 @@ class MeasureRnThread(Thread):
             voltage1_get.append(self.sis.get_bias_voltage())
             current1_get.append(self.sis.get_bias_current())
             step += 1
-            self.progress.emit(step // steps)
+            self.progress.emit(round(step / steps * 100))
 
-        voltage2_range = np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, 20)
+        voltage2_range = (
+            np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, 20) * 1e-3
+        )
         voltage2_get = []
         current2_get = []
         for voltage in voltage2_range:
@@ -65,16 +70,16 @@ class MeasureRnThread(Thread):
             voltage2_get.append(self.sis.get_bias_voltage())
             current2_get.append(self.sis.get_bias_current())
             step += 1
-            self.progress.emit(step // steps)
+            self.progress.emit(round(step / steps * 100))
 
         rn1, _ = linear_fit(voltage1_get, current1_get)
-        self.rn1.emit(rn1)
+        self.rn1.emit(1 / rn1)
         step += 1
-        self.progress.emit(step // steps)
+        self.progress.emit(round(step / steps * 100))
         rn2, _ = linear_fit(voltage2_get, current2_get)
-        self.rn2.emit(rn2)
+        self.rn2.emit(1 / rn2)
         step += 1
-        self.progress.emit(step // steps)
+        self.progress.emit(round(step / steps * 100))
         self.pre_exit()
         self.finished.emit()
 
@@ -100,8 +105,8 @@ class MeasurePowerThread(Thread):
         t_sis=4,
     ):
         super().__init__()
-        self.voltage1 = voltage1
-        self.voltage2 = voltage2
+        self.voltage1 = voltage1 * 1e-3
+        self.voltage2 = voltage2 * 1e-3
         self.rn1 = rn1
         self.rn2 = rn2
         self.freq_range = np.linspace(freq_start, freq_stop, freq_points)
@@ -133,13 +138,13 @@ class MeasurePowerThread(Thread):
                 "voltage": None,
                 "current": None,
                 "power": [],
-                "power_units": power_meter_unit_model.value_pretty,
+                "power_units": power_meter_unit_model.val_pretty,
             },
             "point 2": {
                 "voltage": None,
                 "current": None,
                 "power": [],
-                "power_units": power_meter_unit_model.value_pretty,
+                "power_units": power_meter_unit_model.val_pretty,
             },
             "frequency": self.freq_range.tolist(),
             "tn": [],
@@ -158,7 +163,7 @@ class MeasurePowerThread(Thread):
             self.current1.emit(current)
             for freq in self.freq_range:
                 step += 1
-                self.progress.emit(step // steps)
+                self.progress.emit(round(step / steps * 100))
                 freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
                 resp = self.yig.write_task(freq_point)
                 resp_int = resp.get("result", None)
@@ -203,7 +208,7 @@ class MeasurePowerThread(Thread):
             )
 
         step += 1
-        self.progress.emit(step // steps)
+        self.progress.emit(round(step / steps * 100))
 
         self.pre_exit()
         self.finished.emit()
@@ -301,7 +306,7 @@ class SisRnPowerMeasureTabWidget(QWidget):
         flayout2.addRow("Frequency stop, GHz", self.frequencyStop)
         flayout2.addRow("Frequency points", self.frequencyPoints)
         flayout2.addRow("Temp SIS, K", self.t_sis)
-        flayout2.addRow(self.progres_p)
+        flayout2.addRow(self.progress_p)
         hlayout2.addWidget(self.btnStartMeasure)
         hlayout2.addWidget(self.btnStopMeasure)
 
@@ -346,8 +351,8 @@ class SisRnPowerMeasureTabWidget(QWidget):
             t_sis=self.t_sis.value(),
         )
 
-        self.thread_measure_power.current1.emit(self.set_current1)
-        self.thread_measure_power.current2.emit(self.set_current2)
+        self.thread_measure_power.current1.connect(self.set_current1)
+        self.thread_measure_power.current2.connect(self.set_current2)
 
         self.thread_measure_power.finished.connect(
             lambda: self.btnStartMeasure.setEnabled(True)
@@ -374,5 +379,13 @@ class SisRnPowerMeasureTabWidget(QWidget):
     def set_current2(self, value):
         self.current2 = value
 
-    def plot_graph_ta_if(self, data):
-        ...
+    def plot_graph_ta_if(self, results):
+        graph_tn_if = Dock.ex.dock_manager.findDockWidget("Tn-IF curve")
+        if graph_tn_if is None:
+            return
+        graph_tn_if.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            measure_id=results.get("measure_id"),
+        )
+        graph_tn_if.widget().show()

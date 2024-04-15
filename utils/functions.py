@@ -122,8 +122,8 @@ def t_a(m1, m2, y, t1, t2):
 
 
 def calc_tta(p_if_data1, p_if_data2, v1, v2, i1, i2, rd1, rd2, t_sis):
-    p1 = p_if_data1["power"]
-    p2 = p_if_data2["power"]
+    p1 = np.array(p_if_data1["power"])
+    p2 = np.array(p_if_data2["power"])
 
     if p_if_data1["power_units"] == "dBm":
         p1 = db_to_absolute(p1)
