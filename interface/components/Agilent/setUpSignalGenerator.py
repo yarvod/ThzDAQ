@@ -4,6 +4,6 @@ from store import AgilentSignalGeneratorManager
 
 
 class SetUpAgilentSignalGenerator(SetUpDeviceWidget):
-    title = "Agilent Signal Generator"
+    widget_title = "Agilent Signal Generator"
     manager_class = AgilentSignalGeneratorManager
     device_api_class = SignalGenerator

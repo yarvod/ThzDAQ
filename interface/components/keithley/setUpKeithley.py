@@ -4,6 +4,6 @@ from store import KeithleyPowerSupplyManager
 
 
 class SetUpKeithley(SetUpDeviceWidget):
-    title = "Keithley Power Supply"
+    widget_title = "Keithley Power Supply"
     manager_class = KeithleyPowerSupplyManager
     device_api_class = PowerSupply

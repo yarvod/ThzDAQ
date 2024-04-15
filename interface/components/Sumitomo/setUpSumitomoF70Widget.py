@@ -4,6 +4,6 @@ from store import SumitomoF70Manager
 
 
 class SetUpSumitomoF70Widget(SetUpDeviceWidget):
-    title = "Sumitomo F70 Compressor"
+    widget_title = "Sumitomo F70 Compressor"
     manager_class = SumitomoF70Manager
     device_api_class = F70Rest

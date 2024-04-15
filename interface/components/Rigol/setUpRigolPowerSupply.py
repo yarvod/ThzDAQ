@@ -4,6 +4,6 @@ from store import RigolPowerSupplyManager
 
 
 class SetUpRigolPowerSupplyWidget(SetUpDeviceWidget):
-    title = "Rigol Power Supply"
+    widget_title = "Rigol Power Supply"
     manager_class = RigolPowerSupplyManager
     device_api_class = PowerSupplyDP832A

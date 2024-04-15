@@ -1,7 +1,7 @@
 import logging
 import textwrap
 
-from PyQt5.QtCore import pyqtSignal, QThread, Qt
+from PyQt5.QtCore import pyqtSignal, QThread
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -12,13 +12,8 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QSizePolicy,
     QComboBox,
-    QScrollArea,
-    QSpinBox,
-    QFormLayout,
 )
 
-import settings
-from api.Agilent.signal_generator import SignalGenerator
 from api.LakeShore.temperature_controller import TemperatureController
 from api.Arduino.grid import GridManager
 from interface.components.Agilent.setUpSignalGenerator import (
@@ -113,46 +108,58 @@ class GridThread(QThread):
         self.finished.emit()
 
 
-class SetUpTabWidget(QScrollArea):
+class SetUpTabWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
-        self.widget = QWidget()
         self.layout = QVBoxLayout(self)
+
+        self.searchLine = QLineEdit(self)
+        self.searchLine.setPlaceholderText("Search device")
+        self.searchLine.textChanged.connect(self.search_device)
+
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupGrid()
         self.createGroupTemperatureController()
 
+        self.layout.addWidget(self.searchLine)
         self.layout.addWidget(self.groupBlock)
-        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupVna)
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetUpPowerMeter(self))
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetUpPrologix(self))
-        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupGrid)
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetUpAgilentSignalGenerator(self))
-        self.layout.addSpacing(10)
         self.layout.addWidget(self.groupTemperatureController)
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetupSpectrumGroup(self))
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetupChopperGroup(self))
-        self.layout.addSpacing(10)
         self.layout.addWidget(SetUpDigitalYigGroup(self))
         self.layout.addWidget(SetUpKeithley(self))
         self.layout.addWidget(SetUpRigolPowerSupplyWidget(self))
         self.layout.addWidget(SetUpSumitomoF70Widget(self))
         self.layout.addStretch()
 
-        self.widget.setLayout(self.layout)
+        self.setLayout(self.layout)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setWidgetResizable(True)
-        self.setWidget(self.widget)
+        self.widgets = []
+        self.load_widgets()
+
+    def load_widgets(self):
+        for i in range(self.layout.count()):
+            widget = self.layout.itemAt(i).widget()
+            if not widget or type(widget) == QLineEdit:
+                continue
+            self.widgets.append(widget)
+
+    def search_device(self, value: str):
+        if not value:
+            for widget in self.widgets:
+                widget.show()
+            return
+        for widget in self.widgets:
+            if value.lower() in widget.title().lower():
+                widget.show()
+            else:
+                widget.hide()
 
     def createGroupBlock(self):
         self.groupBlock = QGroupBox(self)

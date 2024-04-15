@@ -14,14 +14,14 @@ from threads.deviceInitThread import DeviceInitThread
 
 
 class SetUpDeviceWidget(QGroupBox):
-    title = ""
+    widget_title = ""
     manager_class = None
     device_api_class = None
 
     def __init__(self, parent):
         super().__init__(parent)
         self.manager_class.setup_widget = self
-        self.setTitle(self.title)
+        self.setTitle(self.widget_title)
         self.form: Union[None, DeviceAddForm] = None
         self.instances = {}
         self._layout = QVBoxLayout()
