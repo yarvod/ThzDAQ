@@ -121,6 +121,7 @@ class App(QMainWindow):
             QtAds.SideBarLeft, self.data_dock_widget
         )
 
+        # Add devices widgets
         self.sis_block_dock_widget = QtAds.CDockWidget("SIS Block")
         self.tab_sis_block = BlockTabWidget(self)
         self.sis_block_dock_widget.setWidget(self.tab_sis_block)
@@ -181,23 +182,12 @@ class App(QMainWindow):
         )
 
         # Add graph widgets
-        self.graph_iv_curve_dock_widget = QtAds.CDockWidget("I-V curve")
-        self.tab_graph_iv_curve = BiasGraphWindow(self)
-        self.graph_iv_curve_dock_widget.setWidget(self.tab_graph_iv_curve)
-        self.menuGraph.addAction(self.graph_iv_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_iv_curve_dock_widget
+        self.add_dock_widget(
+            "I-V curve", import_class("interface.windows.BiasGraphWindow"), "graph"
         )
-        self.tab_sis_block.biasGraphDockWidget = self.graph_iv_curve_dock_widget
-
-        self.graph_cli_curve_dock_widget = QtAds.CDockWidget("CL-I curve")
-        self.tab_graph_cli_curve = CLGraphWindow(self)
-        self.graph_cli_curve_dock_widget.setWidget(self.tab_graph_cli_curve)
-        self.menuGraph.addAction(self.graph_cli_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_cli_curve_dock_widget
+        self.add_dock_widget(
+            "I-CL curve", import_class("interface.windows.CLGraphWindow"), "graph"
         )
-        self.tab_sis_block.ctrlGraphDockWidget = self.graph_cli_curve_dock_widget
 
         self.graph_power_stream_curve_dock_widget = QtAds.CDockWidget("P-t curve")
         self.tab_graph_power_stream_curve = NRXStreamGraphWindow(self)

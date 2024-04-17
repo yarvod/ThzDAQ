@@ -24,6 +24,7 @@ from store.state import state
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.base import MeasureModel, MeasureType
+from utils.dock import Dock
 
 logger = logging.getLogger(__name__)
 
@@ -282,33 +283,28 @@ class BlockBIASScanThread(QThread):
         state.BLOCK_BIAS_SCAN_THREAD = False
 
 
-class BlockTabWidget(QScrollArea, UtilsMixin):
-    def __init__(self, parent, biasGraphDockWidget=None, ctrlGraphDockWidget=None):
+class BlockTabWidget(QWidget, UtilsMixin):
+    def __init__(self, parent):
         super().__init__(parent)
-        self.widget = QWidget()
-        self.layout = QVBoxLayout(self)
-        self.biasGraphDockWidget = biasGraphDockWidget
-        self.ctrlGraphDockWidget = ctrlGraphDockWidget
+        layout = QVBoxLayout(self)
         self.createGroupMonitor()
         self.createGroupValuesSet()
         self.createGroupBiasScan()
         self.createGroupCTRLScan()
-        self.layout.addWidget(self.groupMonitor)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.rowValuesSet)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupBiasScan)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupCTRLScan)
-        self.layout.addWidget(SisDemagnetisationWidget(self))
-        self.layout.addStretch()
+        layout.addWidget(self.groupMonitor)
+        layout.addSpacing(10)
+        layout.addWidget(self.rowValuesSet)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupBiasScan)
+        layout.addSpacing(10)
+        layout.addWidget(self.groupCTRLScan)
+        layout.addWidget(SisDemagnetisationWidget(self))
+        layout.addStretch()
 
-        self.widget.setLayout(self.layout)
+        self.setLayout(layout)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setWidgetResizable(True)
-        self.setWidget(self.widget)
+        self.biasGraphDockWidget = None
+        self.ctrlGraphDockWidget = None
 
     def show_ctrl_graph_window(self, results: dict):
         if self.ctrlGraphDockWidget is None:
@@ -341,6 +337,8 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         state.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
         state.BLOCK_CTRL_SCAN_THREAD = True
         state.BLOCK_CTRL_STEP_DELAY = self.ctrlStepDelay.value()
+
+        self.ctrlGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-CL curve")
 
         self.block_ctrl_scan_thread.start()
 
@@ -410,6 +408,8 @@ class BlockTabWidget(QScrollArea, UtilsMixin):
         state.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
         state.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
         state.BLOCK_BIAS_SCAN_THREAD = True
+
+        self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
 
         self.block_bias_scan_thread.start()
 
