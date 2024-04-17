@@ -89,9 +89,11 @@ class SocketAdapter(InstrumentAdapterInterface):
     def read(self, num_bytes=1024, **kwargs):
         return self._recv(num_bytes)
 
-    def query(self, cmd: str, buffer_size=1024 * 1024, **kwargs):
+    def query(self, cmd: str, buffer_size=1024 * 1024, delay: float = 0, **kwargs):
         self.write(cmd, **kwargs)
-        if self.delay:
+        if delay:
+            time.sleep(delay)
+        elif self.delay:
             time.sleep(self.delay)
         return self.read(num_bytes=buffer_size)
 

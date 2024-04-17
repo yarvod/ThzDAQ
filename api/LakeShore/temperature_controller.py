@@ -25,11 +25,9 @@ class TemperatureController(BaseInstrument):
     def idn(self) -> str:
         return self.query("*IDN?")
 
-    def test(self) -> str:
+    def test(self) -> bool:
         result = self.idn()
-        if "LSCI,MODEL336,LSA2CMQ/LSA2C8R,2.9" in result:
-            return "OK"
-        return "ERROR"
+        return "LSCI,MODEL336,LSA2CMQ/LSA2C8R,2.9" in result
 
     def get_mode(self) -> str:
         """0 = local, 1 = remote, 2 = remote with local lockout."""

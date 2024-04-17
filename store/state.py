@@ -58,7 +58,7 @@ class State:
     # VNA constants
     VNA_POWER_MIN = -100
     VNA_POWER_MAX = 0
-    VNA_POINTS_MAX = 2000
+    VNA_POINTS_MAX = 5000
     VNA_TEST_MAP = dict(
         (
             ("0", "Ok"),

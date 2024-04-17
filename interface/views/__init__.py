@@ -7,3 +7,5 @@ from .chopperTabWidget import ChopperTabWidget
 from .spectrumTabWidget import SpectrumTabWidget
 from .YIG import YIGWidget
 from .temperatureControllerTabWidget import TemperatureControllerTabWidget
+from .vnaTabWidget import VNATabWidget
+from .sis_reflection_measure import SisReflectionMeasureWidget

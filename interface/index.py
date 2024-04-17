@@ -94,14 +94,6 @@ class App(QMainWindow):
             QtAds.RightDockWidgetArea, self.sis_block_dock_widget
         )
 
-        self.vna_dock_widget = QtAds.CDockWidget("VNA")
-        self.tab_vna = VNATabWidget(self)
-        self.vna_dock_widget.setWidget(self.tab_vna)
-        self.menuBase.addAction(self.vna_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.vna_dock_widget
-        )
-
         self.nrx_dock_widget = QtAds.CDockWidget("Power Meter")
         self.tab_nrx = PowerMeterTabWidget(self)
         self.nrx_dock_widget.setWidget(self.tab_nrx)
@@ -134,6 +126,11 @@ class App(QMainWindow):
         self.add_dock_widget(
             "Sis power Rn measure",
             import_class("interface.views.SisRnPowerMeasureTabWidget"),
+            "measure",
+        )
+        self.add_dock_widget(
+            "Sis reflection measure",
+            import_class("interface.views.SisReflectionMeasureWidget"),
             "measure",
         )
 

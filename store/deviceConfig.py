@@ -153,6 +153,9 @@ class DeviceConfigList(list):
     def get_index_by_cid(self, cid: int) -> int:
         return next((i for i, item in enumerate(self) if item.cid == cid), None)
 
+    def list_of_names(self):
+        return [config.name for config in self]
+
 
 class DeviceManager:
     name = ""

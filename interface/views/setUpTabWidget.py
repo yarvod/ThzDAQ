@@ -23,6 +23,7 @@ from interface.components.Lakeshore.setUpTemperatureController import (
     SetUpLakeshoreTemperatureControllerWidget,
 )
 from interface.components.Rigol.setUpRigolPowerSupply import SetUpRigolPowerSupplyWidget
+from interface.components.RohdeSchwarz.setUpVnaZva67 import SetUpVnaZva67Widget
 from interface.components.Sumitomo import SetUpSumitomoF70Widget
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
@@ -33,43 +34,9 @@ from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
-from api.RohdeSchwarz.vna import VNABlock
 from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
-
-
-class VNAThread(QThread):
-    status = pyqtSignal(str)
-
-    def run(self):
-        logger.info(f"[{self.__class__.__name__}.run] Running...")
-        try:
-            vna = VNABlock(
-                vna_ip=state.VNA_ADDRESS,
-                port=state.VNA_PORT,
-                start=state.VNA_FREQ_START,
-                stop=state.VNA_FREQ_STOP,
-                points=state.VNA_POINTS,
-                power=state.VNA_POWER,
-            )
-            result = vna.test()
-            self.status.emit(state.VNA_TEST_MAP.get(result, "Error"))
-        except DeviceConnectionError:
-            self.status.emit("Connection Error!")
-        self.finished.emit()
-
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def quit(self) -> None:
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
 class SISBlockThread(QThread):
@@ -121,12 +88,11 @@ class SetUpTabWidget(QWidget):
         self.searchLine.textChanged.connect(self.search_device)
 
         self.createGroupBlock()
-        self.createGroupVna()
         self.createGroupGrid()
 
         self.layout.addWidget(self.searchLine)
         self.layout.addWidget(self.groupBlock)
-        self.layout.addWidget(self.groupVna)
+        self.layout.addWidget(SetUpVnaZva67Widget(self))
         self.layout.addWidget(SetUpPowerMeter(self))
         self.layout.addWidget(SetUpPrologix(self))
         self.layout.addWidget(self.groupGrid)

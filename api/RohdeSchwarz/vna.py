@@ -9,73 +9,64 @@ from settings import SOCKET
 from store.state import state
 
 from utils.classes import BaseInstrument
-from utils.decorators import exception
 
 
 logger = logging.getLogger(__name__)
 
 
 class VNABlock(BaseInstrument):
+    """
+    Default host 169.254.106.189
+    Default port 5025
+    """
+
     def __init__(
         self,
-        host: str = state.VNA_ADDRESS,
+        host: str = "169.254.106.189",
         gpib: int = None,
         adapter: str = SOCKET,
-        port: int = state.VNA_PORT,
+        port: int = 5025,
         *args,
         **kwargs,
     ):
         kwargs["port"] = port
         super().__init__(host, gpib, adapter, *args, **kwargs)
-        self.start_freq = kwargs.get("start", state.VNA_FREQ_START)
-        self.stop_freq = kwargs.get("stop", state.VNA_FREQ_STOP)
-        self.points = kwargs.get("points", state.VNA_POINTS)
-
-        self.set_parameter(kwargs.get("parameter", state.VNA_SPARAM))
-        self.set_start_frequency(kwargs.get("start", state.VNA_FREQ_START))
-        self.set_stop_frequency(kwargs.get("stop", state.VNA_FREQ_STOP))
-        self.set_sweep(kwargs.get("points", state.VNA_POINTS))
-        self.set_power(kwargs.get("power", state.VNA_POWER))
-        self.set_channel_format(kwargs.get("channel_format", state.VNA_CHANNEL_FORMAT))
 
     def idn(self) -> str:
         return self.query("*IDN?")
 
-    @exception
-    def test(self) -> str:
+    def test(self) -> bool:
         """
         Methods for self testing Instrument.
         Error - 1
         Ok - 0
         """
-        return self.query("*TST?")
+        result = self.idn()
+        return "Rohde&Schwarz,ZVA67-4Port" in result
 
     def set_sweep(self, points: int = state.VNA_POINTS) -> None:
         self.write(f"SWE:POIN {points}")
 
     def get_sweep(self) -> int:
-        return int(self.query(f"SWE:POIN?"))
+        return int(self.query(f"SWE:POIN?", delay=0.05))
 
     def set_channel_format(self, form: str = state.VNA_CHANNEL_FORMAT) -> None:
         self.write(f"CALC:FORM {form}")
 
     def get_channel_format(self):
-        return self.query("CALC:FORM?")
-
-    def get_parameter_catalog(self, chan: int = 1) -> str:
-        return self.query(f"CALCulate{chan}:PARameter:CATalog?")
+        return self.query("CALC:FORM?", delay=0.05)
 
     def set_power(self, power: float = state.VNA_POWER) -> None:
         self.write(f"SOUR:POW {power}")
 
     def get_power(self):
-        return self.query("SOUR:POW?")
+        return self.query("SOUR:POW?", delay=0.05)
 
     def get_start_frequency(self) -> float:
-        return float(self.query("SENS:FREQ:STAR?"))
+        return float(self.query("SENS:FREQ:STAR?", delay=0.05))
 
     def get_stop_frequency(self) -> float:
-        return float(self.query("SENS:FREQ:STOP?"))
+        return float(self.query("SENS:FREQ:STOP?", delay=0.05))
 
     def set_start_frequency(self, freq: float) -> None:
         self.write(f"SENS:FREQ:STAR {freq}")
@@ -93,10 +84,10 @@ class VNABlock(BaseInstrument):
         :returns
         Dict of Trace and Parameter map {"Trc1": "S11"}
         """
-        response = self.query(f"CALCulate{channel}:PARameter:CATalog?")
+        response = self.query(f"CALCulate{channel}:PARameter:CATalog?", delay=0.05)
         lst = response.split(",")
-        lst_traces = lst[::2]
-        lst_params = lst[1::2]
+        lst_traces = [_[1:] for _ in lst[::2]]
+        lst_params = [_[:-1] for _ in lst[1::2]]
         return dict(zip(lst_traces, lst_params))
 
     def get_data(self) -> Dict:
@@ -117,20 +108,32 @@ class VNABlock(BaseInstrument):
             if np.sum(np.abs(resp)) > 0:
                 real = resp[::2]
                 imag = resp[1::2]
-                freq = list(np.linspace(self.start_freq, self.stop_freq, self.points))
+                freq = list(
+                    np.linspace(
+                        self.get_start_frequency(),
+                        self.get_stop_frequency(),
+                        self.get_sweep(),
+                    )
+                )
+                s_param = self.get_parameter_catalog()["Trc1"]
+                power = self.get_power()
+
                 return {
                     "array": np.array([r + i * 1j for r, i in zip(real, imag)]),
                     "real": real,
                     "imag": imag,
                     "freq": freq,
+                    "parameter": s_param,
+                    "power": power,
                 }
         return {}
 
 
 if __name__ == "__main__":
     vna = VNABlock(start=2e9, stop=16e9, points=1001, delay=0.4)
-    refl = vna.get_data()
-    freq = np.linspace(2e9, 16e9, 1001).tolist()
-    data = {"real": list(refl.real), "imag": list(refl.imag), "freq": freq}
-    with open("s12.json", "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+    print(vna.get_parameter_catalog())
+    # refl = vna.get_data()
+    # freq = np.linspace(2e9, 16e9, 1001).tolist()
+    # data = {"real": list(refl.real), "imag": list(refl.imag), "freq": freq}
+    # with open("s12.json", "w", encoding="utf-8") as file:
+    #     json.dump(data, file, ensure_ascii=False, indent=4)

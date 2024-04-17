@@ -71,6 +71,12 @@ class LakeShoreTemperatureControllerManager(DeviceManager):
     configs = DeviceConfigList()
 
 
+class RohdeSchwarzVnaZva67Manager(DeviceManager):
+    name = "Rohde Schwarz VNA ZVA 67"
+    main_widget_class = "interface.views.VNATabWidget"
+    configs = DeviceConfigList()
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -82,6 +88,7 @@ def restore_configs():
     RigolPowerSupplyManager.restore_config()
     SumitomoF70Manager.restore_config()
     LakeShoreTemperatureControllerManager.restore_config()
+    RohdeSchwarzVnaZva67Manager.restore_config()
 
 
 def store_configs():
@@ -91,3 +98,4 @@ def store_configs():
     RigolPowerSupplyManager.store_config()
     SumitomoF70Manager.store_config()
     LakeShoreTemperatureControllerManager.store_config()
+    RohdeSchwarzVnaZva67Manager.store_config()
