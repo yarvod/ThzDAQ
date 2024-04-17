@@ -174,6 +174,7 @@ class DeviceManager:
                 name=config.name,
                 widget_class=import_class(cls.main_widget_class),
                 cid=config.cid,
+                menu="device",
             )
         return cls.last_id
 
