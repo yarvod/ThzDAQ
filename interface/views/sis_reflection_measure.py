@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QSpinBox,
     QProgressBar,
-    QGridLayout,
     QFormLayout,
     QHBoxLayout,
     QComboBox,
@@ -211,7 +210,11 @@ class SisReflectionMeasureWidget(QWidget):
         self.vnaConfigLabel = QLabel(self)
         self.vnaConfigLabel.setText("VNA device")
         self.vnaConfig = QComboBox(self)
-        self.vnaConfig.addItems(RohdeSchwarzVnaZva67Manager.configs.list_of_names())
+        RohdeSchwarzVnaZva67Manager.event_manager.configs_updated.connect(
+            lambda: self.vnaConfig.addItems(
+                RohdeSchwarzVnaZva67Manager.configs.list_of_names()
+            )
+        )
 
         self.vnaParameter = QComboBox(self)
         self.vnaParameter.addItems(state.VNA_SPARAMS)

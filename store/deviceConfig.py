@@ -157,6 +157,10 @@ class DeviceConfigList(list):
         return [config.name for config in self]
 
 
+class DeviceEventManager(QObject):
+    configs_updated = pyqtSignal()
+
+
 class DeviceManager:
     name = ""
     last_id = 0
@@ -164,6 +168,7 @@ class DeviceManager:
     configs: DeviceConfigList[DeviceConfig] = DeviceConfigList()
     setup_widget = None
     main_widget_class = None
+    event_manager = DeviceEventManager()
 
     @classmethod
     def add_config(cls, **kwargs) -> int:
@@ -172,6 +177,7 @@ class DeviceManager:
             name=cls.name, cid=cls.last_id, config_manager=cls, **kwargs
         )
         cls.configs.append(config)
+        cls.event_manager.configs_updated.emit()
         if cls.main_widget_class:
             Dock.add_widget_to_dock(
                 name=config.name,
@@ -218,3 +224,4 @@ class DeviceManager:
         index = cls.configs.get_index_by_cid(cid=cid)
         if index:
             cls.configs.delete_by_index(index)
+            cls.event_manager.configs_updated.emit()
