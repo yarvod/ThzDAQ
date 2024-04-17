@@ -42,6 +42,8 @@ class SpectrumMonitor(QGroupBox):
         self.setTitle("Monitor")
         layout = QVBoxLayout()
 
+        self.spectrumStreamGraphWindow = None
+
         self.timeDelayLabel = QLabel(self)
         self.timeDelayLabel.setText("Step delay, s")
         self.timeDelay = DoubleSpinBox(self)
@@ -63,6 +65,9 @@ class SpectrumMonitor(QGroupBox):
         state.SPECTRUM_STEP_DELAY = self.timeDelay.value()
         self.spectrum_thread = StreamSpectrumThread()
         self.spectrum_thread.data.connect(self.show_spectrum)
+        self.spectrumStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "Spectrum P-F curve"
+        )
         self.spectrum_thread.start()
         self.btnStartSpectrum.setEnabled(False)
         self.btnStopSpectrum.setEnabled(True)
@@ -74,10 +79,7 @@ class SpectrumMonitor(QGroupBox):
         )
 
     def show_spectrum(self, data: Dict):
-        spectrumStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(
-            "Spectrum curve"
-        ).widget()
-        if spectrumStreamGraphWindow is None:
+        if self.spectrumStreamGraphWindow.widget() is None:
             return
-        spectrumStreamGraphWindow.plotNew(x=data["x"], y=data["y"])
-        spectrumStreamGraphWindow.show()
+        self.spectrumStreamGraphWindow.widget().plotNew(x=data["x"], y=data["y"])
+        self.spectrumStreamGraphWindow.widget().show()

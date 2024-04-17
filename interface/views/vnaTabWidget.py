@@ -24,6 +24,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.vna import VNABlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from threads import Thread
+from utils.dock import Dock
 from utils.functions import to_db
 from utils.logger import logger
 
@@ -291,7 +292,7 @@ class VNATabWidget(QWidget):
         self.vna_get_reflection_thread = VNAGetReflectionThread()
 
         self.update_vna_params()
-
+        self.vnaGraphWindow = Dock.ex.dock_manager.findDockWidget("VNA P-F curve")
         self.vna_get_reflection_thread.results.connect(self.plotReflection)
         self.vna_get_reflection_thread.start()
 

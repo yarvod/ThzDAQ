@@ -29,7 +29,7 @@ class NRXStreamGraphWindow(QWidget):
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
-        self.graphWidget.setTitle(self.graph_title, color="#413C58", size="20pt")
+        self.graphWidget.setTitle(self.graph_title, color="#413C58", size="10pt")
         self.styles = {"color": "#413C58", "font-size": "15px"}
         self.graphWidget.setLabel("left", self.y_label, **self.styles)
         self.graphWidget.setLabel("bottom", self.x_label, **self.styles)

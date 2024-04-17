@@ -19,6 +19,7 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.base import MeasureModel
 from store.state import state
 from threads import Thread
+from utils.dock import Dock
 
 
 class MeasureThread(Thread):
@@ -154,6 +155,10 @@ class GridBiasCurrentScan(QGroupBox):
 
         self.thread.progress.connect(lambda x: self.progress.setValue(x))
         self.thread.finished.connect(lambda: self.progress.setValue(0))
+
+        self.gridBiasCurrentAngleGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "GRID I-A curve"
+        )
         self.thread.start()
 
         self.btnStart.setEnabled(False)

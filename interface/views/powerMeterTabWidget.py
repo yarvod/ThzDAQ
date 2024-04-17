@@ -24,6 +24,7 @@ from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from threads import Thread
+from utils.dock import Dock
 from utils.functions import get_voltage_tn
 from utils.logger import logger
 
@@ -322,6 +323,10 @@ class PowerMeterTabWidget(QWidget):
         state.NRX_STREAM_STORE_DATA = self.checkNRXStoreStream.isChecked()
 
         self.nrx_stream_thread.meas.connect(self.update_nrx_stream_values)
+
+        self.powerStreamGraphDockWidget = Dock.ex.dock_manager.findDockWidget(
+            "P-t curve"
+        )
         self.nrx_stream_thread.start()
 
         self.btnStartStreamNRX.setEnabled(False)
@@ -432,6 +437,11 @@ class PowerMeterTabWidget(QWidget):
                 self.show_bias_power_diff_graph
             )
             self.bias_power_thread.stream_tn.connect(self.show_tn_graph)
+
+        self.biasPowerGraphWindow = Dock.ex.dock_manager.findDockWidget("P-V curve")
+        self.biasCurrentGraphWindow = Dock.ex.dock_manager.findDockWidget("I-V curve")
+        self.biasPowerDiffGraphWindow = Dock.ex.dock_manager.findDockWidget("Y-V curve")
+        self.biasTnGraphWindow = Dock.ex.dock_manager.findDockWidget("Tn-V curve")
         self.bias_power_thread.start()
 
         self.btnStartBiasPowerScan.setEnabled(False)

@@ -31,21 +31,6 @@ from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.vnaTabWidget import VNATabWidget
-from interface.windows.biasPowerGraphWindow import (
-    BiasPowerGraphWindow,
-    BiasPowerDiffGraphWindow,
-    TnGraphWindow,
-    BiasCurrentGraphWindow,
-)
-from interface.windows.gridGraphs import (
-    GridBiasPowerGraphWindow,
-    GridBiasCurrentGraphWindow,
-    GridBiasPowerDiffGraphWindow,
-    GridTnGraphWindow,
-    GridAngleCurrentGraphWindow,
-)
-from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
-from interface.windows.vnaGraphWindow import VNAGraphWindow
 from store.base import MeasureManager
 from utils.functions import import_class
 
@@ -166,138 +151,38 @@ class App(QMainWindow):
         self.add_dock_widget(
             "I-CL curve", import_class("interface.windows.CLGraphWindow"), "graph"
         )
-
-        self.graph_power_stream_curve_dock_widget = QtAds.CDockWidget("P-t curve")
-        self.tab_graph_power_stream_curve = NRXStreamGraphWindow(self)
-        self.graph_power_stream_curve_dock_widget.setWidget(
-            self.tab_graph_power_stream_curve
-        )
-        self.menuGraph.addAction(
-            self.graph_power_stream_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_power_stream_curve_dock_widget
-        )
-        self.tab_nrx.powerStreamGraphDockWidget = (
-            self.graph_power_stream_curve_dock_widget
-        )
-
-        self.graph_pv_curve_dock_widget = QtAds.CDockWidget("P-V curve")
-        self.tab_graph_pv_curve = BiasPowerGraphWindow(self)
-        self.graph_pv_curve_dock_widget.setWidget(self.tab_graph_pv_curve)
-        self.menuGraph.addAction(self.graph_pv_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_pv_curve_dock_widget
-        )
-        self.tab_nrx.biasPowerGraphWindow = self.graph_pv_curve_dock_widget
-
-        self.graph_p_iv_curve_dock_widget = QtAds.CDockWidget("Power I-V curve")
-        self.tab_graph_p_iv_curve = BiasCurrentGraphWindow(self)
-        self.graph_p_iv_curve_dock_widget.setWidget(self.tab_graph_p_iv_curve)
-        self.menuGraph.addAction(self.graph_p_iv_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_p_iv_curve_dock_widget
-        )
-        self.tab_nrx.biasCurrentGraphWindow = self.graph_p_iv_curve_dock_widget
-
-        self.graph_yv_curve_dock_widget = QtAds.CDockWidget("Y-V curve")
-        self.tab_graph_yv_curve = BiasPowerDiffGraphWindow(self)
-        self.graph_yv_curve_dock_widget.setWidget(self.tab_graph_yv_curve)
-        self.menuGraph.addAction(self.graph_yv_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_yv_curve_dock_widget
-        )
-        self.tab_nrx.biasPowerDiffGraphWindow = self.graph_yv_curve_dock_widget
-
-        self.graph_tnv_curve_dock_widget = QtAds.CDockWidget("Tn-V curve")
-        self.tab_graph_tnv_curve = TnGraphWindow(self)
-        self.graph_tnv_curve_dock_widget.setWidget(self.tab_graph_tnv_curve)
-        self.menuGraph.addAction(self.graph_tnv_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_tnv_curve_dock_widget
-        )
-        self.tab_nrx.biasTnGraphWindow = self.graph_tnv_curve_dock_widget
-
-        self.graph_grid_pv_curve_dock_widget = QtAds.CDockWidget("GRID P-V curve")
-        self.tab_graph_grid_pv_curve = GridBiasPowerGraphWindow(self)
-        self.graph_grid_pv_curve_dock_widget.setWidget(self.tab_graph_grid_pv_curve)
-        self.menuGraph.addAction(
-            self.graph_grid_pv_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_grid_pv_curve_dock_widget
-        )
-        self.tab_grid.gridBiasPowerGraphWindow = self.graph_grid_pv_curve_dock_widget
-
-        self.graph_grid_iv_curve_dock_widget = QtAds.CDockWidget("GRID I-V curve")
-        self.tab_graph_grid_iv_curve = GridBiasCurrentGraphWindow(self)
-        self.graph_grid_iv_curve_dock_widget.setWidget(self.tab_graph_grid_iv_curve)
-        self.menuGraph.addAction(
-            self.graph_grid_iv_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_grid_iv_curve_dock_widget
-        )
-        self.tab_grid.gridBiasCurrentGraphWindow = self.graph_grid_iv_curve_dock_widget
-
-        self.graph_grid_yv_curve_dock_widget = QtAds.CDockWidget("GRID Y-V curve")
-        self.tab_graph_grid_yv_curve = GridBiasPowerDiffGraphWindow(self)
-        self.graph_grid_yv_curve_dock_widget.setWidget(self.tab_graph_grid_yv_curve)
-        self.menuGraph.addAction(
-            self.graph_grid_yv_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_grid_yv_curve_dock_widget
-        )
-        self.tab_grid.gridBiasPowerDiffGraphWindow = (
-            self.graph_grid_yv_curve_dock_widget
-        )
-
-        self.graph_grid_tnv_curve_dock_widget = QtAds.CDockWidget("GRID Tn-V curve")
-        self.tab_graph_grid_tnv_curve = GridTnGraphWindow(self)
-        self.graph_grid_tnv_curve_dock_widget.setWidget(self.tab_graph_grid_tnv_curve)
-        self.menuGraph.addAction(
-            self.graph_grid_tnv_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_grid_tnv_curve_dock_widget
-        )
-        self.tab_grid.biasTnGraphWindow = self.graph_grid_tnv_curve_dock_widget
-
-        self.graph_grid_ia_curve_dock_widget = QtAds.CDockWidget("GRID I-A curve")
-        self.tab_graph_grid_ia_curve = GridAngleCurrentGraphWindow(self)
-        self.graph_grid_ia_curve_dock_widget.setWidget(self.tab_graph_grid_ia_curve)
-        self.menuGraph.addAction(
-            self.graph_grid_ia_curve_dock_widget.toggleViewAction()
-        )
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_grid_ia_curve_dock_widget
-        )
-        self.tab_grid.gridAngleCurrentScan.gridBiasCurrentAngleGraphWindow = (
-            self.graph_grid_ia_curve_dock_widget
-        )
-
         self.add_dock_widget(
-            "Spectrum curve",
+            "P-t curve", import_class("interface.windows.NRXStreamGraphWindow"), "graph"
+        )
+        self.add_dock_widget(
+            "P-V curve", import_class("interface.windows.BiasPowerGraphWindow"), "graph"
+        )
+        self.add_dock_widget(
+            "Y-V curve",
+            import_class("interface.windows.BiasPowerDiffGraphWindow"),
+            "graph",
+        )
+        self.add_dock_widget(
+            "Tn-V curve", import_class("interface.windows.TnGraphWindow"), "graph"
+        )
+        self.add_dock_widget(
+            "GRID I-A curve",
+            import_class("interface.windows.GridAngleCurrentGraphWindow"),
+            "graph",
+        )
+        self.add_dock_widget(
+            "Spectrum P-F curve",
             import_class("interface.windows.SpectrumGraphWindow"),
             "graph",
         )
-
-        self.graph_vna_dock_widget = QtAds.CDockWidget("VNA curve")
-        self.tab_graph_vna_curve = VNAGraphWindow(self)
-        self.graph_vna_dock_widget.setWidget(self.tab_graph_vna_curve)
-        self.menuGraph.addAction(self.graph_vna_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_vna_dock_widget
+        self.add_dock_widget(
+            "VNA P-F curve", import_class("interface.windows.VNAGraphWindow"), "graph"
         )
-        self.tab_vna.vnaGraphWindow = self.graph_vna_dock_widget
-
         self.add_dock_widget(
             "T-t curve",
             import_class("interface.windows.TemperatureGraphWindow"),
             "graph",
         )
-
         self.add_dock_widget(
             "P-IF curve", import_class("interface.windows.PowerIFGraphWindow"), "graph"
         )

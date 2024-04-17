@@ -28,6 +28,7 @@ from interface.components.ui.Lines import HLine
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from threads import Thread
+from utils.dock import Dock
 from utils.functions import get_voltage_tn
 
 logger = logging.getLogger(__name__)
@@ -250,30 +251,24 @@ class StepBiasPowerThread(Thread):
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
 
 
-class GridTabWidget(QScrollArea):
+class GridTabWidget(QWidget):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
-        self.widget = QWidget()
-        self.layout = QVBoxLayout(self)
+        self._layout = QVBoxLayout(self)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasCurrentGraphWindow = None
         self.gridBiasPowerDiffGraphWindow = None
         self.biasTnGraphWindow = None
         self.createGroupGridBiasPowerScan()
         self.gridAngleCurrentScan = GridBiasCurrentScan(self)
-        self.layout.addWidget(GridManagingGroup(self))
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.groupGridBiasPowerScan)
-        self.layout.addSpacing(10)
-        self.layout.addWidget(self.gridAngleCurrentScan)
-        self.layout.addStretch()
+        self._layout.addWidget(GridManagingGroup(self))
+        self._layout.addSpacing(10)
+        self._layout.addWidget(self.groupGridBiasPowerScan)
+        self._layout.addSpacing(10)
+        self._layout.addWidget(self.gridAngleCurrentScan)
+        self._layout.addStretch()
 
-        self.widget.setLayout(self.layout)
-
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setWidgetResizable(True)
-        self.setWidget(self.widget)
+        self.setLayout(self._layout)
 
     def createGroupGridBiasPowerScan(self):
         self.groupGridBiasPowerScan = QGroupBox("Grid Power Bias Scan")
@@ -369,6 +364,15 @@ class GridTabWidget(QScrollArea):
         state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
         self.bias_power_thread = StepBiasPowerThread()
+
+        self.gridBiasPowerGraphWindow = Dock.ex.dock_manager.findDockWidget("P-V curve")
+        self.gridBiasCurrentGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "I-V curve"
+        )
+        self.gridBiasPowerDiffGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "Y-V curve"
+        )
+        self.biasTnGraphWindow = Dock.ex.dock_manager.findDockWidget("Tn-V curve")
 
         self.bias_power_thread.stream_pv.connect(self.show_bias_power_graph)
         self.bias_power_thread.stream_iv.connect(self.show_bias_current_graph)
