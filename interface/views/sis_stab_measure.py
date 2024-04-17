@@ -273,7 +273,7 @@ class SisRnPowerMeasureTabWidget(QWidget):
         self.frequencyPoints.setRange(1, 5000)
         self.frequencyPoints.setValue(300)
 
-        self.t_sis = QSpinBox(self)
+        self.t_sis = DoubleSpinBox(self)
         self.t_sis.setRange(0, 300)
         self.t_sis.setValue(4)
 
