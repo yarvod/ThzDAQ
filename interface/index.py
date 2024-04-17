@@ -15,14 +15,6 @@ from PyQt5.QtWidgets import (
 from PyQt5 import QtGui
 import PyQtAds as QtAds
 
-from store import (
-    KeithleyPowerSupplyManager,
-    AgilentSignalGeneratorManager,
-    PrologixManager,
-    RigolPowerSupplyManager,
-    SumitomoF70Manager,
-    LakeShoreTemperatureControllerManager,
-)
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
@@ -31,6 +23,7 @@ from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
 from interface.views.vnaTabWidget import VNATabWidget
+from store import store_configs
 from store.base import MeasureManager
 from utils.functions import import_class
 
@@ -220,9 +213,6 @@ class App(QMainWindow):
         self.dock_manager.removeDockWidget(dock_widget)
 
     def restore_state(self):
-        # dock_manager_state = self.settings.value("dock_manager_state")
-        # if dock_manager_state:
-        #     self.dock_manager.restoreState(dock_manager_state)
         self.dock_manager.loadPerspectives(self.settings)
         if not len(self.dock_manager.perspectiveNames()):
             settings = QSettings("settings.ini", QSettings.IniFormat)
@@ -245,14 +235,8 @@ class App(QMainWindow):
             pass
 
     def store_state(self):
-        # self.settings.setValue("dock_manager_state", self.dock_manager.saveState())
         self.dock_manager.savePerspectives(self.settings)
-        KeithleyPowerSupplyManager.store_config()
-        PrologixManager.store_config()
-        AgilentSignalGeneratorManager.store_config()
-        RigolPowerSupplyManager.store_config()
-        SumitomoF70Manager.store_config()
-        LakeShoreTemperatureControllerManager.store_config()
+        store_configs()
         self.settings.sync()
 
     def create_perspective_ui(self):

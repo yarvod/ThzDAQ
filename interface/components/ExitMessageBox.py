@@ -16,7 +16,7 @@ class ExitMessageBox(QMessageBox):
         self.dumpDataCheck.setText("Dump all data on exit")
         self.storeStateCheck = QCheckBox(self)
         self.storeStateCheck.setChecked(False)
-        self.storeStateCheck.setText("Store Perspectives state")
+        self.storeStateCheck.setText("Store app state")
         layout = self.layout()
         check_layout = QGridLayout()
         check_layout.addWidget(self.dumpDataCheck, 0, 0)

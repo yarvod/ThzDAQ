@@ -82,3 +82,12 @@ def restore_configs():
     RigolPowerSupplyManager.restore_config()
     SumitomoF70Manager.restore_config()
     LakeShoreTemperatureControllerManager.restore_config()
+
+
+def store_configs():
+    KeithleyPowerSupplyManager.store_config()
+    PrologixManager.store_config()
+    AgilentSignalGeneratorManager.store_config()
+    RigolPowerSupplyManager.store_config()
+    SumitomoF70Manager.store_config()
+    LakeShoreTemperatureControllerManager.store_config()
