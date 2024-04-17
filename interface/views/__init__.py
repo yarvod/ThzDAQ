@@ -6,3 +6,4 @@ from .sis_stab_measure import SisRnPowerMeasureTabWidget
 from .chopperTabWidget import ChopperTabWidget
 from .spectrumTabWidget import SpectrumTabWidget
 from .YIG import YIGWidget
+from .temperatureControllerTabWidget import TemperatureControllerTabWidget

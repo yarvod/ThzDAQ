@@ -19,6 +19,9 @@ from api.Arduino.grid import GridManager
 from interface.components.Agilent.setUpSignalGenerator import (
     SetUpAgilentSignalGenerator,
 )
+from interface.components.Lakeshore.setUpTemperatureController import (
+    SetUpLakeshoreTemperatureControllerWidget,
+)
 from interface.components.Rigol.setUpRigolPowerSupply import SetUpRigolPowerSupplyWidget
 from interface.components.Sumitomo import SetUpSumitomoF70Widget
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
@@ -120,7 +123,6 @@ class SetUpTabWidget(QWidget):
         self.createGroupBlock()
         self.createGroupVna()
         self.createGroupGrid()
-        self.createGroupTemperatureController()
 
         self.layout.addWidget(self.searchLine)
         self.layout.addWidget(self.groupBlock)
@@ -129,7 +131,7 @@ class SetUpTabWidget(QWidget):
         self.layout.addWidget(SetUpPrologix(self))
         self.layout.addWidget(self.groupGrid)
         self.layout.addWidget(SetUpAgilentSignalGenerator(self))
-        self.layout.addWidget(self.groupTemperatureController)
+        self.layout.addWidget(SetUpLakeshoreTemperatureControllerWidget(self))
         self.layout.addWidget(SetupSpectrumGroup(self))
         self.layout.addWidget(SetupChopperGroup(self))
         self.layout.addWidget(SetUpDigitalYigGroup(self))
@@ -270,36 +272,6 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.btnInitGrid, 3, 0, 1, 2)
 
         self.groupGrid.setLayout(layout)
-
-    def createGroupTemperatureController(self):
-        self.groupTemperatureController = QGroupBox("Temperature controller")
-        self.groupGrid.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.temperatureControllerAddressLabel = QLabel(self)
-        self.temperatureControllerAddressLabel.setText("IP Address:")
-        self.temperatureControllerAddress = QLineEdit(self)
-        self.temperatureControllerAddress.setText(state.LAKE_SHORE_IP)
-
-        self.temperatureControllerStatusLabel = QLabel(self)
-        self.temperatureControllerStatusLabel.setText("Status:")
-        self.temperatureControllerStatus = QLabel(self)
-        self.temperatureControllerStatus.setText("Doesn't initialized yet!")
-
-        self.btnTemperatureControllerInit = Button("Initialize", animate=True)
-        self.btnTemperatureControllerInit.clicked.connect(
-            self.initialize_temperature_controller
-        )
-
-        layout.addWidget(self.temperatureControllerAddressLabel, 1, 0)
-        layout.addWidget(self.temperatureControllerAddress, 1, 1)
-        layout.addWidget(self.temperatureControllerStatusLabel, 2, 0)
-        layout.addWidget(self.temperatureControllerStatus, 2, 1)
-        layout.addWidget(self.btnTemperatureControllerInit, 3, 0, 1, 2)
-
-        self.groupTemperatureController.setLayout(layout)
 
     def initialize_temperature_controller(self):
         state.LAKE_SHORE_IP = self.temperatureControllerAddress.text()

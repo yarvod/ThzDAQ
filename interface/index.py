@@ -21,22 +21,16 @@ from store import (
     PrologixManager,
     RigolPowerSupplyManager,
     SumitomoF70Manager,
+    LakeShoreTemperatureControllerManager,
 )
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.GridTabWidget import GridTabWidget
-from interface.views.YIG.YigWidget import YIGWidget
 from interface.views.blockTabWidget import BlockTabWidget
-from interface.views.chopperTabWidget import ChopperTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
-from interface.views.spectrumTabWidget import SpectrumTabWidget
-from interface.views.temperatureControllerTabWidget import (
-    TemperatureControllerTabWidget,
-)
 from interface.views.vnaTabWidget import VNATabWidget
-from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.biasPowerGraphWindow import (
     BiasPowerGraphWindow,
     BiasPowerDiffGraphWindow,
@@ -50,16 +44,8 @@ from interface.windows.gridGraphs import (
     GridTnGraphWindow,
     GridAngleCurrentGraphWindow,
 )
-from interface.windows.clGraphWindow import CLGraphWindow
 from interface.windows.nrxStreamGraph import NRXStreamGraphWindow
-from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
-from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
 from interface.windows.vnaGraphWindow import VNAGraphWindow
-from interface.windows.yigGraphWindow import (
-    PowerIFGraphWindow,
-    YIFGraphWindow,
-    TnIFGraphWindow,
-)
 from store.base import MeasureManager
 from utils.functions import import_class
 
@@ -152,14 +138,6 @@ class App(QMainWindow):
         self.menuView.addAction(self.grid_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.grid_dock_widget
-        )
-
-        self.temperature_dock_widget = QtAds.CDockWidget("Temperature Controller")
-        self.tab_temperature = TemperatureControllerTabWidget(self)
-        self.temperature_dock_widget.setWidget(self.tab_temperature)
-        self.menuView.addAction(self.temperature_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.temperature_dock_widget
         )
 
         self.add_dock_widget(
@@ -314,15 +292,10 @@ class App(QMainWindow):
         )
         self.tab_vna.vnaGraphWindow = self.graph_vna_dock_widget
 
-        self.graph_temperature_dock_widget = QtAds.CDockWidget("Temperature curve")
-        self.tab_graph_temperature_curve = TemperatureGraphWindow(self)
-        self.graph_temperature_dock_widget.setWidget(self.tab_graph_temperature_curve)
-        self.menuGraph.addAction(self.graph_temperature_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.graph_temperature_dock_widget
-        )
-        self.tab_temperature.temperatureStreamGraphWindow = (
-            self.graph_temperature_dock_widget
+        self.add_dock_widget(
+            "T-t curve",
+            import_class("interface.windows.TemperatureGraphWindow"),
+            "graph",
         )
 
         self.add_dock_widget(
@@ -394,6 +367,7 @@ class App(QMainWindow):
         AgilentSignalGeneratorManager.store_config()
         RigolPowerSupplyManager.store_config()
         SumitomoF70Manager.store_config()
+        LakeShoreTemperatureControllerManager.store_config()
         self.settings.sync()
 
     def create_perspective_ui(self):

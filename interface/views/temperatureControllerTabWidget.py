@@ -1,14 +1,13 @@
 import time
 from typing import Dict
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QGroupBox,
     QGridLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QCheckBox,
     QComboBox,
@@ -18,33 +17,52 @@ from PyQt5.QtWidgets import (
 from api.LakeShore.temperature_controller import TemperatureController
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from interface.windows.temperatureGraphWindow import TemperatureGraphWindow
+from store import LakeShoreTemperatureControllerManager
 from store.base import MeasureModel, MeasureType
-from store.state import state
+from threads import Thread
+from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 
 
-class MonitorThread(QThread):
+class MonitorThread(Thread):
     temperatures = pyqtSignal(dict)
 
-    def run(self):
-        tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
-        start_time = time.time()
-        if state.LAKE_SHORE_STREAM_DATA:
-            measure = MeasureModel.objects.create(
+    def __init__(
+        self,
+        cid: int,
+        step_delay: float,
+        store_data: bool,
+    ):
+        super().__init__()
+        self.cid = cid
+        self.step_delay = step_delay
+        self.store_data = store_data
+        self.config = LakeShoreTemperatureControllerManager.get_config(self.cid)
+        self.tc = None
+        if store_data:
+            self.measure = MeasureModel.objects.create(
                 measure_type=MeasureType.TEMPERATURE_STREAM,
                 data={"temp_a": [], "temp_c": [], "temp_b": [], "time": []},
             )
-            measure.save(finish=False)
+            self.measure.save(finish=False)
+
+    def run(self):
+        try:
+            self.tc = TemperatureController(**self.config.dict())
+        except DeviceConnectionError:
+            self.finished.emit()
+            return
+        start_time = time.time()
         i = 0
-        while state.LAKE_SHORE_STREAM_THREAD:
-            temp_a = tc.get_temperature_a()
-            temp_c = tc.get_temperature_c()
-            temp_b = tc.get_temperature_b()
-            if state.LAKE_SHORE_STREAM_DATA:
-                measure.data["temp_a"].append(temp_a)
-                measure.data["temp_c"].append(temp_c)
-                measure.data["temp_b"].append(temp_b)
-                measure.data["time"].append(time.time() - start_time)
+        while self.config.thread_stream:
+            temp_a = self.tc.get_temperature_a()
+            temp_c = self.tc.get_temperature_c()
+            temp_b = self.tc.get_temperature_b()
+            if self.store_data:
+                self.measure.data["temp_a"].append(temp_a)
+                self.measure.data["temp_c"].append(temp_c)
+                self.measure.data["temp_b"].append(temp_b)
+                self.measure.data["time"].append(time.time() - start_time)
             self.temperatures.emit(
                 {
                     "temp_a": temp_a,
@@ -54,26 +72,51 @@ class MonitorThread(QThread):
                     "reset": i == 0,
                 }
             )
-            time.sleep(state.LAKE_SHORE_STREAM_STEP_DELAY)
+            time.sleep(self.step_delay)
             i += 1
 
-        if state.LAKE_SHORE_STREAM_DATA:
-            measure.save()
+        self.pre_exit()
         self.finished.emit()
 
+    def pre_exit(self, *args, **kwargs):
+        if self.store_data:
+            self.measure.save()
 
-class SetHeaterThread(QThread):
+
+class SetHeaterThread(Thread):
+    def __init__(
+        self, cid: int, heater_range: int, manual_output: float, setup_point: float
+    ):
+        super().__init__()
+        self.cid = cid
+        self.heater_range = heater_range
+        self.manual_output = manual_output
+        self.setup_point = setup_point
+        self.config = LakeShoreTemperatureControllerManager.get_config(self.cid)
+        self.tc = None
+
     def run(self):
-        tc = TemperatureController(host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT)
-        tc.set_heater_range(output=1, value=state.LAKE_SHORE_HEATER_RANGE)
-        tc.set_manual_output(output=1, value=state.LAKE_SHORE_MANUAL_OUTPUT)
-        tc.set_control_point(output=1, value=state.LAKE_SHORE_SETUP_POINT)
+        try:
+            self.tc = TemperatureController(**self.config.dict())
+        except DeviceConnectionError:
+            self.finished.emit()
+            return
+        self.tc.set_heater_range(output=1, value=self.heater_range)
+        self.tc.set_manual_output(output=1, value=self.manual_output)
+        self.tc.set_control_point(output=1, value=self.setup_point)
+        del self.tc
         self.finished.emit()
 
 
 class TemperatureControllerTabWidget(QWidget):
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        cid,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+        self.cid = cid
         self.layout = QVBoxLayout(self)
         self.temperatureStreamGraphWindow = None
 
@@ -116,7 +159,7 @@ class TemperatureControllerTabWidget(QWidget):
         self.temperatureStreamStepDelayLabel.setText("Step delay, s")
         self.temperatureStreamStepDelay = DoubleSpinBox(self)
         self.temperatureStreamStepDelay.setRange(0.01, 1)
-        self.temperatureStreamStepDelay.setValue(state.LAKE_SHORE_STREAM_STEP_DELAY)
+        self.temperatureStreamStepDelay.setValue(0.2)
 
         self.checkTemperatureStreamPlot = QCheckBox(self)
         self.checkTemperatureStreamPlot.setText("Plot stream time line")
@@ -129,7 +172,7 @@ class TemperatureControllerTabWidget(QWidget):
         self.temperatureStreamTime = DoubleSpinBox(self)
         self.temperatureStreamTime.setDecimals(0)
         self.temperatureStreamTime.setRange(10, 43200)
-        self.temperatureStreamTime.setValue(state.LAKE_SHORE_STREAM_TIME)
+        self.temperatureStreamTime.setValue(30)
 
         self.btnStartMonitor = Button("Start", animate=True)
         self.btnStartMonitor.clicked.connect(self.startMonitor)
@@ -158,12 +201,20 @@ class TemperatureControllerTabWidget(QWidget):
         self.groupMonitor.setLayout(layout)
 
     def startMonitor(self):
-        self.thread_monitor = MonitorThread()
-        state.LAKE_SHORE_STREAM_THREAD = True
-        state.LAKE_SHORE_STREAM_TIME = self.temperatureStreamTime.value()
-        state.LAKE_SHORE_STREAM_PLOT_GRAPH = self.checkTemperatureStreamPlot.isChecked()
-        state.LAKE_SHORE_STREAM_DATA = self.checkTemperatureStoreData.isChecked()
-        state.LAKE_SHORE_STREAM_STEP_DELAY = self.temperatureStreamStepDelay.value()
+        self.thread_monitor = MonitorThread(
+            cid=self.cid,
+            step_delay=self.temperatureStreamStepDelay.value(),
+            store_data=self.checkTemperatureStoreData.isChecked(),
+        )
+        config = LakeShoreTemperatureControllerManager.get_config(self.cid)
+        config.thread_stream = True
+
+        self.temperatureStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(
+            "T-t curve"
+        )
+        self.temperatureStreamGraphWindow.widget().stream_window = (
+            self.temperatureStreamTime.value()
+        )
         self.thread_monitor.start()
         self.btnStartMonitor.setEnabled(False)
         self.btnStopMonitor.setEnabled(True)
@@ -176,15 +227,15 @@ class TemperatureControllerTabWidget(QWidget):
         self.thread_monitor.temperatures.connect(self.updateMonitor)
 
     def stopMonitor(self):
-        state.LAKE_SHORE_STREAM_THREAD = False
-        self.thread_monitor.quit()
+        config = LakeShoreTemperatureControllerManager.get_config(cid=self.cid)
+        config.thread_stream = False
         self.thread_monitor.exit(0)
 
     def updateMonitor(self, measure: Dict):
         self.tempA.setText(f"{measure.get('temp_a')}")
         self.tempC.setText(f"{measure.get('temp_c')}")
         self.tempB.setText(f"{measure.get('temp_b')}")
-        if state.LAKE_SHORE_STREAM_PLOT_GRAPH:
+        if self.checkTemperatureStreamPlot.isChecked():
             self.show_temperature_stream_graph(measure=measure)
 
     def show_temperature_stream_graph(self, measure: Dict):
@@ -208,7 +259,6 @@ class TemperatureControllerTabWidget(QWidget):
             y=measure.get("temp_c"),
             reset_data=measure.get("reset"),
         )
-        self.temperatureStreamGraphWindow.widget().show()
 
     def createGroupHeater(self):
         self.groupHeater = QGroupBox(self)
@@ -243,11 +293,12 @@ class TemperatureControllerTabWidget(QWidget):
         self.groupHeater.setLayout(layout)
 
     def set_heater(self):
-        state.LAKE_SHORE_HEATER_RANGE = self.heaterRange.currentIndex()
-        state.LAKE_SHORE_MANUAL_OUTPUT = self.manualOutput.value()
-        state.LAKE_SHORE_SETUP_POINT = self.setupPoint.value()
-
-        self.set_heater_thread = SetHeaterThread()
+        self.set_heater_thread = SetHeaterThread(
+            cid=self.cid,
+            heater_range=self.heaterRange.currentIndex(),
+            manual_output=self.manualOutput.value(),
+            setup_point=self.setupPoint.value(),
+        )
         self.set_heater_thread.start()
         self.btnSetHeater.setEnabled(False)
         self.set_heater_thread.finished.connect(

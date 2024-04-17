@@ -65,6 +65,12 @@ class SumitomoF70Manager(DeviceManager):
     configs = DeviceConfigList()
 
 
+class LakeShoreTemperatureControllerManager(DeviceManager):
+    name = "LakeShore Temperature Controller"
+    main_widget_class = "interface.views.TemperatureControllerTabWidget"
+    configs = DeviceConfigList()
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -75,3 +81,4 @@ def restore_configs():
     AgilentSignalGeneratorManager.restore_config()
     RigolPowerSupplyManager.restore_config()
     SumitomoF70Manager.restore_config()
+    LakeShoreTemperatureControllerManager.restore_config()

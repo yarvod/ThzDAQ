@@ -26,6 +26,7 @@ class TemperatureGraphWindow(QWidget):
         self.dataset = defaultdict(dict[str, list])
         self.prepare()
         self.setLayout(layout)
+        self.stream_window = 60
 
     def get_color(self, ds_id: str):
         if ds_id == "A":
@@ -66,7 +67,7 @@ class TemperatureGraphWindow(QWidget):
             self.dataset[ds_id]["x"] = [x]
             return
 
-        if max(self.dataset[ds_id]["x"]) >= state.LAKE_SHORE_STREAM_TIME:
+        if max(self.dataset[ds_id]["x"]) >= self.stream_window:
             del self.dataset[ds_id]["y"][0]
             del self.dataset[ds_id]["x"][0]
 

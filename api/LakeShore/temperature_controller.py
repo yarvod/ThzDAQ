@@ -1,23 +1,26 @@
 from typing import Dict
 
-from api.adapters.socket_adapter import SocketAdapter
 from settings import SOCKET
 from store.state import state
 from utils.classes import BaseInstrument
 
 
 class TemperatureController(BaseInstrument):
+    """
+    Default port 7777
+    Default host 169.254.0.56
+    """
+
     def __init__(
         self,
-        host: str = state.LAKE_SHORE_IP,
+        host: str = "169.254.0.56",
         gpib: int = None,
         adapter: str = SOCKET,
         delay=0,
         *args,
         **kwargs,
     ):
-        super().__init__(host, gpib, adapter, *args, **kwargs)
-        self.adapter = SocketAdapter(host=host, port=kwargs.get("port"), delay=delay)
+        super().__init__(host, gpib, adapter, *args, delay=delay, **kwargs)
 
     def idn(self) -> str:
         return self.query("*IDN?")
