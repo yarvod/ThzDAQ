@@ -73,12 +73,12 @@ class App(QMainWindow):
         self.dock_manager = None
 
         self.menuBar = self.menuBar()
-        self.menuView = QMenu("Views", self)
+        self.menuBase = QMenu("Base", self)
         self.menuDevice = QMenu("Devices", self)
         self.menuGraph = QMenu("Graphs", self)
         self.menuMeasure = QMenu("Measures", self)
 
-        self.menuBar.addMenu(self.menuView)
+        self.menuBar.addMenu(self.menuBase)
         self.menuBar.addMenu(self.menuDevice)
         self.menuBar.addMenu(self.menuGraph)
         self.menuBar.addMenu(self.menuMeasure)
@@ -94,7 +94,7 @@ class App(QMainWindow):
         self.setup_dock_widget = QtAds.CDockWidget("SetUp")
         self.tab_setup = SetUpTabWidget(self)
         self.setup_dock_widget.setWidget(self.tab_setup)
-        self.menuView.addAction(self.setup_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.setup_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
             QtAds.SideBarLeft, self.setup_dock_widget
         )
@@ -102,7 +102,7 @@ class App(QMainWindow):
         self.data_dock_widget = QtAds.CDockWidget("Data")
         self.tab_data = MeasureDataTabWidget(self)
         self.data_dock_widget.setWidget(self.tab_data)
-        self.menuView.addAction(self.data_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.data_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
             QtAds.SideBarLeft, self.data_dock_widget
         )
@@ -111,7 +111,7 @@ class App(QMainWindow):
         self.sis_block_dock_widget = QtAds.CDockWidget("SIS Block")
         self.tab_sis_block = BlockTabWidget(self)
         self.sis_block_dock_widget.setWidget(self.tab_sis_block)
-        self.menuView.addAction(self.sis_block_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.sis_block_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidget(
             QtAds.RightDockWidgetArea, self.sis_block_dock_widget
         )
@@ -119,7 +119,7 @@ class App(QMainWindow):
         self.vna_dock_widget = QtAds.CDockWidget("VNA")
         self.tab_vna = VNATabWidget(self)
         self.vna_dock_widget.setWidget(self.tab_vna)
-        self.menuView.addAction(self.vna_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.vna_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.vna_dock_widget
         )
@@ -127,7 +127,7 @@ class App(QMainWindow):
         self.nrx_dock_widget = QtAds.CDockWidget("Power Meter")
         self.tab_nrx = PowerMeterTabWidget(self)
         self.nrx_dock_widget.setWidget(self.tab_nrx)
-        self.menuView.addAction(self.nrx_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.nrx_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.nrx_dock_widget
         )
@@ -135,7 +135,7 @@ class App(QMainWindow):
         self.grid_dock_widget = QtAds.CDockWidget("GRID")
         self.tab_grid = GridTabWidget(self)
         self.grid_dock_widget.setWidget(self.tab_grid)
-        self.menuView.addAction(self.grid_dock_widget.toggleViewAction())
+        self.menuBase.addAction(self.grid_dock_widget.toggleViewAction())
         self.dock_manager.addDockWidgetTab(
             QtAds.RightDockWidgetArea, self.grid_dock_widget
         )
@@ -312,14 +312,14 @@ class App(QMainWindow):
         self,
         name: str,
         widget_class,
-        menu: Literal["view", "device", "graph", "measure"] = "view",
+        menu: Literal["base", "device", "graph", "measure"] = "base",
         **kwargs,
     ):
         dock_widget = QtAds.CDockWidget(name)
         widget = widget_class(self, **kwargs)
         dock_widget.setWidget(widget)
-        if menu == "view":
-            self.menuView.addAction(dock_widget.toggleViewAction())
+        if menu == "base":
+            self.menuBase.addAction(dock_widget.toggleViewAction())
         elif menu == "graph":
             self.menuGraph.addAction(dock_widget.toggleViewAction())
         elif menu == "measure":
@@ -331,7 +331,7 @@ class App(QMainWindow):
 
     def delete_dock_widget(self, name: str):
         dock_widget = self.dock_manager.findDockWidget(name)
-        self.menuView.removeAction(dock_widget.toggleViewAction())
+        self.menuBase.removeAction(dock_widget.toggleViewAction())
         self.dock_manager.removeDockWidget(dock_widget)
 
     def restore_state(self):
