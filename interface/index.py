@@ -169,13 +169,8 @@ class App(QMainWindow):
         self.add_dock_widget(
             "Chopper", import_class("interface.views.ChopperTabWidget"), "device"
         )
-
-        self.yig_dock_widget = QtAds.CDockWidget("YIG filter")
-        self.yig_widget = YIGWidget(self)
-        self.yig_dock_widget.setWidget(self.yig_widget)
-        self.menuView.addAction(self.yig_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.yig_dock_widget
+        self.add_dock_widget(
+            "YIG filter", import_class("interface.views.YIGWidget"), "device"
         )
 
         # Add measures widgets
@@ -340,32 +335,15 @@ class App(QMainWindow):
             self.graph_temperature_dock_widget
         )
 
-        self.pif_curve_dock_widget = QtAds.CDockWidget("P-IF curve")
-        self.pif_curve_widget = PowerIFGraphWindow(self)
-        self.pif_curve_dock_widget.setWidget(self.pif_curve_widget)
-        self.menuGraph.addAction(self.pif_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.pif_curve_dock_widget
+        self.add_dock_widget(
+            "P-IF curve", import_class("interface.windows.PowerIFGraphWindow"), "graph"
         )
-        self.yig_widget.powerIfGraphWindow = self.pif_curve_dock_widget
-
-        self.yif_curve_dock_widget = QtAds.CDockWidget("Y-IF curve")
-        self.yif_curve_widget = YIFGraphWindow(self)
-        self.yif_curve_dock_widget.setWidget(self.yif_curve_widget)
-        self.menuGraph.addAction(self.yif_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.yif_curve_dock_widget
+        self.add_dock_widget(
+            "Y-IF curve", import_class("interface.windows.YIFGraphWindow"), "graph"
         )
-        self.yig_widget.yIfGraphWindow = self.yif_curve_dock_widget
-
-        self.tnif_curve_dock_widget = QtAds.CDockWidget("Tn-IF curve")
-        self.tnif_curve_widget = TnIFGraphWindow(self)
-        self.tnif_curve_dock_widget.setWidget(self.tnif_curve_widget)
-        self.menuGraph.addAction(self.tnif_curve_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.tnif_curve_dock_widget
+        self.add_dock_widget(
+            "Tn-IF curve", import_class("interface.windows.TnIFGraphWindow"), "graph"
         )
-        self.yig_widget.tnIfGraphWindow = self.tnif_curve_dock_widget
 
     def add_dock_widget(
         self,

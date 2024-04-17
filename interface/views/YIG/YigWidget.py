@@ -24,6 +24,7 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.state import state
 from store.base import MeasureModel
 from threads import Thread
+from utils.dock import Dock
 from utils.functions import linear, get_if_tn
 
 logger = logging.getLogger(__name__)
@@ -213,25 +214,20 @@ class MeasureThread(Thread):
         self.measure.save()
 
 
-class YIGWidget(QScrollArea):
+class YIGWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
-        self.widget = QWidget()
-        self.layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
+        self.createGroupNiYig()
+        self.createGroupMeas()
+        layout.addWidget(self.groupNiYig)
+        layout.addWidget(self.groupMeas)
+        layout.addStretch()
+        self.setLayout(layout)
+
         self.powerIfGraphWindow = None
         self.yIfGraphWindow = None
         self.tnIfGraphWindow = None
-        self.createGroupNiYig()
-        self.createGroupMeas()
-        self.layout.addWidget(self.groupNiYig)
-        self.layout.addWidget(self.groupMeas)
-        self.layout.addStretch()
-        self.widget.setLayout(self.layout)
-
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setWidgetResizable(True)
-        self.setWidget(self.widget)
 
     def createGroupMeas(self):
         self.groupMeas = GroupBox("P-IF measurement")
@@ -342,6 +338,11 @@ class YIGWidget(QScrollArea):
         if state.CHOPPER_SWITCH:
             self.meas_thread.stream_y_results.connect(self.show_y_if_graph)
             self.meas_thread.stream_tn_results.connect(self.show_tn_if_graph)
+
+        self.powerIfGraphWindow = Dock.ex.dock_manager.findDockWidget("P-IF curve")
+        self.yIfGraphWindow = Dock.ex.dock_manager.findDockWidget("Y-IF curve")
+        self.tnIfGraphWindow = Dock.ex.dock_manager.findDockWidget("Tn-IF curve")
+
         self.meas_thread.start()
 
         self.btnStartMeas.setEnabled(False)
