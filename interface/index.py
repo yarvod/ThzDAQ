@@ -71,7 +71,7 @@ class App(QMainWindow):
         self.setup_dock_widget.setWidget(self.tab_setup)
         self.menuBase.addAction(self.setup_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
-            QtAds.SideBarLeft, self.setup_dock_widget
+            QtAds.SideBarLocation.SideBarLeft, self.setup_dock_widget
         )
 
         self.data_dock_widget = QtAds.CDockWidget("Data")
@@ -79,7 +79,7 @@ class App(QMainWindow):
         self.data_dock_widget.setWidget(self.tab_data)
         self.menuBase.addAction(self.data_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
-            QtAds.SideBarLeft, self.data_dock_widget
+            QtAds.SideBarLocation.SideBarLeft, self.data_dock_widget
         )
 
         # Add devices widgets
@@ -188,7 +188,9 @@ class App(QMainWindow):
             self.menuMeasure.addAction(dock_widget.toggleViewAction())
         elif menu == "device":
             self.menuDevice.addAction(dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock_widget)
+        self.dock_manager.addDockWidget(
+            QtAds.DockWidgetArea.NoDockWidgetArea, dock_widget
+        )
         dock_widget.closeDockWidget()
 
     def delete_dock_widget(self, name: str):
