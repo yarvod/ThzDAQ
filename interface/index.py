@@ -1,6 +1,5 @@
 from typing import Literal
 from PyQt5.QtCore import QSignalBlocker, QSettings
-from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,

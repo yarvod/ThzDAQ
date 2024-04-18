@@ -1,6 +1,5 @@
 from typing import List
 
-from api.adapters.prologix_ethernet_adapter import PrologixEthernetAdapter
 from settings import PROLOGIX
 from store.state import state
 from utils.classes import BaseInstrument

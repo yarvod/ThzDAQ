@@ -5,7 +5,6 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
-    QPushButton,
     QLabel,
 )
 
@@ -13,7 +12,6 @@ from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
-from interface.windows.spectrumGraphWindow import SpectrumGraphWindow
 from store.state import state
 from utils.dock import Dock
 

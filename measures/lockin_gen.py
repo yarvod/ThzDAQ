@@ -5,8 +5,6 @@ import time
 import numpy as np
 
 from api.Agilent.signal_generator import SignalGenerator
-from api.Keithley.power_supply import PowerSupply
-from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.SRS.LockIn_SR830 import LockIn
 from store.state import state
 

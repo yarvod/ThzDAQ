@@ -3,7 +3,7 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QLabel,
     QFormLayout,
-    QScrollArea,
     QCheckBox,
     QProgressBar,
 )

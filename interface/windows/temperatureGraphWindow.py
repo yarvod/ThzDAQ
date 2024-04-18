@@ -5,7 +5,6 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
-from store.state import state
 
 logger = logging.getLogger(__name__)
 

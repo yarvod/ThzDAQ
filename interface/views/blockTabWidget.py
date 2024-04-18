@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
-    QScrollArea,
     QProgressBar,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread

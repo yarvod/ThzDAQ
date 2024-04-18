@@ -2,14 +2,13 @@ import logging
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGridLayout,
     QLabel,
     QSizePolicy,
-    QScrollArea,
     QCheckBox,
     QProgressBar,
     QGroupBox as GroupBox,

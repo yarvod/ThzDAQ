@@ -2,7 +2,6 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
-    QPushButton,
     QLabel,
     QSpinBox,
     QFormLayout,

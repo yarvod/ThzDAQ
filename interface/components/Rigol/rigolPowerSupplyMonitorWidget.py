@@ -1,7 +1,6 @@
 import time
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QGroupBox,
     QSizePolicy,
@@ -9,7 +8,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QVBoxLayout,
     QHBoxLayout,
-    QFormLayout,
     QCheckBox,
 )
 
