@@ -33,6 +33,7 @@ class App(QMainWindow):
         super().__init__()
         self.title = title
         self.company = company
+        self.perspective = None
         self.left = 0
         self.top = 0
         self.width = 1300
@@ -240,9 +241,7 @@ class App(QMainWindow):
         self.perspective_combobox.setSizePolicy(
             QSizePolicy.Preferred, QSizePolicy.Preferred
         )
-        self.perspective_combobox.currentTextChanged.connect(
-            self.dock_manager.openPerspective
-        )
+        self.perspective_combobox.currentTextChanged.connect(self.open_perspective)
         perspective_list_action.setDefaultWidget(self.perspective_combobox)
         self.toolBar.addSeparator()
         self.toolBar.addAction(perspective_list_action)
@@ -266,6 +265,12 @@ class App(QMainWindow):
     def update_perspective(self):
         perspective_name = self.perspective_combobox.currentText()
         self.dock_manager.addPerspective(perspective_name)
+
+    def open_perspective(self, name: str):
+        if self.perspective:
+            self.dock_manager.addPerspective(self.perspective)
+        self.dock_manager.openPerspective(name)
+        self.perspective = name
 
     def closeEvent(self, event):
         reply = ExitMessageBox(self)
