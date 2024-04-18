@@ -9,3 +9,6 @@ from .YIG import YIGWidget
 from .temperatureControllerTabWidget import TemperatureControllerTabWidget
 from .vnaTabWidget import VNATabWidget
 from .sis_reflection_measure import SisReflectionMeasureWidget
+from .blockTabWidget import BlockTabWidget
+from .powerMeterTabWidget import PowerMeterTabWidget
+from .GridTabWidget import GridTabWidget

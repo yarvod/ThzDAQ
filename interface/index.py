@@ -17,12 +17,8 @@ import PyQtAds as QtAds
 
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
-from interface.views.GridTabWidget import GridTabWidget
-from interface.views.blockTabWidget import BlockTabWidget
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
-from interface.views.powerMeterTabWidget import PowerMeterTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
-from interface.views.vnaTabWidget import VNATabWidget
 from store import store_configs
 from store.base import MeasureManager
 from utils.functions import import_class
@@ -86,32 +82,22 @@ class App(QMainWindow):
         )
 
         # Add devices widgets
-        self.sis_block_dock_widget = QtAds.CDockWidget("SIS Block")
-        self.tab_sis_block = BlockTabWidget(self)
-        self.sis_block_dock_widget.setWidget(self.tab_sis_block)
-        self.menuBase.addAction(self.sis_block_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidget(
-            QtAds.RightDockWidgetArea, self.sis_block_dock_widget
+        self.add_dock_widget(
+            "Scontel SIS block",
+            import_class("interface.views.BlockTabWidget"),
+            "device",
         )
-
-        self.nrx_dock_widget = QtAds.CDockWidget("Power Meter")
-        self.tab_nrx = PowerMeterTabWidget(self)
-        self.nrx_dock_widget.setWidget(self.tab_nrx)
-        self.menuBase.addAction(self.nrx_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.nrx_dock_widget
+        self.add_dock_widget(
+            "RohdeSchwarz Power Meter",
+            import_class("interface.views.PowerMeterTabWidget"),
+            "device",
         )
-
-        self.grid_dock_widget = QtAds.CDockWidget("GRID")
-        self.tab_grid = GridTabWidget(self)
-        self.grid_dock_widget.setWidget(self.tab_grid)
-        self.menuBase.addAction(self.grid_dock_widget.toggleViewAction())
-        self.dock_manager.addDockWidgetTab(
-            QtAds.RightDockWidgetArea, self.grid_dock_widget
+        self.add_dock_widget(
+            "GRID", import_class("interface.views.GridTabWidget"), "device"
         )
 
         self.add_dock_widget(
-            "Rohde Schwarz Spectrum",
+            "RohdeSchwarz Spectrum",
             import_class("interface.views.SpectrumTabWidget"),
             "device",
         )
@@ -124,7 +110,7 @@ class App(QMainWindow):
 
         # Add measures widgets
         self.add_dock_widget(
-            "Sis power Rn measure",
+            "Shot noise IF measure",
             import_class("interface.views.SisRnPowerMeasureTabWidget"),
             "measure",
         )
