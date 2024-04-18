@@ -1,5 +1,6 @@
 from typing import Literal
 from PyQt5.QtCore import QSignalBlocker, QSettings
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QMainWindow,
     QMessageBox,
@@ -210,14 +211,44 @@ class App(QMainWindow):
         except ValueError:
             pass
 
+    def delete_perspective(self):
+        perspective = self.perspective_combobox.currentText()
+        perspective_index = self.perspective_combobox.currentIndex()
+        reply = QMessageBox(self)
+        reply.setWindowTitle(f"Deleting perspective {perspective}")
+        reply.setText(f"Are you sure want to delete perspective {perspective} !?")
+        reply.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        reply.setDefaultButton(QMessageBox.StandardButton.No)
+        reply.setIcon(QMessageBox.Icon.Warning)
+        button = reply.exec()
+        if button == QMessageBox.StandardButton.Yes:
+            self.dock_manager.removePerspective(perspective)
+            self.perspective_combobox.removeItem(perspective_index)
+        else:
+            pass
+
     def restore_from_ini_file(self):
-        settings = QSettings("settings.ini", QSettings.IniFormat)
-        self.dock_manager.loadPerspectives(settings)
-        self.store_state()
-        try:
-            self.dock_manager.perspectiveNames().index("SIS measuring")
-            self.perspective_combobox.setCurrentText("SIS measuring")
-        except ValueError:
+        reply = QMessageBox(self)
+        reply.setWindowTitle("Restoring default perspectives")
+        reply.setText("Are you sure want to restore default perspectives?")
+        reply.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        reply.setDefaultButton(QMessageBox.StandardButton.No)
+        reply.setIcon(QMessageBox.Icon.Question)
+        button = reply.exec()
+        if button == QMessageBox.StandardButton.Yes:
+            settings = QSettings("settings.ini", QSettings.IniFormat)
+            self.dock_manager.loadPerspectives(settings)
+            self.store_state()
+            try:
+                self.dock_manager.perspectiveNames().index("SIS measuring")
+                self.perspective_combobox.setCurrentText("SIS measuring")
+            except ValueError:
+                pass
+        else:
             pass
 
     def store_state(self):
@@ -228,8 +259,14 @@ class App(QMainWindow):
     def create_perspective_ui(self):
         create_perspective_action = QAction("Create Perspective", self)
         create_perspective_action.triggered.connect(self.create_perspective)
-        update_perspective_action = QAction("Update Perspective", self)
+
+        update_perspective_action = QAction("Update Current Perspective", self)
         update_perspective_action.triggered.connect(self.update_perspective)
+
+        delete_perspective_action = QAction("Delete Current Perspective", self)
+        delete_perspective_action.setToolTip("DANGER! You will lost this perspective!")
+        delete_perspective_action.triggered.connect(self.delete_perspective)
+
         restore_default_perspectives_action = QAction("!Restore Defaults!", self)
         restore_default_perspectives_action.setToolTip(
             "DANGER! Restoring default perspectives!\nOnly for those in the know!"
@@ -237,6 +274,7 @@ class App(QMainWindow):
         restore_default_perspectives_action.triggered.connect(
             self.restore_from_ini_file
         )
+
         perspective_list_action = QWidgetAction(self)
         self.perspective_combobox = QComboBox(self)
         self.perspective_combobox.setSizeAdjustPolicy(QComboBox.AdjustToContents)
@@ -249,6 +287,7 @@ class App(QMainWindow):
         self.toolBar.addAction(perspective_list_action)
         self.toolBar.addAction(create_perspective_action)
         self.toolBar.addAction(update_perspective_action)
+        self.toolBar.addAction(delete_perspective_action)
         self.toolBar.addAction(restore_default_perspectives_action)
 
     def create_perspective(self):
