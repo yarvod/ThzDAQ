@@ -168,7 +168,7 @@ class DeviceManager:
     configs: DeviceConfigList[DeviceConfig] = DeviceConfigList()
     setup_widget = None
     main_widget_class = None
-    event_manager = DeviceEventManager()
+    event_manager: QObject = None
 
     @classmethod
     def add_config(cls, **kwargs) -> int:
@@ -177,7 +177,8 @@ class DeviceManager:
             name=cls.name, cid=cls.last_id, config_manager=cls, **kwargs
         )
         cls.configs.append(config)
-        cls.event_manager.configs_updated.emit()
+        if cls.event_manager is not None:
+            cls.event_manager.configs_updated.emit()
         if cls.main_widget_class:
             Dock.add_widget_to_dock(
                 name=config.name,
@@ -222,6 +223,7 @@ class DeviceManager:
             name=cls.configs.filter(cid=cid).first().name,
         )
         index = cls.configs.get_index_by_cid(cid=cid)
-        if index:
+        if index is not None:
             cls.configs.delete_by_index(index)
-            cls.event_manager.configs_updated.emit()
+            if cls.event_manager is not None:
+                cls.event_manager.configs_updated.emit()

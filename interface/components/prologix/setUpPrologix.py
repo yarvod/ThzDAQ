@@ -38,7 +38,6 @@ class SetUpPrologix(QGroupBox):
     def add_adapter_info_widget(self, cid, dev_info):
         self.instances[cid] = dev_info
         self.layout.addWidget(dev_info)
-        self.layout.addWidget(HLine(self))
 
     def init_adapter(self, kwargs):
         cid = PrologixManager.add_config(**kwargs)

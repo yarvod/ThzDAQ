@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 import settings
 from interface.components.adapterAddForm import AdapterAddForm
 from interface.components.ui.Button import Button
+from interface.components.ui.Lines import HLine
 from store.adapterConfig import AdapterConfig
 from threads import Thread
 
@@ -85,6 +86,7 @@ class AdapterInfo(QWidget):
 
         layout.addLayout(flayout)
         layout.addLayout(hlayout)
+        layout.addWidget(HLine(self))
         self.setLayout(layout)
 
     def initialize(self):

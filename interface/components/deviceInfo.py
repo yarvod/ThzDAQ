@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 import settings
 from interface.components.deviceAddForm import DeviceAddForm
 from interface.components.ui.Button import Button
+from interface.components.ui.Lines import HLine
 from store.deviceConfig import DeviceConfig
 from threads import Thread
 
@@ -101,6 +102,7 @@ class DeviceInfo(QWidget):
 
         layout.addLayout(flayout)
         layout.addLayout(hlayout)
+        layout.addWidget(HLine(self))
         self.setLayout(layout)
 
     def initialize(self):
@@ -144,4 +146,5 @@ class DeviceInfo(QWidget):
         if action == QMessageBox.StandardButton.Yes:
             self.config.config_manager.delete_config(self.config.cid)
             self.parent().delete_device_info(self.config.cid)
+            del self.config
             self.deleteLater()

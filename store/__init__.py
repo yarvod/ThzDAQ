@@ -2,7 +2,12 @@ from typing import Union
 
 import settings
 from store.adapterConfig import AdapterManager
-from store.deviceConfig import DeviceManager, DeviceConfig, DeviceConfigList
+from store.deviceConfig import (
+    DeviceManager,
+    DeviceConfig,
+    DeviceConfigList,
+    DeviceEventManager,
+)
 
 
 class KeithleyPowerSupplyManager(DeviceManager):
@@ -75,6 +80,7 @@ class RohdeSchwarzVnaZva67Manager(DeviceManager):
     name = "Rohde Schwarz VNA ZVA 67"
     main_widget_class = "interface.views.VNATabWidget"
     configs = DeviceConfigList()
+    event_manager = DeviceEventManager()
 
 
 class PrologixManager(AdapterManager):
