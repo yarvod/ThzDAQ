@@ -171,6 +171,7 @@ class MeasureThread(Thread):
                     time.sleep(2)
 
         if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_cold()
             hot = np.array(results["hot"]["power"])
             cold = np.array(results["cold"]["power"])
             if len(hot) and len(cold):

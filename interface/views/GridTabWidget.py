@@ -205,6 +205,7 @@ class StepBiasPowerThread(Thread):
                     time.sleep(2)
 
             if state.CHOPPER_SWITCH:
+                chopper_manager.chopper.align_to_cold()
                 if len(results["hot"]["power"]) and len(results["cold"]["power"]):
                     volt_diff, power_diff, tn = get_voltage_tn(
                         hot_power=results["hot"]["power"],

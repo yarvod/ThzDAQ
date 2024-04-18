@@ -91,6 +91,41 @@ class ChopperEthernet(Chopper):
         self.set_origin()
         # self.go_to_pos(0)
 
+    def align_to_cold(self):
+        steps = 20
+        step = 1
+        di2, di3 = self.read_di23()
+        if di2 is True and di3 is True:
+            self.path0_slow(90)
+            time.sleep(1)
+
+        while not (di2 is False and di3 is False):
+            logger.info(f"[STEP {step}/{steps}] Start new step")
+            if step >= steps:
+                logger.info(f"Break align to hot, {step} steps exceeded")
+                break
+            if di2 is True and di3 is False:
+                logger.info(
+                    f"[STEP {step}/{steps}] Left D is Hot, Right D is Cold. \n Rotate 2 degree CW"
+                )
+                self.motor_direction(0)
+                self.path0_slow(10)
+                time.sleep(0.1)
+                di2, di3 = self.read_di23()
+            elif di2 is False and di3 is True:
+                logger.info(
+                    f"[STEP {step}/{steps}] Left D is Cold, Right D is Hot. \n Rotate 2 degree CCW"
+                )
+                self.motor_direction(1)
+                self.path0_slow(10)
+                time.sleep(0.1)
+                di2, di3 = self.read_di23()
+            step += 1
+        else:
+            self.path0_slow(3)
+        self.motor_direction(0)
+        self.set_origin()
+
 
 if __name__ == "__main__":
     chopper = ChopperEthernet()
