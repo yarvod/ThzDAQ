@@ -27,7 +27,7 @@ from utils.functions import import_class
 class App(QMainWindow):
     def __init__(
         self,
-        title: str = "SIS manager",
+        title: str = "SIS manager dev",
         company: str = "ASC",
     ):
         super().__init__()
