@@ -148,9 +148,10 @@ class MeasureModel:
     ind_attr_map = {
         0: "id",
         1: "measure_type",
-        2: "started",
-        3: "finished",
-        4: "saved",
+        2: "comment",
+        3: "started",
+        4: "finished",
+        5: "saved",
     }
     type_class = MeasureType
 
@@ -170,6 +171,7 @@ class MeasureModel:
         self.started = datetime.now()
         self.finished = finished
         self.saved = False
+        self.comment = ""
 
     @staticmethod
     def validate_type(value: str) -> None:
@@ -196,6 +198,7 @@ class MeasureModel:
             finished = datetime.now()
         return {
             "id": self.id,
+            "comment": self.comment,
             "type": self.measure_type,
             "measure": self.type_display,
             "started": self.started.strftime("%Y-%m-%d %H:%M:%S"),
@@ -210,7 +213,7 @@ class MeasureTableModel(QAbstractTableModel):
     def __init__(self, data=None):
         super().__init__()
         self._data = []
-        self._headers = ["Id", "Type", "Started", "Finished", "Saved"]
+        self._headers = ["Id", "Type", "Comment", "Started", "Finished", "Saved"]
 
     def data(self, index, role):
         if not self._data:
@@ -242,7 +245,8 @@ class MeasureTableModel(QAbstractTableModel):
         self.beginResetModel()
         measures = self.manager.all()
         self._data = [
-            [m.id, m.type_display, m.started, m.finished, m.saved] for m in measures
+            [m.id, m.type_display, m.comment, m.started, m.finished, m.saved]
+            for m in measures
         ]
         self.endResetModel()
 
