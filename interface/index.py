@@ -19,6 +19,7 @@ from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
 from interface.views.measureDataTabWidget import MeasureDataTabWidget
 from interface.views.setUpTabWidget import SetUpTabWidget
+import interface.windows  # noqa
 from store import store_configs
 from store.base import MeasureManager
 from utils.functions import import_class
