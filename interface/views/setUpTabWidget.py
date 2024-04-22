@@ -26,7 +26,9 @@ from interface.components.Rigol.setUpRigolPowerSupply import SetUpRigolPowerSupp
 from interface.components.RohdeSchwarz.setUpVnaZva67 import SetUpVnaZva67Widget
 from interface.components.Sumitomo import SetUpSumitomoF70Widget
 from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
-from interface.components.Spectrum.SetupSpectrumGroup import SetupSpectrumGroup
+from interface.components.RohdeSchwarz.setUpSpectrumFsek30 import (
+    SetUpSpectrumFsek30Widget,
+)
 from interface.components.keithley.setUpKeithley import SetUpKeithley
 from interface.components.power_meter.setUpPowerMeter import SetUpPowerMeter
 from interface.components.prologix.setUpPrologix import SetUpPrologix
@@ -98,7 +100,7 @@ class SetUpTabWidget(QWidget):
         self.layout.addWidget(self.groupGrid)
         self.layout.addWidget(SetUpAgilentSignalGenerator(self))
         self.layout.addWidget(SetUpLakeshoreTemperatureControllerWidget(self))
-        self.layout.addWidget(SetupSpectrumGroup(self))
+        self.layout.addWidget(SetUpSpectrumFsek30Widget(self))
         self.layout.addWidget(SetupChopperGroup(self))
         self.layout.addWidget(SetUpDigitalYigGroup(self))
         self.layout.addWidget(SetUpKeithley(self))

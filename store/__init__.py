@@ -83,6 +83,13 @@ class RohdeSchwarzVnaZva67Manager(DeviceManager):
     event_manager = DeviceEventManager()
 
 
+class RohdeSchwarzSpectrumFsek30Manager(DeviceManager):
+    name = "Rohde Schwarz Spectrum FSEK 30"
+    main_widget_class = "interface.views.SpectrumTabWidget"
+    configs = DeviceConfigList()
+    event_manager = DeviceEventManager()
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -95,6 +102,7 @@ def restore_configs():
     SumitomoF70Manager.restore_config()
     LakeShoreTemperatureControllerManager.restore_config()
     RohdeSchwarzVnaZva67Manager.restore_config()
+    RohdeSchwarzSpectrumFsek30Manager.restore_config()
 
 
 def store_configs():
@@ -105,3 +113,4 @@ def store_configs():
     SumitomoF70Manager.store_config()
     LakeShoreTemperatureControllerManager.store_config()
     RohdeSchwarzVnaZva67Manager.store_config()
+    RohdeSchwarzSpectrumFsek30Manager.store_config()

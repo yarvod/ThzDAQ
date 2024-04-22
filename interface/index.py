@@ -99,11 +99,6 @@ class App(QMainWindow):
         )
 
         self.add_dock_widget(
-            "RohdeSchwarz Spectrum",
-            import_class("interface.views.SpectrumTabWidget"),
-            "device",
-        )
-        self.add_dock_widget(
             "Chopper", import_class("interface.views.ChopperTabWidget"), "device"
         )
         self.add_dock_widget(

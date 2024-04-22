@@ -1,7 +1,7 @@
 import time
 from typing import Dict
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -12,17 +12,35 @@ from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
+from store import RohdeSchwarzSpectrumFsek30Manager
 from store.state import state
+from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 
 
-class StreamSpectrumThread(QThread):
+class StreamSpectrumThread(Thread):
     data = pyqtSignal(dict)
 
+    def __init__(
+        self,
+        cid: int,
+        step_delay: float,
+    ):
+        super().__init__()
+        self.cid = cid
+        self.step_delay = step_delay
+        self.config = RohdeSchwarzSpectrumFsek30Manager.get_config(cid)
+        self.spectrum = None
+
     def run(self):
-        block = SpectrumBlock()
+        try:
+            self.spectrum = SpectrumBlock(**self.config.dict())
+        except DeviceConnectionError:
+            self.finished.emit()
+            return
         while 1:
-            power = block.get_trace_data()
+            power = self.spectrum.get_trace_data()
             if not power:
                 continue
             self.data.emit(
@@ -31,12 +49,13 @@ class StreamSpectrumThread(QThread):
                     "y": power,
                 }
             )
-            time.sleep(state.SPECTRUM_STEP_DELAY)
+            time.sleep(self.step_delay)
 
 
 class SpectrumMonitor(QGroupBox):
-    def __init__(self, parent):
+    def __init__(self, parent, cid: int):
         super().__init__(parent)
+        self.cid = cid
         self.setTitle("Monitor")
         layout = QVBoxLayout()
 
@@ -60,8 +79,9 @@ class SpectrumMonitor(QGroupBox):
         self.setLayout(layout)
 
     def startStreamSpectrum(self):
-        state.SPECTRUM_STEP_DELAY = self.timeDelay.value()
-        self.spectrum_thread = StreamSpectrumThread()
+        self.spectrum_thread = StreamSpectrumThread(
+            cid=self.cid, step_delay=self.timeDelay.value()
+        )
         self.spectrum_thread.data.connect(self.show_spectrum)
         self.spectrumStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(
             "Spectrum P-F curve"
