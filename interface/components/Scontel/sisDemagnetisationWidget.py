@@ -75,14 +75,14 @@ class SisDemagnetisationWidget(QGroupBox):
         self.minCurrent = DoubleSpinBox(self)
         self.minCurrent.setRange(-50, 50)
         self.minCurrent.setDecimals(1)
-        self.minCurrent.setValue(-50)
+        self.minCurrent.setValue(-30)
 
         self.maxCurrentLabel = QLabel(self)
         self.maxCurrentLabel.setText("Max current, mA:")
         self.maxCurrent = DoubleSpinBox(self)
         self.maxCurrent.setRange(-50, 50)
         self.maxCurrent.setDecimals(1)
-        self.maxCurrent.setValue(50)
+        self.maxCurrent.setValue(30)
 
         self.currentStepLabel = QLabel(self)
         self.currentStepLabel.setText("Step current, mA:")
