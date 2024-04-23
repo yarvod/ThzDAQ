@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Tuple
 
-from settings import PROLOGIX_ETHERNET
+import numpy as np
+
+import settings
 from utils.classes import BaseInstrument
-from utils.decorators import exception
 
 
 class SpectrumBlock(BaseInstrument):
@@ -10,17 +11,15 @@ class SpectrumBlock(BaseInstrument):
         self,
         host: str,
         gpib: int = None,
-        adapter: str = PROLOGIX_ETHERNET,
+        adapter: str = settings.PROLOGIX_ETHERNET,
         *args,
         **kwargs,
     ):
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
-    @exception
     def idn(self) -> str:
         return self.query("*IDN?")
 
-    @exception
     def reset(self) -> None:
         self.write("*RST")
 
@@ -43,18 +42,58 @@ class SpectrumBlock(BaseInstrument):
     def get_peak_power(self) -> float:
         return float(self.query(f"CALC:MARK:Y?"))
 
-    def get_trace_data(self) -> List[float]:
-        response = self.query(f":TRAC:DATA? TRACE1")
+    def get_trace_data(self) -> Tuple[List[float], List[float]]:
+        response = self.query(f":TRAC:DATA? TRACE1", delay=0.1)
+        start = self.get_start_frequency()
+        stop = self.get_stop_frequency()
+        points_raw = response.split(",")
+        frequency_list = np.linspace(start, stop, len(points_raw))
+        frequency_indxs = []
         points = []
-        for p in response.split(","):
+        for i, p in enumerate(points_raw):
             try:
                 points.append(float(p))
+                frequency_indxs.append(i)
             except ValueError:
                 continue
-        return points
+        return points, frequency_list[frequency_indxs]
+
+    def set_video_bw(self, value: float):
+        """Available values, kHz:
+        1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000
+        """
+        available_list = np.array(
+            [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000]
+        )
+        diff = np.abs(available_list - value)
+        min_ind = np.where(diff == np.min(diff))[0][0]
+        bw = available_list[min_ind]
+        self.write(f":BWIDth:VIDeo {bw}kHz")
+
+    def set_video_bw_auto(self, value: bool):
+        """True - ON, False - OFF"""
+        if value:
+            return self.query(f":BWIDth:VIDeo:AUTO ON")
+        return self.query(f":BWIDth:VIDeo:AUTO OFF")
+
+    def set_start_frequency(self, value: float):
+        """value in Hz"""
+        self.write(f":FREQuency:STARt {value}Hz")
+
+    def get_start_frequency(self):
+        """value in Hz"""
+        return float(self.query(f":FREQuency:STARt?"))
+
+    def set_stop_frequency(self, value: float):
+        """value in Hz"""
+        self.write(f":FREQuency:STOP {value}Hz")
+
+    def get_stop_frequency(self):
+        """value in Hz"""
+        return float(self.query(f":FREQuency:STOP?"))
 
 
 if __name__ == "__main__":
-    block = SpectrumBlock()
-    print("idn", block.idn())
-    print("trace", block.get_trace_data())
+    block = SpectrumBlock(host="", gpib=20, adapter=settings.PROLOGIX_USB, port="COM6")
+    block.set_start_frequency(2)
+    print("freq", block.get_start_frequency())

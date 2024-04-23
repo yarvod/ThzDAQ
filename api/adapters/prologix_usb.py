@@ -1,3 +1,5 @@
+import time
+
 from .serial_adapter import SerialAdapter
 from utils.classes import PrologixUsbMeta
 
@@ -43,6 +45,12 @@ class PrologixUsb(SerialAdapter, metaclass=PrologixUsbMeta):
         self._send("++read eoi")
         return super().read(num_bytes)
 
-    def query(self, cmd, eq_addr: int = None, buffer_size=1024 * 1024):
+    def query(
+        self, cmd, eq_addr: int = None, buffer_size=1024 * 1024, delay: float = 0
+    ):
         self.write(cmd, eq_addr)
+        if delay:
+            time.sleep(delay)
+        elif self.delay:
+            time.sleep(delay)
         return self.read(eq_addr, buffer_size)

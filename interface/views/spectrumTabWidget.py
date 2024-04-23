@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from interface.components.RohdeSchwarz.SpectrumMonitor import SpectrumMonitor
+from interface.components.RohdeSchwarz.spectrumConfigWidget import SpectrumConfigWidget
 
 
 class SpectrumTabWidget(QWidget):
@@ -7,8 +8,8 @@ class SpectrumTabWidget(QWidget):
         super().__init__(parent)
         self.cid = cid
         self.layout = QVBoxLayout(self)
-        self.spectrum_monitor = SpectrumMonitor(self, cid)
-        self.layout.addWidget(self.spectrum_monitor)
+        self.layout.addWidget(SpectrumConfigWidget(self, cid))
+        self.layout.addWidget(SpectrumMonitor(self, cid))
         self.layout.addStretch()
 
         self.setLayout(self.layout)

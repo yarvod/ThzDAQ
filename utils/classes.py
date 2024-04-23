@@ -69,7 +69,7 @@ class BaseInstrument:
 
     def query(self, cmd: str, **kwargs) -> str:
         if self.gpib:
-            return self.adapter.query(cmd, eq_addr=self.gpib)
+            return self.adapter.query(cmd, eq_addr=self.gpib, **kwargs)
         return self.adapter.query(cmd, **kwargs)
 
     def write(self, cmd: str) -> None:

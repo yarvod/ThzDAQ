@@ -22,8 +22,8 @@ class SerialAdapter(InstrumentAdapterInterface):
         self.serial.write(encoded_cmd)
 
     def _recv(self, byte_num) -> str:
-        value = self.serial.read_all()
-        return value.decode("ascii").rstrip()
+        value = self.serial.read(byte_num)
+        return value.decode("ascii").rstrip("\n\x00")
 
     def read(self, num_bytes=1024, **kwargs) -> str:
         return self._recv(num_bytes)

@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
     QLabel,
+    QHBoxLayout,
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
@@ -13,7 +14,6 @@ from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.FormWidget import FormWidget
 from store import RohdeSchwarzSpectrumFsek30Manager
-from store.state import state
 from threads import Thread
 from utils.dock import Dock
 from utils.exceptions import DeviceConnectionError
@@ -40,12 +40,12 @@ class StreamSpectrumThread(Thread):
             self.finished.emit()
             return
         while 1:
-            power = self.spectrum.get_trace_data()
+            power, freq = self.spectrum.get_trace_data()
             if not power:
                 continue
             self.data.emit(
                 {
-                    "x": list(range(len(power))),
+                    "x": freq,
                     "y": power,
                 }
             )
@@ -58,14 +58,15 @@ class SpectrumMonitor(QGroupBox):
         self.cid = cid
         self.setTitle("Monitor")
         layout = QVBoxLayout()
+        hlayout = QHBoxLayout()
 
         self.spectrumStreamGraphWindow = None
 
         self.timeDelayLabel = QLabel(self)
         self.timeDelayLabel.setText("Step delay, s")
         self.timeDelay = DoubleSpinBox(self)
-        self.timeDelay.setRange(0.4, 1)
-        self.timeDelay.setValue(state.SPECTRUM_STEP_DELAY)
+        self.timeDelay.setRange(0.01, 5)
+        self.timeDelay.setValue(0.4)
 
         self.btnStartSpectrum = Button("Start stream spectrum", animate=True)
         self.btnStartSpectrum.clicked.connect(self.startStreamSpectrum)
@@ -74,8 +75,9 @@ class SpectrumMonitor(QGroupBox):
         self.btnStopSpectrum.setEnabled(False)
 
         layout.addWidget(FormWidget(self, {self.timeDelayLabel: self.timeDelay}))
-        layout.addWidget(self.btnStartSpectrum)
-        layout.addWidget(self.btnStopSpectrum)
+        hlayout.addWidget(self.btnStartSpectrum)
+        hlayout.addWidget(self.btnStopSpectrum)
+        layout.addLayout(hlayout)
         self.setLayout(layout)
 
     def startStreamSpectrum(self):
