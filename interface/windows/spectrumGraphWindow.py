@@ -26,7 +26,7 @@ class SpectrumGraphWindow(QWidget):
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
-        self.graphWidget.setTitle(self.graph_title, color="#413C58", size="20pt")
+        self.graphWidget.setTitle(self.graph_title, color="#413C58", size="10pt")
         styles = {"color": "#413C58", "font-size": "15px"}
         self.graphWidget.setLabel("left", self.y_label, **styles)
         self.graphWidget.setLabel("bottom", self.x_label, **styles)
@@ -47,9 +47,9 @@ class SpectrumGraphWindow(QWidget):
             items.get("Stream").setData(x, y)
             return
 
-        pen = pg.mkPen(color="#0000FF")
+        pen = pg.mkPen(color="#0000FF", width=2)
         self.graphWidget.plot(
-            x, y, name="Stream", pen=pen, symbolSize=5, symbolBrush=pen.color()
+            x, y, name="Stream", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
 
     def addData(self, x: List, y: List) -> None:
