@@ -1,12 +1,11 @@
 import settings
-from store.state import state
 from utils.classes import BaseInstrument
 
 
 class LockIn(BaseInstrument):
     def __init__(
         self,
-        host: str = state.PROLOGIX_IP,
+        host: str = "",
         gpib: int = 8,
         adapter: str = settings.PROLOGIX_ETHERNET,
         port: int = None,

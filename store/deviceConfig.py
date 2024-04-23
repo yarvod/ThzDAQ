@@ -6,23 +6,6 @@ import settings
 from utils.dock import Dock
 from utils.functions import import_class
 
-# Developers
-AGILENT = "Agilent"
-ARDUINO = "Arduino"
-LEADSHINE = "LeadShine"
-LAKESHORE = "LakeShore"
-SCONTEL = "Scontel"
-SRS = "Stanford Research Systems"
-NI = "National Instruments"
-ROHDESCHWARZ = "Rohde Schwarz"
-SUMITOMO = "Sumitomo"
-RIGOL = "Rigol"
-KEITHLEY = "Keithley"
-PROLOGIX = "Prologix"
-PFEIFFER = "Pfeiffer"
-
-DEVICES = {KEITHLEY}
-
 
 class DeviceConfig(QObject):
     signal_adapter = pyqtSignal(str)

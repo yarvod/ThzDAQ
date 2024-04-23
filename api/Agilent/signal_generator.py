@@ -16,7 +16,7 @@ class SignalGenerator(BaseInstrument):
         self,
         host: str = "169.254.156.103",
         gpib: int = 19,
-        adapter: str = settings.PROLOGIX,
+        adapter: str = settings.PROLOGIX_ETHERNET,
         port: int = 1234,
         *args,
         **kwargs,

@@ -1,20 +1,17 @@
-from api.adapters.socket_adapter import SocketAdapter
-from utils.classes import PrologixMeta
+from .serial_adapter import SerialAdapter
+from utils.classes import PrologixUsbMeta
 
 
-class Prologix(SocketAdapter, metaclass=PrologixMeta):
-    __metaclass__ = PrologixMeta
-
+class PrologixUsb(SerialAdapter, metaclass=PrologixUsbMeta):
     def __init__(
         self,
-        host: str,
-        port: int = 1234,
+        port: str,
         timeout: float = 2,
         delay: float = 0,
         *args,
         **kwargs,
     ):
-        super().__init__(host, port, timeout, delay, *args, **kwargs)
+        super().__init__(port, timeout, delay, *args, **kwargs)
         self.setup()
 
     def setup(self):
@@ -46,11 +43,6 @@ class Prologix(SocketAdapter, metaclass=PrologixMeta):
         self._send("++read eoi")
         return super().read(num_bytes)
 
-    def query(self, cmd, eq_addr: int = None, buffer_size=1024 * 1024, **kwargs):
+    def query(self, cmd, eq_addr: int = None, buffer_size=1024 * 1024):
         self.write(cmd, eq_addr)
         return self.read(eq_addr, buffer_size)
-
-
-if __name__ == "__main__":
-    p = Prologix("169.254.156.103", port=1234)
-    print(p.query("*IDN?", eq_addr=20))

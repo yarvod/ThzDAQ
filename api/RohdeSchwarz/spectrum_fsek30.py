@@ -1,6 +1,6 @@
 from typing import List
 
-from settings import PROLOGIX
+from settings import PROLOGIX_ETHERNET
 from utils.classes import BaseInstrument
 from utils.decorators import exception
 
@@ -10,7 +10,7 @@ class SpectrumBlock(BaseInstrument):
         self,
         host: str,
         gpib: int = None,
-        adapter: str = PROLOGIX,
+        adapter: str = PROLOGIX_ETHERNET,
         *args,
         **kwargs,
     ):
@@ -45,7 +45,13 @@ class SpectrumBlock(BaseInstrument):
 
     def get_trace_data(self) -> List[float]:
         response = self.query(f":TRAC:DATA? TRACE1")
-        return [float(i) for i in response.split(",")]
+        points = []
+        for p in response.split(","):
+            try:
+                points.append(float(p))
+            except ValueError:
+                continue
+        return points
 
 
 if __name__ == "__main__":

@@ -29,6 +29,18 @@ class PrologixMeta(type):
         return cls._instances[host]
 
 
+class PrologixUsbMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        port = kwargs.get("port", None)
+        if not port:
+            port = args[0]  # FIXME: improve later
+        if port not in cls._instances:
+            cls._instances[port] = super(PrologixUsbMeta, cls).__call__(*args, **kwargs)
+        return cls._instances[port]
+
+
 class BaseInstrument:
     def __init__(
         self,
@@ -83,6 +95,12 @@ class InstrumentAdapterInterface:
     """
     This is the base interface for Instrument adapter
     """
+
+    def _send(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def _recv(self, *args, **kwargs):
+        raise NotImplementedError
 
     def read(self, *args, **kwargs):
         raise NotImplementedError
