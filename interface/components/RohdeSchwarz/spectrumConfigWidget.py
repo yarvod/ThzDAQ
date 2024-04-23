@@ -40,7 +40,9 @@ class SetConfigSpectrumThread(Thread):
             return
         self.spectrum.set_video_bw(self.video_bw)
         self.spectrum.set_start_frequency(self.start_frequency)
+        self.config.start_frequency = self.start_frequency
         self.spectrum.set_stop_frequency(self.stop_frequency)
+        self.config.stop_frequency = self.stop_frequency
 
         self.finished.emit()
 

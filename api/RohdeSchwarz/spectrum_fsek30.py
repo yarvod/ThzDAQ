@@ -42,10 +42,8 @@ class SpectrumBlock(BaseInstrument):
     def get_peak_power(self) -> float:
         return float(self.query(f"CALC:MARK:Y?"))
 
-    def get_trace_data(self) -> Tuple[List[float], List[float]]:
-        response = self.query(f":TRAC:DATA? TRACE1", delay=0.1)
-        start = self.get_start_frequency()
-        stop = self.get_stop_frequency()
+    def get_trace_data(self, start, stop) -> Tuple[List[float], List[float]]:
+        response = self.query(":TRAC:DATA? TRACE1", delay=0)
         points_raw = response.split(",")
         frequency_list = np.linspace(start, stop, len(points_raw))
         frequency_indxs = []

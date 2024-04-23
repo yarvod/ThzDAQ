@@ -39,8 +39,14 @@ class StreamSpectrumThread(Thread):
         except DeviceConnectionError:
             self.finished.emit()
             return
+        self.config.start_frequency = self.spectrum.get_start_frequency()
+        self.config.stop_frequency = self.spectrum.get_stop_frequency()
         while 1:
-            power, freq = self.spectrum.get_trace_data()
+            # self.config.start_frequency = self.spectrum.get_start_frequency()
+            # self.config.stop_frequency = self.spectrum.get_stop_frequency()
+            power, freq = self.spectrum.get_trace_data(
+                self.config.start_frequency, self.config.stop_frequency
+            )
             if not power:
                 continue
             self.data.emit(
