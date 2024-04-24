@@ -25,7 +25,7 @@ class SpectrumBlock(BaseInstrument):
 
     def test(self) -> bool:
         response = self.idn()
-        if not response or "FSEK" not in response:
+        if not response or "Rohde" not in response:
             return False
         return True
 
@@ -92,8 +92,12 @@ class SpectrumBlock(BaseInstrument):
 
 
 if __name__ == "__main__":
+    # block = SpectrumBlock(
+    #     host="169.254.156.103", gpib=21, adapter=settings.PROLOGIX_ETHERNET, port=1234
+    # )
     block = SpectrumBlock(
-        host="169.254.156.103", gpib=21, adapter=settings.PROLOGIX_ETHERNET, port=1234
+        host="169.254.75.176", gpib=None, adapter=settings.SOCKET, port=5025, delay=0
     )
-    block.set_start_frequency(2)
-    print("freq", block.get_start_frequency())
+    print(block.idn())
+    print(block.test())
+    # print("freq", block.get_start_frequency())
