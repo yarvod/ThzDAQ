@@ -24,7 +24,7 @@ if __name__ == "__main__":
     Dock.ex = ex
     ex.add_views()
     ex.create_perspective_ui()
-    # ex.init_settings()
-    ex.restore_state()
+    ex.init_settings()
     restore_configs(ex.settings)
+    ex.restore_state()
     sys.exit(app.exec())
