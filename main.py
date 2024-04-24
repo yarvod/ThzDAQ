@@ -9,8 +9,8 @@ from utils.dock import Dock
 
 
 def get_dock_manager(main_app):
-    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, True)
-    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.XmlCompressionEnabled, False)
+    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.OpaqueSplitterResize, False)
+    QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.XmlCompressionEnabled, True)
     QtAds.CDockManager.setConfigFlag(QtAds.CDockManager.FocusHighlighting, True)
     QtAds.CDockManager.setAutoHideConfigFlags(QtAds.CDockManager.DefaultAutoHideConfig)
     return QtAds.CDockManager(main_app)

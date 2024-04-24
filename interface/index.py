@@ -235,6 +235,7 @@ class App(QMainWindow):
         button = reply.exec()
         if button == QMessageBox.StandardButton.Yes:
             self.dock_manager.removePerspective(perspective)
+            self.perspective = None
             self.perspective_combobox.removeItem(perspective_index)
         else:
             pass
@@ -265,6 +266,7 @@ class App(QMainWindow):
         for name in self.settings.allKeys():
             if "Perspective" in name:
                 self.settings.remove(name)
+        self.settings.sync()
         self.dock_manager.savePerspectives(self.settings)
         store_configs(self.settings)
         self.settings.sync()
