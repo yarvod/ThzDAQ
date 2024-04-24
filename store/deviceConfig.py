@@ -23,6 +23,7 @@ class DeviceConfig(QObject):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
         config_manager=None,
     ):
         super().__init__()
@@ -33,6 +34,7 @@ class DeviceConfig(QObject):
         self.port = port
         self.gpib = gpib
         self.status = status
+        self.delay = delay
         self.config_manager = config_manager
 
         self.thread_stream = False

@@ -23,6 +23,7 @@ class SetConfigSpectrumThread(Thread):
         video_bw: float,
         start_frequency: float,
         stop_frequency: float,
+        delay: float,
     ):
         super().__init__()
         self.cid = cid
@@ -30,11 +31,12 @@ class SetConfigSpectrumThread(Thread):
         self.start_frequency = start_frequency
         self.stop_frequency = stop_frequency
         self.config = RohdeSchwarzSpectrumFsek30Manager.get_config(cid)
+        self.config.delay = delay
         self.spectrum = None
 
     def run(self):
         try:
-            self.spectrum = SpectrumBlock(**self.config.dict())
+            self.spectrum = SpectrumBlock(**self.config.dict(), delay=self.config.delay)
         except DeviceConnectionError:
             self.finished.emit()
             return
@@ -53,6 +55,12 @@ class SpectrumConfigWidget(QGroupBox):
         self.cid = cid
         self.setTitle("Config")
         layout = QVBoxLayout()
+
+        self.readDelayLabel = QLabel(self)
+        self.readDelayLabel.setText("Read delay, s")
+        self.readDelay = DoubleSpinBox(self)
+        self.readDelay.setRange(0, 3)
+        self.readDelay.setValue(0.2)
 
         self.videoBwLabel = QLabel(self)
         self.videoBwLabel.setText("Video BW, kHz")
@@ -73,12 +81,13 @@ class SpectrumConfigWidget(QGroupBox):
         self.stopFrequency.setValue(12)
 
         self.btnSetConfig = Button("Set Config", animate=True)
-        self.btnSetConfig.clicked.connect(self.startStreamSpectrum)
+        self.btnSetConfig.clicked.connect(self.set_config)
 
         layout.addWidget(
             FormWidget(
                 self,
                 {
+                    self.readDelayLabel: self.readDelay,
                     self.videoBwLabel: self.videoBw,
                     self.startFrequencyLabel: self.startFrequency,
                     self.stopFrequencyLabel: self.stopFrequency,
@@ -88,12 +97,13 @@ class SpectrumConfigWidget(QGroupBox):
         layout.addWidget(self.btnSetConfig)
         self.setLayout(layout)
 
-    def startStreamSpectrum(self):
+    def set_config(self):
         self.config_thread = SetConfigSpectrumThread(
             cid=self.cid,
             video_bw=self.videoBw.value(),
             start_frequency=self.startFrequency.value() * 1e9,
             stop_frequency=self.stopFrequency.value() * 1e9,
+            delay=self.readDelay.value(),
         )
         self.config_thread.start()
         self.btnSetConfig.setEnabled(False)

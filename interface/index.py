@@ -45,7 +45,7 @@ class App(QMainWindow):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
 
-        self.settings = QSettings(self.company, self.title)
+        self.settings = QSettings("settings.ini", QSettings.IniFormat)
         self.dock_manager = None
 
         self.menuBar = self.menuBar()
@@ -195,7 +195,7 @@ class App(QMainWindow):
         self.dock_manager.removeDockWidget(dock_widget)
 
     def init_settings(self):
-        settings_ini = QSettings("settings.ini", QSettings.IniFormat)
+        settings_ini = QSettings("settings_default.ini", QSettings.IniFormat)
         if "Perspectives" not in self.settings.childGroups():
             for key in settings_ini.allKeys():
                 if "Perspectives" not in key:
@@ -212,7 +212,7 @@ class App(QMainWindow):
     def restore_state(self):
         self.dock_manager.loadPerspectives(self.settings)
         if not len(self.dock_manager.perspectiveNames()):
-            settings = QSettings("settings.ini", QSettings.IniFormat)
+            settings = QSettings("settings_default.ini", QSettings.IniFormat)
             self.dock_manager.loadPerspectives(settings)
         self.perspective_combobox.addItems(self.dock_manager.perspectiveNames())
         try:
@@ -250,7 +250,7 @@ class App(QMainWindow):
         reply.setIcon(QMessageBox.Icon.Question)
         button = reply.exec()
         if button == QMessageBox.StandardButton.Yes:
-            settings = QSettings("settings.ini", QSettings.IniFormat)
+            settings = QSettings("settings_default.ini", QSettings.IniFormat)
             self.dock_manager.loadPerspectives(settings)
             self.store_state()
             try:
@@ -262,6 +262,9 @@ class App(QMainWindow):
             pass
 
     def store_state(self):
+        for name in self.settings.allKeys():
+            if "Perspective" in name:
+                self.settings.remove(name)
         self.dock_manager.savePerspectives(self.settings)
         store_configs(self.settings)
         self.settings.sync()

@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QLabel,
     QHBoxLayout,
+    QComboBox,
 )
 
 from api.RohdeSchwarz.spectrum_fsek30 import SpectrumBlock
@@ -26,26 +27,27 @@ class StreamSpectrumThread(Thread):
         self,
         cid: int,
         step_delay: float,
+        trace: str = "TRACE1",
     ):
         super().__init__()
         self.cid = cid
+        self.trace = trace
         self.step_delay = step_delay
         self.config = RohdeSchwarzSpectrumFsek30Manager.get_config(cid)
         self.spectrum = None
 
     def run(self):
         try:
-            self.spectrum = SpectrumBlock(**self.config.dict())
+            self.spectrum = SpectrumBlock(**self.config.dict(), delay=self.config.delay)
         except DeviceConnectionError:
             self.finished.emit()
             return
-        self.config.start_frequency = self.spectrum.get_start_frequency()
-        self.config.stop_frequency = self.spectrum.get_stop_frequency()
+
         while 1:
-            # self.config.start_frequency = self.spectrum.get_start_frequency()
-            # self.config.stop_frequency = self.spectrum.get_stop_frequency()
+            self.config.start_frequency = self.spectrum.get_start_frequency()
+            self.config.stop_frequency = self.spectrum.get_stop_frequency()
             power, freq = self.spectrum.get_trace_data(
-                self.config.start_frequency, self.config.stop_frequency
+                self.trace, self.config.start_frequency, self.config.stop_frequency
             )
             if not power:
                 continue
@@ -68,6 +70,12 @@ class SpectrumMonitor(QGroupBox):
 
         self.spectrumStreamGraphWindow = None
 
+        self.traceLabel = QLabel(self)
+        self.traceLabel.setText("Trace")
+        self.trace = QComboBox(self)
+        self.trace.addItems(["TRACE1", "TRACE2", "TRACE3", "TRACE4"])
+        self.trace.setCurrentText("TRACE1")
+
         self.timeDelayLabel = QLabel(self)
         self.timeDelayLabel.setText("Step delay, s")
         self.timeDelay = DoubleSpinBox(self)
@@ -80,7 +88,11 @@ class SpectrumMonitor(QGroupBox):
         self.btnStopSpectrum.clicked.connect(lambda: self.spectrum_thread.terminate())
         self.btnStopSpectrum.setEnabled(False)
 
-        layout.addWidget(FormWidget(self, {self.timeDelayLabel: self.timeDelay}))
+        layout.addWidget(
+            FormWidget(
+                self, {self.traceLabel: self.trace, self.timeDelayLabel: self.timeDelay}
+            )
+        )
         hlayout.addWidget(self.btnStartSpectrum)
         hlayout.addWidget(self.btnStopSpectrum)
         layout.addLayout(hlayout)
@@ -88,7 +100,9 @@ class SpectrumMonitor(QGroupBox):
 
     def startStreamSpectrum(self):
         self.spectrum_thread = StreamSpectrumThread(
-            cid=self.cid, step_delay=self.timeDelay.value()
+            cid=self.cid,
+            step_delay=self.timeDelay.value(),
+            trace=self.trace.currentText(),
         )
         self.spectrum_thread.data.connect(self.show_spectrum)
         self.spectrumStreamGraphWindow = Dock.ex.dock_manager.findDockWidget(

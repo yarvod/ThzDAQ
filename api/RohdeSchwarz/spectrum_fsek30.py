@@ -7,6 +7,39 @@ from utils.classes import BaseInstrument
 
 
 class SpectrumBlock(BaseInstrument):
+    available_video_bw_list = np.array(
+        [
+            1e-3,
+            2e-3,
+            3e-3,
+            5e-3,
+            1e-2,
+            2e-2,
+            3e-2,
+            5e-2,
+            1e-1,
+            2e-1,
+            3e-1,
+            5e-1,
+            1,
+            2,
+            3,
+            5,
+            10,
+            20,
+            30,
+            50,
+            1e2,
+            2e2,
+            3e2,
+            5e2,
+            1e3,
+            2e3,
+            5e3,
+            10e3,
+        ]
+    )
+
     def __init__(
         self,
         host: str,
@@ -15,6 +48,8 @@ class SpectrumBlock(BaseInstrument):
         *args,
         **kwargs,
     ):
+        if not kwargs.get("delay"):
+            kwargs["delay"] = 0.2
         super().__init__(host, gpib, adapter, *args, **kwargs)
 
     def idn(self) -> str:
@@ -42,9 +77,15 @@ class SpectrumBlock(BaseInstrument):
     def get_peak_power(self) -> float:
         return float(self.query(f"CALC:MARK:Y?"))
 
-    def get_trace_data(self, start, stop) -> Tuple[List[float], List[float]]:
-        response = self.query(":TRAC:DATA? TRACE1", delay=0)
+    def get_trace_data(
+        self, trace: str = "TRACE1", start: float = None, stop: float = None
+    ) -> Tuple[List[float], List[float]]:
+        response = self.query(f":TRAC:DATA? {trace}", delay=0)
         points_raw = response.split(",")
+        if not start:
+            start = self.get_start_frequency()
+        if not stop:
+            stop = self.get_stop_frequency()
         frequency_list = np.linspace(start, stop, len(points_raw))
         frequency_indxs = []
         points = []
@@ -57,42 +98,9 @@ class SpectrumBlock(BaseInstrument):
         return points, frequency_list[frequency_indxs]
 
     def set_video_bw(self, value: float):
-        """Available values, kHz"""
-        available_list = np.array(
-            [
-                1e-3,
-                2e-3,
-                3e-3,
-                5e-3,
-                1e-2,
-                2e-2,
-                3e-2,
-                5e-2,
-                1e-1,
-                2e-1,
-                3e-1,
-                5e-1,
-                1,
-                2,
-                3,
-                5,
-                10,
-                20,
-                30,
-                50,
-                1e2,
-                2e2,
-                3e2,
-                5e2,
-                1e3,
-                2e3,
-                5e3,
-                10e3,
-            ]
-        )
-        diff = np.abs(available_list - value)
+        diff = np.abs(self.available_video_bw_list - value)
         min_ind = np.where(diff == np.min(diff))[0][0]
-        bw = available_list[min_ind]
+        bw = self.available_video_bw_list[min_ind]
         self.write(f":BWIDth:VIDeo {bw}kHz")
 
     def set_video_bw_auto(self, value: bool):
