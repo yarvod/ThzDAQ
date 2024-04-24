@@ -57,11 +57,38 @@ class SpectrumBlock(BaseInstrument):
         return points, frequency_list[frequency_indxs]
 
     def set_video_bw(self, value: float):
-        """Available values, kHz:
-        1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000
-        """
+        """Available values, kHz"""
         available_list = np.array(
-            [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000]
+            [
+                1e-3,
+                2e-3,
+                3e-3,
+                5e-3,
+                1e-2,
+                2e-2,
+                3e-2,
+                5e-2,
+                1e-1,
+                2e-1,
+                3e-1,
+                5e-1,
+                1,
+                2,
+                3,
+                5,
+                10,
+                20,
+                30,
+                50,
+                1e2,
+                2e2,
+                3e2,
+                5e2,
+                1e3,
+                2e3,
+                5e3,
+                10e3,
+            ]
         )
         diff = np.abs(available_list - value)
         min_ind = np.where(diff == np.min(diff))[0][0]
