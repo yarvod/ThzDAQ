@@ -1,6 +1,6 @@
 from typing import Union
 
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal, QSettings
+from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
 
 import settings
 
@@ -128,15 +128,12 @@ class AdapterManager:
         return cls.configs.filter(cid=cid).first()
 
     @classmethod
-    def store_config(cls):
+    def store_config(cls, qsettings):
         configs = [c.dict() for c in cls.configs]
-        qsettings = QSettings("ASC", "SIS manager")
         qsettings.setValue(f"Configs/{cls.name}", configs)
-        qsettings.sync()
 
     @classmethod
-    def restore_config(cls):
-        qsettings = QSettings("ASC", "SIS manager")
+    def restore_config(cls, qsettings):
         configs = qsettings.value(f"Configs/{cls.name}", None)
         if not configs:
             return

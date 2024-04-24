@@ -112,23 +112,23 @@ class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
 
-def restore_configs():
-    PrologixManager.restore_config()
-    KeithleyPowerSupplyManager.restore_config()
-    AgilentSignalGeneratorManager.restore_config()
-    RigolPowerSupplyManager.restore_config()
-    SumitomoF70Manager.restore_config()
-    LakeShoreTemperatureControllerManager.restore_config()
-    RohdeSchwarzVnaZva67Manager.restore_config()
-    RohdeSchwarzSpectrumFsek30Manager.restore_config()
+def restore_configs(qsettings):
+    PrologixManager.restore_config(qsettings)
+    KeithleyPowerSupplyManager.restore_config(qsettings)
+    AgilentSignalGeneratorManager.restore_config(qsettings)
+    RigolPowerSupplyManager.restore_config(qsettings)
+    SumitomoF70Manager.restore_config(qsettings)
+    LakeShoreTemperatureControllerManager.restore_config(qsettings)
+    RohdeSchwarzVnaZva67Manager.restore_config(qsettings)
+    RohdeSchwarzSpectrumFsek30Manager.restore_config(qsettings)
 
 
-def store_configs():
-    KeithleyPowerSupplyManager.store_config()
-    PrologixManager.store_config()
-    AgilentSignalGeneratorManager.store_config()
-    RigolPowerSupplyManager.store_config()
-    SumitomoF70Manager.store_config()
-    LakeShoreTemperatureControllerManager.store_config()
-    RohdeSchwarzVnaZva67Manager.store_config()
-    RohdeSchwarzSpectrumFsek30Manager.store_config()
+def store_configs(qsettings):
+    KeithleyPowerSupplyManager.store_config(qsettings)
+    PrologixManager.store_config(qsettings)
+    AgilentSignalGeneratorManager.store_config(qsettings)
+    RigolPowerSupplyManager.store_config(qsettings)
+    SumitomoF70Manager.store_config(qsettings)
+    LakeShoreTemperatureControllerManager.store_config(qsettings)
+    RohdeSchwarzVnaZva67Manager.store_config(qsettings)
+    RohdeSchwarzSpectrumFsek30Manager.store_config(qsettings)

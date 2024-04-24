@@ -105,7 +105,7 @@ class SocketAdapter(InstrumentAdapterInterface):
         self.socket.settimeout(self.timeout)
 
     def _send(self, value):
-        encoded_value = ("%s\n" % value).encode("ascii")
+        encoded_value = ("%s\n\r" % value).encode("ascii")
         self.socket.sendall(encoded_value)
 
     def _recv(self, byte_num):

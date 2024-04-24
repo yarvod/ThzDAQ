@@ -194,6 +194,21 @@ class App(QMainWindow):
         self.menuBase.removeAction(dock_widget.toggleViewAction())
         self.dock_manager.removeDockWidget(dock_widget)
 
+    def init_settings(self):
+        settings_ini = QSettings("settings.ini", QSettings.IniFormat)
+        if "Perspectives" not in self.settings.childGroups():
+            for key in settings_ini.allKeys():
+                if "Perspectives" not in key:
+                    continue
+                self.settings.setValue(key, settings_ini.value(key))
+            self.settings.sync()
+        if "Configs" not in self.settings.childGroups():
+            for key in settings_ini.allKeys():
+                if "Configs" not in key:
+                    continue
+                self.settings.setValue(key, settings_ini.value(key))
+            self.settings.sync()
+
     def restore_state(self):
         self.dock_manager.loadPerspectives(self.settings)
         if not len(self.dock_manager.perspectiveNames()):
@@ -248,7 +263,7 @@ class App(QMainWindow):
 
     def store_state(self):
         self.dock_manager.savePerspectives(self.settings)
-        store_configs()
+        store_configs(self.settings)
         self.settings.sync()
 
     def create_perspective_ui(self):

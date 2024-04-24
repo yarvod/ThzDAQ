@@ -92,6 +92,8 @@ class SpectrumBlock(BaseInstrument):
 
 
 if __name__ == "__main__":
-    block = SpectrumBlock(host="", gpib=20, adapter=settings.PROLOGIX_USB, port="COM6")
+    block = SpectrumBlock(
+        host="169.254.156.103", gpib=21, adapter=settings.PROLOGIX_ETHERNET, port=1234
+    )
     block.set_start_frequency(2)
     print("freq", block.get_start_frequency())
