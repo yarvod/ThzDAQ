@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 
 import numpy as np
 
@@ -124,6 +124,13 @@ class SpectrumBlock(BaseInstrument):
     def get_stop_frequency(self):
         """value in Hz"""
         return float(self.query(f":FREQuency:STOP?"))
+
+    def get_average_mode(self):
+        return self.query("AVER:TYPE?")
+
+    def set_average_mode(self, value: Literal["LIN", "LOG", "POW"]):
+        """LIN LOG POW"""
+        self.write(f"AVER:TYPE {value}")
 
 
 if __name__ == "__main__":
