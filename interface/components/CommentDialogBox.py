@@ -17,7 +17,7 @@ class CommentDialogBox(QDialog):
         self.commentEdit.setPlainText(comment)
 
         self.btnSave = Button(self)
-        self.btnSave.setText("Save")
+        self.btnSave.setText("Ok")
         self.btnSave.clicked.connect(self.accept)
 
         self.btnClose = Button(self)
