@@ -84,9 +84,10 @@ class VNABlock(BaseInstrument):
         Dict of Trace and Parameter map {"Trc1": "S11"}
         """
         response = self.query(f"CALCulate{channel}:PARameter:CATalog?", delay=0.05)
+        response = response.replace("'", "")
         lst = response.split(",")
-        lst_traces = [_[1:] for _ in lst[::2]]
-        lst_params = [_[:-1] for _ in lst[1::2]]
+        lst_traces = [_ for _ in lst[::2]]
+        lst_params = [_ for _ in lst[1::2]]
         return dict(zip(lst_traces, lst_params))
 
     def get_data(self) -> Dict:
@@ -131,6 +132,7 @@ class VNABlock(BaseInstrument):
 if __name__ == "__main__":
     vna = VNABlock(start=2e9, stop=16e9, points=1001, delay=0.4)
     print(vna.get_parameter_catalog())
+    print(vna.get_data())
     # refl = vna.get_data()
     # freq = np.linspace(2e9, 16e9, 1001).tolist()
     # data = {"real": list(refl.real), "imag": list(refl.imag), "freq": freq}
