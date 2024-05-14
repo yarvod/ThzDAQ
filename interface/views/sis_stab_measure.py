@@ -137,12 +137,14 @@ class MeasurePowerThread(Thread):
             "point 1": {
                 "voltage": None,
                 "current": None,
+                "rd": self.rd1,
                 "power": [],
                 "power_units": power_meter_unit_model.val_pretty,
             },
             "point 2": {
                 "voltage": None,
                 "current": None,
+                "rd": self.rd2,
                 "power": [],
                 "power_units": power_meter_unit_model.val_pretty,
             },
@@ -206,6 +208,7 @@ class MeasurePowerThread(Thread):
                     "measure_id": self.measure.id,
                 }
             )
+            self.measure.data["tn"] = list(ta)
 
         step += 1
         self.progress.emit(round(step / steps * 100))
