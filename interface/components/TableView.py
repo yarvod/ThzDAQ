@@ -2,6 +2,8 @@ from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtWidgets import QAbstractItemView, QMessageBox
 
 from interface.components.CommentDialogBox import CommentDialogBox
+from interface.components.dataViewBox import DataViewBox
+from store.base import MeasureModel
 
 
 class TableView(QtWidgets.QTableView):
@@ -12,18 +14,22 @@ class TableView(QtWidgets.QTableView):
         self.menu = QtWidgets.QMenu(self)
 
         self.action_comment = QtWidgets.QAction("Comment", self)
+        self.action_view = QtWidgets.QAction("View", self)
         self.action_save = QtWidgets.QAction("Save", self)
         self.action_delete = QtWidgets.QAction("Delete", self)
 
         self.action_comment.setIcon(QtGui.QIcon("assets/edit-icon.png"))
+        self.action_view.setIcon(QtGui.QIcon("assets/search-icon.png"))
         self.action_save.setIcon(QtGui.QIcon("assets/save-icon.png"))
         self.action_delete.setIcon(QtGui.QIcon("assets/delete-icon.png"))
 
         self.menu.addAction(self.action_comment)
+        self.menu.addAction(self.action_view)
         self.menu.addAction(self.action_save)
         self.menu.addAction(self.action_delete)
 
         self.action_comment.triggered.connect(self.commentSelectedRow)
+        self.action_view.triggered.connect(self.viewSelectedRow)
         self.action_save.triggered.connect(self.saveSelectedRow)
         self.action_delete.triggered.connect(self.deleteSelectedRows)
         self.customContextMenuRequested.connect(self.showContextMenu)
@@ -39,7 +45,7 @@ class TableView(QtWidgets.QTableView):
             return
         model.manager.save_by_index(rows[0])
 
-    def commentSelectedRow(self):
+    def get_selected_measure_model(self) -> MeasureModel | None:
         model = self.model()
         selection = self.selectionModel()
         selected_index = list(set(index for index in selection.selectedIndexes()))
@@ -47,13 +53,24 @@ class TableView(QtWidgets.QTableView):
             return
         selected_index = selected_index[0]
         measure_model_id = selected_index.model()._data[selected_index.row()][0]
-        measure_model = model.manager.get(id=measure_model_id)
+        return model.manager.get(id=measure_model_id)
 
+    def commentSelectedRow(self):
+        measure_model = self.get_selected_measure_model()
+        if not measure_model:
+            return
         reply = CommentDialogBox(self, measure_model.comment)
         button = reply.exec()
         if button == 1:
             measure_model.comment = reply.commentEdit.toPlainText()
-            model.manager.update_table()
+            measure_model.objects.update_table()
+
+    def viewSelectedRow(self):
+        measure_model = self.get_selected_measure_model()
+        if not measure_model:
+            return
+        reply = DataViewBox(self, measure_model)
+        button = reply.exec()
 
     def deleteSelectedRows(self):
         model = self.model()
