@@ -137,14 +137,14 @@ class MeasurePowerThread(Thread):
             "point 1": {
                 "voltage": None,
                 "current": None,
-                "rd": self.rd1,
+                "rd": self.rn1,
                 "power": [],
                 "power_units": power_meter_unit_model.val_pretty,
             },
             "point 2": {
                 "voltage": None,
                 "current": None,
-                "rd": self.rd2,
+                "rd": self.rn2,
                 "power": [],
                 "power_units": power_meter_unit_model.val_pretty,
             },
