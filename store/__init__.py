@@ -55,6 +55,9 @@ class RigolPowerSupplyConfig(DeviceConfig):
         self.monitor_ch1 = True
         self.monitor_ch2 = True
         self.monitor_ch3 = True
+        self.output_ch1 = False
+        self.output_ch2 = False
+        self.output_ch3 = False
 
 
 class RigolPowerSupplyManager(DeviceManager):

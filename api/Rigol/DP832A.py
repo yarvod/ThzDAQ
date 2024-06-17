@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List
 
 import settings
 from utils.classes import BaseInstrument
@@ -57,9 +57,6 @@ class PowerSupplyDP832A(BaseInstrument):
     def measure_power(self, channel: int) -> float:
         return float(self.query(f":MEAS:POWEr? CH{channel}"))
 
-    def set_output(self, channel: int, output: Literal["ON", "OFF"] = "OFF"):
-        self.write(f":OUTP CH{channel},{output}")
-
     def get_output(self, channel: int) -> str:
         """
         :param channel: channel number
@@ -67,8 +64,17 @@ class PowerSupplyDP832A(BaseInstrument):
         """
         return self.query(f":OUTP? CH{channel}")
 
+    def set_output(self, channel: int, value: bool) -> None:
+        """
+        :param channel: channel number
+        :param value: True = On, False = Off
+        """
+        _value = "ON" if value else "OFF"
+        self.write(f":OUTP CH{channel},{_value}")
+
 
 if __name__ == "__main__":
     d = PowerSupplyDP832A(host="169.254.0.14", port=5555)
-    print(d.idn())
+    print(d.get_output(1))
+    d.set_output(1, True)
     print(d.get_output(1))

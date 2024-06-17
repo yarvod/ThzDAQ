@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
+from interface.components.Rigol.rigolPowerSupplyManagerWidget import ManagerWidget
 from interface.components.Rigol.rigolPowerSupplyMonitorWidget import MonitorWidget
 
 
@@ -12,6 +13,7 @@ class RigolPowerSupplyTabWidget(QScrollArea):
 
         layout = QVBoxLayout()
         layout.addWidget(MonitorWidget(self, cid=self.cid))
+        layout.addWidget(ManagerWidget(self, cid=self.cid))
         layout.addStretch()
 
         self.widget.setLayout(layout)
