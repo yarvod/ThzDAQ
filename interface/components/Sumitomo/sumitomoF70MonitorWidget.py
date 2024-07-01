@@ -61,18 +61,24 @@ class SumitomoF70MonitorWidget(QGroupBox):
 
         self.temp1Label = QLabel(self)
         self.temp1Label.setText("T1,°C")
+        self.temp1Label.setToolTip("Temperature of Helium container. 93°C is Danger!")
         self.temp1 = QLabel(self)
         self.temp1.setText("Unknown")
+        self.temp1.setToolTip("Temperature of Helium container. 93°C is Danger!")
 
         self.temp2Label = QLabel(self)
         self.temp2Label.setText("T2,°C")
+        self.temp2Label.setToolTip("Temperature of Output water.")
         self.temp2 = QLabel(self)
         self.temp2.setText("Unknown")
+        self.temp2.setToolTip("Temperature of Output water.")
 
         self.temp3Label = QLabel(self)
         self.temp3Label.setText("T3,°C")
+        self.temp3Label.setToolTip("Temperature of Input water.")
         self.temp3 = QLabel(self)
         self.temp3.setText("Unknown")
+        self.temp3.setToolTip("Temperature of Input water.")
 
         self.btnStartStream = Button(animate=True)
         self.btnStartStream.setText("Start Stream")
