@@ -2,13 +2,13 @@ import socket
 import time
 from typing import Union
 
+import settings
 from store.state import state
-from utils.classes import BaseInstrumentInterface
-from utils.decorators import exception
+from utils.classes import BaseInstrument
 from utils.logger import logger
 
 
-class SisBlock(BaseInstrumentInterface):
+class SisBlock(BaseInstrument):
     """
     Scontel SIS block operation interface.
     """
@@ -17,29 +17,21 @@ class SisBlock(BaseInstrumentInterface):
         self,
         host: str = state.BLOCK_ADDRESS,
         port: int = state.BLOCK_PORT,
+        adapter: str = settings.SOCKET,
         bias_dev: str = state.BLOCK_BIAS_DEV,
         ctrl_dev: str = state.BLOCK_CTRL_DEV,
+        **kwargs,
     ):
-        self.host = host
-        self.port = port
+        super().__init__(host=host, gpib=0, adapter=adapter, port=port)
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    @exception
     def connect(self):
-        self.s.settimeout(10)
-        try:
-            self.s.connect((self.host, self.port))
-            logger.info(f"Connected to Block {self.host}:{self.port}")
-        except Exception as e:
-            logger.warning(f"Warning[Block.connect] {e}")
-        self.s.settimeout(2)
+        ...
 
-    @exception
     def disconnect(self):
-        self.s.close()
-        logger.info(f"Disconnected from Block {self.host}:{self.port}")
+        if self.adapter:
+            self.adapter.close()
 
     def manipulate(self, cmd: str) -> str:
         """
@@ -49,14 +41,12 @@ class SisBlock(BaseInstrumentInterface):
         Returns:
             result (str): Block answer
         """
-        cmd = bytes(cmd, "utf-8")
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
-                self.s.send(cmd)
+                self.adapter.write(cmd)
                 time.sleep(0.05)
-                data = self.s.recv(1024 * 1024)
-                result = data.decode("ISO-8859-1").rstrip()
+                result = self.adapter.read()
                 logger.debug(
                     f"[Block.manipulate] Received result: {result}; attempt {attempt}"
                 )
@@ -127,7 +117,7 @@ class SisBlock(BaseInstrumentInterface):
         """
         return self.manipulate(f"GEN:{self.ctrl_dev}:STAT?")
 
-    def test(self):
+    def test(self) -> bool:
         """
         Method to test full block.
         """
@@ -135,9 +125,7 @@ class SisBlock(BaseInstrumentInterface):
         logger.info(f"[Block.test] Bias test `{bias}`")
         ctrl = self.test_ctrl()
         logger.info(f"[Block.test] CTRL test `{ctrl}`")
-        if bias == "OK" and ctrl == "OK":
-            return "OK"
-        return "ERROR"
+        return bias == "OK" and ctrl == "OK"
 
     def set_ctrl_current(self, curr: float):
         return self.manipulate(f"CTRL:{self.ctrl_dev}:CURR {curr}")

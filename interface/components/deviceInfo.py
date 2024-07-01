@@ -30,10 +30,10 @@ class DeviceInfo(QWidget):
         port: str = "",
         gpib: int = 0,
         status: str = settings.NOT_INITIALIZED,
-        **kwargs,
+        **form_kwargs,
     ):
         super().__init__(parent)
-
+        self.form_kwargs = form_kwargs
         self.config: DeviceConfig = config
         self.thread_class = thread_class
         self.init_thread: Union[None, Thread] = None
@@ -85,6 +85,7 @@ class DeviceInfo(QWidget):
         flayout.addRow(self.hostLabel, self.host)
         flayout.addRow(self.portLabel, self.port)
         flayout.addRow(self.gpibLabel, self.gpib)
+        self.add_custom_form_fields(flayout)
         flayout.addRow(self.statusLabel, self.status)
 
         self.btnInitialize = Button(
@@ -108,10 +109,7 @@ class DeviceInfo(QWidget):
     def initialize(self):
         self.init_thread = self.thread_class(
             self.device_api_class,
-            adapter=self.adapter.text(),
-            host=self.host.text(),
-            port=self.port.text(),
-            gpib=self.gpib.text(),
+            **self.get_initialize_kwargs(),
         )
         self.init_thread.status.connect(self.config.set_status)
         self.init_thread.finished.connect(lambda: self.btnInitialize.setEnabled(True))
@@ -126,10 +124,7 @@ class DeviceInfo(QWidget):
     def edit(self):
         self.form = DeviceAddForm(
             self,
-            adapter=self.adapter.text(),
-            host=self.host.text(),
-            port=self.port.text(),
-            gpib=self.gpib.text(),
+            **self.get_initialize_kwargs(),
         )
         self.form.init.connect(self.update_config_initialize)
         self.form.show()
@@ -148,3 +143,14 @@ class DeviceInfo(QWidget):
             self.parent().delete_device_info(self.config.cid)
             del self.config
             self.deleteLater()
+
+    def add_custom_form_fields(self, flayout):
+        ...
+
+    def get_initialize_kwargs(self):
+        return dict(
+            adapter=self.adapter.text(),
+            host=self.host.text(),
+            port=self.port.text(),
+            gpib=self.gpib.text(),
+        )

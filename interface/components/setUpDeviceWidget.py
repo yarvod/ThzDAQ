@@ -17,6 +17,8 @@ class SetUpDeviceWidget(QGroupBox):
     widget_title = ""
     manager_class = None
     device_api_class = None
+    device_add_form_class = DeviceAddForm
+    device_info_class = DeviceInfo
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -33,7 +35,7 @@ class SetUpDeviceWidget(QGroupBox):
         self.setLayout(self._layout)
 
     def open_form_add_device(self):
-        self.form = DeviceAddForm(self)
+        self.form = self.device_add_form_class(self)
         self.form.init.connect(self.init_device)
         self.form.show()
 
@@ -48,7 +50,7 @@ class SetUpDeviceWidget(QGroupBox):
         dev_info.initialize()
 
     def create_device_info_widget(self, config, **kwargs):
-        dev_info = DeviceInfo(
+        dev_info = self.device_info_class(
             self, config, DeviceInitThread, self.device_api_class, **kwargs
         )
         self.add_device_info_widget(config.cid, dev_info)

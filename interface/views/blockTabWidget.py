@@ -13,77 +13,82 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QProgressBar,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtCore import Qt, pyqtSignal
 
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
 )
 from interface.components.ui.Button import Button
+from store import ScontelSisBlockManager
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.base import MeasureModel, MeasureType
+from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
 
-class UtilsMixin:
-    def set_voltage(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+class BlockSetBiasVoltageThread(Thread):
+    def __init__(self, cid: int, voltage: float):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        self.voltage = voltage
+        super().__init__()
+
+    def run(self):
         try:
-            voltage_to_set = float(self.sisVoltageSet.value()) * 1e-3
-        except ValueError:
-            logger.warning(f"Value {self.sisVoltageSet.value()} is not correct float")
+            block = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
             return
-        block.set_bias_voltage(voltage_to_set)
-        current = block.get_bias_current()
-        self.sisCurrentGet.setText(f"{round(current * 1e6, 3)}")
-        voltage = block.get_bias_voltage()
-        self.sisVoltageGet.setText(f"{round(voltage * 1e3, 3)}")
+        block.set_bias_voltage(self.voltage)
         block.disconnect()
+        self.pre_exit()
+        self.finished.emit()
 
-    def set_ctrl_current(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+
+class BlockSetCtrlCurrentThread(Thread):
+    def __init__(self, cid: int, current: float):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        self.current = current
+        super().__init__()
+
+    def run(self):
         try:
-            ctrlCurrentSet = float(self.ctrlCurrentSet.value()) * 1e-3
-        except ValueError:
-            logger.warning(f"Value {self.ctrlCurrentSet.value()} is not correct float")
+            block = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
             return
-        block.set_ctrl_current(ctrlCurrentSet)
-        ctrlCurrentGet = block.get_ctrl_current()
+        block.set_ctrl_current(self.current)
         block.disconnect()
-        self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
+        self.pre_exit()
+        self.finished.emit()
 
 
-class BlockStreamThread(QThread):
+class BlockStreamThread(Thread):
     cl_current = pyqtSignal(float)
     bias_voltage = pyqtSignal(float)
     bias_current = pyqtSignal(float)
 
+    def __init__(self, cid: int):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        self.config.thread_stream = True
+        super().__init__()
+
     def run(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+        try:
+            block = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
         i = 1
         while 1:
-            if not state.BLOCK_STREAM_THREAD:
+            if not self.config.thread_stream:
                 break
             time.sleep(0.2)
 
@@ -103,26 +108,28 @@ class BlockStreamThread(QThread):
             i += 1
 
         block.disconnect()
+        self.pre_exit()
 
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        state.BLOCK_STREAM_THREAD = False
+    def pre_exit(self, *args, **kwargs):
+        self.config.thread_stream = False
 
 
-class BlockCLScanThread(QThread):
+class BlockCLScanThread(Thread):
     results = pyqtSignal(dict)
     stream_result = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
+    def __init__(self, cid: int):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        super().__init__()
+
     def run(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+        try:
+            block = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
         results = {
             "ctrl_i_set": [],
             "ctrl_i_get": [],
@@ -175,40 +182,30 @@ class BlockCLScanThread(QThread):
         block.set_ctrl_current(initial_ctrl_i)
         self.results.emit(results)
         block.disconnect()
+        self.pre_exit()
         measure.save()
         self.finished.emit()
 
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        state.BLOCK_CTRL_SCAN_THREAD = False
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        state.BLOCK_CTRL_SCAN_THREAD = False
-
-    def quit(
-        self,
-    ):
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        state.BLOCK_CTRL_SCAN_THREAD = False
+    def pre_exit(self):
+        self.config.thread_ctrl_scan = False
 
 
-class BlockBIASScanThread(QThread):
+class BlockBIASScanThread(Thread):
     results = pyqtSignal(dict)
     stream_result = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
+    def __init__(self, cid: int):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        super().__init__()
+
     def run(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
+        try:
+            block = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
         results = {
             "i_get": [],
             "v_set": [],
@@ -228,7 +225,7 @@ class BlockBIASScanThread(QThread):
         )
         measure.save(False)
         for v_set in v_range:
-            if not state.BLOCK_BIAS_SCAN_THREAD:
+            if not self.config.thread_bias_scan:
                 break
             proc = round((i / state.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
             block.set_bias_voltage(v_set)
@@ -264,27 +261,14 @@ class BlockBIASScanThread(QThread):
         self.results.emit(results)
         self.finished.emit()
 
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-        state.BLOCK_BIAS_SCAN_THREAD = False
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
-        state.BLOCK_BIAS_SCAN_THREAD = False
-
-    def quit(
-        self,
-    ):
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-        state.BLOCK_BIAS_SCAN_THREAD = False
+    def pre_exit(self):
+        self.config.thread_bias_scan = False
 
 
-class BlockTabWidget(QWidget, UtilsMixin):
-    def __init__(self, parent):
+class BlockTabWidget(QWidget):
+    def __init__(self, parent, cid: int):
         super().__init__(parent)
+        self.cid = cid
         layout = QVBoxLayout(self)
         self.createGroupMonitor()
         self.createGroupValuesSet()
@@ -328,7 +312,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.biasGraphDockWidget.widget().show()
 
     def scan_ctrl_current(self):
-        self.block_ctrl_scan_thread = BlockCLScanThread()
+        self.block_ctrl_scan_thread = BlockCLScanThread(cid=self.cid)
         self.block_ctrl_scan_thread.stream_result.connect(self.show_ctrl_graph_window)
 
         state.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
@@ -360,47 +344,45 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_ctrl_scan_thread.quit()
 
     def set_block_bias_short_status(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        if state.BLOCK_BIAS_SHORT_STATUS == "1":
+        config = ScontelSisBlockManager.get_config(self.cid)
+        try:
+            block = SisBlock(**config.dict())
+        except DeviceConnectionError:
+            return
+
+        if config.bias_short_status == "1":
             status = "0"
         else:
             status = "1"
         block.set_bias_short_status(status)
         new_status = block.get_bias_short_status()
-        state.BLOCK_BIAS_SHORT_STATUS = new_status
+        config.bias_short_status = new_status
         self.btnSetBiasShortStatus.setText(
-            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_BIAS_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(config.bias_short_status)}"
         )
         block.disconnect()
 
     def set_block_ctrl_short_status(self):
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        if state.BLOCK_CTRL_SHORT_STATUS == "1":
+        config = ScontelSisBlockManager.get_config(self.cid)
+        try:
+            block = SisBlock(**config.dict())
+        except DeviceConnectionError:
+            return
+
+        if config.ctrl_short_status == "1":
             status = "0"
         else:
             status = "1"
         block.set_ctrl_short_status(status)
         new_status = block.get_ctrl_short_status()
-        state.BLOCK_CTRL_SHORT_STATUS = new_status
+        config.ctrl_short_status = new_status
         self.btnSetCtrlShortStatus.setText(
-            f"{state.BLOCK_SHORT_STATUS_MAP.get(state.BLOCK_CTRL_SHORT_STATUS)}"
+            f"{state.BLOCK_SHORT_STATUS_MAP.get(config.ctrl_short_status)}"
         )
         block.disconnect()
 
     def scan_bias_iv(self):
-        self.block_bias_scan_thread = BlockBIASScanThread()
+        self.block_bias_scan_thread = BlockBIASScanThread(cid=self.cid)
         self.block_bias_scan_thread.stream_result.connect(self.show_bias_graph_window)
 
         state.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
@@ -432,7 +414,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_bias_scan_thread.quit()
 
     def startStreamBlock(self):
-        self.stream_thread = BlockStreamThread()
+        self.stream_thread = BlockStreamThread(cid=self.cid)
 
         self.stream_thread.cl_current.connect(
             lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}")
@@ -533,8 +515,8 @@ class BlockTabWidget(QWidget, UtilsMixin):
             state.BLOCK_BIAS_VOLT_MIN_VALUE, state.BLOCK_BIAS_VOLT_MAX_VALUE
         )
 
-        self.btn_set_voltage = Button("Set BIAS voltage", animate=True)
-        self.btn_set_voltage.clicked.connect(lambda: self.set_voltage())
+        self.btnSetBiasVoltage = Button("Set BIAS voltage", animate=True)
+        self.btnSetBiasVoltage.clicked.connect(self.set_bias_voltage)
 
         self.ctrlCurrentSetLabel = QLabel(self)
         self.ctrlCurrentSetLabel.setText("CL current, mA")
@@ -562,7 +544,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
 
         layout.addWidget(self.sisVoltageSetLabel, 1, 0)
         layout.addWidget(self.sisVoltageSet, 1, 1)
-        layout.addWidget(self.btn_set_voltage, 1, 2)
+        layout.addWidget(self.btnSetBiasVoltage, 1, 2)
         layout.addWidget(self.ctrlCurrentSetLabel, 2, 0)
         layout.addWidget(self.ctrlCurrentSet, 2, 1)
         layout.addWidget(self.btnSetCTRLCurrent, 2, 2)
@@ -572,6 +554,26 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.btnSetCtrlShortStatus, 4, 1)
 
         self.rowValuesSet.setLayout(layout)
+
+    def set_bias_voltage(self):
+        self.thread_set_bias_voltage = BlockSetBiasVoltageThread(
+            cid=self.cid, voltage=self.sisVoltageSet.value() * 1e-3
+        )
+        self.btnSetBiasVoltage.setEnabled(False)
+        self.thread_set_bias_voltage.start()
+        self.thread_set_bias_voltage.finished.connect(
+            lambda: self.btnSetBiasVoltage.setEnabled(True)
+        )
+
+    def set_ctrl_current(self):
+        self.thread_set_ctrl_current = BlockSetCtrlCurrentThread(
+            cid=self.cid, current=self.ctrlCurrentSet.value() * 1e-3
+        )
+        self.btnSetCTRLCurrent.setEnabled(False)
+        self.thread_set_ctrl_current.start()
+        self.thread_set_ctrl_current.finished.connect(
+            lambda: self.btnSetCTRLCurrent.setEnabled(True)
+        )
 
     def createGroupCTRLScan(self):
         self.groupCTRLScan = QGroupBox("Scan CTRL current")

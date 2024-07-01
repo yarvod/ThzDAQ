@@ -85,11 +85,6 @@ class App(QMainWindow):
 
         # Add devices widgets
         self.add_dock_widget(
-            "Scontel SIS block",
-            import_class("interface.views.BlockTabWidget"),
-            "device",
-        )
-        self.add_dock_widget(
             "RohdeSchwarz Power Meter",
             import_class("interface.views.PowerMeterTabWidget"),
             "device",

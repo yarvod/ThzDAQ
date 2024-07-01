@@ -111,6 +111,47 @@ class RohdeSchwarzSpectrumFsek30Manager(DeviceManager):
     event_manager = DeviceEventManager()
 
 
+class ScontelSisBlockConfig(DeviceConfig):
+    def __init__(
+        self,
+        name: str,
+        cid: int,
+        adapter: str = None,
+        host: str = None,
+        port: Union[str, int] = None,
+        gpib: int = None,
+        status: str = settings.NOT_INITIALIZED,
+        bias_dev: str = "DEV4",
+        ctrl_dev: str = "DEV3",
+        config_manager=None,
+    ):
+        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        self.bias_dev = bias_dev
+        self.ctrl_dev = ctrl_dev
+        self.bias_short_status = "1"
+        self.ctrl_short_status = "1"
+        self.thread_stream = False
+        self.thread_ctrl_scan = False
+        self.thread_bias_scan = False
+
+    def dict(self):
+        old_dict = super().dict()
+        new_dict = {
+            "bias_dev": self.bias_dev,
+            "ctrl_dev": self.ctrl_dev,
+        }
+        old_dict.update(new_dict)
+        return old_dict
+
+
+class ScontelSisBlockManager(DeviceManager):
+    name = "Scontel SIS Block"
+    main_widget_class = "interface.views.BlockTabWidget"
+    config_class = ScontelSisBlockConfig
+    configs = DeviceConfigList()
+    event_manager = DeviceEventManager()
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -124,6 +165,7 @@ def restore_configs(qsettings):
     LakeShoreTemperatureControllerManager.restore_config(qsettings)
     RohdeSchwarzVnaZva67Manager.restore_config(qsettings)
     RohdeSchwarzSpectrumFsek30Manager.restore_config(qsettings)
+    ScontelSisBlockManager.restore_config(qsettings)
 
 
 def store_configs(qsettings):
@@ -135,3 +177,4 @@ def store_configs(qsettings):
     LakeShoreTemperatureControllerManager.store_config(qsettings)
     RohdeSchwarzVnaZva67Manager.store_config(qsettings)
     RohdeSchwarzSpectrumFsek30Manager.store_config(qsettings)
+    ScontelSisBlockManager.store_config(qsettings)

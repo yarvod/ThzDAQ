@@ -25,6 +25,7 @@ class DeviceAddForm(QDialog):
         host: str = "",
         port: str = "",
         gpib: int = 0,
+        **kwargs,
     ):
         super().__init__(parent)
         self.setWindowTitle("Add new device")
@@ -63,6 +64,7 @@ class DeviceAddForm(QDialog):
         flayout.addRow(self.hostLabel, self.host)
         flayout.addRow(self.portLabel, self.port)
         flayout.addRow(self.gpibLabel, self.gpib)
+        self.add_custom_form_fields(flayout)
 
         self.btnSubmit = Button(self, icon=QIcon("assets/init-icon.png"))
         self.btnSubmit.setText("Initialize")
@@ -75,12 +77,16 @@ class DeviceAddForm(QDialog):
         self.setLayout(layout)
 
     def initilize(self):
-        self.init.emit(
-            {
-                "adapter": self.adapter.currentText(),
-                "host": self.host.text(),
-                "port": self.port.text(),
-                "gpib": self.gpib.value(),
-            }
-        )
+        self.init.emit(self.get_initialize_kwargs())
         self.close()
+
+    def add_custom_form_fields(self, flayout):
+        ...
+
+    def get_initialize_kwargs(self):
+        return dict(
+            adapter=self.adapter.currentText(),
+            host=self.host.text(),
+            port=self.port.text(),
+            gpib=self.gpib.text(),
+        )
