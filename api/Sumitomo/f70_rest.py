@@ -1,5 +1,5 @@
 import logging
-from typing import Union, List
+from typing import Union, List, Dict
 
 import settings
 from utils.functions import import_class
@@ -39,16 +39,12 @@ class F70Rest:
     def test(self) -> bool:
         return bool(self.get_temperatures())
 
-    def get_temperatures(self) -> Union[None, List[float]]:
+    def get_temperatures(self) -> Dict[str, List]:
         status, data = self.adapter.get(url="/api/v1/temperatures/")
-        if data:
-            return data.get("temperatures")
         return data
 
-    def get_pressures(self) -> Union[None, List[float]]:
+    def get_pressures(self) -> Dict[str, List]:
         status, data = self.adapter.get(url="/api/v1/pressures/")
-        if data:
-            return data.get("pressures")
         return data
 
     def turn_on(self) -> Union[None, str]:
