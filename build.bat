@@ -15,6 +15,6 @@ mkdir .\dist\%app_name%\assets
 copy .\assets\* .\dist\%app_name%\assets\
 copy .\settings_default.ini .\dist\%app_name%\
 copy .\dist\%app_name%_settings\settings.ini .\dist\%app_name%\
-copy .env .\dist\%app_name%/
+copy .env .\dist\%app_name%\
 
 endlocal
