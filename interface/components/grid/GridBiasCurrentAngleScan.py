@@ -4,7 +4,6 @@ import numpy as np
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QGroupBox,
-    QSizePolicy,
     QFormLayout,
     QLabel,
     QProgressBar,
@@ -98,7 +97,6 @@ class GridBiasCurrentScan(QGroupBox):
     def __init__(self, parent):
         super().__init__(parent)
         self.setTitle("Grid Sis current angle scan")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.gridBiasCurrentAngleGraphWindow = None
 
         layout = QVBoxLayout()

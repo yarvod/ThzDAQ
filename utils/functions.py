@@ -2,8 +2,12 @@ import logging
 from typing import List, Tuple
 
 import numpy as np
+import requests
 from alvar import db_to_absolute
+from requests import RequestException, HTTPError
 from scipy import constants
+
+import settings
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +147,24 @@ def calc_tta(p_if_data1, p_if_data2, v1, v2, i1, i2, rd1, rd2, t_sis):
     print(f"M {m1}; {m2}")
 
     return t_a(m1, m2, y, t1, t2)
+
+
+def send_to_telegram(message: str):
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage?chat_id="
+            f"-{settings.TELEGRAM_CHANNEL_ID}&text="
+            f"{message}"
+        )
+        response.raise_for_status()
+        if not response.status_code == requests.status_codes.codes.ALL_GOOD:
+            logger.error(
+                f"[send_to_telegram] Request to Telegram failed, status_code={response.status_code}"
+            )
+        logger.info(f"[send_to_telegram] message {message}")
+        return response.status_code
+    except (HTTPError, RequestException) as exc:
+        logger.exception(
+            f"[send_to_telegram] Error sending code to Telegram, {str(exc)}"
+        )
+        return None
