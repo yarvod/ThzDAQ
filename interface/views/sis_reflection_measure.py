@@ -55,13 +55,13 @@ class BiasReflectionThread(Thread):
         self.config_vna = RohdeSchwarzVnaZva67Manager.get_config(cid_vna)
         self.start_frequency = start_frequency
         self.stop_frequency = stop_frequency
-        self.frequency_points = frequency_points
+        self.frequency_points = int(frequency_points)
         self.vna_power = vna_power
         self.vna_parameter = vna_parameter
         self.vna_samples_count = vna_samples_count
         self.start_voltage = start_voltage
         self.stop_voltage = stop_voltage
-        self.voltage_points = voltage_points
+        self.voltage_points = int(voltage_points)
         self.step_delay = step_delay
         self.vna = None
         self.block = None
@@ -81,7 +81,7 @@ class BiasReflectionThread(Thread):
 
     def run(self):
         try:
-            self.vna = VNABlock(**self.config.dict())
+            self.vna = VNABlock(**self.config_vna.dict())
         except DeviceConnectionError:
             self.finished.emit()
             return
