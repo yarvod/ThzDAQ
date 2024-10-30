@@ -1,8 +1,10 @@
 import json
+from typing import Optional
 
 import requests
 
 from store.state import state
+from utils.functions import linear
 
 
 class NiYIGManager:
@@ -49,6 +51,24 @@ class NiYIGManager:
         url = f"{self.url}/devices/{device}/reset"
         response = requests.post(url, headers=self.headers)
         return response.json()
+
+    def set_frequency(self, frequency: float) -> Optional[float]:
+        """Set frequency Hz directly"""
+        value = int(
+            linear(
+                frequency,
+                *state.CALIBRATION_DIGITAL_FREQ_2_POINT,
+            )
+        )
+        resp = self.write_task(value=value)
+        resp_int = resp.get("result", None)
+        if resp_int is None:
+            return None
+        else:
+            return round(
+                linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9,
+                2,
+            )
 
 
 if __name__ == "__main__":

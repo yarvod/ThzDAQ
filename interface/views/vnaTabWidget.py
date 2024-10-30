@@ -75,6 +75,7 @@ class ConfigureVnaThread(Thread):
         parameter: str,
         power: float = -30,
         channel_format: str = "COMP",
+        average_count: int = 10,
     ):
         super().__init__()
         self.cid = cid
@@ -85,6 +86,7 @@ class ConfigureVnaThread(Thread):
         self.parameter = parameter
         self.power = power
         self.channel_format = channel_format
+        self.average_count = average_count
         self.vna = None
 
     def run(self):
@@ -100,6 +102,8 @@ class ConfigureVnaThread(Thread):
         self.vna.set_sweep(self.points)
         self.vna.set_power(self.power)
         self.vna.set_channel_format(self.channel_format)
+        self.vna.set_average_count(self.average_count)
+        self.vna.set_average_status(True)
 
         self.pre_exit()
         self.finished.emit()
@@ -152,6 +156,12 @@ class VNATabWidget(QWidget):
         self.vnaPower.setRange(state.VNA_POWER_MIN, state.VNA_POWER_MAX)
         self.vnaPower.setValue(state.VNA_POWER)
 
+        self.vnaAverageCountLabel = QLabel(self)
+        self.vnaAverageCountLabel.setText("Aver count:")
+        self.vnaAverageCount = QSpinBox(self)
+        self.vnaAverageCount.setRange(1, 1000)
+        self.vnaAverageCount.setValue(10)
+
         self.vnaStoreData = QCheckBox(self)
         self.vnaStoreData.setText("Store Data")
         self.vnaStoreData.setChecked(state.VNA_STORE_DATA)
@@ -167,6 +177,7 @@ class VNATabWidget(QWidget):
         layout.addRow(self.freqToLabel, self.freqTo)
         layout.addRow(self.vnaPointsLabel, self.vnaPoints)
         layout.addRow(self.vnaPowerLabel, self.vnaPower)
+        layout.addRow(self.vnaAverageCountLabel, self.vnaAverageCount)
         layout.addRow(self.vnaStoreData)
         layout.addRow(self.btnConfigureVna)
         layout.addRow(self.btnGetVnaData)
@@ -182,6 +193,7 @@ class VNATabWidget(QWidget):
             parameter=self.vnaParameter.currentText(),
             power=self.vnaPower.value(),
             channel_format=state.VNA_CHANNEL_FORMAT,
+            average_count=int(self.vnaAverageCount.value()),
         )
         self.vna_configure_thread.start()
         self.btnConfigureVna.setEnabled(False)

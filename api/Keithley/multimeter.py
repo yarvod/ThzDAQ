@@ -56,8 +56,13 @@ class Multimeter(BaseInstrument):
     def set_function(self, value: Literal["F0", "F1", "F2", "F3", "F4", "F5", "F6"]):
         self.write(f"{value}X")
 
+    def get_voltage(self):
+        res = self.idn()
+        return float(res.replace("NDCV", ""))
+
 
 if __name__ == "__main__":
     m = Multimeter(gpib=26)
     print(m.idn())
     print(m.tst())
+    print(m.get_voltage())

@@ -166,11 +166,9 @@ class MeasureThread(Thread):
 
             if state.CHOPPER_SWITCH:
                 chopper_manager.chopper.path0()
-                if not chopper_step == 2:
-                    time.sleep(2)
+                time.sleep(2)
 
         if state.CHOPPER_SWITCH:
-            chopper_manager.chopper.align_to_cold()
             hot = np.array(results["hot"]["power"])
             cold = np.array(results["cold"]["power"])
             if len(hot) and len(cold):
@@ -195,6 +193,7 @@ class MeasureThread(Thread):
                 self.measure.data["y_factor"] = y_factor.tolist()
                 self.measure.data["tn"] = tn.tolist()
 
+        chopper_manager.chopper.align_to_cold()
         self.pre_exit()
         self.finished.emit()
 

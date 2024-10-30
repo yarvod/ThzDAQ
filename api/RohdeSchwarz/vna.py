@@ -49,6 +49,13 @@ class VNABlock(BaseInstrument):
     def get_sweep(self) -> int:
         return int(self.query(f"SWE:POIN?", delay=0.05))
 
+    def set_average_status(self, value: bool, channel: int = 1) -> None:
+        status = "ON" if value else "OFF"
+        self.write(f"SENSe{channel}:AVERage {status}")
+
+    def set_average_count(self, value: int, channel: int = 1) -> None:
+        self.write(f"SENSe{channel}:AVERage:COUNt {value}")
+
     def set_channel_format(self, form: str = state.VNA_CHANNEL_FORMAT) -> None:
         self.write(f"CALC:FORM {form}")
 

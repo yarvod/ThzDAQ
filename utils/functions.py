@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import numpy as np
 import requests
@@ -59,11 +59,11 @@ def import_class(path: str):
     return getattr(module, class_name)
 
 
-def get_tn(y: np.ndarray, th: float = 300, tc: float = 77):
+def get_tn(y: np.ndarray, th: float = 300, tc: float = 77) -> Union[np.ndarray, float]:
     return (th - tc * y) / (y - 1)
 
 
-def get_if_tn(hot_power, cold_power, th=300, tc=77):
+def get_if_tn(hot_power, cold_power, th=300, tc=77) -> Union[np.ndarray, float]:
     y_w = db_to_absolute(hot_power) / db_to_absolute(cold_power)
     t = get_tn(y=y_w, th=th, tc=tc)
     return t
