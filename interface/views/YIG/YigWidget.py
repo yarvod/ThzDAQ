@@ -193,7 +193,8 @@ class MeasureThread(Thread):
                 self.measure.data["y_factor"] = y_factor.tolist()
                 self.measure.data["tn"] = tn.tolist()
 
-        chopper_manager.chopper.align_to_cold()
+            chopper_manager.chopper.align_to_cold()
+
         self.pre_exit()
         self.finished.emit()
 

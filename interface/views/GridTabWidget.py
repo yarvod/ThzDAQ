@@ -229,7 +229,8 @@ class StepBiasPowerThread(Thread):
                             "legend_postfix": f"angle {angle} °",
                         }
                     )
-        chopper_manager.chopper.align_to_cold()
+        if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_cold()
         self.pre_exit()
         self.finished.emit()
 

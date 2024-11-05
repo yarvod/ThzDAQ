@@ -12,9 +12,12 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QProgressBar,
+    QHBoxLayout,
+    QCheckBox,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
+from api import SocketAdapter
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
 )
@@ -23,7 +26,9 @@ from store.state import state
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store.base import MeasureModel, MeasureType
+from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +73,32 @@ class UtilsMixin:
         self.ctrlCurrentGet.setText(f"{round(ctrlCurrentGet * 1e3, 3)}")
 
 
+class BlockCalibrateThread(Thread):
+    def run(self):
+        try:
+            s = SocketAdapter(host="169.254.190.83", port=9876)
+
+            s.query("BIAS:DEV4:VADC [6.646970168984848e-09, -0.057734626818342544]")
+            s.query("BIAS:DEV4:CADC [7.74425641113238e-09, -0.0672697170091591]")
+
+            s.query("BIAS:DEV2:VADC [6.40453512694892e-09, -0.055806821507716556]")
+            s.query("BIAS:DEV2:CADC [3.793915158306934e-09, -0.03298317896838076]")
+            s.query("GENeral:DEVice2:WriteEEProm")
+            s.query("GENeral:DEVice4:WriteEEProm")
+        except DeviceConnectionError:
+            ...
+        self.finished.emit()
+
+
 class BlockStreamThread(QThread):
     cl_current = pyqtSignal(float)
     bias_voltage = pyqtSignal(float)
     bias_current = pyqtSignal(float)
+    plot_data = pyqtSignal(dict)
+
+    def __init__(self, stream_plot: bool = False):
+        self.stream_plot = stream_plot
+        super().__init__()
 
     def run(self):
         block = SisBlock(
@@ -99,6 +126,15 @@ class BlockStreamThread(QThread):
                 cl_current = block.get_ctrl_current()
                 if cl_current:
                     self.cl_current.emit(cl_current)
+
+            if self.stream_plot and bias_voltage and bias_current:
+                self.plot_data.emit(
+                    {
+                        "x": [bias_voltage * 1e3],
+                        "y": [bias_current * 1e6],
+                        "new_plot": i == 1,
+                    }
+                )
 
             i += 1
 
@@ -432,7 +468,7 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.block_bias_scan_thread.quit()
 
     def startStreamBlock(self):
-        self.stream_thread = BlockStreamThread()
+        self.stream_thread = BlockStreamThread(stream_plot=self.plotStream.isChecked())
 
         self.stream_thread.cl_current.connect(
             lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}")
@@ -443,6 +479,10 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.stream_thread.bias_voltage.connect(
             lambda x: self.sisVoltageGet.setText(f"{round(x * 1e3, 3)}")
         )
+
+        self.stream_thread.plot_data.connect(self.show_bias_graph_window)
+
+        self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
 
         state.BLOCK_STREAM_THREAD = True
         self.stream_thread.start()
@@ -465,7 +505,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.groupMonitor.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        vlayout = QVBoxLayout()
         layout = QGridLayout()
+        hlayout = QHBoxLayout()
 
         self.sisVoltageGetLabel = QLabel(self)
         self.sisVoltageGetLabel.setText("<h4>BIAS voltage, mV</h4>")
@@ -492,6 +534,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
         self.btnStopStreamBlock.setEnabled(False)
         self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
+        self.plotStream = QCheckBox("Plot stream")
+        self.plotStream.setChecked(False)
+
         layout.addWidget(
             self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -510,14 +555,15 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        layout.addWidget(
-            self.btnStartStreamBlock, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        layout.addWidget(
-            self.btnStopStreamBlock, 3, 2, alignment=Qt.AlignmentFlag.AlignCenter
-        )
 
-        self.groupMonitor.setLayout(layout)
+        hlayout.addWidget(self.btnStartStreamBlock)
+        hlayout.addWidget(self.btnStopStreamBlock)
+        hlayout.addWidget(self.plotStream)
+
+        vlayout.addLayout(layout)
+        vlayout.addLayout(hlayout)
+
+        self.groupMonitor.setLayout(vlayout)
 
     def createGroupValuesSet(self):
         self.rowValuesSet = QGroupBox("Set block values")
@@ -560,6 +606,9 @@ class BlockTabWidget(QWidget, UtilsMixin):
         )
         self.btnSetCtrlShortStatus.clicked.connect(self.set_block_ctrl_short_status)
 
+        self.btnCalibrateBlock = Button("Calibrate sis block", animate=True)
+        self.btnCalibrateBlock.clicked.connect(self.calibrate_sis_block)
+
         layout.addWidget(self.sisVoltageSetLabel, 1, 0)
         layout.addWidget(self.sisVoltageSet, 1, 1)
         layout.addWidget(self.btn_set_voltage, 1, 2)
@@ -570,8 +619,18 @@ class BlockTabWidget(QWidget, UtilsMixin):
         layout.addWidget(self.btnSetBiasShortStatus, 3, 1)
         layout.addWidget(self.btnSetCtrlShortStatusLabel, 4, 0)
         layout.addWidget(self.btnSetCtrlShortStatus, 4, 1)
+        layout.addWidget(self.btnCalibrateBlock, 5, 0)
 
         self.rowValuesSet.setLayout(layout)
+
+    def calibrate_sis_block(self):
+        self.calibrate_thread = BlockCalibrateThread(self)
+        self.calibrate_thread.finished.connect(
+            lambda: self.btnCalibrateBlock.setEnabled(True)
+        )
+
+        self.btnCalibrateBlock.setEnabled(False)
+        self.calibrate_thread.start()
 
     def createGroupCTRLScan(self):
         self.groupCTRLScan = QGroupBox("Scan CTRL current")

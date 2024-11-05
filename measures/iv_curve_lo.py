@@ -33,7 +33,7 @@ if __name__ == "__main__":
     )
     sis.connect()
     data = []
-    freqs = np.linspace(270e9, 300e9, 50)
+    freqs = np.linspace(283.5e9, 285.5e9, 40)
     voltages = np.linspace(2e-3, 9e-3, 100)
 
     try:
