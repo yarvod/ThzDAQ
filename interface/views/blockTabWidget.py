@@ -82,7 +82,7 @@ class BlockCalibrateThread(Thread):
             s.query("BIAS:DEV4:CADC [5.476738214604828e-09, -0.047573144569453]")
 
             s.query("BIAS:DEV2:VADC [6.1339499534143405e-09, -0.0532786070163532]")
-            s.query("BIAS:DEV2:CADC [2.3831911807636223e-09, -0.02070135437125212]")
+            s.query("BIAS:DEV2:CADC [2.6324255809708966e-09, -0.02286630432652346]")
 
             s.query("GENeral:DEVice2:WriteEEProm")
             s.query("GENeral:DEVice4:WriteEEProm")
