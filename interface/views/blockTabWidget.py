@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QCheckBox,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSettings
 
 from api import SocketAdapter
 from interface.components.Scontel.sisDemagnetisationWidget import (
@@ -76,13 +76,20 @@ class UtilsMixin:
 class BlockCalibrateThread(Thread):
     def run(self):
         try:
+
+            settings = QSettings("settings.ini", QSettings.IniFormat)
+
+            vadc4 = settings.value("SIS_Block_Cals/vadc4", None)
+            cadc4 = settings.value("SIS_Block_Cals/cadc4", None)
+            vadc2 = settings.value("SIS_Block_Cals/vadc2", None)
+            cadc2 = settings.value("SIS_Block_Cals/cadc2", None)
             s = SocketAdapter(host="169.254.190.83", port=9876)
 
-            s.query("BIAS:DEV4:VADC [6.56704542211282e-09, -0.05704041196301819]")
-            s.query("BIAS:DEV4:CADC [5.476738214604828e-09, -0.047573144569453]")
+            s.query(f"BIAS:DEV4:VADC {vadc4}")
+            s.query(f"BIAS:DEV4:CADC {cadc4}")
 
-            s.query("BIAS:DEV2:VADC [6.1339499534143405e-09, -0.0532786070163532]")
-            s.query("BIAS:DEV2:CADC [2.6324255809708966e-09, -0.02286630432652346]")
+            s.query(f"BIAS:DEV2:VADC {vadc2}")
+            s.query(f"BIAS:DEV2:CADC {cadc2}")
 
             s.query("GENeral:DEVice2:WriteEEProm")
             s.query("GENeral:DEVice4:WriteEEProm")
