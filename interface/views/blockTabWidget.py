@@ -85,16 +85,24 @@ class BlockCalibrateThread(Thread):
             cadc2 = settings.value("SIS_Block_Cals/cadc2", None)
             s = SocketAdapter(host="169.254.190.83", port=9876)
 
-            s.query(f"BIAS:DEV4:VADC {vadc4}")
-            s.query(f"BIAS:DEV4:CADC {cadc4}")
+            if vadc4:
+                vadc4 = [float(_) for _ in vadc4]
+                s.query(f"BIAS:DEV4:VADC {vadc4}")
+            if cadc4:
+                cadc4 = [float(_) for _ in cadc4]
+                s.query(f"BIAS:DEV4:CADC {cadc4}")
 
-            s.query(f"BIAS:DEV2:VADC {vadc2}")
-            s.query(f"BIAS:DEV2:CADC {cadc2}")
+            if vadc2:
+                vadc2 = [float(_) for _ in vadc2]
+                s.query(f"BIAS:DEV2:VADC {vadc2}")
+            if cadc2:
+                cadc2 = [float(_) for _ in cadc2]
+                s.query(f"BIAS:DEV2:CADC {cadc2}")
 
             s.query("GENeral:DEVice2:WriteEEProm")
             s.query("GENeral:DEVice4:WriteEEProm")
-        except DeviceConnectionError:
-            ...
+        except DeviceConnectionError as e:
+            logger.exception(f"{e}", exc_info=True)
         self.finished.emit()
 
 
