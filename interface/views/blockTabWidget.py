@@ -78,11 +78,12 @@ class BlockCalibrateThread(Thread):
         try:
             s = SocketAdapter(host="169.254.190.83", port=9876)
 
-            s.query("BIAS:DEV4:VADC [6.646970168984848e-09, -0.057734626818342544]")
-            s.query("BIAS:DEV4:CADC [7.74425641113238e-09, -0.0672697170091591]")
+            s.query("BIAS:DEV4:VADC [6.56704542211282e-09, -0.05704041196301819]")
+            s.query("BIAS:DEV4:CADC [5.476738214604828e-09, -0.047573144569453]")
 
-            s.query("BIAS:DEV2:VADC [6.40453512694892e-09, -0.055806821507716556]")
-            s.query("BIAS:DEV2:CADC [3.793915158306934e-09, -0.03298317896838076]")
+            s.query("BIAS:DEV2:VADC [6.1339499534143405e-09, -0.0532786070163532]")
+            s.query("BIAS:DEV2:CADC [2.3831911807636223e-09, -0.02070135437125212]")
+
             s.query("GENeral:DEVice2:WriteEEProm")
             s.query("GENeral:DEVice4:WriteEEProm")
         except DeviceConnectionError:
