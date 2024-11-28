@@ -143,6 +143,7 @@ class State:
     NI_FREQ_POINTS = 300
     NI_STABILITY_MEAS = False
     DIGITAL_YIG_FREQ = YigFrequencyModel()
+    DIGITAL_YIG_FREQ_2 = YigFrequencyModel()
     NRX_POINTS = 20
 
     CALIBRATION_CURR_2_FREQ = [3.49015508e10, 1.14176903e08]

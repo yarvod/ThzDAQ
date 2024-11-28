@@ -6,12 +6,12 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QGridLayout,
     QLabel,
     QSizePolicy,
     QCheckBox,
     QProgressBar,
-    QGroupBox as GroupBox,
+    QGroupBox,
+    QHBoxLayout,
     QFormLayout,
 )
 
@@ -20,6 +20,7 @@ from api.NationalInstruments.yig_filter import NiYIGManager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from interface.components.yig.manage_yig import ManageYigWidget
 from store.state import state
 from store.base import MeasureModel
 from threads import Thread
@@ -27,29 +28,6 @@ from utils.dock import Dock
 from utils.functions import linear, get_if_tn
 
 logger = logging.getLogger(__name__)
-
-
-class DigitalYigThread(Thread):
-    response = pyqtSignal(str)
-
-    def run(self):
-        value = int(
-            linear(
-                state.DIGITAL_YIG_FREQ.value * 1e9,
-                *state.CALIBRATION_DIGITAL_FREQ_2_POINT,
-            )
-        )
-        ni_yig = NiYIGManager(host=state.NI_IP)
-        resp = ni_yig.write_task(value=value)
-        resp_int = resp.get("result", None)
-        if resp_int is None:
-            self.response.emit("Unable to set frequency")
-        else:
-            freq = round(
-                linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9, 2
-            )
-            state.DIGITAL_YIG_FREQ.value = freq
-        logger.info(f"[setNiYigFreq] {resp}")
 
 
 class MeasureThread(Thread):
@@ -218,9 +196,9 @@ class YIGWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        self.createGroupNiYig()
         self.createGroupMeas()
-        layout.addWidget(self.groupNiYig)
+        layout.addWidget(ManageYigWidget(self, yig="yig_1"))
+        layout.addWidget(ManageYigWidget(self, yig="yig_2"))
         layout.addWidget(self.groupMeas)
         layout.addStretch()
         self.setLayout(layout)
@@ -230,11 +208,13 @@ class YIGWidget(QWidget):
         self.tnIfGraphWindow = None
 
     def createGroupMeas(self):
-        self.groupMeas = GroupBox("P-IF measurement")
+        self.groupMeas = QGroupBox("P-IF measurement")
         self.groupMeas.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+        flayout = QFormLayout()
+        hlayout = QHBoxLayout()
 
         self.niFreqStartLabel = QLabel(self)
         self.niFreqStartLabel.setText("Frequency start, GHz")
@@ -277,50 +257,19 @@ class YIGWidget(QWidget):
         self.btnStopMeas = Button("Stop Measure")
         self.btnStopMeas.clicked.connect(self.stop_meas)
 
-        layout.addWidget(self.niFreqStartLabel, 1, 0)
-        layout.addWidget(self.niFreqStart, 1, 1)
-        layout.addWidget(self.niFreqStopLabel, 2, 0)
-        layout.addWidget(self.niFreqStop, 2, 1)
-        layout.addWidget(self.niFreqPointsLabel, 3, 0)
-        layout.addWidget(self.niFreqPoints, 3, 1)
-        layout.addWidget(self.nrxPointsLabel, 4, 0)
-        layout.addWidget(self.nrxPoints, 4, 1)
-        layout.addWidget(self.chopperSwitch, 5, 0)
-        layout.addWidget(self.progress, 6, 0, 1, 2)
-        layout.addWidget(self.btnStartMeas, 7, 0)
-        layout.addWidget(self.btnStopMeas, 7, 1)
+        flayout.addRow(self.niFreqStartLabel, self.niFreqStart)
+        flayout.addRow(self.niFreqStopLabel, self.niFreqStop)
+        flayout.addRow(self.niFreqPointsLabel, self.niFreqPoints)
+        flayout.addRow(self.nrxPointsLabel, self.nrxPoints)
+        flayout.addRow(self.chopperSwitch)
+        flayout.addRow(self.progress)
+        hlayout.addWidget(self.btnStartMeas)
+        hlayout.addWidget(self.btnStopMeas)
+
+        layout.addLayout(flayout)
+        layout.addLayout(hlayout)
 
         self.groupMeas.setLayout(layout)
-
-    def createGroupNiYig(self):
-        self.groupNiYig = GroupBox("Digital YIG (NI)")
-        self.groupNiYig.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QFormLayout()
-
-        self.niYigFreqLabel = QLabel(self)
-        self.niYigFreqLabel.setText("Freq, GHz")
-        self.niYigFreq = DoubleSpinBox(self)
-        self.niYigFreq.setRange(2.94, 13)
-        self.niYigFreq.setValue(8)
-
-        self.niDigitalResponseLabel = QLabel(self)
-        self.niDigitalResponseLabel.setText("Actual:")
-        self.niDigitalResponse = QLabel(self)
-        self.niDigitalResponse.setText("Unknown")
-        state.DIGITAL_YIG_FREQ.signal_value.connect(
-            lambda x: self.niDigitalResponse.setText(f"{x} GHz")
-        )
-
-        self.btnSetNiYigFreq = Button("Set frequency", animate=True)
-        self.btnSetNiYigFreq.clicked.connect(self.set_ni_yig_freq)
-
-        layout.addRow(self.niYigFreqLabel, self.niYigFreq)
-        layout.addRow(self.niDigitalResponseLabel, self.niDigitalResponse)
-        layout.addRow(self.btnSetNiYigFreq)
-
-        self.groupNiYig.setLayout(layout)
 
     def start_meas(self):
         self.meas_thread = MeasureThread()
@@ -384,15 +333,3 @@ class YIGWidget(QWidget):
             measure_id=results.get("measure_id"),
         )
         self.tnIfGraphWindow.widget().show()
-
-    def set_ni_yig_freq(self):
-        state.DIGITAL_YIG_FREQ.value = self.niYigFreq.value()
-        self.set_digital_yig_freq_thread = DigitalYigThread()
-        self.set_digital_yig_freq_thread.finished.connect(
-            lambda: self.btnSetNiYigFreq.setEnabled(True)
-        )
-        self.set_digital_yig_freq_thread.response.connect(
-            lambda x: self.niDigitalResponse.setText(f"{x}")
-        )
-        self.set_digital_yig_freq_thread.start()
-        self.btnSetNiYigFreq.setEnabled(False)
