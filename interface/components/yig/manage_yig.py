@@ -23,11 +23,13 @@ class DigitalYigThread(Thread):
 
     def run(self):
         ni_yig = NiYIGManager(host=state.NI_IP)
-        resp = ni_yig.set_frequency(state.DIGITAL_YIG_FREQ.value * 1e9, yig=self.yig)
+        resp = ni_yig.set_frequency(
+            state.DIGITAL_YIG_MAP[self.yig].value * 1e9, yig=self.yig
+        )
         if resp is None:
             self.response.emit("Unable to set frequency")
         else:
-            state.DIGITAL_YIG_FREQ.value = resp
+            state.DIGITAL_YIG_MAP[yig].value = resp
         logger.info(f"[setNiYigFreq] {resp}")
 
 
@@ -49,7 +51,7 @@ class ManageYigWidget(QGroupBox):
         self.niDigitalResponseLabel.setText("Actual:")
         self.niDigitalResponse = QLabel(self)
         self.niDigitalResponse.setText("Unknown")
-        state.DIGITAL_YIG_FREQ.signal_value.connect(
+        state.DIGITAL_YIG_MAP[yig].signal_value.connect(
             lambda x: self.niDigitalResponse.setText(f"{x} GHz")
         )
 
@@ -66,7 +68,7 @@ class ManageYigWidget(QGroupBox):
         if self.set_digital_yig_freq_thread is None:
             self.set_digital_yig_freq_thread = DigitalYigThread(yig=self.yig)
 
-        state.DIGITAL_YIG_FREQ.value = self.niYigFreq.value()
+        state.DIGITAL_YIG_MAP[self.yig].value = self.niYigFreq.value()
         self.set_digital_yig_freq_thread.finished.connect(
             lambda: self.btnSetNiYigFreq.setEnabled(True)
         )

@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from api.Chopper import chopper_manager
-from api.NationalInstruments.yig_filter import NiYIGManager
+from api.NationalInstruments.yig_filter import NiYIGManager, YigType
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
@@ -36,8 +36,9 @@ class MeasureThread(Thread):
     stream_tn_results = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
-    def __init__(self):
+    def __init__(self, yig: YigType):
         super().__init__()
+        self.yig = yig
         self.ni = NiYIGManager()
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
@@ -54,7 +55,7 @@ class MeasureThread(Thread):
             )
         self.measure.save(finish=False)
 
-        self.initial_freq = state.DIGITAL_YIG_FREQ.value
+        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
@@ -102,7 +103,7 @@ class MeasureThread(Thread):
                         * 1e-9,
                         2,
                     )
-                    state.DIGITAL_YIG_FREQ.value = freq
+                    state.DIGITAL_YIG_MAP[self.yig].value = freq
                 else:
                     break
                 time.sleep(0.01)
@@ -178,16 +179,9 @@ class MeasureThread(Thread):
 
     def pre_exit(self):
         state.NI_STABILITY_MEAS = False
-        freq_point = linear(
-            self.initial_freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT
-        )
-        resp = self.ni.write_task(freq_point)
-        resp_freq_int = resp.get("result", None)
-        if resp_freq_int:
-            state.DIGITAL_YIG_FREQ.value = round(
-                linear(resp_freq_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9,
-                2,
-            )
+        resp = self.ni.set_frequency(self.initial_freq, yig=self.yig)
+        if resp:
+            state.DIGITAL_YIG_MAP[self.yig].value = resp
         self.nrx.adapter.close()
         self.measure.save()
 
@@ -272,7 +266,7 @@ class YIGWidget(QWidget):
         self.groupMeas.setLayout(layout)
 
     def start_meas(self):
-        self.meas_thread = MeasureThread()
+        self.meas_thread = MeasureThread(yig="yig_1")
 
         state.NI_STABILITY_MEAS = True
         state.NI_FREQ_TO = self.niFreqStop.value()
