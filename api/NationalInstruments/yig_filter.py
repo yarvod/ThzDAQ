@@ -46,7 +46,7 @@ class NiYIGManager:
         value = int(value)
         url = f"{self.url}/devices/{device}/write/{yig}/"
         response = requests.post(
-            url, data=json.dumps({"value": value}), headers=self.headers
+            url, data=json.dumps({"value": value}), headers=self.headers, timeout=5
         )
         return response.json()
 
