@@ -137,11 +137,13 @@ class VNATabWidget(QWidget):
         self.freqFromLabel = QLabel(self)
         self.freqFromLabel.setText("Freq start, GHz:")
         self.freqFrom = DoubleSpinBox(self)
+        self.freqFrom.setRange(0.01, 67)
         self.freqFrom.setValue(state.VNA_FREQ_START)
 
         self.freqToLabel = QLabel(self)
         self.freqToLabel.setText("Freq stop, GHz:")
         self.freqTo = DoubleSpinBox(self)
+        self.freqFrom.setRange(0.01, 67)
         self.freqTo.setValue(state.VNA_FREQ_STOP)
 
         self.vnaPointsLabel = QLabel(self)

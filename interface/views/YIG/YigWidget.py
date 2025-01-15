@@ -213,14 +213,14 @@ class YIGWidget(QWidget):
         self.niFreqStartLabel = QLabel(self)
         self.niFreqStartLabel.setText("Frequency start, GHz")
         self.niFreqStart = DoubleSpinBox(self)
-        self.niFreqStart.setRange(0, 20)
+        self.niFreqStart.setRange(2.97, 13)
         self.niFreqStart.setDecimals(3)
         self.niFreqStart.setValue(state.NI_FREQ_FROM)
 
         self.niFreqStopLabel = QLabel(self)
         self.niFreqStopLabel.setText("Frequency stop, GHz")
         self.niFreqStop = DoubleSpinBox(self)
-        self.niFreqStop.setRange(0, 20)
+        self.niFreqStop.setRange(2.97, 13)
         self.niFreqStop.setDecimals(3)
         self.niFreqStop.setValue(state.NI_FREQ_TO)
 
