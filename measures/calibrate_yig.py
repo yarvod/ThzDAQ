@@ -9,7 +9,7 @@ from store.state import state
 from utils.functions import linear
 from utils.logger import logger
 
-s_block = SpectrumBlock(host="169.254.75.176", port=5025, adapter="SOCKET")
+s_block = SpectrumBlock(host="169.254.75.176", port=5025, adapter="SOCKET", delay=0.05)
 ni = NiYIGManager()
 
 results = {
@@ -31,15 +31,14 @@ try:
             linear(point, *state.CALIBRATION_DIGITAL_POINT_2_FREQ),
         )
         s_block.set_center_frequency(freq)
-        time.sleep(0.1)
-        resp = ni.write_task(value=point, yig="yig_2")
+        resp = ni.write_task(value=point, yig="yig_1")
         resp_int = resp.get("result", None)
         if resp_int is None:
             logger.error(f"Unable set point {point}")
 
         if point == 0:
-            time.sleep(1)
-        time.sleep(0.2)
+            time.sleep(0.5)
+        time.sleep(0.15)
         s_block.peak_search()
         power = s_block.get_peak_power()
         freq = s_block.get_peak_freq()
