@@ -1,6 +1,6 @@
 import socket
 import time
-from typing import Union
+from typing import Union, Optional
 
 import settings
 from store.state import state
@@ -181,6 +181,33 @@ class SisBlock(BaseInstrument):
         :return:
         """
         return float(self.manipulate(f"BIAS:{self.bias_dev}:CMRE?"))
+
+    def set_bias_voltage_iterative(
+        self, desired_voltage, tolerance=0.001, max_iterations=500
+    ) -> Optional[float]:
+        voltage_to_set = desired_voltage
+        iteration = 0
+
+        while iteration < max_iterations:
+            self.set_bias_voltage(voltage_to_set)
+            time.sleep(1)
+            real_voltage = self.get_bias_voltage()
+            logger.info(f"Real voltage {real_voltage*1e3:.3f}")
+
+            if abs(real_voltage - desired_voltage) <= tolerance * abs(desired_voltage):
+                logger.info(
+                    f"Желаемое напряжение {desired_voltage*1e3:.3f} достигнуто с точностью {tolerance * 100:.2f}%. за {iteration} итераций"
+                )
+                return real_voltage
+
+            voltage_to_set += desired_voltage - real_voltage
+            logger.info(f"Voltage to set {voltage_to_set*1e3:.3f}")
+            iteration += 1
+
+        logger.error(
+            f"Не удалось достичь желаемого напряжения {desired_voltage*1e3:.3f} за {max_iterations} итераций."
+        )
+        return None
 
     def __del__(self):
         self.disconnect()

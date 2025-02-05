@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QProgressBar,
 )
 
-from api.NationalInstruments.yig_filter import NiYIGManager
+from api.NationalInstruments.yig_filter import NiYIGManager, YigType
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
@@ -103,6 +103,7 @@ class MeasurePowerThread(Thread):
         freq_stop,
         freq_points,
         t_sis=4,
+        yig: YigType = "yig_1",
     ):
         super().__init__()
         self.voltage1 = voltage1 * 1e-3
@@ -122,8 +123,9 @@ class MeasurePowerThread(Thread):
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
+        self.yig_type = yig
         self.yig = NiYIGManager()
-        self.initial_freq = state.DIGITAL_YIG_FREQ.value
+        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.TA_SIS_CALIBRATION, data={}
         )
@@ -175,7 +177,7 @@ class MeasurePowerThread(Thread):
                         * 1e-9,
                         2,
                     )
-                    state.DIGITAL_YIG_FREQ.value = freq
+                    state.DIGITAL_YIG_MAP[self.yig_type].value = freq
                 else:
                     break
 

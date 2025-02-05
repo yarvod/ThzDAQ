@@ -9,8 +9,9 @@ const int sleepPin = 4;
 const int ms1Pin = 5;
 const int ms2Pin = 6;
 const int ms3Pin = 7;
-const int stepsPerRevolution = 4000;
-const int stepDelay = 700;
+
+const int stepsPerRevolution = 16000;
+const int stepDelay = 350;
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress ip(169, 254, 0, 52);
@@ -121,18 +122,23 @@ void setup() {
   // Set pins outs
   pinMode(dirPin, OUTPUT);
   pinMode(stepPin, OUTPUT);
-  // pinMode(resetPin, OUTPUT);
-  // pinMode(sleepPin, OUTPUT);
+  pinMode(sleepPin, OUTPUT);
+  pinMode(resetPin, OUTPUT);
   pinMode(ms1Pin, OUTPUT);
   pinMode(ms2Pin, OUTPUT);
   pinMode(ms3Pin, OUTPUT);
-  // Init default pins values
-  digitalWrite(ms2Pin, HIGH);
   // Init ethernet
   Ethernet.begin(mac, ip);
   server.begin();
   Serial.print("Server is at ");
   Serial.println(Ethernet.localIP());
+  // Enable driver motor
+  digitalWrite(resetPin, HIGH);
+  digitalWrite(sleepPin, HIGH);
+  digitalWrite(ms1Pin, HIGH);
+  digitalWrite(ms2Pin, HIGH);
+  digitalWrite(ms3Pin, HIGH);
+  Serial.println("Motor enabled");
 }
 
 // Main Loop

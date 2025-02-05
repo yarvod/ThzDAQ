@@ -2,13 +2,20 @@
 #include <Ethernet2.h>
 #include <ArduinoJson.h>
 
-const int dirPin = 4;
+const int dirPin = 2;
 const int stepPin = 3;
-const int stepsPerRevolution = 1000;
-const int stepDelay = 700;
+const int sleepPin = 4;
+const int resetPin = 5;
+const int ms3Pin = 6;
+const int ms2Pin = 7;
+const int ms1Pin = 8;
+const int enablePin = 9;
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip(169, 254, 0, 52);
+const int stepsPerRevolution = 16000;
+const int stepDelay = 350;
+
+byte mac[] = { 0x00, 0xAA, 0xBB, 0xCC, 0xDE, 0x02 };
+IPAddress ip(169, 254, 0, 53);
 EthernetServer server(80);
 
 // Helpers
@@ -17,6 +24,10 @@ void urlHandler(String request, EthernetClient client) {
   if (request.indexOf("POST /rotate") != -1) {
     Serial.println("Calling stepperRotateView");
     stepperRotateView(request, client);
+  }
+  if (request.indexOf("POST /test") != -1) {
+    Serial.println("Calling testStepperRotateView");
+    testStepperRotateView(request, client);
   }
 }
 
@@ -60,17 +71,16 @@ float serializeRequest(String request, EthernetClient client) {
   return angle;
 }
 
-String serializeResponse(float angle) {
+String serializeResponse() {
   DynamicJsonDocument responseDoc(1024);
   responseDoc["status"] = "OK";
-  responseDoc["angle"] = angle;
   String response;
   serializeJson(responseDoc, response);
   return response;
 }
 
-void processResponse(EthernetClient client, float angle) {
-  String response = serializeResponse(angle);
+void processResponse(EthernetClient client) {
+  String response = serializeResponse();
   sendResponse(client, response);
 }
 
@@ -78,7 +88,13 @@ void processResponse(EthernetClient client, float angle) {
 void stepperRotateView(String request, EthernetClient client) {
   float angle = serializeRequest(request, client);
   stepperRotate(angle);
-  processResponse(client, angle);
+  processResponse(client);
+}
+
+void testStepperRotateView(String request, EthernetClient client) {
+  stepperRotate(45);
+  stepperRotate(-45);
+  processResponse(client);
 }
 
 // UseCases
@@ -101,14 +117,34 @@ void stepperRotate(float angle) {
 
 // Set Up
 void setup() {
+  // Init serial
   Serial.begin(9600);
+  Serial.print("Serial init OK\r\n");
+  // Set pins outs
   pinMode(dirPin, OUTPUT);
   pinMode(stepPin, OUTPUT);
-  Serial.print("Serial init OK\r\n");
+  pinMode(sleepPin, OUTPUT);
+  pinMode(resetPin, OUTPUT);
+  pinMode(ms1Pin, OUTPUT);
+  pinMode(ms2Pin, OUTPUT);
+  pinMode(ms3Pin, OUTPUT);
+  pinMode(enablePin, OUTPUT);
+  // pinMode(resetPin, OUTPUT);
+  // pinMode(sleepPin, OUTPUT);
+  // Init default pins values
+  // Init ethernet
   Ethernet.begin(mac, ip);
   server.begin();
   Serial.print("Server is at ");
   Serial.println(Ethernet.localIP());
+  // Enable driver motor
+  digitalWrite(enablePin, LOW);
+  digitalWrite(resetPin, HIGH);
+  digitalWrite(sleepPin, HIGH);
+  digitalWrite(ms1Pin, HIGH);
+  digitalWrite(ms2Pin, HIGH);
+  digitalWrite(ms3Pin, HIGH);
+  Serial.println("Motor enabled");
 }
 
 // Main Loop

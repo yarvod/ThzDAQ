@@ -7,7 +7,6 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QSizePolicy,
     QGroupBox,
     QLabel,
     QFormLayout,
@@ -230,7 +229,8 @@ class StepBiasPowerThread(Thread):
                             "legend_postfix": f"angle {angle} °",
                         }
                     )
-        chopper_manager.chopper.align_to_cold()
+        if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_cold()
         self.pre_exit()
         self.finished.emit()
 
@@ -252,7 +252,7 @@ class StepBiasPowerThread(Thread):
 
 class GridTabWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self._layout = QVBoxLayout(self)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasCurrentGraphWindow = None
@@ -271,9 +271,6 @@ class GridTabWidget(QWidget):
 
     def createGroupGridBiasPowerScan(self):
         self.groupGridBiasPowerScan = QGroupBox("Grid Power Bias Scan")
-        self.groupGridBiasPowerScan.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
         layout = QFormLayout()
 
         self.angleStartLabel = QLabel(self)

@@ -1,3 +1,9 @@
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 SOCKET = "SOCKET"
 PROLOGIX_ETHERNET = "PROLOGIX ETHERNET"
 PROLOGIX_USB = "PROLOGIX USB"
@@ -15,6 +21,10 @@ ADAPTERS = {
 
 WAVESHARE_ETHERNET = "WaveShare Ethernet"
 SERIAL_USB = "Serial Usb"
+
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 
 
 class GridPlotTypes:

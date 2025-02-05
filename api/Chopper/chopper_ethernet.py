@@ -9,7 +9,6 @@ from api.Chopper.chopper_sync import Chopper
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class ChopperEthernet(Chopper):
@@ -64,12 +63,12 @@ class ChopperEthernet(Chopper):
             time.sleep(1)
 
         while not (di2 is True and di3 is True):
-            logger.info(f"[STEP {step}/{steps}] Start new step")
+            logger.debug(f"[STEP {step}/{steps}] Start new step")
             if step >= steps:
-                logger.info(f"Break align to hot, {step} steps exceeded")
+                logger.debug(f"Break align to hot, {step} steps exceeded")
                 break
             if di2 is True and di3 is False:
-                logger.info(
+                logger.debug(
                     f"[STEP {step}/{steps}] Left D is Hot, Right D is Cold. \n Rotate 2 degree CW"
                 )
                 self.motor_direction(1)
@@ -77,7 +76,7 @@ class ChopperEthernet(Chopper):
                 time.sleep(0.1)
                 di2, di3 = self.read_di23()
             elif di2 is False and di3 is True:
-                logger.info(
+                logger.debug(
                     f"[STEP {step}/{steps}] Left D is Cold, Right D is Hot. \n Rotate 2 degree CCW"
                 )
                 self.motor_direction(0)
@@ -100,12 +99,12 @@ class ChopperEthernet(Chopper):
             time.sleep(1)
 
         while not (di2 is False and di3 is False):
-            logger.info(f"[STEP {step}/{steps}] Start new step")
+            logger.debug(f"[STEP {step}/{steps}] Start new step")
             if step >= steps:
-                logger.info(f"Break align to hot, {step} steps exceeded")
+                logger.debug(f"Break align to cold, {step} steps exceeded")
                 break
             if di2 is True and di3 is False:
-                logger.info(
+                logger.debug(
                     f"[STEP {step}/{steps}] Left D is Hot, Right D is Cold. \n Rotate 2 degree CW"
                 )
                 self.motor_direction(0)
@@ -113,7 +112,7 @@ class ChopperEthernet(Chopper):
                 time.sleep(0.1)
                 di2, di3 = self.read_di23()
             elif di2 is False and di3 is True:
-                logger.info(
+                logger.debug(
                     f"[STEP {step}/{steps}] Left D is Cold, Right D is Hot. \n Rotate 2 degree CCW"
                 )
                 self.motor_direction(1)

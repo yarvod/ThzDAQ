@@ -9,3 +9,4 @@ dist
 dumps
 *.ipynb
 *meas*.json
+.env

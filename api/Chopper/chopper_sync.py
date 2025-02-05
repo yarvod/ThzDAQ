@@ -46,17 +46,17 @@ class Chopper:
     def connect(self) -> bool:
         if not self.client.connected:
             self.client.connect()
-        logger.info(
+        logger.debug(
             f"[{[self.__class__.__name__]}.connect] Connected {self.client.connected}"
         )
         return self.client.connected
 
     def close(self):
         self.client.close()
-        logger.info(f"[{[self.__class__.__name__]}.close] Client closed")
+        logger.debug(f"[{[self.__class__.__name__]}.close] Client closed")
 
     def __del__(self):
-        logger.info(f"[{[self.__class__.__name__]}.__del__] Instance deleted")
+        logger.debug(f"[{[self.__class__.__name__]}.__del__] Instance deleted")
 
     def save_parameters_to_eeprom(self):
         self.client.write_register(int(0x1801), int(0x2211), self.slave_address)
@@ -75,21 +75,21 @@ class Chopper:
 
     def jogCW(self):
         self.client.write_register(int(0x1801), int(0x4001), self.slave_address)
-        logger.info("jogCW")
+        logger.debug("jogCW")
 
     def jogCCW(self):
         self.client.write_register(int(0x1801), int(0x4002), self.slave_address)
-        logger.info("jogCCW")
+        logger.debug("jogCCW")
 
     def emergency_stop(self):
         self.client.write_register(int(0x6002), int(0x040), self.slave_address)
-        logger.info("Emergency stop")
+        logger.debug("Emergency stop")
 
     def set_origin(self):
         """Set current position as 'Zero'"""
         self.client.write_register(int(0x6002), int(0x021), self.slave_address)
         pos = self.get_actual_pos()
-        logger.info(f"Origin set, actual position (in pulses): {pos}")
+        logger.debug(f"Origin set, actual position (in pulses): {pos}")
 
     def get_actual_pos(self) -> int:
         start_address = int(0x602C)
@@ -137,7 +137,7 @@ class Chopper:
             and abs(self.get_actual_pos() - (int(self.get_actual_pos() / 2500) * 2500))
             > 50
         ):
-            logger.info("[path0] Aligning before rotation")
+            logger.debug("[path0] Aligning before rotation")
             self.align()
             time.sleep(0.3)
         self.client.write_register(int(0x6002), int(0x010), self.slave_address)
@@ -188,12 +188,12 @@ class Chopper:
         self.client.write_register(int(0x620D), int(5000), self.slave_address)
         # trigger PR1 motion
         self.client.write_register(int(0x6002), int(0x011), self.slave_address)
-        # logger.info("Constant speed:", freq, "Hz")
+        # logger.debug("Constant speed:", freq, "Hz")
 
     # slow down
     def path2(self):
-        logger.info("[path2]!Axis in rotation!")
-        logger.info("[path2] Slowing down, wait for complete stop ...")
+        logger.debug("[path2]!Axis in rotation!")
+        logger.debug("[path2] Slowing down, wait for complete stop ...")
         while True:
             self.client.write_register(
                 int(0x6210), int(0b01000001), self.slave_address
@@ -211,9 +211,9 @@ class Chopper:
             self.client.write_register(int(0x6002), int(0x012), self.slave_address)
             if self.get_actual_speed() < 0.1:
                 self.emergency_stop()
-                logger.info("[path2] Stopped")
+                logger.debug("[path2] Stopped")
                 self.align()
-                logger.info("[path2] Aligned")
+                logger.debug("[path2] Aligned")
                 break
             time.sleep(0.1)
 
@@ -223,7 +223,7 @@ class Chopper:
         builder.add_32bit_int(pulse)
         registers = builder.to_registers()
         self.client.write_registers(starting_address, registers, self.slave_address)
-        # logger.info("Moving to position: p = ", pulse, "...")
+        # logger.debug("Moving to position: p = ", pulse, "...")
 
         self.client.write_register(
             int(0x6218), int(0b00000001), self.slave_address
@@ -239,10 +239,10 @@ class Chopper:
 
     def align(self):
         actual_pos = self.get_actual_pos()
-        logger.info(f"[align] Actual position: {actual_pos}")
+        logger.debug(f"[align] Actual position: {actual_pos}")
         target = int(round(actual_pos / 2500) * 2500)
         self.go_to_pos(target)
-        logger.info(f"[align] Chopper aligned")
+        logger.debug(f"[align] Chopper aligned")
 
 
 if __name__ == "__main__":

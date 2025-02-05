@@ -67,10 +67,27 @@ class RigolPowerSupplyManager(DeviceManager):
     config_class = RigolPowerSupplyConfig
 
 
+class SumitomoF70Config(DeviceConfig):
+    def __init__(
+        self,
+        name: str,
+        cid: int,
+        adapter: str = None,
+        host: str = None,
+        port: Union[str, int] = None,
+        gpib: int = None,
+        status: str = settings.NOT_INITIALIZED,
+        config_manager=None,
+    ):
+        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        self.thread_stream = False
+
+
 class SumitomoF70Manager(DeviceManager):
     name = "Sumitomo F70 Compressor"
     main_widget_class = "interface.views.SumitomoF70TabWidget"
     configs = DeviceConfigList()
+    config_class = SumitomoF70Config
 
 
 class LakeShoreTemperatureControllerManager(DeviceManager):
