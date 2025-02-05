@@ -56,7 +56,7 @@ class DeviceAddForm(QDialog):
         self.gpibLabel = QLabel(self)
         self.gpibLabel.setText("GPIB:")
         self.gpib = QSpinBox(self)
-        self.gpib.setRange(1, 31)
+        self.gpib.setRange(0, 31)
         self.gpib.setValue(int(gpib))
         self.gpib.setToolTip("GPIB address")
 
@@ -64,7 +64,7 @@ class DeviceAddForm(QDialog):
         flayout.addRow(self.hostLabel, self.host)
         flayout.addRow(self.portLabel, self.port)
         flayout.addRow(self.gpibLabel, self.gpib)
-        self.add_custom_form_fields(flayout)
+        self.add_custom_form_fields(flayout, **kwargs)
 
         self.btnSubmit = Button(self, icon=QIcon("assets/init-icon.png"))
         self.btnSubmit.setText("Initialize")
@@ -80,7 +80,7 @@ class DeviceAddForm(QDialog):
         self.init.emit(self.get_initialize_kwargs())
         self.close()
 
-    def add_custom_form_fields(self, flayout):
+    def add_custom_form_fields(self, flayout, **kwargs):
         ...
 
     def get_initialize_kwargs(self):

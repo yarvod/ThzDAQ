@@ -9,9 +9,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
-    QDoubleSpinBox,
     QSizePolicy,
-    QComboBox,
 )
 
 from api.Arduino.grid import GridManager
@@ -37,39 +35,8 @@ from interface.components.prologix.setUpPrologix import SetUpPrologix
 from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
-from api.Scontel.sis_block import SisBlock
 
 logger = logging.getLogger(__name__)
-
-
-class SISBlockThread(QThread):
-    status = pyqtSignal(str)
-
-    def run(self):
-        logger.info(f"[{self.__class__.__name__}.run] Running...")
-        block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        block.connect()
-        result = block.test()
-        logger.info(f"[{self.__class__.__name__}.run]Health check SIS block {result}")
-        self.status.emit(result)
-        self.finished.emit()
-
-    def terminate(self):
-        super().terminate()
-        logger.info(f"[{self.__class__.__name__}.terminate] Terminated")
-
-    def quit(self) -> None:
-        super().quit()
-        logger.info(f"[{self.__class__.__name__}.quit] Quited")
-
-    def exit(self, returnCode: int = ...):
-        super().exit(returnCode)
-        logger.info(f"[{self.__class__.__name__}.exit] Exited")
 
 
 class GridThread(QThread):
@@ -131,59 +98,6 @@ class SetUpTabWidget(QWidget):
             else:
                 widget.hide()
 
-    def createGroupBlock(self):
-        self.groupBlock = QGroupBox(self)
-        self.groupBlock.setTitle("SIS Block")
-        self.groupBlock.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.blockIPLabel = QLabel(self)
-        self.blockIPLabel.setText("IP Address:")
-        self.block_ip = QLineEdit(self)
-        self.block_ip.setText(state.BLOCK_ADDRESS)
-
-        self.blockPortLabel = QLabel(self)
-        self.blockPortLabel.setText("Port:")
-        self.block_port = QDoubleSpinBox(self)
-        self.block_port.setMaximum(10000)
-        self.block_port.setDecimals(0)
-        self.block_port.setValue(state.BLOCK_PORT)
-
-        self.ctrlDevLabel = QLabel(self)
-        self.biasDevLabel = QLabel(self)
-        self.ctrlDev = QComboBox(self)
-        self.ctrlDev.addItems(["DEV1", "DEV3"])
-        self.biasDev = QComboBox(self)
-        self.biasDev.addItems(["DEV2", "DEV4"])
-        self.ctrlDevLabel.setText("CTRL Device:")
-        self.biasDevLabel.setText("BIAS Device:")
-        self.ctrlDev.setCurrentText(state.BLOCK_CTRL_DEV)
-        self.biasDev.setCurrentText(state.BLOCK_BIAS_DEV)
-
-        self.sisBlockStatusLabel = QLabel(self)
-        self.sisBlockStatusLabel.setText("Status:")
-        self.sisBlockStatus = QLabel(self)
-        self.sisBlockStatus.setText("Doesn't initialized yet!")
-
-        self.btnInitBlock = Button("Initialize", animate=True)
-        self.btnInitBlock.clicked.connect(self.initialize_block)
-
-        layout.addWidget(self.blockIPLabel, 1, 0)
-        layout.addWidget(self.block_ip, 1, 1)
-        layout.addWidget(self.blockPortLabel, 2, 0)
-        layout.addWidget(self.block_port, 2, 1)
-        layout.addWidget(self.ctrlDevLabel, 3, 0)
-        layout.addWidget(self.ctrlDev, 3, 1)
-        layout.addWidget(self.biasDevLabel, 4, 0)
-        layout.addWidget(self.biasDev, 4, 1)
-        layout.addWidget(self.sisBlockStatusLabel, 5, 0)
-        layout.addWidget(self.sisBlockStatus, 5, 1)
-        layout.addWidget(self.btnInitBlock, 6, 0, 1, 2)
-
-        self.groupBlock.setLayout(layout)
-
     def createGroupGrid(self):
         self.groupGrid = QGroupBox("GRID")
         self.groupGrid.setSizePolicy(
@@ -225,21 +139,3 @@ class SetUpTabWidget(QWidget):
         short_status = textwrap.shorten(status, width=40, placeholder="...")
         self.gridStatus.setText(short_status)
         self.gridStatus.setToolTip(status)
-
-    def initialize_block(self):
-        self.sis_block_thread = SISBlockThread()
-
-        state.BLOCK_ADDRESS = self.block_ip.text()
-        state.BLOCK_PORT = int(self.block_port.value())
-        state.BLOCK_BIAS_DEV = self.biasDev.currentText()
-        state.BLOCK_CTRL_DEV = self.ctrlDev.currentText()
-
-        self.sis_block_thread.status.connect(
-            lambda status: self.sisBlockStatus.setText(status)
-        )
-        self.sis_block_thread.start()
-
-        self.btnInitBlock.setEnabled(False)
-        self.sis_block_thread.finished.connect(
-            lambda: self.btnInitBlock.setEnabled(True)
-        )

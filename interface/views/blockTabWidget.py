@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSettings
 
-from api import SocketAdapter
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
 )
@@ -73,8 +72,14 @@ class BlockSetCtrlCurrentThread(Thread):
 
 
 class BlockCalibrateThread(Thread):
+    def __init__(self, parent, cid: int):
+        self.config = ScontelSisBlockManager.get_config(cid)
+        self.block = None
+        super().__init__(parent)
+
     def run(self):
         try:
+            self.block = SisBlock(**self.config.dict())
 
             settings = QSettings("settings.ini", QSettings.IniFormat)
 
@@ -82,24 +87,24 @@ class BlockCalibrateThread(Thread):
             cadc4 = settings.value("SIS_Block_Cals/cadc4", None)
             vadc2 = settings.value("SIS_Block_Cals/vadc2", None)
             cadc2 = settings.value("SIS_Block_Cals/cadc2", None)
-            s = SocketAdapter(host="169.254.190.83", port=9876)
 
             if vadc4:
                 vadc4 = [float(_) for _ in vadc4]
-                s.query(f"BIAS:DEV4:VADC {vadc4}")
+                self.block.adapter.query(f"BIAS:DEV4:VADC {vadc4}")
             if cadc4:
                 cadc4 = [float(_) for _ in cadc4]
-                s.query(f"BIAS:DEV4:CADC {cadc4}")
+                self.block.adapter.query(f"BIAS:DEV4:CADC {cadc4}")
 
             if vadc2:
                 vadc2 = [float(_) for _ in vadc2]
-                s.query(f"BIAS:DEV2:VADC {vadc2}")
+                self.block.adapter.query(f"BIAS:DEV2:VADC {vadc2}")
             if cadc2:
                 cadc2 = [float(_) for _ in cadc2]
-                s.query(f"BIAS:DEV2:CADC {cadc2}")
+                self.block.adapter.query(f"BIAS:DEV2:CADC {cadc2}")
 
-            s.query("GENeral:DEVice2:WriteEEProm")
-            s.query("GENeral:DEVice4:WriteEEProm")
+            self.block.adapter.query("GENeral:DEVice2:WriteEEProm")
+            self.block.adapter.query("GENeral:DEVice4:WriteEEProm")
+            del self.block
         except DeviceConnectionError as e:
             logger.exception(f"{e}", exc_info=True)
         self.finished.emit()
@@ -110,11 +115,6 @@ class BlockStreamThread(QThread):
     bias_voltage = pyqtSignal(float)
     bias_current = pyqtSignal(float)
     plot_data = pyqtSignal(dict)
-    plot_data = pyqtSignal(dict)
-
-    def __init__(self, stream_plot: bool = False):
-        self.stream_plot = stream_plot
-        super().__init__()
 
     def __init__(self, cid: int, stream_plot: bool = False):
         self.config = ScontelSisBlockManager.get_config(cid)
@@ -247,8 +247,13 @@ class BlockBIASScanThread(Thread):
     stream_result = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
-    def __init__(self, cid: int):
+    def __init__(self, cid: int, voltage_start, voltage_stop, voltage_points):
         self.config = ScontelSisBlockManager.get_config(cid)
+        self.config.thread_bias_scan = True
+        self.voltage_start = voltage_start
+        self.voltage_stop = voltage_stop
+        self.voltage_stop = voltage_stop
+        self.voltage_points = voltage_points
         super().__init__()
 
     def run(self):
@@ -266,9 +271,9 @@ class BlockBIASScanThread(Thread):
         }
         initial_v = block.get_bias_voltage()
         v_range = np.linspace(
-            state.BLOCK_BIAS_VOLT_FROM * 1e-3,
-            state.BLOCK_BIAS_VOLT_TO * 1e-3,
-            state.BLOCK_BIAS_VOLT_POINTS,
+            self.voltage_start * 1e-3,
+            self.voltage_stop * 1e-3,
+            self.voltage_points,
         )
         start_t = datetime.now()
         i = 0
@@ -434,13 +439,13 @@ class BlockTabWidget(QWidget):
         block.disconnect()
 
     def scan_bias_iv(self):
-        self.block_bias_scan_thread = BlockBIASScanThread(cid=self.cid)
+        self.block_bias_scan_thread = BlockBIASScanThread(
+            cid=self.cid,
+            voltage_start=self.biasVoltageFrom.value(),
+            voltage_stop=self.biasVoltageTo.value(),
+            voltage_points=int(self.biasPoints.value()),
+        )
         self.block_bias_scan_thread.stream_result.connect(self.show_bias_graph_window)
-
-        state.BLOCK_BIAS_VOLT_FROM = self.biasVoltageFrom.value()
-        state.BLOCK_BIAS_VOLT_TO = self.biasVoltageTo.value()
-        state.BLOCK_BIAS_VOLT_POINTS = int(self.biasPoints.value())
-        state.BLOCK_BIAS_SCAN_THREAD = True
 
         self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
 
@@ -644,7 +649,7 @@ class BlockTabWidget(QWidget):
         )
 
     def calibrate_sis_block(self):
-        self.calibrate_thread = BlockCalibrateThread(self)
+        self.calibrate_thread = BlockCalibrateThread(self, cid=self.cid)
         self.calibrate_thread.finished.connect(
             lambda: self.btnCalibrateBlock.setEnabled(True)
         )

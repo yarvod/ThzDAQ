@@ -22,7 +22,7 @@ from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.Lines import HLine
-from store import RohdeSchwarzVnaZva67Manager
+from store import RohdeSchwarzVnaZva67Manager, ScontelSisBlockManager
 from store.base import MeasureModel
 from store.state import state
 from threads import Thread
@@ -37,7 +37,7 @@ class BiasReflectionThread(Thread):
 
     def __init__(
         self,
-        # cid_sis: int, FIXME: insert Configs logic
+        cid_sis: int,
         cid_vna: int,
         start_frequency: float,
         stop_frequency: float,
@@ -52,6 +52,8 @@ class BiasReflectionThread(Thread):
         step_delay: float,
     ):
         super().__init__()
+        self.cid_sis = cid_sis
+        self.config_sis = ScontelSisBlockManager.get_config(cid_sis)
         self.cid_vna = cid_vna
         self.config_vna = RohdeSchwarzVnaZva67Manager.get_config(cid_vna)
         self.start_frequency = start_frequency
@@ -88,6 +90,12 @@ class BiasReflectionThread(Thread):
             self.finished.emit()
             return
 
+        try:
+            self.block = SisBlock(**self.config_sis.dict())
+        except DeviceConnectionError:
+            self.finished.emit()
+            return
+
         self.vna.set_parameter(self.vna_parameter)
         self.vna.set_start_frequency(self.start_frequency)
         self.vna.set_stop_frequency(self.stop_frequency)
@@ -96,14 +104,6 @@ class BiasReflectionThread(Thread):
         self.vna.set_channel_format("COMP")
         self.vna.set_average_count(self.vna_average_count)
         self.vna.set_average_status(True)
-
-        self.block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        self.block.connect()
 
         frequencies = list(
             np.linspace(
@@ -185,6 +185,13 @@ class SisReflectionMeasureWidget(QWidget):
         flayout = QFormLayout()
         hlayout = QHBoxLayout()
 
+        self.sisConfigLabel = QLabel(self)
+        self.sisConfigLabel.setText("SIS block device")
+        self.sisConfig = QComboBox(self)
+        ScontelSisBlockManager.event_manager.configs_updated.connect(
+            self.update_sis_config
+        )
+
         self.voltageStartLabel = QLabel(self)
         self.voltageStartLabel.setText("Voltage start, mV")
         self.voltageStart = DoubleSpinBox(self)
@@ -224,11 +231,13 @@ class SisReflectionMeasureWidget(QWidget):
         self.frequencyStartLabel = QLabel(self)
         self.frequencyStartLabel.setText("Freq start, GHz:")
         self.frequencyStart = DoubleSpinBox(self)
+        self.frequencyStart.setRange(state.VNA_FREQ_MIN, state.VNA_FREQ_MAX)
         self.frequencyStart.setValue(state.VNA_FREQ_START)
 
         self.frequencyStopLabel = QLabel(self)
         self.frequencyStopLabel.setText("Freq stop, GHz:")
         self.frequencyStop = DoubleSpinBox(self)
+        self.frequencyStop.setRange(state.VNA_FREQ_MIN, state.VNA_FREQ_MAX)
         self.frequencyStop.setValue(state.VNA_FREQ_STOP)
 
         self.vnaPointsLabel = QLabel(self)
@@ -263,6 +272,7 @@ class SisReflectionMeasureWidget(QWidget):
         self.btnStopBiasReflScan.clicked.connect(self.stop_scan_bias_reflection)
         self.btnStopBiasReflScan.setEnabled(False)
 
+        flayout.addRow(self.sisConfigLabel, self.sisConfig)
         flayout.addRow(self.voltageStartLabel, self.voltageStart)
         flayout.addRow(self.voltageStopLabel, self.voltageStop)
         flayout.addRow(self.voltagePointsLabel, self.voltagePoints)
@@ -294,8 +304,16 @@ class SisReflectionMeasureWidget(QWidget):
         if len(names):
             self.vnaConfig.insertItems(0, names)
 
+    def update_sis_config(self):
+        names = ScontelSisBlockManager.configs.list_of_names()
+        for i in range(self.sisConfig.count()):
+            self.sisConfig.removeItem(i)
+        if len(names):
+            self.sisConfig.insertItems(0, names)
+
     def scan_bias_reflection(self):
         self.bias_reflection_thread = BiasReflectionThread(
+            cid_sis=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
             cid_vna=RohdeSchwarzVnaZva67Manager.configs[
                 self.vnaConfig.currentIndex()
             ].cid,

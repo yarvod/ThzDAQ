@@ -48,6 +48,8 @@ class State:
     VNA_POWER = -30
     VNA_POINTS = 300
     VNA_FREQ_START = 2
+    VNA_FREQ_MIN = 0.01  # using
+    VNA_FREQ_MAX = 60  # using
     VNA_FREQ_STOP = 12
     VNA_SAMPLES_COUNT = 1
 
@@ -85,11 +87,8 @@ class State:
     )
 
     # Bias reflection variables
-    BIAS_REFL_SCAN_THREAD = False
-    BIAS_REFL_VOLT_FROM = 0
-    BIAS_REFL_VOLT_TO = 0
-    BIAS_REFL_VOLT_POINTS = 300
-    BIAS_REFL_DELAY = 0.8
+    BIAS_REFL_SCAN_THREAD = False  # using
+    BIAS_REFL_DELAY = 0.8  # using
 
     # Agilent signal generator
     AGILENT_SIGNAL_GENERATOR_IP = "169.254.190.9"

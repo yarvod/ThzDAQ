@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional, Type
 
 from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
 
@@ -18,13 +18,13 @@ class DeviceConfig(QObject):
         self,
         name: str,
         cid: int,
-        adapter: str = None,
-        host: str = None,
-        port: Union[str, int] = None,
-        gpib: int = None,
+        adapter: Optional[str] = None,
+        host: Optional[str] = None,
+        port: Union[str, int, None] = None,
+        gpib: int = 0,
         status: str = settings.NOT_INITIALIZED,
         delay: float = 0,
-        config_manager=None,
+        config_manager: Type["DeviceManager"] = None,
     ):
         super().__init__()
         self._name = name
@@ -81,8 +81,8 @@ class DeviceConfig(QObject):
 
     @gpib.setter
     def gpib(self, value: str):
-        self._gpib = value
-        self.signal_gpib.emit(value)
+        self._gpib = int(value)
+        self.signal_gpib.emit(int(value))
 
     @pyqtProperty("QString", notify=signal_status)
     def status(self):
@@ -103,7 +103,7 @@ class DeviceConfig(QObject):
             adapter=self._adapter,
             host=self._host,
             port=self._port,
-            gpib=self._gpib,
+            gpib=int(self._gpib),
         )
 
 

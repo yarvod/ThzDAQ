@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
@@ -19,6 +19,8 @@ from threads import Thread
 
 
 class DeviceInfo(QWidget):
+    device_add_form_class = DeviceAddForm
+
     def __init__(
         self,
         parent,
@@ -28,7 +30,7 @@ class DeviceInfo(QWidget):
         adapter: str = settings.SOCKET,
         host: str = "",
         port: str = "",
-        gpib: int = 0,
+        gpib: Optional[int] = 0,
         status: str = settings.NOT_INITIALIZED,
         **form_kwargs,
     ):
@@ -122,7 +124,7 @@ class DeviceInfo(QWidget):
         self.initialize()
 
     def edit(self):
-        self.form = DeviceAddForm(
+        self.form = self.device_add_form_class(
             self,
             **self.get_initialize_kwargs(),
         )

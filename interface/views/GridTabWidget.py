@@ -12,17 +12,18 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QCheckBox,
     QProgressBar,
+    QComboBox,
 )
 
 from api.Arduino.grid import GridManager
 from api.Chopper import chopper_manager
-from api.Scontel.sis_block import SisBlock
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.grid.GridBiasCurrentAngleScan import GridBiasCurrentScan
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.grid.GridManagingGroup import GridManagingGroup
 from interface.components.ui.Lines import HLine
+from store import ScontelSisBlockManager
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from threads import Thread
@@ -55,14 +56,6 @@ class StepBiasPowerThread(Thread):
         self.measure.save(finish=False)
 
         self.motor = GridManager(host=state.GRID_ADDRESS)
-
-        self.block = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            bias_dev=state.BLOCK_BIAS_DEV,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-        )
-        self.block.connect()
 
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
@@ -105,6 +98,7 @@ class StepBiasPowerThread(Thread):
         }
 
     def run(self):
+
         angle_range = np.arange(
             state.GRID_ANGLE_START,
             state.GRID_ANGLE_STOP + state.GRID_ANGLE_STEP,
@@ -290,6 +284,13 @@ class GridTabWidget(QWidget):
         self.angleStep = DoubleSpinBox(self)
         self.angleStep.setRange(-180, 180)
         self.angleStep.setValue(state.GRID_ANGLE_STEP)
+
+        self.sisConfigLabel = QLabel(self)
+        self.sisConfigLabel.setText("SIS block device")
+        self.sisConfig = QComboBox(self)
+        ScontelSisBlockManager.event_manager.configs_updated.connect(
+            self.update_sis_config
+        )
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")

@@ -1,4 +1,6 @@
-from typing import Union
+from typing import Union, Optional
+
+from PyQt5.QtCore import pyqtProperty, pyqtSignal
 
 import settings
 from store.adapterConfig import AdapterManager
@@ -24,11 +26,22 @@ class AgilentSignalGeneratorConfig(DeviceConfig):
         adapter: str = None,
         host: str = None,
         port: Union[str, int] = None,
-        gpib: int = None,
+        gpib: int = 0,
         status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
         config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
         self.thread_set_config = False
 
 
@@ -49,9 +62,20 @@ class RigolPowerSupplyConfig(DeviceConfig):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
         config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
         self.monitor_ch1 = True
         self.monitor_ch2 = True
         self.monitor_ch3 = True
@@ -77,9 +101,20 @@ class SumitomoF70Config(DeviceConfig):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
         config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
         self.thread_stream = False
 
 
@@ -113,9 +148,20 @@ class RohdeSchwarzSpectrumFsek30Config(DeviceConfig):
         port: Union[str, int] = None,
         gpib: int = None,
         status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
         config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
         self.start_frequency: float = None
         self.stop_frequency: float = None
 
@@ -129,33 +175,71 @@ class RohdeSchwarzSpectrumFsek30Manager(DeviceManager):
 
 
 class ScontelSisBlockConfig(DeviceConfig):
+    signal_bias_dev = pyqtSignal(str)
+    signal_ctrl_dev = pyqtSignal(str)
+
     def __init__(
         self,
         name: str,
         cid: int,
-        adapter: str = None,
-        host: str = None,
-        port: Union[str, int] = None,
-        gpib: int = None,
+        adapter: Optional[str] = None,
+        host: Optional[str] = None,
+        port: Union[str, int, None] = None,
+        gpib: int = 0,
         status: str = settings.NOT_INITIALIZED,
         bias_dev: str = "DEV4",
         ctrl_dev: str = "DEV3",
+        delay: float = 0,
         config_manager=None,
     ):
-        super().__init__(name, cid, adapter, host, port, gpib, status, config_manager)
-        self.bias_dev = bias_dev
-        self.ctrl_dev = ctrl_dev
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
+        self._bias_dev = bias_dev
+        self._ctrl_dev = ctrl_dev
         self.bias_short_status = "1"
         self.ctrl_short_status = "1"
         self.thread_stream = False
         self.thread_ctrl_scan = False
         self.thread_bias_scan = False
 
+    @pyqtProperty("QString", notify=signal_bias_dev)
+    def bias_dev(self):
+        return self._bias_dev
+
+    @bias_dev.setter
+    def bias_dev(self, value: str):
+        self._bias_dev = value
+        self.signal_bias_dev.emit(value)
+
+    def set_bias_dev(self, bias_dev: str):
+        self.bias_dev = bias_dev
+
+    @pyqtProperty("QString", notify=signal_ctrl_dev)
+    def ctrl_dev(self):
+        return self._ctrl_dev
+
+    @ctrl_dev.setter
+    def ctrl_dev(self, value: str):
+        self._ctrl_dev = value
+        self.signal_ctrl_dev.emit(value)
+
+    def set_ctrl_dev(self, ctrl_dev: str):
+        self.ctrl_dev = ctrl_dev
+
     def dict(self):
         old_dict = super().dict()
         new_dict = {
-            "bias_dev": self.bias_dev,
-            "ctrl_dev": self.ctrl_dev,
+            "bias_dev": self._bias_dev,
+            "ctrl_dev": self._ctrl_dev,
         }
         old_dict.update(new_dict)
         return old_dict
