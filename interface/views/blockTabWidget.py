@@ -12,9 +12,12 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QProgressBar,
+    QHBoxLayout,
+    QCheckBox,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSettings
 
+from api import SocketAdapter
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
 )
@@ -69,14 +72,54 @@ class BlockSetCtrlCurrentThread(Thread):
         self.finished.emit()
 
 
-class BlockStreamThread(Thread):
+class BlockCalibrateThread(Thread):
+    def run(self):
+        try:
+
+            settings = QSettings("settings.ini", QSettings.IniFormat)
+
+            vadc4 = settings.value("SIS_Block_Cals/vadc4", None)
+            cadc4 = settings.value("SIS_Block_Cals/cadc4", None)
+            vadc2 = settings.value("SIS_Block_Cals/vadc2", None)
+            cadc2 = settings.value("SIS_Block_Cals/cadc2", None)
+            s = SocketAdapter(host="169.254.190.83", port=9876)
+
+            if vadc4:
+                vadc4 = [float(_) for _ in vadc4]
+                s.query(f"BIAS:DEV4:VADC {vadc4}")
+            if cadc4:
+                cadc4 = [float(_) for _ in cadc4]
+                s.query(f"BIAS:DEV4:CADC {cadc4}")
+
+            if vadc2:
+                vadc2 = [float(_) for _ in vadc2]
+                s.query(f"BIAS:DEV2:VADC {vadc2}")
+            if cadc2:
+                cadc2 = [float(_) for _ in cadc2]
+                s.query(f"BIAS:DEV2:CADC {cadc2}")
+
+            s.query("GENeral:DEVice2:WriteEEProm")
+            s.query("GENeral:DEVice4:WriteEEProm")
+        except DeviceConnectionError as e:
+            logger.exception(f"{e}", exc_info=True)
+        self.finished.emit()
+
+
+class BlockStreamThread(QThread):
     cl_current = pyqtSignal(float)
     bias_voltage = pyqtSignal(float)
     bias_current = pyqtSignal(float)
+    plot_data = pyqtSignal(dict)
+    plot_data = pyqtSignal(dict)
 
-    def __init__(self, cid: int):
+    def __init__(self, stream_plot: bool = False):
+        self.stream_plot = stream_plot
+        super().__init__()
+
+    def __init__(self, cid: int, stream_plot: bool = False):
         self.config = ScontelSisBlockManager.get_config(cid)
         self.config.thread_stream = True
+        self.stream_plot = stream_plot
         super().__init__()
 
     def run(self):
@@ -104,6 +147,15 @@ class BlockStreamThread(Thread):
                 cl_current = block.get_ctrl_current()
                 if cl_current:
                     self.cl_current.emit(cl_current)
+
+            if self.stream_plot and bias_voltage and bias_current:
+                self.plot_data.emit(
+                    {
+                        "x": [bias_voltage * 1e3],
+                        "y": [bias_current * 1e6],
+                        "new_plot": i == 1,
+                    }
+                )
 
             i += 1
 
@@ -414,7 +466,9 @@ class BlockTabWidget(QWidget):
         self.block_bias_scan_thread.quit()
 
     def startStreamBlock(self):
-        self.stream_thread = BlockStreamThread(cid=self.cid)
+        self.stream_thread = BlockStreamThread(
+            cid=self.cid, stream_plot=self.plotStream.isChecked()
+        )
 
         self.stream_thread.cl_current.connect(
             lambda x: self.ctrlCurrentGet.setText(f"{round(x * 1e3, 3)}")
@@ -425,6 +479,10 @@ class BlockTabWidget(QWidget):
         self.stream_thread.bias_voltage.connect(
             lambda x: self.sisVoltageGet.setText(f"{round(x * 1e3, 3)}")
         )
+
+        self.stream_thread.plot_data.connect(self.show_bias_graph_window)
+
+        self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
 
         state.BLOCK_STREAM_THREAD = True
         self.stream_thread.start()
@@ -447,7 +505,9 @@ class BlockTabWidget(QWidget):
         self.groupMonitor.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        vlayout = QVBoxLayout()
         layout = QGridLayout()
+        hlayout = QHBoxLayout()
 
         self.sisVoltageGetLabel = QLabel(self)
         self.sisVoltageGetLabel.setText("<h4>BIAS voltage, mV</h4>")
@@ -474,6 +534,9 @@ class BlockTabWidget(QWidget):
         self.btnStopStreamBlock.setEnabled(False)
         self.btnStopStreamBlock.clicked.connect(self.stopStreamBlock)
 
+        self.plotStream = QCheckBox("Plot stream")
+        self.plotStream.setChecked(False)
+
         layout.addWidget(
             self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -492,14 +555,15 @@ class BlockTabWidget(QWidget):
         layout.addWidget(
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
-        layout.addWidget(
-            self.btnStartStreamBlock, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter
-        )
-        layout.addWidget(
-            self.btnStopStreamBlock, 3, 2, alignment=Qt.AlignmentFlag.AlignCenter
-        )
 
-        self.groupMonitor.setLayout(layout)
+        hlayout.addWidget(self.btnStartStreamBlock)
+        hlayout.addWidget(self.btnStopStreamBlock)
+        hlayout.addWidget(self.plotStream)
+
+        vlayout.addLayout(layout)
+        vlayout.addLayout(hlayout)
+
+        self.groupMonitor.setLayout(vlayout)
 
     def createGroupValuesSet(self):
         self.rowValuesSet = QGroupBox("Set block values")
@@ -542,6 +606,9 @@ class BlockTabWidget(QWidget):
         )
         self.btnSetCtrlShortStatus.clicked.connect(self.set_block_ctrl_short_status)
 
+        self.btnCalibrateBlock = Button("Calibrate sis block", animate=True)
+        self.btnCalibrateBlock.clicked.connect(self.calibrate_sis_block)
+
         layout.addWidget(self.sisVoltageSetLabel, 1, 0)
         layout.addWidget(self.sisVoltageSet, 1, 1)
         layout.addWidget(self.btnSetBiasVoltage, 1, 2)
@@ -552,6 +619,7 @@ class BlockTabWidget(QWidget):
         layout.addWidget(self.btnSetBiasShortStatus, 3, 1)
         layout.addWidget(self.btnSetCtrlShortStatusLabel, 4, 0)
         layout.addWidget(self.btnSetCtrlShortStatus, 4, 1)
+        layout.addWidget(self.btnCalibrateBlock, 5, 0)
 
         self.rowValuesSet.setLayout(layout)
 
@@ -574,6 +642,15 @@ class BlockTabWidget(QWidget):
         self.thread_set_ctrl_current.finished.connect(
             lambda: self.btnSetCTRLCurrent.setEnabled(True)
         )
+
+    def calibrate_sis_block(self):
+        self.calibrate_thread = BlockCalibrateThread(self)
+        self.calibrate_thread.finished.connect(
+            lambda: self.btnCalibrateBlock.setEnabled(True)
+        )
+
+        self.btnCalibrateBlock.setEnabled(False)
+        self.calibrate_thread.start()
 
     def createGroupCTRLScan(self):
         self.groupCTRLScan = QGroupBox("Scan CTRL current")
