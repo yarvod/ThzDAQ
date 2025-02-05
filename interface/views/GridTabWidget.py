@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
 )
 
+from api import SisBlock
 from api.Arduino.grid import GridManager
 from api.Chopper import chopper_manager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
@@ -28,6 +29,7 @@ from store.base import MeasureModel, MeasureType
 from store.state import state
 from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 from utils.functions import get_voltage_tn
 
 logger = logging.getLogger(__name__)
@@ -40,12 +42,33 @@ class StepBiasPowerThread(Thread):
     stream_tn = pyqtSignal(dict)
     progress = pyqtSignal(int)
 
-    def __init__(self):
+    def __init__(
+        self,
+        angle_start: float,
+        angle_stop: float,
+        angle_step: float,
+        sis_cid: int,
+        voltage_start: float,
+        voltage_stop: float,
+        voltage_points: int,
+        voltage_step_delay: float,
+        chopper_switch: bool,
+    ):
         super().__init__()
+        self.angle_start = angle_start
+        self.angle_stop = angle_stop
+        self.ange_step = angle_step
+        self.config_sis = ScontelSisBlockManager.get_config(sis_cid)
+        self.block = None
+        self.voltage_start = voltage_start
+        self.voltage_stop = voltage_stop
+        self.voltage_points = voltage_points
+        self.voltage_step_delay = voltage_step_delay
+        self.chopper_switch = chopper_switch
         self.initial_v = 0
         self.initial_angle = float(state.GRID_ANGLE.val)
 
-        if state.CHOPPER_SWITCH:
+        if self.chopper_switch:
             self.measure = MeasureModel.objects.create(
                 measure_type=MeasureType.GRID_PV_CURVE_HOT_COLD, data={}
             )
@@ -64,7 +87,7 @@ class StepBiasPowerThread(Thread):
         )
 
     def get_results_format(self) -> Dict:
-        if state.CHOPPER_SWITCH:
+        if self.chopper_switch:
             return {
                 "id": 0,
                 "step": state.GRID_ANGLE_STEP,
@@ -98,22 +121,28 @@ class StepBiasPowerThread(Thread):
         }
 
     def run(self):
+        try:
+            self.block = SisBlock(**self.config_sis.dict())
+        except DeviceConnectionError:
+            self.measure.save(finish=True)
+            self.finished.emit()
+            return
 
         angle_range = np.arange(
-            state.GRID_ANGLE_START,
-            state.GRID_ANGLE_STOP + state.GRID_ANGLE_STEP,
-            state.GRID_ANGLE_STEP,
+            self.angle_start,
+            self.angle_stop + self.ange_step,
+            self.ange_step,
         )
         volt_range = np.linspace(
-            state.BLOCK_BIAS_VOLT_FROM * 1e-3,
-            state.BLOCK_BIAS_VOLT_TO * 1e-3,
-            state.BLOCK_BIAS_VOLT_POINTS,
+            self.voltage_start * 1e-3,
+            self.voltage_stop * 1e-3,
+            self.voltage_points,
         )
-        chopper_range = range(2) if state.CHOPPER_SWITCH else range(1)
+        chopper_range = range(2) if self.chopper_switch else range(1)
         total_steps = len(chopper_range) * len(angle_range) * len(volt_range)
         self.initial_v = self.block.get_bias_voltage()
         initial_time = time.time()
-        if state.CHOPPER_SWITCH:
+        if self.chopper_switch:
             # chopper_manager.chopper.align()
             chopper_manager.chopper.align_to_hot()
         self.motor.rotate(state.GRID_ANGLE_START)
@@ -177,7 +206,7 @@ class StepBiasPowerThread(Thread):
                             "legend_postfix": f"angle {angle} °",
                         }
                     )
-                    if state.CHOPPER_SWITCH:
+                    if self.chopper_switch:
                         results[chopper_state]["voltage_set"].append(voltage_set)
                         results[chopper_state]["voltage_get"].append(voltage_get)
                         results[chopper_state]["current_get"].append(current_get)
@@ -192,11 +221,11 @@ class StepBiasPowerThread(Thread):
 
                     self.measure.data[angle_step] = results
 
-                if state.CHOPPER_SWITCH:
+                if self.chopper_switch:
                     chopper_manager.chopper.path0()
                     time.sleep(2)
 
-            if state.CHOPPER_SWITCH:
+            if self.chopper_switch:
                 if len(results["hot"]["power"]) and len(results["cold"]["power"]):
                     volt_diff, power_diff, tn = get_voltage_tn(
                         hot_power=results["hot"]["power"],
@@ -223,7 +252,7 @@ class StepBiasPowerThread(Thread):
                             "legend_postfix": f"angle {angle} °",
                         }
                     )
-        if state.CHOPPER_SWITCH:
+        if self.chopper_switch:
             chopper_manager.chopper.align_to_cold()
         self.pre_exit()
         self.finished.emit()
@@ -337,6 +366,7 @@ class GridTabWidget(QWidget):
         layout.addRow(self.angleStopLabel, self.angleStop)
         layout.addRow(self.angleStepLabel, self.angleStep)
         layout.addRow(HLine(self))
+        layout.addRow(self.sisConfigLabel, self.sisConfig)
         layout.addRow(self.voltFromLabel, self.voltFrom)
         layout.addRow(self.voltToLabel, self.voltTo)
         layout.addRow(self.voltPointsLabel, self.voltPoints)
@@ -351,16 +381,18 @@ class GridTabWidget(QWidget):
 
     def start_measure_step_bias_power(self):
         state.GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = True
-        state.GRID_ANGLE_START = self.angleStart.value()
-        state.GRID_ANGLE_STOP = self.angleStop.value()
-        state.GRID_ANGLE_STEP = self.angleStep.value()
-        state.BLOCK_BIAS_VOLT_FROM = self.voltFrom.value()
-        state.BLOCK_BIAS_VOLT_TO = self.voltTo.value()
-        state.BLOCK_BIAS_VOLT_POINTS = int(self.voltPoints.value())
-        state.BLOCK_BIAS_STEP_DELAY = self.voltStepDelay.value()
-        state.CHOPPER_SWITCH = self.chopperSwitch.isChecked()
 
-        self.bias_power_thread = StepBiasPowerThread()
+        self.bias_power_thread = StepBiasPowerThread(
+            angle_start=self.angleStart.value(),
+            angle_stop=self.angleStop.value(),
+            angle_step=self.angleStep.value(),
+            sis_cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
+            voltage_start=self.voltFrom.value(),
+            voltage_stop=self.voltTo.value(),
+            voltage_points=int(self.voltPoints.value()),
+            voltage_step_delay=self.voltStepDelay.value(),
+            chopper_switch=self.chopperSwitch.isChecked(),
+        )
 
         self.gridBiasPowerGraphWindow = Dock.ex.dock_manager.findDockWidget("P-V curve")
         self.gridBiasCurrentGraphWindow = Dock.ex.dock_manager.findDockWidget(
@@ -373,7 +405,7 @@ class GridTabWidget(QWidget):
 
         self.bias_power_thread.stream_pv.connect(self.show_bias_power_graph)
         self.bias_power_thread.stream_iv.connect(self.show_bias_current_graph)
-        if state.CHOPPER_SWITCH:
+        if self.chopperSwitch.isChecked():
             self.bias_power_thread.stream_y_factor.connect(
                 self.show_bias_power_diff_graph
             )
@@ -441,3 +473,10 @@ class GridTabWidget(QWidget):
             legend_postfix=results.get("legend_postfix"),
         )
         self.biasTnGraphWindow.widget().show()
+
+    def update_sis_config(self):
+        names = ScontelSisBlockManager.configs.list_of_names()
+        for i in range(self.sisConfig.count()):
+            self.sisConfig.removeItem(i)
+        if len(names):
+            self.sisConfig.insertItems(0, names)
