@@ -1,6 +1,6 @@
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QFormLayout,
@@ -13,7 +13,7 @@ from interface.components.ui.Button import Button
 
 
 class AdapterAddForm(QDialog):
-    init = pyqtSignal(dict)
+    init = Signal(dict)
 
     def __init__(
         self,

@@ -1,7 +1,7 @@
 import sys
 
-from PyQt5.QtWidgets import QApplication
-import PyQtAds as QtAds
+from PySide6.QtWidgets import QApplication
+import PySide6QtAds as QtAds
 
 from store import restore_configs
 from interface.index import App

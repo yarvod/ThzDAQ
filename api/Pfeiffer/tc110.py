@@ -119,7 +119,7 @@ class TC110:
                 return message
 
     def send_message(self, command, device_id=None, query_only=True, payload="=?"):
-        if device_id == None:
+        if device_id is None:
             device_id = self.device_id
         else:
             device_id = self._format_id(device_id)

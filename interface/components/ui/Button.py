@@ -1,5 +1,5 @@
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QPushButton
+from PySide6 import QtCore, QtGui
+from PySide6.QtWidgets import QPushButton
 
 
 class Button(QPushButton):
@@ -25,12 +25,12 @@ class Button(QPushButton):
         else:
             self.start()
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def start(self):
         if hasattr(self, "_movie"):
             self._movie.start()
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def stop(self):
         if hasattr(self, "_movie"):
             self._movie.stop()
@@ -48,6 +48,6 @@ class Button(QPushButton):
                 self._movie.finished.connect(self.start)
         self.stop()
 
-    @QtCore.pyqtSlot(int)
+    @QtCore.Slot(int)
     def on_frameChanged(self, frameNumber):
         self.setIcon(QtGui.QIcon(self._movie.currentPixmap()))

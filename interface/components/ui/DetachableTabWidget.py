@@ -1,7 +1,7 @@
-from PyQt5 import QtCore
-from PyQt5.QtCore import pyqtSlot, QPoint, pyqtSignal, Qt, QMimeData, QEvent
-from PyQt5.QtGui import QIcon, QCursor, QMouseEvent, QDrag, QPixmap, QColor, QPainter
-from PyQt5.QtWidgets import (
+from PySide6 import QtCore
+from PySide6.QtCore import Slot, QPoint, Signal, Qt, QMimeData, QEvent
+from PySide6.QtGui import QIcon, QCursor, QMouseEvent, QDrag, QPixmap, QColor, QPainter
+from PySide6.QtWidgets import (
     QTabWidget,
     QWidget,
     QDialog,
@@ -36,7 +36,7 @@ class DetachableTabWidget(QTabWidget):
     #
     #  @param    fromIndex    the original index location of the tab
     #  @param    toIndex      the new index location of the tab
-    @pyqtSlot(int, int)
+    @Slot(int, int)
     def moveTab(self, fromIndex, toIndex):
         widget = self.widget(fromIndex)
         icon = self.tabIcon(fromIndex)
@@ -52,7 +52,7 @@ class DetachableTabWidget(QTabWidget):
     #
     #  @param    index    the index location of the tab to be detached
     #  @param    point    the screen position for creating the new DetachedTab dialog
-    @pyqtSlot(int, QPoint)
+    @Slot(int, QPoint)
     def detachTab(self, index, point):
         # Get the tab content
         name = self.tabText(index)
@@ -80,7 +80,7 @@ class DetachableTabWidget(QTabWidget):
     #  @param    contentWidget    the content widget from the DetachedTab dialog
     #  @param    name             the name of the detached tab
     #  @param    icon             the window icon for the detached tab
-    @pyqtSlot(QWidget, type(""), QIcon)
+    @Slot(QWidget, type(""), QIcon)
     def attachTab(self, contentWidget, name, icon):
 
         # Make the content widget a child of this widget
@@ -121,7 +121,7 @@ class DetachableTabWidget(QTabWidget):
     #  can be re-attached by closing the dialog or by double clicking on its
     #  window frame.
     class DetachedTab(QDialog):
-        onCloseSignal = pyqtSignal(QWidget, type(""), QIcon)
+        onCloseSignal = Signal(QWidget, type(""), QIcon)
 
         def __init__(self, contentWidget, parent=None):
             QDialog.__init__(self, parent)
@@ -161,8 +161,8 @@ class DetachableTabWidget(QTabWidget):
     ##
     #  The TabBar class re-implements some of the functionality of the QTabBar widget
     class TabBar(QTabBar):
-        onDetachTabSignal = pyqtSignal(int, QPoint)
-        onMoveTabSignal = pyqtSignal(int, int)
+        onDetachTabSignal = Signal(int, QPoint)
+        onMoveTabSignal = Signal(int, int)
 
         def __init__(self, parent=None):
             QTabBar.__init__(self, parent)

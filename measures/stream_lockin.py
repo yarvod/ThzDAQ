@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from time import time
 
-from PyQt5.QtCore import pyqtSignal
+from PySide6.QtCore import Signal
 
 from api.SRS.LockIn_SR830 import LockIn
 from threads import Thread
@@ -13,7 +13,7 @@ class state:
 
 
 class MeasThread(Thread):
-    data_signal = pyqtSignal(dict)
+    data_signal = Signal(dict)
 
     def __init__(self, stop_time: float):
         self.lockin = LockIn(host="169.254.156.103")

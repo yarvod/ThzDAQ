@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QScrollArea, QWidget, QVBoxLayout
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout
 
 from interface.components.Sumitomo import SumitomoF70ManagerWidget
 from interface.components.Sumitomo.sumitomoF70MonitorWidget import (

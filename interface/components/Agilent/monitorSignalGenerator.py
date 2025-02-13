@@ -1,7 +1,7 @@
 import time
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QSizePolicy,
     QGridLayout,
@@ -19,9 +19,9 @@ from utils.exceptions import DeviceConnectionError
 
 
 class StreamThread(Thread):
-    amplitude = pyqtSignal(float)
-    frequency = pyqtSignal(float)
-    output = pyqtSignal(bool)
+    amplitude = Signal(float)
+    frequency = Signal(float)
+    output = Signal(bool)
 
     def __init__(self, cid: int):
         super().__init__()

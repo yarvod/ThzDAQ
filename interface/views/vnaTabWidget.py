@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -26,7 +26,7 @@ from utils.functions import to_db
 
 
 class VnaGetDataThread(Thread):
-    results = pyqtSignal(dict)
+    results = Signal(dict)
 
     def __init__(
         self,

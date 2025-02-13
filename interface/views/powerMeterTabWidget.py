@@ -1,8 +1,8 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import (
     QGroupBox,
     QGridLayout,
     QVBoxLayout,
@@ -30,7 +30,7 @@ from utils.logger import logger
 
 
 class NRXBlockStreamThread(Thread):
-    meas = pyqtSignal(dict)
+    meas = Signal(dict)
 
     def run(self):
         nrx = NRXPowerMeter(
@@ -71,11 +71,11 @@ class NRXBlockStreamThread(Thread):
 
 
 class BiasPowerThread(Thread):
-    stream_power = pyqtSignal(dict)
-    stream_y_factor = pyqtSignal(dict)
-    stream_tn = pyqtSignal(dict)
-    stream_iv = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    stream_power = Signal(dict)
+    stream_y_factor = Signal(dict)
+    stream_tn = Signal(dict)
+    stream_iv = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self):
         super().__init__()

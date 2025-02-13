@@ -1,7 +1,7 @@
 import logging
 
-from PyQt5.QtCore import QThread, Qt, QTimer
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QThread, Qt, QTimer
+from PySide6.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
     QGridLayout,

@@ -1,5 +1,7 @@
-from PyQt5 import QtGui, QtWidgets, QtCore
-from PyQt5.QtWidgets import QAbstractItemView, QMessageBox
+from typing import Optional
+
+from PySide6 import QtGui, QtWidgets, QtCore
+from PySide6.QtWidgets import QAbstractItemView, QMessageBox
 
 from interface.components.CommentDialogBox import CommentDialogBox
 from interface.components.dataViewBox import DataViewBox
@@ -13,10 +15,10 @@ class TableView(QtWidgets.QTableView):
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.menu = QtWidgets.QMenu(self)
 
-        self.action_comment = QtWidgets.QAction("Comment", self)
-        self.action_view = QtWidgets.QAction("View", self)
-        self.action_save = QtWidgets.QAction("Save", self)
-        self.action_delete = QtWidgets.QAction("Delete", self)
+        self.action_comment = QtWidgets.QWidgetAction("Comment", self)
+        self.action_view = QtWidgets.QWidgetAction("View", self)
+        self.action_save = QtWidgets.QWidgetAction("Save", self)
+        self.action_delete = QtWidgets.QWidgetAction("Delete", self)
 
         self.action_comment.setIcon(QtGui.QIcon("assets/edit-icon.png"))
         self.action_view.setIcon(QtGui.QIcon("assets/search-icon.png"))
@@ -45,7 +47,7 @@ class TableView(QtWidgets.QTableView):
             return
         model.manager.save_by_index(rows[0])
 
-    def get_selected_measure_model(self) -> MeasureModel | None:
+    def get_selected_measure_model(self) -> Optional[MeasureModel]:
         model = self.model()
         selection = self.selectionModel()
         selected_index = list(set(index for index in selection.selectedIndexes()))

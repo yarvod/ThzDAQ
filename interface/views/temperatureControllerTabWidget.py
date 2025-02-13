@@ -1,8 +1,8 @@
 import time
 from typing import Dict
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QGroupBox,
@@ -25,7 +25,7 @@ from utils.exceptions import DeviceConnectionError
 
 
 class MonitorThread(Thread):
-    temperatures = pyqtSignal(dict)
+    temperatures = Signal(dict)
 
     def __init__(
         self,

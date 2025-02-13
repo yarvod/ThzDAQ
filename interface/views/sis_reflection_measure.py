@@ -3,8 +3,8 @@ import time
 from datetime import datetime
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QLabel,
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class BiasReflectionThread(Thread):
-    progress = pyqtSignal(int)
+    progress = Signal(int)
 
     def __init__(
         self,

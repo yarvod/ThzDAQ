@@ -1,7 +1,7 @@
 import time
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QSizePolicy,
     QGridLayout,
@@ -19,20 +19,20 @@ from utils.exceptions import DeviceConnectionError
 
 
 class StreamThread(Thread):
-    measure_1 = pyqtSignal(list)
-    voltage_sour_1 = pyqtSignal(float)
-    current_sour_1 = pyqtSignal(float)
-    output_1 = pyqtSignal(str)
+    measure_1 = Signal(list)
+    voltage_sour_1 = Signal(float)
+    current_sour_1 = Signal(float)
+    output_1 = Signal(str)
 
-    measure_2 = pyqtSignal(list)
-    voltage_sour_2 = pyqtSignal(float)
-    current_sour_2 = pyqtSignal(float)
-    output_2 = pyqtSignal(str)
+    measure_2 = Signal(list)
+    voltage_sour_2 = Signal(float)
+    current_sour_2 = Signal(float)
+    output_2 = Signal(str)
 
-    measure_3 = pyqtSignal(list)
-    voltage_sour_3 = pyqtSignal(float)
-    current_sour_3 = pyqtSignal(float)
-    output_3 = pyqtSignal(str)
+    measure_3 = Signal(list)
+    voltage_sour_3 = Signal(float)
+    current_sour_3 = Signal(float)
+    output_3 = Signal(str)
 
     def __init__(self, cid: int):
         super().__init__()

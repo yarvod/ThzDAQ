@@ -1,8 +1,8 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QFormLayout,
     QLabel,
@@ -22,8 +22,8 @@ from utils.dock import Dock
 
 
 class MeasureThread(Thread):
-    progress = pyqtSignal(int)
-    stream_ia = pyqtSignal(dict)
+    progress = Signal(int)
+    stream_ia = Signal(dict)
 
     def __init__(self):
         super().__init__()

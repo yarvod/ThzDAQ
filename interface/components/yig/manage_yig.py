@@ -1,8 +1,8 @@
 import logging
 from typing import Literal
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QFormLayout, QLabel, QGroupBox
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QFormLayout, QLabel, QGroupBox
 
 from api.NationalInstruments.yig_filter import YigType, NiYIGManager
 from interface.components.ui.Button import Button
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class DigitalYigThread(Thread):
-    response = pyqtSignal(str)
+    response = Signal(str)
 
     def __init__(self, yig: Literal["yig_1", "yig_2"] = "yig_1"):
         super().__init__()
@@ -29,7 +29,7 @@ class DigitalYigThread(Thread):
         if resp is None:
             self.response.emit("Unable to set frequency")
         else:
-            state.DIGITAL_YIG_MAP[yig].value = resp
+            state.DIGITAL_YIG_MAP[self.yig].value = resp
         logger.info(f"[setNiYigFreq] {resp}")
 
 

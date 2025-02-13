@@ -1,14 +1,14 @@
 from typing import Union
 
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PySide6.QtCore import QObject, Property, Signal
 
 import settings
 
 
 class AdapterConfig(QObject):
-    signal_host = pyqtSignal(str)
-    signal_port = pyqtSignal(str)
-    signal_status = pyqtSignal(str)
+    signal_host = Signal(str)
+    signal_port = Signal(str)
+    signal_status = Signal(str)
 
     def __init__(
         self,
@@ -36,7 +36,7 @@ class AdapterConfig(QObject):
     def name(self):
         return f"{self._name} {self.cid}"
 
-    @pyqtProperty("QString", notify=signal_host)
+    @Property("QString", notify=signal_host)
     def host(self):
         return self._host
 
@@ -45,7 +45,7 @@ class AdapterConfig(QObject):
         self._host = value
         self.signal_host.emit(value)
 
-    @pyqtProperty("QString", notify=signal_port)
+    @Property("QString", notify=signal_port)
     def port(self):
         return self._port
 
@@ -54,7 +54,7 @@ class AdapterConfig(QObject):
         self._port = value
         self.signal_port.emit(value)
 
-    @pyqtProperty("QString", notify=signal_status)
+    @Property("QString", notify=signal_status)
     def status(self):
         return self._status
 

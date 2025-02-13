@@ -3,9 +3,9 @@ import os
 from datetime import datetime
 from typing import Union, Dict, Any
 
-from PyQt5 import QtGui
-from PyQt5.QtCore import QAbstractTableModel, Qt, QModelIndex
-from PyQt5.QtWidgets import QFileDialog
+from PySide6 import QtGui
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtWidgets import QFileDialog
 
 
 class MeasureType:

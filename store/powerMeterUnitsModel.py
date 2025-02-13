@@ -1,11 +1,11 @@
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PySide6.QtCore import QObject, Property, Signal
 
 from store.state import state
 
 
 class PowerMeterUnitModel(QObject):
-    value = pyqtSignal(str)
-    value_pretty = pyqtSignal(str)
+    value = Signal(str)
+    value_pretty = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -13,7 +13,7 @@ class PowerMeterUnitModel(QObject):
         self.values = state.NRX_UNITS
         self.values_reverse = state.NRX_UNITS_REVERSE
 
-    @pyqtProperty("QString", notify=value)
+    @Property("QString", notify=value)
     def val(self):
         return self._val
 
