@@ -6,6 +6,7 @@ import PySide6QtAds as QtAds
 from store import restore_configs
 from interface.index import App
 from utils.dock import Dock
+from utils.logger import configure_logger
 
 
 def get_dock_manager(main_app):
@@ -17,6 +18,7 @@ def get_dock_manager(main_app):
 
 
 if __name__ == "__main__":
+    configure_logger()
     app = QApplication(sys.argv)
     ex = App()
     dock_manager = get_dock_manager(ex)

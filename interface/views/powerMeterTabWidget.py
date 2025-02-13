@@ -1,4 +1,5 @@
 import time
+import logging
 
 import numpy as np
 from PySide6.QtCore import Signal, Qt
@@ -26,7 +27,9 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from threads import Thread
 from utils.dock import Dock
 from utils.functions import get_voltage_tn
-from utils.logger import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class NRXBlockStreamThread(Thread):

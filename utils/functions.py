@@ -5,9 +5,9 @@ import numpy as np
 import requests
 from alvar import db_to_absolute
 from requests import RequestException, HTTPError
-from scipy import constants
 
 import settings
+from utils import constants
 
 logger = logging.getLogger(__name__)
 

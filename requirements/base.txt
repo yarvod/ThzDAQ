@@ -5,9 +5,9 @@ charset-normalizer==3.4.1
 idna==3.10
 numpy==2.2.3
 packaging==24.2
-pefile==2024.8.26
+pefile==2023.2.7
 pillow==11.1.0
-pyinstaller==5.9.0
+pyinstaller==6.12.0
 pyinstaller-hooks-contrib==2025.1
 pymodbus==3.8.6
 pyqtgraph==0.13.7
@@ -19,6 +19,5 @@ PySide6_Essentials==6.8.2.1
 python-dotenv==1.0.1
 pywin32-ctypes==0.2.3
 requests==2.32.3
-scipy==1.15.1
 shiboken6==6.8.2.1
 urllib3==2.3.0
