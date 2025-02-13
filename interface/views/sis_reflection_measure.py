@@ -169,7 +169,7 @@ class BiasReflectionThread(Thread):
 
 class SisReflectionMeasureWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.layout = QVBoxLayout(self)
         self.createGroupBiasReflScan()
         self.layout.addWidget(self.groupBiasReflScan)

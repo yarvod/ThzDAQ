@@ -245,7 +245,7 @@ class BiasPowerThread(Thread):
 
 class PowerMeterTabWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.layout = QVBoxLayout(self)
         self.biasPowerGraphWindow = None
         self.powerStreamGraphDockWidget = None

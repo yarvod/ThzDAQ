@@ -15,10 +15,15 @@ class TableView(QtWidgets.QTableView):
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.menu = QtWidgets.QMenu(self)
 
-        self.action_comment = QtWidgets.QWidgetAction("Comment", self)
-        self.action_view = QtWidgets.QWidgetAction("View", self)
-        self.action_save = QtWidgets.QWidgetAction("Save", self)
-        self.action_delete = QtWidgets.QWidgetAction("Delete", self)
+        self.action_comment = QtWidgets.QWidgetAction(self)
+        self.action_view = QtWidgets.QWidgetAction(self)
+        self.action_save = QtWidgets.QWidgetAction(self)
+        self.action_delete = QtWidgets.QWidgetAction(self)
+
+        self.action_comment.setText("Comment")
+        self.action_view.setText("View")
+        self.action_save.setText("Save")
+        self.action_delete.setText("Delete")
 
         self.action_comment.setIcon(QtGui.QIcon("assets/edit-icon.png"))
         self.action_view.setIcon(QtGui.QIcon("assets/search-icon.png"))

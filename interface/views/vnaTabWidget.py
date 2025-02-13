@@ -114,7 +114,7 @@ class ConfigureVnaThread(Thread):
 
 class VNATabWidget(QWidget):
     def __init__(self, parent, cid: int):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.cid = cid
         self.layout = QVBoxLayout(self)
         self.vnaGraphWindow = None
