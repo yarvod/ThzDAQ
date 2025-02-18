@@ -242,7 +242,6 @@ class BlockCLScanThread(QThread):
         self.config.thread_ctrl_scan = False
 
 
-
 class BlockBIASScanThread(QThread):
     results = Signal(dict)
     stream_result = Signal(dict)
