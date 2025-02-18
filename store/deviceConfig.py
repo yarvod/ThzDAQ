@@ -1,6 +1,6 @@
 from typing import Union, Optional, Type
 
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PySide6.QtCore import QObject, Property, Signal
 
 import settings
 from utils.dock import Dock
@@ -8,11 +8,11 @@ from utils.functions import import_class
 
 
 class DeviceConfig(QObject):
-    signal_adapter = pyqtSignal(str)
-    signal_host = pyqtSignal(str)
-    signal_port = pyqtSignal(str)
-    signal_gpib = pyqtSignal(int)
-    signal_status = pyqtSignal(str)
+    signal_adapter = Signal(str)
+    signal_host = Signal(str)
+    signal_port = Signal(str)
+    signal_gpib = Signal(int)
+    signal_status = Signal(str)
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class DeviceConfig(QObject):
     def name(self):
         return f"{self._name} {self.cid}"
 
-    @pyqtProperty("QString", notify=signal_adapter)
+    @Property("QString", notify=signal_adapter)
     def adapter(self):
         return self._adapter
 
@@ -57,7 +57,7 @@ class DeviceConfig(QObject):
         self._adapter = value
         self.signal_adapter.emit(value)
 
-    @pyqtProperty("QString", notify=signal_host)
+    @Property("QString", notify=signal_host)
     def host(self):
         return self._host
 
@@ -66,7 +66,7 @@ class DeviceConfig(QObject):
         self._host = value
         self.signal_host.emit(value)
 
-    @pyqtProperty("QString", notify=signal_port)
+    @Property("QString", notify=signal_port)
     def port(self):
         return self._port
 
@@ -75,7 +75,7 @@ class DeviceConfig(QObject):
         self._port = value
         self.signal_port.emit(value)
 
-    @pyqtProperty("int", notify=signal_gpib)
+    @Property("int", notify=signal_gpib)
     def gpib(self):
         return self._gpib
 
@@ -84,7 +84,7 @@ class DeviceConfig(QObject):
         self._gpib = int(value)
         self.signal_gpib.emit(int(value))
 
-    @pyqtProperty("QString", notify=signal_status)
+    @Property("QString", notify=signal_status)
     def status(self):
         return self._status
 
@@ -143,7 +143,7 @@ class DeviceConfigList(list):
 
 
 class DeviceEventManager(QObject):
-    configs_updated = pyqtSignal()
+    configs_updated = Signal()
 
 
 class DeviceManager:

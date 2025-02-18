@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 import numpy as np
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QCheckBox,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSettings
+from PySide6.QtCore import Qt, Signal, QThread, QSettings
 
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
@@ -111,10 +111,10 @@ class BlockCalibrateThread(Thread):
 
 
 class BlockStreamThread(QThread):
-    cl_current = pyqtSignal(float)
-    bias_voltage = pyqtSignal(float)
-    bias_current = pyqtSignal(float)
-    plot_data = pyqtSignal(dict)
+    cl_current = Signal(float)
+    bias_voltage = Signal(float)
+    bias_current = Signal(float)
+    plot_data = Signal(dict)
 
     def __init__(self, cid: int, stream_plot: bool = False):
         self.config = ScontelSisBlockManager.get_config(cid)
@@ -166,10 +166,10 @@ class BlockStreamThread(QThread):
         self.config.thread_stream = False
 
 
-class BlockCLScanThread(Thread):
-    results = pyqtSignal(dict)
-    stream_result = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+class BlockCLScanThread(QThread):
+    results = Signal(dict)
+    stream_result = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self, cid: int):
         self.config = ScontelSisBlockManager.get_config(cid)
@@ -242,10 +242,11 @@ class BlockCLScanThread(Thread):
         self.config.thread_ctrl_scan = False
 
 
-class BlockBIASScanThread(Thread):
-    results = pyqtSignal(dict)
-    stream_result = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+
+class BlockBIASScanThread(QThread):
+    results = Signal(dict)
+    stream_result = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self, cid: int, voltage_start, voltage_stop, voltage_points):
         self.config = ScontelSisBlockManager.get_config(cid)

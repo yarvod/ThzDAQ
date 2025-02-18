@@ -1,8 +1,8 @@
 import logging
 import textwrap
 
-from PyQt5.QtCore import pyqtSignal, QThread
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, QThread
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class GridThread(QThread):
-    status = pyqtSignal(str)
+    status = Signal(str)
 
     def run(self):
         test_result, test_message = GridManager(host=state.GRID_ADDRESS).test()

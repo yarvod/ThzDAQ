@@ -1,7 +1,7 @@
 import time
 
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGridLayout
+from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QGridLayout
 
 from api.Chopper import chopper_manager
 from interface.components.ui.Button import Button
@@ -20,8 +20,8 @@ class ChopperSetZeroThread(QThread):
 
 
 class ChopperMonitorThread(QThread):
-    position = pyqtSignal(int)
-    speed = pyqtSignal(float)
+    position = Signal(int)
+    speed = Signal(float)
 
     def run(self):
         if not chopper_manager.chopper.client.connected:

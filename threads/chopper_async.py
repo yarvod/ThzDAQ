@@ -1,14 +1,14 @@
 # import asyncio
 #
-# from PyQt5.QtCore import QThread, pyqtSignal
+# from PySide6.QtCore import QThread, Signal
 #
 # from api.Chopper.chopper_async import Chopper
 # from store.state import state
 #
 #
 # class ChopperThread(QThread):
-#     status = pyqtSignal(bool)
-#     position = pyqtSignal(int)
+#     status = Signal(bool)
+#     position = Signal(int)
 #
 #     CONNECT = "connect"
 #     PATH0 = "path0"

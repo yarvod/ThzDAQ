@@ -1,6 +1,6 @@
 from typing import Union, List, Dict, Any
 
-from PyQt5.QtCore import QAbstractItemModel, QModelIndex, QObject, Qt
+from PySide6.QtCore import QAbstractItemModel, QModelIndex, QObject, Qt
 
 
 class TreeItem:

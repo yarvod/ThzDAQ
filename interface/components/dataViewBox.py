@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTreeView, QHeaderView
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QTreeView, QHeaderView
 
 from store.treeModel import JsonModel
 

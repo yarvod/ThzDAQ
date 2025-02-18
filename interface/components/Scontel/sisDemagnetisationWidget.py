@@ -1,6 +1,6 @@
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QSizePolicy,
     QVBoxLayout,
@@ -18,7 +18,7 @@ from threads import Thread
 
 
 class ThreadDemagnetization(Thread):
-    progress = pyqtSignal(int)
+    progress = Signal(int)
 
     def __init__(
         self,

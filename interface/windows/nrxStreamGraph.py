@@ -1,10 +1,14 @@
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+import logging
+
+from PySide6 import QtGui
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
 from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
-from utils.logger import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class NRXStreamGraphWindow(QWidget):

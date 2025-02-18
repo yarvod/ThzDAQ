@@ -1,8 +1,8 @@
 import time
 from typing import Dict
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QSizePolicy,
     QGroupBox,
     QHBoxLayout,
@@ -18,7 +18,7 @@ from threads import Thread
 
 
 class StreamThread(Thread):
-    stream_temperatures = pyqtSignal(dict)
+    stream_temperatures = Signal(dict)
 
     def __init__(self, cid):
         super().__init__()

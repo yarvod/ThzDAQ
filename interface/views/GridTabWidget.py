@@ -3,8 +3,8 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -36,11 +36,11 @@ logger = logging.getLogger(__name__)
 
 
 class StepBiasPowerThread(Thread):
-    stream_pv = pyqtSignal(dict)
-    stream_y_factor = pyqtSignal(dict)
-    stream_iv = pyqtSignal(dict)
-    stream_tn = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    stream_pv = Signal(dict)
+    stream_y_factor = Signal(dict)
+    stream_iv = Signal(dict)
+    stream_tn = Signal(dict)
+    progress = Signal(int)
 
     def __init__(
         self,

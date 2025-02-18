@@ -1,6 +1,6 @@
-from PyQt5 import QtGui
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDoubleSpinBox
+from PySide6 import QtGui
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDoubleSpinBox
 
 
 class DoubleSpinBox(QDoubleSpinBox):

@@ -1,8 +1,9 @@
 import time
+import logging
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import (
     QGroupBox,
     QGridLayout,
     QVBoxLayout,
@@ -26,11 +27,13 @@ from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from threads import Thread
 from utils.dock import Dock
 from utils.functions import get_voltage_tn
-from utils.logger import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class NRXBlockStreamThread(Thread):
-    meas = pyqtSignal(dict)
+    meas = Signal(dict)
 
     def run(self):
         nrx = NRXPowerMeter(
@@ -71,11 +74,11 @@ class NRXBlockStreamThread(Thread):
 
 
 class BiasPowerThread(Thread):
-    stream_power = pyqtSignal(dict)
-    stream_y_factor = pyqtSignal(dict)
-    stream_tn = pyqtSignal(dict)
-    stream_iv = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    stream_power = Signal(dict)
+    stream_y_factor = Signal(dict)
+    stream_tn = Signal(dict)
+    stream_iv = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self):
         super().__init__()
@@ -245,7 +248,7 @@ class BiasPowerThread(Thread):
 
 class PowerMeterTabWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.layout = QVBoxLayout(self)
         self.biasPowerGraphWindow = None
         self.powerStreamGraphDockWidget = None

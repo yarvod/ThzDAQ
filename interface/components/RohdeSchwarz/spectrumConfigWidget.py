@@ -1,5 +1,5 @@
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
     QLabel,
@@ -15,7 +15,7 @@ from utils.exceptions import DeviceConnectionError
 
 
 class SetConfigSpectrumThread(Thread):
-    data = pyqtSignal(dict)
+    data = Signal(dict)
 
     def __init__(
         self,

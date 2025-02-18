@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGroupBox, QGridLayout, QLabel, QComboBox
+from PySide6.QtWidgets import QGroupBox, QGridLayout, QLabel, QComboBox
 
 from api.Agilent.signal_generator import SignalGenerator
 from interface.components.ui.Button import Button

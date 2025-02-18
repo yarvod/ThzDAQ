@@ -1,11 +1,14 @@
 import socket
 import time
+import logging
 from typing import Union, Optional
 
 import settings
 from store.state import state
 from utils.classes import BaseInstrument
-from utils.logger import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class SisBlock(BaseInstrument):

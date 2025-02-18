@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -26,7 +26,7 @@ from utils.functions import to_db
 
 
 class VnaGetDataThread(Thread):
-    results = pyqtSignal(dict)
+    results = Signal(dict)
 
     def __init__(
         self,
@@ -114,7 +114,7 @@ class ConfigureVnaThread(Thread):
 
 class VNATabWidget(QWidget):
     def __init__(self, parent, cid: int):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.cid = cid
         self.layout = QVBoxLayout(self)
         self.vnaGraphWindow = None

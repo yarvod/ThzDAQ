@@ -1,8 +1,8 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -29,9 +29,9 @@ from utils.functions import linear_fit, linear, calc_tta
 
 
 class MeasureRnThread(Thread):
-    rn1 = pyqtSignal(float)
-    rn2 = pyqtSignal(float)
-    progress = pyqtSignal(int)
+    rn1 = Signal(float)
+    rn2 = Signal(float)
+    progress = Signal(int)
 
     def __init__(self, voltage1, voltage2):
         super().__init__()
@@ -91,10 +91,10 @@ class MeasureRnThread(Thread):
 
 
 class MeasurePowerThread(Thread):
-    current1 = pyqtSignal(float)
-    current2 = pyqtSignal(float)
-    result = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    current1 = Signal(float)
+    current2 = Signal(float)
+    result = Signal(dict)
+    progress = Signal(int)
 
     def __init__(
         self,

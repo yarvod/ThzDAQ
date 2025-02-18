@@ -1,6 +1,6 @@
 import requests.exceptions
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import QGroupBox, QFormLayout, QLabel, QLineEdit
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtWidgets import QGroupBox, QFormLayout, QLabel, QLineEdit
 
 from api.NationalInstruments.yig_filter import NiYIGManager
 from interface.components.ui.Button import Button
@@ -8,7 +8,7 @@ from store.state import state
 
 
 class DigitalYigTestThread(QThread):
-    status = pyqtSignal(bool)
+    status = Signal(bool)
 
     def run(self):
         ni = NiYIGManager(host=state.NI_IP)

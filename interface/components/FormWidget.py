@@ -1,6 +1,6 @@
 from typing import Dict
 
-from PyQt5.QtWidgets import QWidget, QFormLayout
+from PySide6.QtWidgets import QWidget, QFormLayout
 
 
 class FormWidget(QWidget):

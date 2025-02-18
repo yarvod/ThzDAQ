@@ -2,8 +2,8 @@ import logging
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QLabel,
@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 class MeasureThread(Thread):
-    stream_result = pyqtSignal(dict)
-    stream_y_results = pyqtSignal(dict)
-    stream_tn_results = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    stream_result = Signal(dict)
+    stream_y_results = Signal(dict)
+    stream_tn_results = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self, yig: YigType):
         super().__init__()

@@ -1,5 +1,6 @@
 import json
 import time
+import logging
 
 from datetime import datetime
 
@@ -7,7 +8,10 @@ from api import SpectrumBlock
 from api.NationalInstruments.yig_filter import NiYIGManager
 from store.state import state
 from utils.functions import linear
-from utils.logger import logger
+
+
+logger = logging.getLogger(__name__)
+
 
 s_block = SpectrumBlock(host="169.254.75.176", port=5025, adapter="SOCKET", delay=0.05)
 ni = NiYIGManager()

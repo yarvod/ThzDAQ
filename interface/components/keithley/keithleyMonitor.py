@@ -1,7 +1,7 @@
 import time
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QSizePolicy,
     QGridLayout,
@@ -19,11 +19,11 @@ from utils.exceptions import DeviceConnectionError
 
 
 class KeithleyStreamThread(Thread):
-    current = pyqtSignal(float)
-    voltage = pyqtSignal(float)
-    sour_current = pyqtSignal(float)
-    sour_voltage = pyqtSignal(float)
-    output = pyqtSignal(str)
+    current = Signal(float)
+    voltage = Signal(float)
+    sour_current = Signal(float)
+    sour_voltage = Signal(float)
+    output = Signal(str)
 
     def __init__(self, cid: int):
         super().__init__()
