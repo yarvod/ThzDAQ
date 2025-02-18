@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QLabel, QComboBox
+from PySide6.QtWidgets import QLabel, QComboBox
 
 from interface.components.deviceAddForm import DeviceAddForm
 

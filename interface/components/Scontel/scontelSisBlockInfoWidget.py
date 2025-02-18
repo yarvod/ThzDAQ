@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel
 
 from interface.components.Scontel.scontelSisBlockAddForm import ScontelSisBlockAddForm
 from interface.components.deviceInfo import DeviceInfo

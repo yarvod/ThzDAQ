@@ -1,6 +1,6 @@
 from typing import Union, Optional
 
-from PyQt5.QtCore import pyqtProperty, pyqtSignal
+from PySide6.QtCore import Property, Signal
 
 import settings
 from store.adapterConfig import AdapterManager
@@ -184,8 +184,8 @@ class RohdeSchwarzSpectrumFsek30Manager(DeviceManager):
 
 
 class ScontelSisBlockConfig(DeviceConfig):
-    signal_bias_dev = pyqtSignal(str)
-    signal_ctrl_dev = pyqtSignal(str)
+    signal_bias_dev = Signal(str)
+    signal_ctrl_dev = Signal(str)
 
     def __init__(
         self,
@@ -220,7 +220,7 @@ class ScontelSisBlockConfig(DeviceConfig):
         self.thread_ctrl_scan = False
         self.thread_bias_scan = False
 
-    @pyqtProperty("QString", notify=signal_bias_dev)
+    @Property("QString", notify=signal_bias_dev)
     def bias_dev(self):
         return self._bias_dev
 
@@ -232,7 +232,7 @@ class ScontelSisBlockConfig(DeviceConfig):
     def set_bias_dev(self, bias_dev: str):
         self.bias_dev = bias_dev
 
-    @pyqtProperty("QString", notify=signal_ctrl_dev)
+    @Property("QString", notify=signal_ctrl_dev)
     def ctrl_dev(self):
         return self._ctrl_dev
 
