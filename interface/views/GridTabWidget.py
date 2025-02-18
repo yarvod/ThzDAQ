@@ -3,11 +3,10 @@ import time
 from typing import Dict
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QSizePolicy,
     QGroupBox,
     QLabel,
     QFormLayout,
@@ -34,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 class StepBiasPowerThread(Thread):
-    stream_pv = pyqtSignal(dict)
-    stream_y_factor = pyqtSignal(dict)
-    stream_iv = pyqtSignal(dict)
-    stream_tn = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    stream_pv = Signal(dict)
+    stream_y_factor = Signal(dict)
+    stream_iv = Signal(dict)
+    stream_tn = Signal(dict)
+    progress = Signal(int)
 
     def __init__(self):
         super().__init__()
@@ -230,7 +229,8 @@ class StepBiasPowerThread(Thread):
                             "legend_postfix": f"angle {angle} °",
                         }
                     )
-        chopper_manager.chopper.align_to_cold()
+        if state.CHOPPER_SWITCH:
+            chopper_manager.chopper.align_to_cold()
         self.pre_exit()
         self.finished.emit()
 
@@ -252,7 +252,7 @@ class StepBiasPowerThread(Thread):
 
 class GridTabWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self._layout = QVBoxLayout(self)
         self.gridBiasPowerGraphWindow = None
         self.gridBiasCurrentGraphWindow = None
@@ -271,9 +271,6 @@ class GridTabWidget(QWidget):
 
     def createGroupGridBiasPowerScan(self):
         self.groupGridBiasPowerScan = QGroupBox("Grid Power Bias Scan")
-        self.groupGridBiasPowerScan.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
         layout = QFormLayout()
 
         self.angleStartLabel = QLabel(self)

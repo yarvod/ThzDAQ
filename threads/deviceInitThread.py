@@ -1,6 +1,6 @@
 import logging
 
-from PyQt5.QtCore import pyqtSignal
+from PySide6.QtCore import Signal
 
 from threads import Thread
 from utils.exceptions import DeviceConnectionError
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class DeviceInitThread(Thread):
-    status = pyqtSignal(str)
+    status = Signal(str)
 
     def __init__(self, device_api_class, **kwargs):
         super().__init__()

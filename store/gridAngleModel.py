@@ -1,14 +1,14 @@
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PySide6.QtCore import QObject, Property, Signal
 
 
 class GridAngleModel(QObject):
-    value = pyqtSignal(str)
+    value = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._val = "0"
 
-    @pyqtProperty("QString", notify=value)
+    @Property("QString", notify=value)
     def val(self):
         return self._val
 

@@ -1,19 +1,18 @@
 from typing import Literal
-from PyQt5.QtCore import QSignalBlocker, QSettings
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QSignalBlocker, QSettings
+from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QApplication,
     QMenu,
-    QAction,
     QWidgetAction,
     QComboBox,
     QSizePolicy,
     QInputDialog,
     QToolBar,
 )
-from PyQt5 import QtGui
-import PyQtAds as QtAds
+from PySide6 import QtGui
+import PySide6QtAds as QtAds
 
 from interface import style
 from interface.components.ExitMessageBox import ExitMessageBox
@@ -72,7 +71,7 @@ class App(QMainWindow):
         self.setup_dock_widget.setWidget(self.tab_setup)
         self.menuBase.addAction(self.setup_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
-            QtAds.SideBarLocation.SideBarLeft, self.setup_dock_widget
+            QtAds.SideBarLeft, self.setup_dock_widget
         )
 
         self.data_dock_widget = QtAds.CDockWidget("Data")
@@ -80,7 +79,7 @@ class App(QMainWindow):
         self.data_dock_widget.setWidget(self.tab_data)
         self.menuBase.addAction(self.data_dock_widget.toggleViewAction())
         self.dock_manager.addAutoHideDockWidget(
-            QtAds.SideBarLocation.SideBarLeft, self.data_dock_widget
+            QtAds.SideBarLeft, self.data_dock_widget
         )
 
         # Add devices widgets
@@ -272,17 +271,21 @@ class App(QMainWindow):
         self.settings.sync()
 
     def create_perspective_ui(self):
-        create_perspective_action = QAction("Create Perspective", self)
+        create_perspective_action = QWidgetAction(self)
+        create_perspective_action.setText("Create Perspective")
         create_perspective_action.triggered.connect(self.create_perspective)
 
-        update_perspective_action = QAction("Update Current Perspective", self)
+        update_perspective_action = QWidgetAction(self)
+        update_perspective_action.setText("Update Current Perspective")
         update_perspective_action.triggered.connect(self.update_perspective)
 
-        delete_perspective_action = QAction("Delete Current Perspective", self)
+        delete_perspective_action = QWidgetAction(self)
+        delete_perspective_action.setText("Delete Current Perspective")
         delete_perspective_action.setToolTip("DANGER! You will lost this perspective!")
         delete_perspective_action.triggered.connect(self.delete_perspective)
 
-        restore_default_perspectives_action = QAction("!Restore Defaults!", self)
+        restore_default_perspectives_action = QWidgetAction(self)
+        restore_default_perspectives_action.setText("!Restore Defaults!")
         restore_default_perspectives_action.setToolTip(
             "DANGER! Restoring default perspectives!\nOnly for those in the know!"
         )

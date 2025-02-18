@@ -1,8 +1,8 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QProgressBar,
 )
 
-from api.NationalInstruments.yig_filter import NiYIGManager
+from api.NationalInstruments.yig_filter import NiYIGManager, YigType
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
@@ -26,9 +26,9 @@ from utils.functions import linear_fit, linear, calc_tta
 
 
 class MeasureRnThread(Thread):
-    rn1 = pyqtSignal(float)
-    rn2 = pyqtSignal(float)
-    progress = pyqtSignal(int)
+    rn1 = Signal(float)
+    rn2 = Signal(float)
+    progress = Signal(int)
 
     def __init__(self, voltage1, voltage2):
         super().__init__()
@@ -88,10 +88,10 @@ class MeasureRnThread(Thread):
 
 
 class MeasurePowerThread(Thread):
-    current1 = pyqtSignal(float)
-    current2 = pyqtSignal(float)
-    result = pyqtSignal(dict)
-    progress = pyqtSignal(int)
+    current1 = Signal(float)
+    current2 = Signal(float)
+    result = Signal(dict)
+    progress = Signal(int)
 
     def __init__(
         self,
@@ -103,6 +103,7 @@ class MeasurePowerThread(Thread):
         freq_stop,
         freq_points,
         t_sis=4,
+        yig: YigType = "yig_1",
     ):
         super().__init__()
         self.voltage1 = voltage1 * 1e-3
@@ -122,8 +123,9 @@ class MeasurePowerThread(Thread):
             aperture_time=state.NRX_APER_TIME,
             delay=0,
         )
+        self.yig_type = yig
         self.yig = NiYIGManager()
-        self.initial_freq = state.DIGITAL_YIG_FREQ.value
+        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.TA_SIS_CALIBRATION, data={}
         )
@@ -175,7 +177,7 @@ class MeasurePowerThread(Thread):
                         * 1e-9,
                         2,
                     )
-                    state.DIGITAL_YIG_FREQ.value = freq
+                    state.DIGITAL_YIG_MAP[self.yig_type].value = freq
                 else:
                     break
 

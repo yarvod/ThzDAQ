@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMessageBox, QCheckBox, QGridLayout
+from PySide6.QtWidgets import QMessageBox, QCheckBox, QGridLayout
 
 
 class ExitMessageBox(QMessageBox):

@@ -1,7 +1,7 @@
 import logging
 
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtWidgets import (
     QGroupBox,
     QSizePolicy,
     QLabel,
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class NRXBlockThread(QThread):
-    status = pyqtSignal(str)
+    status = Signal(str)
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")

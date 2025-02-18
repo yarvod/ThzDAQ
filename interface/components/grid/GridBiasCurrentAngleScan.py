@@ -1,10 +1,9 @@
 import time
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QGroupBox,
-    QSizePolicy,
     QFormLayout,
     QLabel,
     QProgressBar,
@@ -23,8 +22,8 @@ from utils.dock import Dock
 
 
 class MeasureThread(Thread):
-    progress = pyqtSignal(int)
-    stream_ia = pyqtSignal(dict)
+    progress = Signal(int)
+    stream_ia = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -98,7 +97,6 @@ class GridBiasCurrentScan(QGroupBox):
     def __init__(self, parent):
         super().__init__(parent)
         self.setTitle("Grid Sis current angle scan")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.gridBiasCurrentAngleGraphWindow = None
 
         layout = QVBoxLayout()

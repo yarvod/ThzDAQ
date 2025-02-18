@@ -1,7 +1,7 @@
 from typing import Union
 
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QFormLayout,

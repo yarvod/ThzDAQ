@@ -3,8 +3,8 @@ import time
 from datetime import datetime
 
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QLabel,
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class BiasReflectionThread(Thread):
-    progress = pyqtSignal(int)
+    progress = Signal(int)
 
     def __init__(
         self,
@@ -45,6 +45,7 @@ class BiasReflectionThread(Thread):
         vna_power: float,
         vna_parameter: str,
         vna_samples_count: int,
+        vna_average_count: int,
         start_voltage: float,
         stop_voltage: float,
         voltage_points: int,
@@ -55,13 +56,14 @@ class BiasReflectionThread(Thread):
         self.config_vna = RohdeSchwarzVnaZva67Manager.get_config(cid_vna)
         self.start_frequency = start_frequency
         self.stop_frequency = stop_frequency
-        self.frequency_points = frequency_points
+        self.frequency_points = int(frequency_points)
         self.vna_power = vna_power
         self.vna_parameter = vna_parameter
         self.vna_samples_count = vna_samples_count
+        self.vna_average_count = vna_average_count
         self.start_voltage = start_voltage
         self.stop_voltage = stop_voltage
-        self.voltage_points = voltage_points
+        self.voltage_points = int(voltage_points)
         self.step_delay = step_delay
         self.vna = None
         self.block = None
@@ -81,7 +83,7 @@ class BiasReflectionThread(Thread):
 
     def run(self):
         try:
-            self.vna = VNABlock(**self.config.dict())
+            self.vna = VNABlock(**self.config_vna.dict())
         except DeviceConnectionError:
             self.finished.emit()
             return
@@ -92,6 +94,8 @@ class BiasReflectionThread(Thread):
         self.vna.set_sweep(self.frequency_points)
         self.vna.set_power(self.vna_power)
         self.vna.set_channel_format("COMP")
+        self.vna.set_average_count(self.vna_average_count)
+        self.vna.set_average_status(True)
 
         self.block = SisBlock(
             host=state.BLOCK_ADDRESS,
@@ -165,7 +169,7 @@ class BiasReflectionThread(Thread):
 
 class SisReflectionMeasureWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.layout = QVBoxLayout(self)
         self.createGroupBiasReflScan()
         self.layout.addWidget(self.groupBiasReflScan)
@@ -244,6 +248,12 @@ class SisReflectionMeasureWidget(QWidget):
         self.vnaSamplesCount.setRange(1, 1000)
         self.vnaSamplesCount.setValue(state.VNA_SAMPLES_COUNT)
 
+        self.vnaAverageCountLabel = QLabel(self)
+        self.vnaAverageCountLabel.setText("Aver count:")
+        self.vnaAverageCount = QSpinBox(self)
+        self.vnaAverageCount.setRange(1, 1000)
+        self.vnaAverageCount.setValue(10)
+
         self.scanProgress = QProgressBar(self)
         self.scanProgress.setValue(0)
 
@@ -265,6 +275,7 @@ class SisReflectionMeasureWidget(QWidget):
         flayout.addRow(self.frequencyStopLabel, self.frequencyStop)
         flayout.addRow(self.vnaPointsLabel, self.vnaPoints)
         flayout.addRow(self.vnaSamplesCountLabel, self.vnaSamplesCount)
+        flayout.addRow(self.vnaAverageCountLabel, self.vnaAverageCount)
         flayout.addRow(HLine(self))
         flayout.addRow(self.scanProgress)
 
@@ -294,6 +305,7 @@ class SisReflectionMeasureWidget(QWidget):
             vna_power=self.vnaPower.value(),
             vna_parameter=self.vnaParameter.currentText(),
             vna_samples_count=self.vnaSamplesCount.value(),
+            vna_average_count=int(self.vnaAverageCount.value()),
             start_voltage=self.voltageStart.value(),
             stop_voltage=self.voltageStop.value(),
             voltage_points=self.voltagePoints.value(),

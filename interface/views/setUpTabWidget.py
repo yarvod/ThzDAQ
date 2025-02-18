@@ -1,8 +1,8 @@
 import logging
 import textwrap
 
-from PyQt5.QtCore import pyqtSignal, QThread
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, QThread
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGroupBox,
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QComboBox,
 )
 
-from api.LakeShore.temperature_controller import TemperatureController
 from api.Arduino.grid import GridManager
 from interface.components.Agilent.setUpSignalGenerator import (
     SetUpAgilentSignalGenerator,
@@ -36,13 +35,12 @@ from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 from api.Scontel.sis_block import SisBlock
-from utils.exceptions import DeviceConnectionError
 
 logger = logging.getLogger(__name__)
 
 
 class SISBlockThread(QThread):
-    status = pyqtSignal(str)
+    status = Signal(str)
 
     def run(self):
         logger.info(f"[{self.__class__.__name__}.run] Running...")
@@ -72,7 +70,7 @@ class SISBlockThread(QThread):
 
 
 class GridThread(QThread):
-    status = pyqtSignal(str)
+    status = Signal(str)
 
     def run(self):
         test_result, test_message = GridManager(host=state.GRID_ADDRESS).test()
@@ -184,35 +182,6 @@ class SetUpTabWidget(QWidget):
 
         self.groupBlock.setLayout(layout)
 
-    def createGroupVna(self):
-        self.groupVna = QGroupBox(self)
-        self.groupVna.setTitle("VNA")
-        self.groupVna.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.vnaIPLabel = QLabel(self)
-        self.vnaIPLabel.setText("IP Address:")
-        self.vna_ip = QLineEdit(self)
-        self.vna_ip.setText(state.VNA_ADDRESS)
-
-        self.vnaStatusLabel = QLabel(self)
-        self.vnaStatusLabel.setText("Status:")
-        self.vnaStatus = QLabel(self)
-        self.vnaStatus.setText("Doesn't initialized yet!")
-
-        self.btnInitVna = Button("Initialize", animate=True)
-        self.btnInitVna.clicked.connect(self.initialize_vna)
-
-        layout.addWidget(self.vnaIPLabel, 1, 0)
-        layout.addWidget(self.vna_ip, 1, 1)
-        layout.addWidget(self.vnaStatusLabel, 2, 0)
-        layout.addWidget(self.vnaStatus, 2, 1)
-        layout.addWidget(self.btnInitVna, 3, 0, 1, 2)
-
-        self.groupVna.setLayout(layout)
-
     def createGroupGrid(self):
         self.groupGrid = QGroupBox("GRID")
         self.groupGrid.setSizePolicy(
@@ -240,17 +209,6 @@ class SetUpTabWidget(QWidget):
         layout.addWidget(self.btnInitGrid, 3, 0, 1, 2)
 
         self.groupGrid.setLayout(layout)
-
-    def initialize_temperature_controller(self):
-        state.LAKE_SHORE_IP = self.temperatureControllerAddress.text()
-        try:
-            tc = TemperatureController(
-                host=state.LAKE_SHORE_IP, port=state.LAKE_SHORE_PORT
-            )
-            result = tc.test()
-            self.temperatureControllerStatus.setText(result)
-        except DeviceConnectionError:
-            self.temperatureControllerStatus.setText("Connection Error!")
 
     def initialize_grid(self):
         state.GRID_ADDRESS = self.gridAddress.text()
@@ -283,13 +241,3 @@ class SetUpTabWidget(QWidget):
         self.sis_block_thread.finished.connect(
             lambda: self.btnInitBlock.setEnabled(True)
         )
-
-    def initialize_vna(self):
-        self.vna_thread = VNAThread()
-        self.vna_thread.status.connect(lambda x: self.vnaStatus.setText(x))
-
-        state.VNA_ADDRESS = self.vna_ip.text()
-        self.vna_thread.start()
-
-        self.btnInitVna.setEnabled(False)
-        self.vna_thread.finished.connect(lambda: self.btnInitVna.setEnabled(True))

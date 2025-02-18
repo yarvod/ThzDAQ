@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QSizePolicy, QGroupBox, QHBoxLayout
+from PySide6.QtWidgets import QSizePolicy, QGroupBox, QHBoxLayout
 
 from api import F70Rest
 from interface.components.ui.Button import Button

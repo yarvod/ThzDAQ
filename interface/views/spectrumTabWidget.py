@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 from interface.components.RohdeSchwarz.SpectrumMonitor import SpectrumMonitor
 from interface.components.RohdeSchwarz.spectrumConfigWidget import SpectrumConfigWidget
 

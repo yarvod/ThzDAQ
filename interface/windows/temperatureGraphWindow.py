@@ -1,8 +1,8 @@
 import logging
 from collections import defaultdict
 
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PySide6 import QtGui
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
 
 

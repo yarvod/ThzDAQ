@@ -1,14 +1,14 @@
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PySide6.QtCore import QObject, Property, Signal
 
 
 class YigFrequencyModel(QObject):
-    signal_value = pyqtSignal(float)
+    signal_value = Signal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._value = 0
 
-    @pyqtProperty("float", notify=signal_value)
+    @Property("float", notify=signal_value)
     def value(self):
         return self._value
 

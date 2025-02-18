@@ -125,6 +125,22 @@ class SpectrumBlock(BaseInstrument):
         """value in Hz"""
         return float(self.query(f":FREQuency:STOP?"))
 
+    def set_center_frequency(self, value: float):
+        """value in Hz"""
+        self.write(f":FREQuency:CENT {value}Hz")
+
+    def get_center_frequency(self):
+        """value in Hz"""
+        return float(self.query(f":FREQuency:CENT?"))
+
+    def set_span_frequency(self, value: float):
+        """value in Hz"""
+        self.write(f":FREQuency:SPAN {value}Hz")
+
+    def get_span_frequency(self):
+        """value in Hz"""
+        return float(self.query(f":FREQuency:SPAN?"))
+
     def get_average_mode(self):
         return self.query("AVER:TYPE?")
 

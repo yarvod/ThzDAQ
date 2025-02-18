@@ -1,7 +1,10 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QScrollArea, QWidget, QVBoxLayout
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout
 
 from interface.components.Sumitomo import SumitomoF70ManagerWidget
+from interface.components.Sumitomo.sumitomoF70MonitorWidget import (
+    SumitomoF70MonitorWidget,
+)
 
 
 class SumitomoF70TabWidget(QScrollArea):
@@ -11,6 +14,7 @@ class SumitomoF70TabWidget(QScrollArea):
         self.cid = cid
 
         layout = QVBoxLayout()
+        layout.addWidget(SumitomoF70MonitorWidget(self, cid=self.cid))
         layout.addWidget(SumitomoF70ManagerWidget(self, cid=self.cid))
         layout.addStretch()
 

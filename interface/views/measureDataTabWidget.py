@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHeaderView
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHeaderView
 
 from interface.components.TableView import TableView
 from store.base import MeasureTableModel, MeasureManager
@@ -6,7 +6,7 @@ from store.base import MeasureTableModel, MeasureManager
 
 class MeasureDataTabWidget(QWidget):
     def __init__(self, parent):
-        super(QWidget, self).__init__(parent)
+        super().__init__(parent)
         self.layout = QVBoxLayout(self)
 
         self.tableView = None

@@ -1,5 +1,5 @@
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
 from interface.components.Rigol.rigolPowerSupplyManagerWidget import ManagerWidget
 from interface.components.Rigol.rigolPowerSupplyMonitorWidget import MonitorWidget

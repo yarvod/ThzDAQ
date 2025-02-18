@@ -2,8 +2,8 @@ import logging
 import re
 from typing import Iterable
 
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
+from PySide6 import QtGui
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
 import pyqtgraph as pg
 
 
