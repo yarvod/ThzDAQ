@@ -137,6 +137,15 @@ class RohdeSchwarzVnaZva67Manager(DeviceManager):
     configs = DeviceConfigList()
     event_manager = DeviceEventManager()
 
+    @classmethod
+    def update_vna_config(cls, widget):
+        names = cls.configs.list_of_names()
+        vna_config = getattr(widget, "vnaConfig")
+        for i in range(vna_config.count()):
+            vna_config.removeItem(i)
+        if len(names):
+            vna_config.insertItems(0, names)
+
 
 class RohdeSchwarzSpectrumFsek30Config(DeviceConfig):
     def __init__(
@@ -251,6 +260,15 @@ class ScontelSisBlockManager(DeviceManager):
     config_class = ScontelSisBlockConfig
     configs = DeviceConfigList()
     event_manager = DeviceEventManager()
+
+    @classmethod
+    def update_sis_config(cls, widget):
+        names = cls.configs.list_of_names()
+        sis_config = getattr(widget, "sisConfig")
+        for i in range(sis_config.count()):
+            sis_config.removeItem(i)
+        if len(names):
+            sis_config.insertItems(0, names)
 
 
 class PrologixManager(AdapterManager):

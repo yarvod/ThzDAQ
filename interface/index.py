@@ -103,7 +103,7 @@ class App(QMainWindow):
         # Add measures widgets
         self.add_dock_widget(
             "Shot noise IF measure",
-            import_class("interface.views.SisRnPowerMeasureTabWidget"),
+            import_class("interface.views.ShotNoizeMeasurementWidget"),
             "measure",
         )
         self.add_dock_widget(

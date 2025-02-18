@@ -1,7 +1,6 @@
-from typing import Dict
+from typing import Dict, Literal
 
 from settings import SOCKET
-from store.state import state
 from utils.classes import BaseInstrument
 
 
@@ -98,9 +97,38 @@ class TemperatureController(BaseInstrument):
     def set_manual_output(self, value: float, output: int = 1) -> None:
         self.write(f"MOUT {output},{value}")
 
+    def get_out_mode(self, output: Literal[1, 2, 3, 4] = 1):
+        res = self.query(f"OUTMODE? {output}")
+        mode, input_, powerup_enable = res.split(",")
+        return {
+            "mode": int(mode),
+            "input": int(input_),
+            "powerup_enable": int(powerup_enable),
+        }
+
+    def set_out_mode(
+        self,
+        output: Literal[1, 2, 3, 4] = 1,
+        mode: Literal[0, 1, 2, 3, 4, 5] = 1,
+        input_: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8] = 1,
+        powerup_enable: Literal[0, 1] = 1,
+    ):
+        """
+        mode:
+        0 = Off, 1 = Closed Loop PID, 2 = Zone, 3 = Open Loop, 4 = Monitor Out, 5 = Warmup Supply
+
+        output: 1–4
+
+        input_:
+        0 = None, 1 = A, 2 = B, 3 = C, 4 = D (5 = Input D2, 6 = Input D3, 7 = Input D4, 8 = Input D5 for 3062 option)
+
+        powerup_enable:
+        0 = powerup enable off, 1 = powerup enable on
+        """
+
 
 if __name__ == "__main__":
-    tc = TemperatureController(port=state.LAKE_SHORE_PORT)
-    print(tc.get_heater_output())
-    print(tc.get_manual_output())
-    print(tc.get_mode())
+    tc = TemperatureController(
+        host="169.254.156.101", port=1234, adapter="PROLOGIX ETHERNET"
+    )
+    print(tc.get_out_mode())

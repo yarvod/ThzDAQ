@@ -189,7 +189,7 @@ class SisReflectionMeasureWidget(QWidget):
         self.sisConfigLabel.setText("SIS block device")
         self.sisConfig = QComboBox(self)
         ScontelSisBlockManager.event_manager.configs_updated.connect(
-            self.update_sis_config
+            lambda: ScontelSisBlockManager.update_sis_config(self)
         )
 
         self.voltageStartLabel = QLabel(self)
@@ -222,7 +222,7 @@ class SisReflectionMeasureWidget(QWidget):
         self.vnaConfigLabel.setText("VNA device")
         self.vnaConfig = QComboBox(self)
         RohdeSchwarzVnaZva67Manager.event_manager.configs_updated.connect(
-            self.update_vna_config
+            lambda: RohdeSchwarzVnaZva67Manager.update_vna_config(self)
         )
 
         self.vnaParameter = QComboBox(self)
@@ -296,20 +296,6 @@ class SisReflectionMeasureWidget(QWidget):
         layout.addLayout(hlayout)
 
         self.groupBiasReflScan.setLayout(layout)
-
-    def update_vna_config(self):
-        names = RohdeSchwarzVnaZva67Manager.configs.list_of_names()
-        for i in range(self.vnaConfig.count()):
-            self.vnaConfig.removeItem(i)
-        if len(names):
-            self.vnaConfig.insertItems(0, names)
-
-    def update_sis_config(self):
-        names = ScontelSisBlockManager.configs.list_of_names()
-        for i in range(self.sisConfig.count()):
-            self.sisConfig.removeItem(i)
-        if len(names):
-            self.sisConfig.insertItems(0, names)
 
     def scan_bias_reflection(self):
         self.bias_reflection_thread = BiasReflectionThread(

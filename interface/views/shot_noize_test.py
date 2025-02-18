@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QHBoxLayout,
     QProgressBar,
+    QLabel,
+    QComboBox,
 )
 
 from api.NationalInstruments.yig_filter import NiYIGManager, YigType
@@ -17,6 +19,7 @@ from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from store import ScontelSisBlockManager
 from store.base import MeasureModel
 from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
@@ -225,7 +228,7 @@ class MeasurePowerThread(Thread):
         del self.nrx
 
 
-class SisRnPowerMeasureTabWidget(QWidget):
+class ShotNoizeMeasurementWidget(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
@@ -249,6 +252,13 @@ class SisRnPowerMeasureTabWidget(QWidget):
         flayout2 = QFormLayout()
         hlayout1 = QHBoxLayout()
         hlayout2 = QHBoxLayout()
+
+        self.sisConfigLabel = QLabel(self)
+        self.sisConfigLabel.setText("SIS block device")
+        self.sisConfig = QComboBox(self)
+        ScontelSisBlockManager.event_manager.configs_updated.connect(
+            lambda: ScontelSisBlockManager.update_sis_config(self)
+        )
 
         self.voltage1 = DoubleSpinBox(self)
         self.voltage1.setRange(-30, 30)
@@ -300,6 +310,7 @@ class SisRnPowerMeasureTabWidget(QWidget):
         self.btnStopMeasure.clicked.connect(self.stop_measure_power)
         self.btnStopMeasure.setEnabled(False)
 
+        flayout1.addRow(self.sisConfigLabel, self.sisConfig)
         flayout1.addRow("Voltage 1, mV", self.voltage1)
         flayout1.addRow("Voltage 2, mV", self.voltage2)
         flayout1.addRow("Rn 1, Ohm", self.rn1)

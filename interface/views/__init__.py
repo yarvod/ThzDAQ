@@ -2,7 +2,7 @@ from .keithleyTabWidget import KeithleyTabWidget
 from .signalGeneratorTabWidget import SignalGeneratorTabWidget
 from .rigolPowerSupplyTabWidget import RigolPowerSupplyTabWidget
 from .Sumitomo import SumitomoF70TabWidget
-from .sis_stab_measure import SisRnPowerMeasureTabWidget
+from .shot_noize_test import ShotNoizeMeasurementWidget
 from .chopperTabWidget import ChopperTabWidget
 from .spectrumTabWidget import SpectrumTabWidget
 from .YIG import YIGWidget

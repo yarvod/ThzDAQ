@@ -318,7 +318,7 @@ class GridTabWidget(QWidget):
         self.sisConfigLabel.setText("SIS block device")
         self.sisConfig = QComboBox(self)
         ScontelSisBlockManager.event_manager.configs_updated.connect(
-            self.update_sis_config
+            lambda: ScontelSisBlockManager.update_sis_config(self)
         )
 
         self.voltFromLabel = QLabel(self)
@@ -473,10 +473,3 @@ class GridTabWidget(QWidget):
             legend_postfix=results.get("legend_postfix"),
         )
         self.biasTnGraphWindow.widget().show()
-
-    def update_sis_config(self):
-        names = ScontelSisBlockManager.configs.list_of_names()
-        for i in range(self.sisConfig.count()):
-            self.sisConfig.removeItem(i)
-        if len(names):
-            self.sisConfig.insertItems(0, names)
