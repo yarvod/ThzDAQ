@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QMenu,
     QWidgetAction,
-    QWidgetAction,
     QComboBox,
     QSizePolicy,
     QInputDialog,

@@ -19,13 +19,12 @@ QWidget {
 QGroupBox {
     border: 1px solid #514f59;
     border-radius: 5px;
-    padding-top: 10px;
-    margin-top: 5ex;
+    padding-top: 5px;
+    margin-top: 10px;
 }
 QGroupBox:title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 10px 2px;
     left: 10px;
     color: #514f59;
 }
