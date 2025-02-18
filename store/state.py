@@ -21,9 +21,7 @@ class State:
     BLOCK_CTRL_SCAN_THREAD = False
     BLOCK_CTRL_STEP_DELAY = 0.01
     BLOCK_STREAM_THREAD = False
-    BLOCK_BIAS_POWER_MEASURE_THREAD = False
     BLOCK_DEMAG_THREAD = False
-    BLOCK_BIAS_STEP_DELAY = 0.1
     BLOCK_BIAS_SHORT_STATUS = "1"
     BLOCK_CTRL_SHORT_STATUS = "1"
 
@@ -38,6 +36,9 @@ class State:
         "0": "Open",
         "1": "Short",
     }
+    BLOCK_BIAS_STEP_DELAY = 0.01
+    BLOCK_BIAS_STEP_DELAY_MIN = 0.01
+    BLOCK_BIAS_STEP_DELAY_MAX = 10
 
     # VNA variables
     VNA_ADDRESS = "169.254.106.189"
@@ -104,7 +105,7 @@ class State:
     # Arduino step motor
     GRID_ADDRESS = "169.254.0.52"
 
-    GRID_BLOCK_BIAS_POWER_MEASURE_THREAD = False
+    POWER_BIAS_VOLTAGE_MEASURE_THREAD = False
     GRID_CURRENT_ANGLE_THREAD = False
     GRID_ANGLE = GridAngleModel()
     GRID_ANGLE_ROTATE = 0
@@ -128,7 +129,7 @@ class State:
     CHOPPER_ADAPTER = WAVESHARE_ETHERNET
     CHOPPER_DEFAULT_SERIAL_PORT = "COM16"
     CHOPPER_FREQ = 1
-    CHOPPER_SWITCH = True
+    CHOPPER_SWITCH = False
     CHOPPER_MONITOR = False
 
     # National Instruments

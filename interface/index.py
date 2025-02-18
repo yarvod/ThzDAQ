@@ -111,6 +111,12 @@ class App(QMainWindow):
             "measure",
         )
 
+        self.add_dock_widget(
+            "Power Bias Voltage measure",
+            import_class("interface.views.PowerBiasVoltageMeasureWidget"),
+            "measure",
+        )
+
         # Add graph widgets
         self.add_dock_widget(
             "I-V curve", import_class("interface.windows.BiasGraphWindow"), "graph"
