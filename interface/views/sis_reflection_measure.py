@@ -124,21 +124,28 @@ class BiasReflectionThread(Thread):
         )
         proc = 0
         start_t = datetime.now()
-        for p_i, param in enumerate(self.vna_parameters):
-            self.vna.set_parameter(param)
-            for i, v_set in enumerate(v_range, 1):
-                if not state.BIAS_REFL_SCAN_THREAD:
-                    break
-                self.block.set_bias_voltage(v_set)
-                if i == 0:
-                    time.sleep(1)
-                v_get = self.block.get_bias_voltage()
-                if not v_get:
-                    continue
-                i_get = self.block.get_bias_current()
-                if not i_get:
-                    continue
-                time.sleep(self.step_delay)  # waiting for VNA averaging
+        for i, v_set in enumerate(v_range):
+            if not state.BIAS_REFL_SCAN_THREAD:
+                break
+            self.block.set_bias_voltage(v_set)
+            if i == 0:
+                time.sleep(1)
+            v_get = self.block.get_bias_voltage()
+            if not v_get:
+                continue
+            i_get = self.block.get_bias_current()
+            if not i_get:
+                continue
+
+            self.measure.data["v_get"].append(v_get * 1e3)
+            self.measure.data["v_set"].append(v_set * 1e3)
+            self.measure.data["i_get"].append(i_get * 1e6)
+            # waiting for VNA averaging
+            time.sleep(self.step_delay)
+
+            for p_i, param in enumerate(self.vna_parameters):
+                self.vna.set_parameter(param)
+
                 vna_samples = []
                 for sample in range(self.vna_samples_count):
                     vna_data = self.vna.get_data()
@@ -148,8 +155,8 @@ class BiasReflectionThread(Thread):
                     proc = round(
                         (
                             (
-                                p_i * self.voltage_points
-                                + (i * self.vna_samples_count + sample)
+                                i * len(self.vna_parameters)
+                                + (p_i * self.vna_samples_count + sample)
                             )
                             / (
                                 self.voltage_points
@@ -159,9 +166,7 @@ class BiasReflectionThread(Thread):
                         )
                         * 100
                     )
-                self.measure.data["v_get"].append(v_get * 1e3)
-                self.measure.data["v_set"].append(v_set * 1e3)
-                self.measure.data["i_get"].append(i_get * 1e6)
+
                 self.measure.data["params"][param].append(vna_samples)
                 delta_t = datetime.now() - start_t
                 self.measure.data["time"].append(delta_t.total_seconds())
