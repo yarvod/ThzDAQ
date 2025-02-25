@@ -76,7 +76,7 @@ class BiasReflectionThread(Thread):
                 "i_get": [],
                 "v_set": [],
                 "v_get": [],
-                "params": {},
+                "params": {k: [] for k in self.vna_parameters},
                 "frequencies": [],
                 "time": [],
             },
@@ -124,7 +124,7 @@ class BiasReflectionThread(Thread):
         )
         proc = 0
         start_t = datetime.now()
-        for p_i, param in enumerate(self.vna_parameters, 1):
+        for p_i, param in enumerate(self.vna_parameters):
             self.vna.set_parameter(param)
             for i, v_set in enumerate(v_range, 1):
                 if not state.BIAS_REFL_SCAN_THREAD:
@@ -305,6 +305,8 @@ class SisReflectionMeasureWidget(QWidget):
             self.vnaConfig.insertItems(0, names)
 
     def scan_bias_reflection(self):
+        if not len(self.vnaParameter.currentData()):
+            return
         self.bias_reflection_thread = BiasReflectionThread(
             cid_vna=RohdeSchwarzVnaZva67Manager.configs[
                 self.vnaConfig.currentIndex()
