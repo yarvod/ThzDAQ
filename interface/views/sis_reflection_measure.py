@@ -145,6 +145,7 @@ class BiasReflectionThread(Thread):
 
             for p_i, param in enumerate(self.vna_parameters):
                 self.vna.set_parameter(param)
+                self.vna.set_channel_format("COMP")
 
                 vna_samples = []
                 for sample in range(self.vna_samples_count):
