@@ -1,6 +1,7 @@
 import logging
 import time
 from datetime import datetime
+from typing import List
 
 import numpy as np
 from PySide6.QtCore import Signal
@@ -22,6 +23,7 @@ from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.Lines import HLine
+from interface.components.ui.MultipleComboBox import MultipleComboBox
 from store import RohdeSchwarzVnaZva67Manager
 from store.base import MeasureModel
 from store.state import state
@@ -43,7 +45,7 @@ class BiasReflectionThread(Thread):
         stop_frequency: float,
         frequency_points: int,
         vna_power: float,
-        vna_parameter: str,
+        vna_parameters: List[str],
         vna_samples_count: int,
         vna_average_count: int,
         start_voltage: float,
@@ -58,7 +60,7 @@ class BiasReflectionThread(Thread):
         self.stop_frequency = stop_frequency
         self.frequency_points = int(frequency_points)
         self.vna_power = vna_power
-        self.vna_parameter = vna_parameter
+        self.vna_parameters = vna_parameters
         self.vna_samples_count = vna_samples_count
         self.vna_average_count = vna_average_count
         self.start_voltage = start_voltage
@@ -74,7 +76,7 @@ class BiasReflectionThread(Thread):
                 "i_get": [],
                 "v_set": [],
                 "v_get": [],
-                "refl": [],
+                "params": {},
                 "frequencies": [],
                 "time": [],
             },
@@ -88,7 +90,6 @@ class BiasReflectionThread(Thread):
             self.finished.emit()
             return
 
-        self.vna.set_parameter(self.vna_parameter)
         self.vna.set_start_frequency(self.start_frequency)
         self.vna.set_stop_frequency(self.stop_frequency)
         self.vna.set_sweep(self.frequency_points)
@@ -123,42 +124,51 @@ class BiasReflectionThread(Thread):
         )
         proc = 0
         start_t = datetime.now()
-        for i, v_set in enumerate(v_range, 1):
-            if not state.BIAS_REFL_SCAN_THREAD:
-                break
-            self.block.set_bias_voltage(v_set)
-            if i == 0:
-                time.sleep(1)
-            v_get = self.block.get_bias_voltage()
-            if not v_get:
-                continue
-            i_get = self.block.get_bias_current()
-            if not i_get:
-                continue
-            time.sleep(self.step_delay)  # waiting for VNA averaging
-            vna_samples = []
-            for sample in range(self.vna_samples_count):
-                vna_data = self.vna.get_data()
-                vna_data.pop("array", None)
-                vna_data.pop("freq", None)
-                vna_samples.append(vna_data)
-                proc = round(
-                    (
-                        (i * self.vna_samples_count + sample)
-                        / (self.voltage_points * self.vna_samples_count)
+        for p_i, param in enumerate(self.vna_parameters, 1):
+            self.vna.set_parameter(param)
+            for i, v_set in enumerate(v_range, 1):
+                if not state.BIAS_REFL_SCAN_THREAD:
+                    break
+                self.block.set_bias_voltage(v_set)
+                if i == 0:
+                    time.sleep(1)
+                v_get = self.block.get_bias_voltage()
+                if not v_get:
+                    continue
+                i_get = self.block.get_bias_current()
+                if not i_get:
+                    continue
+                time.sleep(self.step_delay)  # waiting for VNA averaging
+                vna_samples = []
+                for sample in range(self.vna_samples_count):
+                    vna_data = self.vna.get_data()
+                    vna_data.pop("array", None)
+                    vna_data.pop("freq", None)
+                    vna_samples.append(vna_data)
+                    proc = round(
+                        (
+                            (
+                                p_i * self.voltage_points
+                                + (i * self.vna_samples_count + sample)
+                            )
+                            / (
+                                self.voltage_points
+                                * self.vna_samples_count
+                                * len(self.vna_parameters)
+                            )
+                        )
+                        * 100
                     )
-                    * 100
+                self.measure.data["v_get"].append(v_get * 1e3)
+                self.measure.data["v_set"].append(v_set * 1e3)
+                self.measure.data["i_get"].append(i_get * 1e6)
+                self.measure.data["params"][param].append(vna_samples)
+                delta_t = datetime.now() - start_t
+                self.measure.data["time"].append(delta_t.total_seconds())
+                logger.info(
+                    f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
                 )
-            self.measure.data["v_get"].append(v_get * 1e3)
-            self.measure.data["v_set"].append(v_set * 1e3)
-            self.measure.data["i_get"].append(i_get * 1e6)
-            self.measure.data["refl"].append(vna_samples)
-            delta_t = datetime.now() - start_t
-            self.measure.data["time"].append(delta_t.total_seconds())
-            logger.info(
-                f"[scan_reflection] Proc {proc} %; Time {delta_t}; V_set {v_set * 1e3}"
-            )
-            self.progress.emit(proc)
+                self.progress.emit(proc)
 
         self.block.set_bias_voltage(initial_v)
         self.block.disconnect()
@@ -218,7 +228,7 @@ class SisReflectionMeasureWidget(QWidget):
             self.update_vna_config
         )
 
-        self.vnaParameter = QComboBox(self)
+        self.vnaParameter = MultipleComboBox(self)
         self.vnaParameter.addItems(state.VNA_SPARAMS)
 
         self.frequencyStartLabel = QLabel(self)
@@ -303,12 +313,12 @@ class SisReflectionMeasureWidget(QWidget):
             stop_frequency=self.frequencyStop.value(),
             frequency_points=self.vnaPoints.value(),
             vna_power=self.vnaPower.value(),
-            vna_parameter=self.vnaParameter.currentText(),
+            vna_parameters=self.vnaParameter.currentData(),
             vna_samples_count=self.vnaSamplesCount.value(),
             vna_average_count=int(self.vnaAverageCount.value()),
             start_voltage=self.voltageStart.value(),
             stop_voltage=self.voltageStop.value(),
-            voltage_points=self.voltagePoints.value(),
+            voltage_points=int(self.voltagePoints.value()),
             step_delay=self.scanStepDelay.value(),
         )
         state.BIAS_REFL_SCAN_THREAD = True
