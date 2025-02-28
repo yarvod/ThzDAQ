@@ -25,7 +25,7 @@ from store.state import state
 from store.base import MeasureModel
 from threads import Thread
 from utils.dock import Dock
-from utils.functions import linear, get_if_tn
+from utils.functions import get_if_tn
 
 logger = logging.getLogger(__name__)
 
@@ -94,16 +94,9 @@ class MeasureThread(Thread):
                 }
                 if not state.NI_STABILITY_MEAS:
                     break
-                freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
-                resp = self.ni.write_task(freq_point)
-                resp_int = resp.get("result", None)
-                if resp_int:
-                    freq = round(
-                        linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ)
-                        * 1e-9,
-                        2,
-                    )
-                    state.DIGITAL_YIG_MAP[self.yig].value = freq
+                freq_set = self.ni.set_frequency(freq * 1e9)
+                if freq_set:
+                    state.DIGITAL_YIG_MAP[self.yig].value = freq_set
                 else:
                     break
                 time.sleep(0.01)

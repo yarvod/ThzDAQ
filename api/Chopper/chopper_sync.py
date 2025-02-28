@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Union
+from typing import Union, Optional
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
 from pymodbus.constants import Endian
@@ -25,7 +25,7 @@ class Chopper:
         self.port = port
         self.baudrate = baudrate
         self.slave_address = slave_address
-        self.client = None
+        self.client: Optional[ModbusClient] = None
         self.init_client()
 
         self.frequency = 1
@@ -35,7 +35,6 @@ class Chopper:
             if self.client.connected:
                 self.client.close()
         self.client = ModbusClient(
-            method="rtu",
             port=self.port,
             baudrate=self.baudrate,
             stopbits=1,
@@ -59,42 +58,60 @@ class Chopper:
         logger.debug(f"[{[self.__class__.__name__]}.__del__] Instance deleted")
 
     def save_parameters_to_eeprom(self):
-        self.client.write_register(int(0x1801), int(0x2211), self.slave_address)
+        self.client.write_register(
+            address=int(0x1801), value=int(0x2211), slave=self.slave_address
+        )
 
     def motor_direction(self, param):
         # 0:CW; 1:CCW
-        self.client.write_register(int(0x007), int(param), self.slave_address)
+        self.client.write_register(
+            address=int(0x007), value=int(param), slave=self.slave_address
+        )
 
     def jog_speed(self, param):
         # 0--5000 rpm
-        self.client.write_register(int(0x01E1), int(param), self.slave_address)
+        self.client.write_register(
+            address=int(0x01E1), value=int(param), slave=self.slave_address
+        )
 
     def jog_acc_dec_time(self, param):
         # in ms/1000rpm
-        self.client.write_register(int(0x01E7), int(param), self.slave_address)
+        self.client.write_register(
+            address=int(0x01E7), value=int(param), slave=self.slave_address
+        )
 
     def jogCW(self):
-        self.client.write_register(int(0x1801), int(0x4001), self.slave_address)
+        self.client.write_register(
+            address=int(0x1801), value=int(0x4001), slave=self.slave_address
+        )
         logger.debug("jogCW")
 
     def jogCCW(self):
-        self.client.write_register(int(0x1801), int(0x4002), self.slave_address)
+        self.client.write_register(
+            address=int(0x1801), value=int(0x4002), slave=self.slave_address
+        )
         logger.debug("jogCCW")
 
     def emergency_stop(self):
-        self.client.write_register(int(0x6002), int(0x040), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x040), slave=self.slave_address
+        )
         logger.debug("Emergency stop")
 
     def set_origin(self):
         """Set current position as 'Zero'"""
-        self.client.write_register(int(0x6002), int(0x021), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x021), slave=self.slave_address
+        )
         pos = self.get_actual_pos()
         logger.debug(f"Origin set, actual position (in pulses): {pos}")
 
     def get_actual_pos(self) -> int:
         start_address = int(0x602C)
         count = 2
-        result = self.client.read_holding_registers(start_address, count, 1)
+        result = self.client.read_holding_registers(
+            address=start_address, count=count, slave=1
+        )
         decoder = BinaryPayloadDecoder.fromRegisters(
             result.registers, byteorder=Endian.BIG, wordorder=Endian.BIG
         )
@@ -118,19 +135,27 @@ class Chopper:
         """
         steps = int(angle / 360 * 10000)
         self.client.write_register(
-            int(0x6200), int(0b01000001), self.slave_address
+            address=int(0x6200), value=int(0b01000001), slave=self.slave_address
         )  # relative position mode
         # position high bits
-        self.client.write_register(int(0x6201), int(0), self.slave_address)
+        self.client.write_register(
+            address=int(0x6201), value=int(0), slave=self.slave_address
+        )
         # position low bits
         self.client.write_register(
-            int(0x6202), steps, self.slave_address
+            address=int(0x6202), value=steps, slave=self.slave_address
         )  # 10000 ppr, equals to 90 deg rotation
         # turn speed
-        self.client.write_register(int(0x6203), int(25), self.slave_address)
+        self.client.write_register(
+            address=int(0x6203), value=int(25), slave=self.slave_address
+        )
         # acc/decc time
-        self.client.write_register(int(0x6204), int(5000), self.slave_address)
-        self.client.write_register(int(0x6205), int(10000), self.slave_address)
+        self.client.write_register(
+            address=int(0x6204), value=int(5000), slave=self.slave_address
+        )
+        self.client.write_register(
+            address=int(0x6205), value=int(10000), slave=self.slave_address
+        )
         # trigger PR0 motion
         if (
             align
@@ -140,7 +165,9 @@ class Chopper:
             logger.debug("[path0] Aligning before rotation")
             self.align()
             time.sleep(0.3)
-        self.client.write_register(int(0x6002), int(0x010), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x010), slave=self.slave_address
+        )
         time.sleep(0.3)
 
     def path0_slow(self, angle: float = 90):
@@ -150,44 +177,62 @@ class Chopper:
         """
         steps = int(angle / 360 * 10000)
         self.client.write_register(
-            int(0x6200), int(0b01000001), self.slave_address
+            address=int(0x6200), value=int(0b01000001), slave=self.slave_address
         )  # relative position mode
         # position high bits
-        self.client.write_register(int(0x6201), int(0), self.slave_address)
+        self.client.write_register(
+            address=int(0x6201), value=int(0), slave=self.slave_address
+        )
         # position low bits
         self.client.write_register(
-            int(0x6202), steps, self.slave_address
+            address=int(0x6202), value=steps, slave=self.slave_address
         )  # 10000 ppr, equals to 90 deg rotation
         # turn speed
-        self.client.write_register(int(0x6203), int(25), self.slave_address)
+        self.client.write_register(
+            address=int(0x6203), value=int(25), slave=self.slave_address
+        )
         # acc/decc time
-        self.client.write_register(int(0x6204), int(10000), self.slave_address)
-        self.client.write_register(int(0x6205), int(10000), self.slave_address)
+        self.client.write_register(
+            address=int(0x6204), value=int(10000), slave=self.slave_address
+        )
+        self.client.write_register(
+            address=int(0x6205), value=int(10000), slave=self.slave_address
+        )
 
-        self.client.write_register(int(0x6002), int(0x010), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x010), slave=self.slave_address
+        )
         time.sleep(0.3)
 
     # Constant speed
     def set_frequency(self, frequency: float = 1):
         self.frequency = frequency  # Hz
         omega = frequency * 60
-        self.client.write_register(int(0x620B), int(omega), self.slave_address)
+        self.client.write_register(
+            address=int(0x620B), value=int(omega), slave=self.slave_address
+        )
 
     def path1(self):
         self.client.write_register(
-            int(0x6208), int(0b0010), self.slave_address
+            address=int(0x6208), value=int(0b0010), slave=self.slave_address
         )  # velocity mode
         # Angular speed (rpm)
         # freq = 12  # Hz
         # omega = freq * 60
-        # self.client.write_register(int(0x620B), int(omega), self.slave_address)
+        # self.client.write_register(int(0x620B), int(omega), slave=self.slave_address)
         self.set_frequency(self.frequency)
-        # self.client.write_register(int(0x0191), 24, self.slave_address)  # set max current 2.4 A
+        # self.client.write_register(int(0x0191), 24, slave=self.slave_address)  # set max current 2.4 A
         # acc/dec (ms/1000 rpm)
-        self.client.write_register(int(0x620C), int(10000), self.slave_address)
-        self.client.write_register(int(0x620D), int(5000), self.slave_address)
+        self.client.write_register(
+            address=int(0x620C), value=int(10000), slave=self.slave_address
+        )
+        self.client.write_register(
+            address=int(0x620D), value=int(5000), slave=self.slave_address
+        )
         # trigger PR1 motion
-        self.client.write_register(int(0x6002), int(0x011), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x011), slave=self.slave_address
+        )
         # logger.debug("Constant speed:", freq, "Hz")
 
     # slow down
@@ -196,19 +241,31 @@ class Chopper:
         logger.debug("[path2] Slowing down, wait for complete stop ...")
         while True:
             self.client.write_register(
-                int(0x6210), int(0b01000001), self.slave_address
+                address=int(0x6210), value=int(0b01000001), slave=self.slave_address
             )  # relative position mode
             # position high bits
-            self.client.write_register(int(0x6211), int(0), self.slave_address)
+            self.client.write_register(
+                address=int(0x6211), value=int(0), slave=self.slave_address
+            )
             # position low bits
-            self.client.write_register(int(0x6212), int(0), self.slave_address)
+            self.client.write_register(
+                address=int(0x6212), value=int(0), slave=self.slave_address
+            )
             # turn speed
-            self.client.write_register(int(0x6213), int(4), self.slave_address)
+            self.client.write_register(
+                address=int(0x6213), value=int(4), slave=self.slave_address
+            )
             # acc/decc time
-            self.client.write_register(int(0x6214), int(12000), self.slave_address)
-            self.client.write_register(int(0x6215), int(12000), self.slave_address)
+            self.client.write_register(
+                address=int(0x6214), value=int(12000), slave=self.slave_address
+            )
+            self.client.write_register(
+                address=int(0x6215), value=int(12000), slave=self.slave_address
+            )
             # trigger PR0 motion
-            self.client.write_register(int(0x6002), int(0x012), self.slave_address)
+            self.client.write_register(
+                address=int(0x6002), value=int(0x012), slave=self.slave_address
+            )
             if self.get_actual_speed() < 0.1:
                 self.emergency_stop()
                 logger.debug("[path2] Stopped")
@@ -222,19 +279,29 @@ class Chopper:
         builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
         builder.add_32bit_int(pulse)
         registers = builder.to_registers()
-        self.client.write_registers(starting_address, registers, self.slave_address)
+        self.client.write_registers(
+            address=starting_address, values=registers, slave=self.slave_address
+        )
         # logger.debug("Moving to position: p = ", pulse, "...")
 
         self.client.write_register(
-            int(0x6218), int(0b00000001), self.slave_address
+            address=int(0x6218), value=int(0b00000001), slave=self.slave_address
         )  # absolute position mode
         # Angular speed (rpm)
-        self.client.write_register(int(0x621B), int(25), self.slave_address)
+        self.client.write_register(
+            address=int(0x621B), value=int(25), slave=self.slave_address
+        )
         # acc/dec (ms/100 rpm)
-        self.client.write_register(int(0x621C), int(3000), self.slave_address)
-        self.client.write_register(int(0x621D), int(3000), self.slave_address)
+        self.client.write_register(
+            address=int(0x621C), value=int(3000), slave=self.slave_address
+        )
+        self.client.write_register(
+            address=int(0x621D), value=int(3000), slave=self.slave_address
+        )
         # trigger PR2 motion
-        self.client.write_register(int(0x6002), int(0x013), self.slave_address)
+        self.client.write_register(
+            address=int(0x6002), value=int(0x013), slave=self.slave_address
+        )
         time.sleep(0.3)
 
     def align(self):

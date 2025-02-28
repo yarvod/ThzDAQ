@@ -15,7 +15,9 @@ from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from store.state import state
 from utils.functions import send_to_telegram, get_if_tn
+from utils.logger import configure_logger
 
+configure_logger()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -24,14 +26,14 @@ if __name__ == "__main__":
     sis = SisBlock(
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
-        bias_dev=state.BLOCK_BIAS_DEV,
-        ctrl_dev=state.BLOCK_CTRL_DEV,
+        bias_dev="DEV2",
+        ctrl_dev="DEV1",
     )
     sis.connect()
     ni_yig = NiYIGManager(host=state.NI_IP)
     nrx = NRXPowerMeter(delay=0, aperture_time=50)
 
-    voltages_range = np.arange(2, 2.8, 0.05) * 1e-3
+    voltages_range = np.arange(2.5, 2.8, 0.05) * 1e-3
     freq_range = np.linspace(3, 13, 300) * 1e9
 
     data = {
@@ -46,6 +48,7 @@ if __name__ == "__main__":
         chopper_manager.chopper.align_to_cold()
         for voltage_step, voltage in enumerate(voltages_range, 1):
             logger.info(f"Start for voltage = {voltage*1e3:.3f}")
+            send_to_telegram(f"Start for voltage = {voltage*1e3:.3f}")
 
             _data = {
                 "voltage": voltage,
@@ -92,12 +95,20 @@ if __name__ == "__main__":
         send_to_telegram(f"Exception: {e}")
         sis.set_bias_voltage(0)
         chopper_manager.chopper.align_to_cold()
+    try:
+        with open(
+            f"measures/data/meas_tn_if_sis_bias_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
-    with open(
-        f"data/meas_tn_if_sis_bias_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
-        "w",
-        encoding="utf-8",
-    ) as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    except (FileNotFoundError, Exception):
+        with open(
+            f"meas_tn_if_sis_bias_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
     send_to_telegram(f"Measurement successfully finished!")

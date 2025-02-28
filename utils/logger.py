@@ -5,5 +5,4 @@ def configure_logger():
         level=logging.INFO,
         format="%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
         handlers=[logging.FileHandler("debug.log"), logging.StreamHandler()],
-)
-
+    )

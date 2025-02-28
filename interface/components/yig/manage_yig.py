@@ -44,7 +44,8 @@ class ManageYigWidget(QGroupBox):
         self.niYigFreqLabel = QLabel(self)
         self.niYigFreqLabel.setText("Freq, GHz")
         self.niYigFreq = DoubleSpinBox(self)
-        self.niYigFreq.setRange(2.94, 13)
+        self.niYigFreq.setDecimals(3)
+        self.niYigFreq.setRange(3, 13)
         self.niYigFreq.setValue(8)
 
         self.niDigitalResponseLabel = QLabel(self)

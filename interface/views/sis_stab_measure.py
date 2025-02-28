@@ -162,7 +162,7 @@ class MeasurePowerThread(Thread):
             voltage_get.append(voltage)
             current = self.sis.get_bias_current()
             current_get.append(current)
-            current_signal = self.__getattr__(f"current{i}")
+            current_signal = getattr(self, f"current{i}")
             current_signal.emit(current)
             self.current1.emit(current)
             for freq in self.freq_range:

@@ -59,7 +59,7 @@ class NiYIGManager:
         self, frequency: float, yig: YigType = "yig_1"
     ) -> Optional[float]:
         """Set frequency Hz directly"""
-        value = int(
+        value = round(
             linear(
                 frequency,
                 *state.CALIBRATION_DIGITAL_FREQ_2_POINT,
@@ -72,7 +72,7 @@ class NiYIGManager:
         else:
             return round(
                 linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ) * 1e-9,
-                2,
+                3,
             )
 
 

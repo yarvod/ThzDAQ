@@ -140,12 +140,12 @@ class BiasReflectionThread(Thread):
             self.measure.data["v_get"].append(v_get * 1e3)
             self.measure.data["v_set"].append(v_set * 1e3)
             self.measure.data["i_get"].append(i_get * 1e6)
-            # waiting for VNA averaging
-            time.sleep(self.step_delay)
 
             for p_i, param in enumerate(self.vna_parameters):
                 self.vna.set_parameter(param)
                 self.vna.set_channel_format("COMP")
+                # waiting for VNA averaging
+                time.sleep(self.step_delay)
 
                 vna_samples = []
                 for sample in range(self.vna_samples_count):
@@ -317,8 +317,8 @@ class SisReflectionMeasureWidget(QWidget):
             cid_vna=RohdeSchwarzVnaZva67Manager.configs[
                 self.vnaConfig.currentIndex()
             ].cid,
-            start_frequency=self.frequencyStart.value(),
-            stop_frequency=self.frequencyStop.value(),
+            start_frequency=self.frequencyStart.value() * 1e9,
+            stop_frequency=self.frequencyStop.value() * 1e9,
             frequency_points=self.vnaPoints.value(),
             vna_power=self.vnaPower.value(),
             vna_parameters=self.vnaParameter.currentData(),
