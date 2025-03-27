@@ -33,7 +33,7 @@ if __name__ == "__main__":
     ni_yig = NiYIGManager(host=state.NI_IP)
     nrx = NRXPowerMeter(delay=0, aperture_time=50)
 
-    voltages_range = np.arange(2.5, 2.8, 0.05) * 1e-3
+    voltages_range = np.arange(2.1, 3.2, 0.05) * 1e-3
     freq_range = np.linspace(3, 13, 300) * 1e9
 
     data = {
