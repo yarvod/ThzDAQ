@@ -77,6 +77,17 @@ class SpectrumBlock(BaseInstrument):
     def get_peak_power(self) -> float:
         return float(self.query(f"CALC:MARK:Y?"))
 
+    def get_data(self, trace: str = "TRACE1"):
+        response = self.query(f":TRAC:DATA? {trace}", delay=0)
+        points_raw = response.split(",")
+        points = []
+        for p in points_raw:
+            try:
+                points.append(float(p))
+            except ValueError:
+                points.append(0.0)
+        return points
+
     def get_trace_data(
         self, trace: str = "TRACE1", start: float = None, stop: float = None
     ) -> Tuple[List[float], List[float]]:
@@ -115,6 +126,7 @@ class SpectrumBlock(BaseInstrument):
 
     def get_start_frequency(self):
         """value in Hz"""
+        self.query(f":FREQuency:STARt?")
         return float(self.query(f":FREQuency:STARt?"))
 
     def set_stop_frequency(self, value: float):
@@ -123,6 +135,7 @@ class SpectrumBlock(BaseInstrument):
 
     def get_stop_frequency(self):
         """value in Hz"""
+        self.query(f":FREQuency:STOP?")
         return float(self.query(f":FREQuency:STOP?"))
 
     def set_center_frequency(self, value: float):

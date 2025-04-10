@@ -25,7 +25,7 @@ from store.state import state
 from store.base import MeasureModel
 from threads import Thread
 from utils.dock import Dock
-from utils.functions import linear, get_if_tn
+from utils.functions import get_if_tn
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,14 @@ class MeasureThread(Thread):
     stream_tn_results = Signal(dict)
     progress = Signal(int)
 
-    def __init__(self, yig: YigType):
+    def __init__(
+        self,
+        yig: YigType,
+        use_bias: bool,
+        start_voltage: float,
+        stop_voltage: float,
+        bias_points: int,
+    ):
         super().__init__()
         self.yig = yig
         self.ni = NiYIGManager()
@@ -56,6 +63,9 @@ class MeasureThread(Thread):
         self.measure.save(finish=False)
 
         self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
+
+        self.start_voltage = start_voltage
+        self.stop_voltage = stop_voltage
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
@@ -94,16 +104,9 @@ class MeasureThread(Thread):
                 }
                 if not state.NI_STABILITY_MEAS:
                     break
-                freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
-                resp = self.ni.write_task(freq_point)
-                resp_int = resp.get("result", None)
-                if resp_int:
-                    freq = round(
-                        linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ)
-                        * 1e-9,
-                        2,
-                    )
-                    state.DIGITAL_YIG_MAP[self.yig].value = freq
+                freq_set = self.ni.set_frequency(freq * 1e9)
+                if freq_set:
+                    state.DIGITAL_YIG_MAP[self.yig].value = freq_set
                 else:
                     break
                 time.sleep(0.01)

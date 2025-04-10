@@ -27,13 +27,8 @@ class ChopperEthernet(Chopper):
             if self.client.connected:
                 self.client.close()
         self.client = ModbusTcpClient(
-            method="rtu",
             host=self.host,
             port=self.port,
-            baudrate=self.baudrate,
-            stopbits=1,
-            bytesize=8,
-            parity="N",
         )
 
     def read_di23(self) -> Union[None, Tuple[bool, bool]]:
