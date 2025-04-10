@@ -3,8 +3,6 @@ import time
 from typing import Union, Optional
 
 from pymodbus.client import ModbusSerialClient as ModbusClient
-from pymodbus.constants import Endian
-from pymodbus.payload import BinaryPayloadBuilder, BinaryPayloadDecoder
 
 from store.state import state
 
@@ -112,10 +110,9 @@ class Chopper:
         result = self.client.read_holding_registers(
             address=start_address, count=count, slave=1
         )
-        decoder = BinaryPayloadDecoder.fromRegisters(
-            result.registers, byteorder=Endian.BIG, wordorder=Endian.BIG
+        actual_pos = self.client.convert_from_registers(
+            registers=result.registers, data_type=self.client.DATATYPE.INT32
         )
-        actual_pos = decoder.decode_32bit_int()
         return actual_pos
 
     def get_actual_speed(self) -> float:
@@ -276,9 +273,9 @@ class Chopper:
 
     def go_to_pos(self, pulse: int):
         starting_address = int(0x6219)
-        builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
-        builder.add_32bit_int(pulse)
-        registers = builder.to_registers()
+        registers = self.client.convert_to_registers(
+            value=pulse, data_type=self.client.DATATYPE.INT32
+        )
         self.client.write_registers(
             address=starting_address, values=registers, slave=self.slave_address
         )

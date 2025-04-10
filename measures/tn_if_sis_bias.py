@@ -33,7 +33,7 @@ if __name__ == "__main__":
     ni_yig = NiYIGManager(host=state.NI_IP)
     nrx = NRXPowerMeter(delay=0, aperture_time=50)
 
-    voltages_range = np.arange(2.1, 3.2, 0.05) * 1e-3
+    voltages_range = np.arange(2.3, 3.2, 0.1) * 1e-3
     freq_range = np.linspace(3, 13, 300) * 1e9
 
     data = {
@@ -61,10 +61,10 @@ if __name__ == "__main__":
             logger.info("Hot measure...")
             chopper_manager.chopper.path0()
             time.sleep(2)
-            sis.set_bias_voltage_iterative(voltage)
+            sis.set_bias_voltage(voltage)
             for freq_step, freq in enumerate(freq_range, 1):
                 ni_yig.set_frequency(freq)
-                time.sleep(0.1)
+                time.sleep(0.01)
                 power = nrx.get_power()
                 _data["hot_power"].append(power)
 
@@ -72,10 +72,10 @@ if __name__ == "__main__":
             logger.info("Cold measure...")
             chopper_manager.chopper.path0()
             time.sleep(2)
-            sis.set_bias_voltage_iterative(voltage)
+            sis.set_bias_voltage(voltage)
             for freq_step, freq in enumerate(freq_range, 1):
                 ni_yig.set_frequency(freq)
-                time.sleep(0.1)
+                time.sleep(0.01)
                 power = nrx.get_power()
                 _data["cold_power"].append(power)
 

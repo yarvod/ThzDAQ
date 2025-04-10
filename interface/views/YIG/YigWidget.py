@@ -36,7 +36,14 @@ class MeasureThread(Thread):
     stream_tn_results = Signal(dict)
     progress = Signal(int)
 
-    def __init__(self, yig: YigType):
+    def __init__(
+        self,
+        yig: YigType,
+        use_bias: bool,
+        start_voltage: float,
+        stop_voltage: float,
+        bias_points: int,
+    ):
         super().__init__()
         self.yig = yig
         self.ni = NiYIGManager()
@@ -56,6 +63,9 @@ class MeasureThread(Thread):
         self.measure.save(finish=False)
 
         self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
+
+        self.start_voltage = start_voltage
+        self.stop_voltage = stop_voltage
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:

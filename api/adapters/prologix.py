@@ -1,3 +1,5 @@
+import time
+
 from api.adapters.socket_adapter import SocketAdapter
 from utils.classes import PrologixMeta
 
@@ -48,6 +50,8 @@ class Prologix(SocketAdapter, metaclass=PrologixMeta):
 
     def query(self, cmd, eq_addr: int = None, buffer_size=1024 * 1024, **kwargs):
         self.write(cmd, eq_addr)
+        if self.delay:
+            time.sleep(self.delay)
         return self.read(eq_addr, buffer_size)
 
 
