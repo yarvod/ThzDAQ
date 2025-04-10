@@ -135,10 +135,14 @@ class PowerBiasVoltageThread(Thread):
             self.finished.emit()
             return
 
-        angle_range = np.arange(
-            self.angle_start,
-            self.angle_stop + self.ange_step,
-            self.ange_step,
+        angle_range = (
+            np.arange(
+                self.angle_start,
+                self.angle_stop + self.ange_step,
+                self.ange_step,
+            )
+            if self.use_grid
+            else np.array([0])
         )
         volt_range = np.linspace(
             self.voltage_start * 1e-3,
