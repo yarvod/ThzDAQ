@@ -63,6 +63,19 @@ class GraphWindow(QWidget):
         number = ind % len(self.colors) - 1 if ind >= 1 else 0
         return self.colors[number]
 
+    @staticmethod
+    def get_plot_number(name: str):
+        val = next((_ for _ in re.findall(r"№ (\d+);", name)), 0)
+        return int(val)
+
+    def get_last_plot_number(self):
+        items = self.get_plot_items()
+        plot_number = max(
+            [self.get_plot_number(name) for name in items.keys()], default=0
+        )
+        print(f"PLOT_NUMBER {plot_number}")
+        return plot_number
+
     def plotNew(
         self,
         x: Iterable,
@@ -73,11 +86,7 @@ class GraphWindow(QWidget):
     ) -> str:
         items = self.get_plot_items()
 
-        def get_id(name: str):
-            val = next((_ for _ in re.findall(r"№ (\d+);", name)), 0)
-            return int(val)
-
-        plot_num = max([get_id(name) for name in items.keys()], default=0)
+        plot_num = max([self.get_plot_number(name) for name in items.keys()], default=0)
         if new_plot:
             plot_num += 1
         graph_id = f"id {measure_id}; № {plot_num}; {legend_postfix}"
@@ -96,6 +105,38 @@ class GraphWindow(QWidget):
             x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
         return graph_id
+
+    def plot(
+        self,
+        x: Iterable,
+        y: Iterable,
+        plot_num=None,
+        measure_id=None,
+        legend_postfix="",
+    ) -> str:
+        items = self.get_plot_items()
+
+        if not plot_num:
+            plot_num = max(
+                [self.get_plot_number(name) for name in items.keys()], default=1
+            )
+
+        graph_id = f"id {measure_id}; № {plot_num}; {legend_postfix}"
+
+        if items.get(graph_id):
+            item = items.get(graph_id)
+            x_data = list(item.xData)
+            x_data.extend(x)
+            y_data = list(item.yData)
+            y_data.extend(y)
+            items.get(graph_id).setData(x_data, y_data)
+            return plot_num
+
+        pen = pg.mkPen(color=self.get_color(plot_num), width=2)
+        self.graphWidget.plot(
+            x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
+        )
+        return plot_num
 
     def remove_hidden_graphs(self):
         plotItem = self.graphWidget.getPlotItem()

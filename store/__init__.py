@@ -270,6 +270,10 @@ class ScontelSisBlockManager(DeviceManager):
         if len(names):
             sis_config.insertItems(0, names)
 
+    @classmethod
+    def get_config(cls, cid: int) -> Union[ScontelSisBlockConfig, None]:
+        return super().get_config(cid)
+
 
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"

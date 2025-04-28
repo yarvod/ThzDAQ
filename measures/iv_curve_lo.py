@@ -24,17 +24,17 @@ logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     nrx = NRXPowerMeter(delay=0)
-    sg = SignalGenerator(host=state.PROLOGIX_IP)
+    sg = SignalGenerator(host=state.PROLOGIX_IP, gpib=18)
     sis = SisBlock(
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
-        bias_dev=state.BLOCK_BIAS_DEV,
-        ctrl_dev=state.BLOCK_CTRL_DEV,
+        bias_dev="DEV2",
+        ctrl_dev="DEV1",
     )
     sis.connect()
     data = []
-    freqs = np.linspace(283.5e9, 285.5e9, 40)
-    voltages = np.linspace(2e-3, 9e-3, 100)
+    freqs = np.arange(232.2e9, 232e9, 1e9)
+    voltages = np.linspace(-5e-3, 5e-3, 301)
 
     try:
         send_to_telegram(
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         for step_freq, freq in enumerate(freqs, 1):
             logger.info(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
             send_to_telegram(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
-            sg.set_frequency(freq / 18)
+            sg.set_frequency(freq)
             _data = {
                 "frequency": freq,
                 "voltage": [],
@@ -62,6 +62,9 @@ if __name__ == "__main__":
                 _data["voltage"].append(volt)
                 _data["current"].append(curr)
                 _data["power"].append(power)
+                logger.info(
+                    f"V={volt*1e3:.2f} mV; I={curr*1e6:.2f} mkA; P={power:.2f} dBm; LO={freq/1e9:.1f} GHz"
+                )
 
             data.append(_data)
     except (Exception, KeyboardInterrupt) as e:

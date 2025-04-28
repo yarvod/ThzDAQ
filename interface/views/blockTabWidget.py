@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QCheckBox,
 )
-from PySide6.QtCore import Qt, Signal, QThread, QSettings
+from PySide6.QtCore import Qt, Signal, QSettings
 
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
@@ -110,7 +110,7 @@ class BlockCalibrateThread(Thread):
         self.finished.emit()
 
 
-class BlockStreamThread(QThread):
+class BlockStreamThread(Thread):
     cl_current = Signal(float)
     bias_voltage = Signal(float)
     bias_current = Signal(float)
@@ -166,13 +166,24 @@ class BlockStreamThread(QThread):
         self.config.thread_stream = False
 
 
-class BlockCLScanThread(QThread):
+class BlockCLScanThread(Thread):
     results = Signal(dict)
     stream_result = Signal(dict)
     progress = Signal(int)
 
-    def __init__(self, cid: int):
+    def __init__(
+        self,
+        cid: int,
+        current_start: float,
+        current_stop: float,
+        current_points: int,
+        step_delay: float,
+    ):
         self.config = ScontelSisBlockManager.get_config(cid)
+        self.current_start = current_start
+        self.current_stop = current_stop
+        self.current_points = current_points
+        self.step_delay = step_delay
         super().__init__()
 
     def run(self):
@@ -188,9 +199,9 @@ class BlockCLScanThread(QThread):
             "bias_i": [],
         }
         ctrl_i_range = np.linspace(
-            state.BLOCK_CTRL_CURR_FROM / 1e3,
-            state.BLOCK_CTRL_CURR_TO / 1e3,
-            state.BLOCK_CTRL_POINTS,
+            self.current_start,
+            self.current_stop,
+            self.current_points,
         )
         initial_ctrl_i = block.get_ctrl_current()
         start_t = datetime.now()
@@ -200,14 +211,14 @@ class BlockCLScanThread(QThread):
         )
         measure.save(False)
         for ctrl_i in ctrl_i_range:
-            if not state.BLOCK_CTRL_SCAN_THREAD:
+            if not self.config.thread_ctrl_scan:
                 break
-            proc = round((i / state.BLOCK_CTRL_POINTS) * 100, 2)
+            proc = round((i / self.current_points) * 100, 2)
             results["ctrl_i_set"].append(ctrl_i * 1e3)
             block.set_ctrl_current(ctrl_i)
             if i == 0:
                 time.sleep(1)
-            time.sleep(state.BLOCK_CTRL_STEP_DELAY)
+            time.sleep(self.step_delay)
             ctrl_current = block.get_ctrl_current() * 1e3
             if not ctrl_current:
                 continue
@@ -242,18 +253,26 @@ class BlockCLScanThread(QThread):
         self.config.thread_ctrl_scan = False
 
 
-class BlockBIASScanThread(QThread):
+class BlockBIASScanThread(Thread):
     results = Signal(dict)
     stream_result = Signal(dict)
     progress = Signal(int)
 
-    def __init__(self, cid: int, voltage_start, voltage_stop, voltage_points):
+    def __init__(
+        self,
+        cid: int,
+        voltage_start: float,
+        voltage_stop: float,
+        voltage_points: int,
+        step_delay: float,
+    ):
         self.config = ScontelSisBlockManager.get_config(cid)
         self.config.thread_bias_scan = True
         self.voltage_start = voltage_start
         self.voltage_stop = voltage_stop
         self.voltage_stop = voltage_stop
         self.voltage_points = voltage_points
+        self.step_delay = step_delay
         super().__init__()
 
     def run(self):
@@ -284,11 +303,11 @@ class BlockBIASScanThread(QThread):
         for v_set in v_range:
             if not self.config.thread_bias_scan:
                 break
-            proc = round((i / state.BLOCK_BIAS_VOLT_POINTS) * 100, 2)
+            proc = round((i / self.voltage_points) * 100, 2)
             block.set_bias_voltage(v_set)
             if i == 0:
                 time.sleep(1)
-            time.sleep(state.BLOCK_CTRL_STEP_DELAY)
+            time.sleep(self.step_delay)
             v_get = block.get_bias_voltage()
             if not v_get:
                 continue
@@ -326,6 +345,12 @@ class BlockTabWidget(QWidget):
     def __init__(self, parent, cid: int):
         super().__init__(parent)
         self.cid = cid
+        self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
+        self.ctrlGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-CL curve")
+        self.iv_plot_number = 1
+        self.icl_plot_number = 1
+        self.block_bias_scan_thread = None
+
         layout = QVBoxLayout(self)
         self.createGroupMonitor()
         self.createGroupValuesSet()
@@ -343,42 +368,41 @@ class BlockTabWidget(QWidget):
 
         self.setLayout(layout)
 
-        self.biasGraphDockWidget = None
-        self.ctrlGraphDockWidget = None
-
     def show_ctrl_graph_window(self, results: dict):
-        if self.ctrlGraphDockWidget is None:
-            return
+        if results.get("new_plot"):
+            self.icl_plot_number = (
+                self.ctrlGraphDockWidget.widget().get_last_plot_number()
+            )
         self.ctrlGraphDockWidget.widget().plotNew(
             x=results.get("x", []),
             y=results.get("y", []),
-            new_plot=results.get("new_plot", True),
+            plot_num=self.icl_plot_number,
             measure_id=results.get("measure_id"),
         )
         self.ctrlGraphDockWidget.widget().show()
 
     def show_bias_graph_window(self, results):
-        if self.biasGraphDockWidget is None:
-            return
-        self.biasGraphDockWidget.widget().plotNew(
+        if results.get("new_plot"):
+            self.iv_plot_number = (
+                self.biasGraphDockWidget.widget().get_last_plot_number() + 1
+            )
+        self.biasGraphDockWidget.widget().plot(
             x=results.get("x", []),
             y=results.get("y", []),
-            new_plot=results.get("new_plot", True),
+            plot_num=self.iv_plot_number,
             measure_id=results.get("measure_id"),
         )
         self.biasGraphDockWidget.widget().show()
 
     def scan_ctrl_current(self):
-        self.block_ctrl_scan_thread = BlockCLScanThread(cid=self.cid)
+        self.block_ctrl_scan_thread = BlockCLScanThread(
+            cid=self.cid,
+            current_start=self.ctrlCurrentFrom.value() / 1e3,
+            current_stop=self.ctrlCurrentTo.value() / 1e3,
+            current_points=int(self.ctrlPoints.value()),
+            step_delay=self.ctrlStepDelay.value(),
+        )
         self.block_ctrl_scan_thread.stream_result.connect(self.show_ctrl_graph_window)
-
-        state.BLOCK_CTRL_CURR_FROM = self.ctrlCurrentFrom.value()
-        state.BLOCK_CTRL_CURR_TO = self.ctrlCurrentTo.value()
-        state.BLOCK_CTRL_POINTS = int(self.ctrlPoints.value())
-        state.BLOCK_CTRL_SCAN_THREAD = True
-        state.BLOCK_CTRL_STEP_DELAY = self.ctrlStepDelay.value()
-
-        self.ctrlGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-CL curve")
 
         self.block_ctrl_scan_thread.start()
 
@@ -444,10 +468,9 @@ class BlockTabWidget(QWidget):
             voltage_start=self.biasVoltageFrom.value(),
             voltage_stop=self.biasVoltageTo.value(),
             voltage_points=int(self.biasPoints.value()),
+            step_delay=self.biasStepDelay.value(),
         )
         self.block_bias_scan_thread.stream_result.connect(self.show_bias_graph_window)
-
-        self.biasGraphDockWidget = Dock.ex.dock_manager.findDockWidget("I-V curve")
 
         self.block_bias_scan_thread.start()
 
@@ -737,6 +760,13 @@ class BlockTabWidget(QWidget):
         self.biasPoints.setMaximum(state.BLOCK_BIAS_VOLT_POINTS_MAX)
         self.biasPoints.setValue(state.BLOCK_BIAS_VOLT_POINTS)
 
+        self.biasStepDelayLabel = QLabel(self)
+        self.biasStepDelayLabel.setText("Step delay, s")
+        self.biasStepDelay = DoubleSpinBox(self)
+        self.biasStepDelay.setDecimals(2)
+        self.biasStepDelay.setRange(0, 10)
+        self.biasStepDelay.setValue(0.01)
+
         self.biasScanProgress = QProgressBar(self)
         self.biasScanProgress.setValue(0)
 
@@ -747,12 +777,14 @@ class BlockTabWidget(QWidget):
         self.btnBiasStopScan.clicked.connect(self.stop_scan_bias_iv)
         self.btnBiasStopScan.setEnabled(False)
 
-        layout.addWidget(self.biasVoltageFromLabel, 1, 0)
-        layout.addWidget(self.biasVoltageFrom, 1, 1)
-        layout.addWidget(self.biasVoltageToLabel, 2, 0)
-        layout.addWidget(self.biasVoltageTo, 2, 1)
-        layout.addWidget(self.biasPointsLabel, 3, 0)
-        layout.addWidget(self.biasPoints, 3, 1)
+        layout.addWidget(self.biasVoltageFromLabel, 0, 0)
+        layout.addWidget(self.biasVoltageFrom, 0, 1)
+        layout.addWidget(self.biasVoltageToLabel, 1, 0)
+        layout.addWidget(self.biasVoltageTo, 1, 1)
+        layout.addWidget(self.biasPointsLabel, 2, 0)
+        layout.addWidget(self.biasPoints, 2, 1)
+        layout.addWidget(self.biasStepDelayLabel, 3, 0)
+        layout.addWidget(self.biasStepDelay, 3, 1)
         layout.addWidget(self.biasScanProgress, 4, 0, 1, 2)
         layout.addWidget(self.btnBiasScan, 5, 0)
         layout.addWidget(self.btnBiasStopScan, 5, 1)
