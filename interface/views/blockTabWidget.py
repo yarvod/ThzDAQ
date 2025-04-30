@@ -184,6 +184,7 @@ class BlockCLScanThread(Thread):
         self.current_stop = current_stop
         self.current_points = current_points
         self.step_delay = step_delay
+        self.config.thread_ctrl_scan = True
         super().__init__()
 
     def run(self):
@@ -371,9 +372,9 @@ class BlockTabWidget(QWidget):
     def show_ctrl_graph_window(self, results: dict):
         if results.get("new_plot"):
             self.icl_plot_number = (
-                self.ctrlGraphDockWidget.widget().get_last_plot_number()
+                self.ctrlGraphDockWidget.widget().get_last_plot_number() + 1
             )
-        self.ctrlGraphDockWidget.widget().plotNew(
+        self.ctrlGraphDockWidget.widget().plot(
             x=results.get("x", []),
             y=results.get("y", []),
             plot_num=self.icl_plot_number,

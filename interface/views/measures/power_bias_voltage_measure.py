@@ -156,8 +156,9 @@ class PowerBiasVoltageThread(Thread):
         if self.chopper_switch:
             # chopper_manager.chopper.align()
             chopper_manager.chopper.align_to_hot()
-        self.motor.rotate(state.GRID_ANGLE_START)
-        time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
+        if self.use_grid:
+            self.motor.rotate(self.angle_start)
+        time.sleep(abs(self.angle_start) / state.GRID_SPEED)
         for angle_step, angle in enumerate(angle_range):
             if not state.POWER_BIAS_VOLTAGE_MEASURE_THREAD:
                 break
@@ -171,7 +172,7 @@ class PowerBiasVoltageThread(Thread):
             time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
             for chopper_step in chopper_range:
                 chopper_state = None
-                if state.CHOPPER_SWITCH:
+                if self.chopper_switch:
                     chopper_state = "hot" if chopper_step == 0 else "cold"
                 for voltage_step, voltage_set in enumerate(volt_range):
                     if not state.POWER_BIAS_VOLTAGE_MEASURE_THREAD:

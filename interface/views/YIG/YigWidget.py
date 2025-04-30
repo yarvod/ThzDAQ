@@ -39,10 +39,6 @@ class MeasureThread(Thread):
     def __init__(
         self,
         yig: YigType,
-        use_bias: bool,
-        start_voltage: float,
-        stop_voltage: float,
-        bias_points: int,
     ):
         super().__init__()
         self.yig = yig
@@ -63,9 +59,6 @@ class MeasureThread(Thread):
         self.measure.save(finish=False)
 
         self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
-
-        self.start_voltage = start_voltage
-        self.stop_voltage = stop_voltage
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
@@ -269,7 +262,9 @@ class YIGWidget(QWidget):
         self.groupMeas.setLayout(layout)
 
     def start_meas(self):
-        self.meas_thread = MeasureThread(yig="yig_1")
+        self.meas_thread = MeasureThread(
+            yig="yig_1",
+        )
 
         state.NI_STABILITY_MEAS = True
         state.NI_FREQ_TO = self.niFreqStop.value()

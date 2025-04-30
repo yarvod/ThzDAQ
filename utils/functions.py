@@ -154,7 +154,8 @@ def send_to_telegram(message: str):
         response = requests.get(
             f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage?chat_id="
             f"-{settings.TELEGRAM_CHANNEL_ID}&text="
-            f"{message}"
+            f"{message}",
+            timeout=10,
         )
         response.raise_for_status()
         if not response.status_code == requests.status_codes.codes.ALL_GOOD:

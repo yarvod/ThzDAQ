@@ -275,6 +275,45 @@ class ScontelSisBlockManager(DeviceManager):
         return super().get_config(cid)
 
 
+class RohdeSchwarzPowerSupplyConfig(DeviceConfig):
+    def __init__(
+        self,
+        name: str,
+        cid: int,
+        adapter: str = None,
+        host: str = None,
+        port: Union[str, int] = None,
+        gpib: int = None,
+        status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
+        config_manager=None,
+    ):
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
+        self.monitor_ch1 = True
+        self.monitor_ch2 = True
+        self.monitor_ch3 = True
+        self.output_ch1 = False
+        self.output_ch2 = False
+        self.output_ch3 = False
+
+
+class RohdeSchwarzPowerSupplyManager(DeviceManager):
+    name = "Rohde Schwarz Power Supply"
+    main_widget_class = "interface.views.RohdeSchwarzPowerSupplyTabWidget"
+    configs = DeviceConfigList()
+    config_class = RigolPowerSupplyConfig
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
