@@ -35,26 +35,27 @@ if __name__ == "__main__":
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
         bias_dev="DEV2",
-        ctrl_dev="DEV1",
+        ctrl_dev="DEV4",
     )
 
     sis1 = SisBlock(
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
         bias_dev="DEV4",
-        ctrl_dev="DEV3",
+        ctrl_dev="DEV1",
     )
 
     sis2.connect()
     sis1.connect()
 
     data = []
+    _data = {}
 
     lo_frequency = 252e9
     inter_frequencies = np.linspace(4e9, 12e9, 30)
 
     sis_voltage_1 = 2.4e-3
-    sis_voltage_2 = 2.6e-3
+    sis_voltage_2 = 2.7e-3
 
     side_bands = ["upper", "lower"]
 
@@ -71,6 +72,8 @@ if __name__ == "__main__":
                 "power_ch1": [],
                 "power_ch2": [],
                 "power_diff": [],
+                "powers_ch1": [],
+                "powers_ch2": [],
                 "if": [],
                 "testone": [],
             }
@@ -84,17 +87,17 @@ if __name__ == "__main__":
                 send_to_telegram(f"Set TT freq {test_tone_freq/1e9:.4f}")
                 test_tone.set_frequency(test_tone_freq)
                 yig.set_frequency(freq)
-                rs_power.set_output_state(1, False)
+                rs_power.set_output_state(1, True)
                 time.sleep(1)
                 powers_ch1 = []
                 powers_ch2 = []
-                for _if in np.linspace(freq - 50e6, freq + 50e6, 30):
+                for _if in np.linspace(freq - 25e6, freq + 25e6, 15):
                     yig.set_frequency(_if)
                     time.sleep(0.1)
                     powers_ch1.append(nrx.get_power())
-                rs_power.set_output_state(1, True)
+                rs_power.set_output_state(1, False)
                 time.sleep(1)
-                for _if in np.linspace(freq - 0.1e9, freq + 0.1e9, 50):
+                for _if in np.linspace(freq - 25e6, freq + 25e6, 15):
                     yig.set_frequency(_if)
                     time.sleep(0.1)
                     powers_ch2.append(nrx.get_power())
@@ -102,6 +105,8 @@ if __name__ == "__main__":
                 power_ch2 = np.max(powers_ch2)
                 _data["power_ch1"].append(power_ch1)
                 _data["power_ch2"].append(power_ch2)
+                _data["powers_ch1"].append(powers_ch1)
+                _data["powers_ch2"].append(powers_ch2)
                 power_diff = (
                     power_ch1 - power_ch2
                     if side_band == "upper"
@@ -114,6 +119,7 @@ if __name__ == "__main__":
 
             data.append(_data)
     except (Exception, KeyboardInterrupt) as e:
+        data.append(_data)
         logger.error(f"Exception: {e}")
         send_to_telegram(f"Exception: {e}")
 

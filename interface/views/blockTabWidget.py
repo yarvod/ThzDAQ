@@ -638,19 +638,55 @@ class BlockTabWidget(QWidget):
         self.btnCalibrateBlock = Button("Calibrate sis block", animate=True)
         self.btnCalibrateBlock.clicked.connect(self.calibrate_sis_block)
 
-        layout.addWidget(self.sisVoltageSetLabel, 1, 0)
-        layout.addWidget(self.sisVoltageSet, 1, 1)
-        layout.addWidget(self.btnSetBiasVoltage, 1, 2)
-        layout.addWidget(self.ctrlCurrentSetLabel, 2, 0)
-        layout.addWidget(self.ctrlCurrentSet, 2, 1)
-        layout.addWidget(self.btnSetCTRLCurrent, 2, 2)
-        layout.addWidget(self.btnSetBiasShortStatusLabel, 3, 0)
-        layout.addWidget(self.btnSetBiasShortStatus, 3, 1)
-        layout.addWidget(self.btnSetCtrlShortStatusLabel, 4, 0)
-        layout.addWidget(self.btnSetCtrlShortStatus, 4, 1)
-        layout.addWidget(self.btnCalibrateBlock, 5, 0)
+        self.offsetVoltageLabel = QLabel("Voltage offset, mV", self)
+        self.offsetVoltage = DoubleSpinBox(self)
+        self.offsetVoltage.setDecimals(3)
+        self.offsetVoltage.setRange(-10, 10)
+        self.offsetVoltage.setValue(
+            ScontelSisBlockManager.get_config(self.cid).offset_voltage * 1e3
+        )
+        self.btnSetOffsetVoltage = Button("Set")
+        self.btnSetOffsetVoltage.clicked.connect(self.set_offset_voltage)
+
+        self.offsetCurrentLabel = QLabel("Current offset, mkA", self)
+        self.offsetCurrent = DoubleSpinBox(self)
+        self.offsetCurrent.setDecimals(3)
+        self.offsetCurrent.setRange(-10, 10)
+        self.offsetCurrent.setValue(
+            ScontelSisBlockManager.get_config(self.cid).offset_current * 1e6
+        )
+        self.btnSetOffsetCurrent = Button("Set")
+        self.btnSetOffsetCurrent.clicked.connect(self.set_offset_current)
+
+        layout.addWidget(self.sisVoltageSetLabel, 0, 0)
+        layout.addWidget(self.sisVoltageSet, 0, 1)
+        layout.addWidget(self.btnSetBiasVoltage, 0, 2)
+        layout.addWidget(self.ctrlCurrentSetLabel, 1, 0)
+        layout.addWidget(self.ctrlCurrentSet, 1, 1)
+        layout.addWidget(self.btnSetCTRLCurrent, 1, 2)
+        layout.addWidget(self.btnSetBiasShortStatusLabel, 2, 0)
+        layout.addWidget(self.btnSetBiasShortStatus, 2, 1)
+        layout.addWidget(self.btnSetCtrlShortStatusLabel, 3, 0)
+        layout.addWidget(self.btnSetCtrlShortStatus, 3, 1)
+        layout.addWidget(self.offsetVoltageLabel, 4, 0)
+        layout.addWidget(self.offsetVoltage, 4, 1)
+        layout.addWidget(self.btnSetOffsetVoltage, 4, 2)
+        layout.addWidget(self.offsetCurrentLabel, 5, 0)
+        layout.addWidget(self.offsetCurrent, 5, 1)
+        layout.addWidget(self.btnSetOffsetCurrent, 5, 2)
+        layout.addWidget(self.btnCalibrateBlock, 6, 0)
 
         self.rowValuesSet.setLayout(layout)
+
+    def set_offset_voltage(self):
+        ScontelSisBlockManager.get_config(self.cid).offset_voltage = (
+            self.offsetVoltage.value() / 1e3
+        )
+
+    def set_offset_current(self):
+        ScontelSisBlockManager.get_config(self.cid).offset_current = (
+            self.offsetCurrent.value() / 1e6
+        )
 
     def set_bias_voltage(self):
         self.thread_set_bias_voltage = BlockSetBiasVoltageThread(

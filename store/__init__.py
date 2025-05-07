@@ -199,6 +199,8 @@ class ScontelSisBlockConfig(DeviceConfig):
         bias_dev: str = "DEV4",
         ctrl_dev: str = "DEV3",
         delay: float = 0,
+        offset_voltage: float = 0,
+        offset_current: float = 0,
         config_manager=None,
     ):
         super().__init__(
@@ -219,6 +221,8 @@ class ScontelSisBlockConfig(DeviceConfig):
         self.thread_stream = False
         self.thread_ctrl_scan = False
         self.thread_bias_scan = False
+        self.offset_voltage = offset_voltage
+        self.offset_current = offset_current
 
     @Property("QString", notify=signal_bias_dev)
     def bias_dev(self):
@@ -249,6 +253,8 @@ class ScontelSisBlockConfig(DeviceConfig):
         new_dict = {
             "bias_dev": self._bias_dev,
             "ctrl_dev": self._ctrl_dev,
+            "offset_voltage": self.offset_voltage,
+            "offset_current": self.offset_current,
         }
         old_dict.update(new_dict)
         return old_dict

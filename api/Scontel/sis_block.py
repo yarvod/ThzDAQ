@@ -1,4 +1,3 @@
-import socket
 import time
 import logging
 from typing import Union, Optional
@@ -23,11 +22,15 @@ class SisBlock(BaseInstrument):
         adapter: str = settings.SOCKET,
         bias_dev: str = state.BLOCK_BIAS_DEV,
         ctrl_dev: str = state.BLOCK_CTRL_DEV,
+        offset_voltage: float = 0,
+        offset_current: float = 0,
         **kwargs,
     ):
         super().__init__(host=host, gpib=0, adapter=adapter, port=port)
         self.bias_dev = bias_dev
         self.ctrl_dev = ctrl_dev
+        self.offset_voltage = offset_voltage
+        self.offset_current = offset_current
 
     def connect(self):
         ...
@@ -64,7 +67,7 @@ class SisBlock(BaseInstrument):
                 continue
         return ""
 
-    def get_ctrl_short_status(self, s: socket.socket = None):
+    def get_ctrl_short_status(self):
         """
         Method to get Short status for CTRL.
         Shorted = 1
@@ -145,7 +148,10 @@ class SisBlock(BaseInstrument):
     def get_bias_current(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
-                return float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
+                return (
+                    float(self.manipulate(f"BIAS:{self.bias_dev}:CURR?"))
+                    + self.offset_current
+                )
             except ValueError as e:
                 logger.debug(
                     f"[Block.get_bias_current][Exception] {e}, attempt {attempt}"
@@ -156,7 +162,10 @@ class SisBlock(BaseInstrument):
     def get_bias_voltage(self) -> Union[float, None]:
         for attempt in range(1, 6):
             try:
-                return float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
+                return (
+                    float(self.manipulate(f"BIAS:{self.bias_dev}:VOLT?"))
+                    + self.offset_voltage
+                )
             except ValueError as e:
                 logger.debug(
                     f"[Block.get_bias_voltage] Exception {e}; attempt {attempt}"
@@ -166,7 +175,9 @@ class SisBlock(BaseInstrument):
 
     def set_bias_voltage(self, volt: float) -> None:
         for attempt in range(1, 6):
-            status = self.manipulate(f"BIAS:{self.bias_dev}:VOLT {volt}")
+            status = self.manipulate(
+                f"BIAS:{self.bias_dev}:VOLT {volt - self.offset_voltage}"
+            )
             if status == "OK":
                 logger.debug(
                     f"[Block.set_bias_voltage] Success set volt {volt}; status {status}; attempt {attempt}"
