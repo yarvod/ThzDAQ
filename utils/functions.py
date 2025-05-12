@@ -149,6 +149,44 @@ def calc_tta(p_if_data1, p_if_data2, v1, v2, i1, i2, rd1, rd2, t_sis):
     return t_a(m1, m2, y, t1, t2)
 
 
+def calc_m_dsb(
+    p1_hot: np.ndarray[float],
+    p1_cold: np.ndarray[float],
+    p2_hot: np.ndarray[float],
+    p2_cold: np.ndarray[float],
+) -> np.ndarray[float]:
+    """Calculates M_DCB.
+
+    :param p1_hot: Power (W) ch1 for HOT load
+    :param p1_cold: Power (W) ch1 for COLD load
+    :param p2_hot: Power (W) ch1 for HOT load
+    :param p2_cold: Power (W) ch1 for COLD load
+    """
+    return (p1_hot - p1_cold) / (p2_hot - p2_cold)
+
+
+def calc_r1(
+    mu: np.ndarray[float], ml: np.ndarray[float], m_dcb: np.ndarray[float]
+) -> np.ndarray[float]:
+    """Calculates R1.
+    :param mu: Upper power (W) peak ratio for ch1 and ch2
+    :param ml: Lower power (W) peak ratio for ch1 and ch2
+    :param m_dcb: Y-factor ratio
+    """
+    return mu * (ml * m_dcb - 1) / (mu - m_dcb)
+
+
+def calc_r2(
+    mu: np.ndarray[float], ml: np.ndarray[float], m_dcb: np.ndarray[float]
+) -> np.ndarray[float]:
+    """Calculates R2.
+    :param mu: Upper power (W) peak ratio for ch1 and ch2
+    :param ml: Lower power (W) peak ratio for ch1 and ch2
+    :param m_dcb: Y-factor ratio
+    """
+    return ml * (mu - m_dcb) / (ml * m_dcb - 1)
+
+
 def send_to_telegram(message: str):
     try:
         response = requests.get(

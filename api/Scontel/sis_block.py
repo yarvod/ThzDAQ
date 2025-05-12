@@ -202,6 +202,15 @@ class SisBlock(BaseInstrument):
         voltage_to_set = desired_voltage
         iteration = 0
 
+        real_voltage = self.get_bias_voltage()
+        logger.info(f"Real voltage {real_voltage * 1e3:.3f}")
+
+        if abs(real_voltage - desired_voltage) <= tolerance * abs(desired_voltage):
+            logger.info(
+                f"Желаемое напряжение {desired_voltage * 1e3:.3f} достигнуто с точностью {tolerance * 100:.2f}%. за {iteration} итераций"
+            )
+            return real_voltage
+
         while iteration < max_iterations:
             self.set_bias_voltage(voltage_to_set)
             time.sleep(1)

@@ -32,17 +32,21 @@ if __name__ == "__main__":
     yig = NiYIGManager(host=state.NI_IP)
     rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
     sis2 = SisBlock(
-        host=state.BLOCK_ADDRESS,
-        port=state.BLOCK_PORT,
+        host="169.254.190.83",
+        port=9876,
         bias_dev="DEV2",
         ctrl_dev="DEV4",
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
 
     sis1 = SisBlock(
-        host=state.BLOCK_ADDRESS,
-        port=state.BLOCK_PORT,
+        host="169.254.190.83",
+        port=9876,
         bias_dev="DEV4",
         ctrl_dev="DEV1",
+        offset_voltage=0.04e-3,
+        offset_current=0,
     )
 
     sis2.connect()
@@ -51,11 +55,11 @@ if __name__ == "__main__":
     data = []
     _data = {}
 
-    lo_frequency = 252e9
-    inter_frequencies = np.linspace(4e9, 12e9, 30)
+    lo_frequency = 263e9
+    inter_frequencies = np.arange(3e9, 7.8e9, 20e6)
 
     sis_voltage_1 = 2.4e-3
-    sis_voltage_2 = 2.7e-3
+    sis_voltage_2 = 2.4e-3
 
     side_bands = ["upper", "lower"]
 
@@ -91,13 +95,13 @@ if __name__ == "__main__":
                 time.sleep(1)
                 powers_ch1 = []
                 powers_ch2 = []
-                for _if in np.linspace(freq - 25e6, freq + 25e6, 15):
+                for _if in np.linspace(freq - 30e6, freq + 30e6, 10):
                     yig.set_frequency(_if)
                     time.sleep(0.1)
                     powers_ch1.append(nrx.get_power())
                 rs_power.set_output_state(1, False)
                 time.sleep(1)
-                for _if in np.linspace(freq - 25e6, freq + 25e6, 15):
+                for _if in np.linspace(freq - 30e6, freq + 30e6, 10):
                     yig.set_frequency(_if)
                     time.sleep(0.1)
                     powers_ch2.append(nrx.get_power())
