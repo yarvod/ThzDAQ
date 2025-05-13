@@ -28,22 +28,23 @@ if __name__ == "__main__":
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
         bias_dev="DEV2",
-        ctrl_dev="DEV1",
+        ctrl_dev="DEV4",
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
 
     sis1 = SisBlock(
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
         bias_dev="DEV4",
-        ctrl_dev="DEV3",
+        ctrl_dev="DEV1",
+        offset_voltage=0.04e-3,
+        offset_current=0,
     )
 
-    sis2.connect()
-    sis1.connect()
     data = []
     npoints = 301
-    # freqs = np.arange(220e9, 271e9, 0.5e9)
-    # freqs = np.arange(12.8, 14.6, 0.11)
+
     freqs = np.arange(12.2, 14.72, 0.014)
     freqs = 18e9 * freqs
     print(freqs)
@@ -51,12 +52,8 @@ if __name__ == "__main__":
     voltages1 = np.linspace(-25e-3, 25e-3, npoints)
 
     try:
-        send_to_telegram(
-            "Measure SIs Block iv-curves versus Signal generator frequency started"
-        )
-        logger.info(
-            "Measure SIs Block iv-curves versus Signal generator frequency started"
-        )
+        send_to_telegram("Measure 2SB LO Balance started")
+        logger.info("Measure 2SB LO Balance started")
         for step_freq, freq in enumerate(freqs, 1):
             logger.info(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
             send_to_telegram(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
@@ -93,7 +90,7 @@ if __name__ == "__main__":
         send_to_telegram(f"Exception: {e}")
 
     with open(
-        f"data/meas_iv-lo_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+        f"data/meas_2sb_lo_balance_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",
         encoding="utf-8",
     ) as f:

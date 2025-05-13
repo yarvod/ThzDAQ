@@ -49,13 +49,15 @@ if __name__ == "__main__":
     sis2.connect()
     sis1.connect()
 
-    inter_frequencies = np.arange(3e9, 7.8e9, 20e6)
+    inter_frequencies = np.arange(3e9, 13e9, 20e6)
 
     sis_voltage_1 = 4.2e-3
     sis_voltage_2 = 4.8e-3
 
-    voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
-    voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]
+    # voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2]
+    # voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1]
+    voltages_1 = [sis_voltage_2]
+    voltages_2 = [sis_voltage_2]
 
     data = {"if": inter_frequencies.tolist(), "data": []}
     _data = {}
@@ -86,7 +88,7 @@ if __name__ == "__main__":
                 time.sleep(1)
                 for freq in inter_frequencies:
                     yig.set_frequency(freq)
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                     _data[f"power_{channel}"].append(nrx.get_power())
 
             data["data"].append(_data)

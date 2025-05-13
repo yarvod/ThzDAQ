@@ -221,6 +221,7 @@ class ScontelSisBlockConfig(DeviceConfig):
         self.thread_stream = False
         self.thread_ctrl_scan = False
         self.thread_bias_scan = False
+        self.thread_demagnetization = False
         self.offset_voltage = offset_voltage
         self.offset_current = offset_current
 

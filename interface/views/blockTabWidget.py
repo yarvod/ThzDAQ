@@ -364,7 +364,7 @@ class BlockTabWidget(QWidget):
         layout.addWidget(self.groupBiasScan)
         layout.addSpacing(10)
         layout.addWidget(self.groupCTRLScan)
-        layout.addWidget(SisDemagnetisationWidget(self))
+        layout.addWidget(SisDemagnetisationWidget(self, cid=cid))
         layout.addStretch()
 
         self.setLayout(layout)

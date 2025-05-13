@@ -128,7 +128,7 @@ if __name__ == "__main__":
         send_to_telegram(f"Exception: {e}")
 
     with open(
-        f"data/meas_2sb_srr_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+        f"data/meas_2sb_srr_simple_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",
         encoding="utf-8",
     ) as f:

@@ -52,6 +52,14 @@ def to_db(vec: np.ndarray):
     return 20 * np.log10(np.abs(vec))
 
 
+def to_w(data: List) -> np.ndarray:
+    """
+    :param data: Data in dBm
+    :return: converted dBm to Watt
+    """
+    return 0.001 * 10 ** (np.array(data) / 10)
+
+
 def import_class(path: str):
     module_name = ".".join(path.split(".")[:-1])
     class_name = path.split(".")[-1]
@@ -150,19 +158,19 @@ def calc_tta(p_if_data1, p_if_data2, v1, v2, i1, i2, rd1, rd2, t_sis):
 
 
 def calc_m_dsb(
-    p1_hot: np.ndarray[float],
-    p1_cold: np.ndarray[float],
-    p2_hot: np.ndarray[float],
-    p2_cold: np.ndarray[float],
+    p_upper_hot: np.ndarray[float],
+    p_upper_cold: np.ndarray[float],
+    p_lower_hot: np.ndarray[float],
+    p_lower_cold: np.ndarray[float],
 ) -> np.ndarray[float]:
     """Calculates M_DCB.
 
-    :param p1_hot: Power (W) ch1 for HOT load
-    :param p1_cold: Power (W) ch1 for COLD load
-    :param p2_hot: Power (W) ch1 for HOT load
-    :param p2_cold: Power (W) ch1 for COLD load
+    :param p_upper_hot: Power (W) ch1 for HOT load
+    :param p_upper_cold: Power (W) ch1 for COLD load
+    :param p_lower_hot: Power (W) ch1 for HOT load
+    :param p_lower_cold: Power (W) ch1 for COLD load
     """
-    return (p1_hot - p1_cold) / (p2_hot - p2_cold)
+    return (p_upper_hot - p_upper_cold) / (p_lower_hot - p_lower_cold)
 
 
 def calc_r1(

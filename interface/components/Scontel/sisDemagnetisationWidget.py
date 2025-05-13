@@ -13,8 +13,9 @@ from PySide6.QtWidgets import (
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from store.state import state
+from store import ScontelSisBlockManager
 from threads import Thread
+from utils.exceptions import DeviceConnectionError
 
 
 class ThreadDemagnetization(Thread):
@@ -22,11 +23,14 @@ class ThreadDemagnetization(Thread):
 
     def __init__(
         self,
+        cid,
         min_current,
         max_current,
         step,
     ):
         super().__init__()
+        self.cid = cid
+        self.config = ScontelSisBlockManager.get_config(self.cid)
         self.min_current = min_current
         self.max_current = max_current
         self.step = step
@@ -44,24 +48,32 @@ class ThreadDemagnetization(Thread):
         return res
 
     def run(self):
-        self.sis = SisBlock(host=state.BLOCK_ADDRESS, port=state.BLOCK_PORT)
-        self.sis.connect()
+        try:
+            self.sis = SisBlock(**self.config.dict())
+        except DeviceConnectionError:
+            return
+
         current_range = self.generate_range(
             self.min_current, self.max_current, self.step
         )
         for i, current in enumerate(current_range, 1):
+            if not self.config.thread_demagnetization:
+                break
             self.sis.set_ctrl_current(current)
             self.progress.emit(int(i / len(current_range) * 100))
         self.pre_exit()
         self.finished.emit()
 
     def pre_exit(self, *args, **kwargs):
-        self.sis.disconnect()
+        self.config.thread_demagnetization = False
+        if self.sis:
+            self.sis.disconnect()
 
 
 class SisDemagnetisationWidget(QGroupBox):
-    def __init__(self, parent):
+    def __init__(self, parent, cid):
         super().__init__(parent)
+        self.cid = cid
         self.thread_demag = None
         self.setTitle("Demagnetization")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -118,8 +130,10 @@ class SisDemagnetisationWidget(QGroupBox):
             min_current=self.minCurrent.value(),
             max_current=self.maxCurrent.value(),
             step=self.currentStep.value(),
+            cid=self.cid,
         )
-        state.BLOCK_DEMAG_THREAD = True
+        config = ScontelSisBlockManager.get_config(self.cid)
+        config.thread_demagnetization = True
 
         self.thread_demag.progress.connect(lambda x: self.progress.setValue(x))
         self.thread_demag.finished.connect(lambda: self.progress.setValue(0))
@@ -130,4 +144,4 @@ class SisDemagnetisationWidget(QGroupBox):
         self.thread_demag.start()
 
     def stop(self):
-        state.BLOCK_DEMAG_THREAD = False
+        self.thread_demag.quit()
