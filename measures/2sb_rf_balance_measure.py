@@ -23,7 +23,8 @@ logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     # nrx = NRXPowerMeter(delay=0)
-    sg = SignalGenerator(host=state.PROLOGIX_IP, gpib=19)
+    rf = SignalGenerator(host=state.PROLOGIX_IP, gpib=18)
+    lo = SignalGenerator(host=state.PROLOGIX_IP, gpib=19)
     sis2 = SisBlock(
         host=state.BLOCK_ADDRESS,
         port=state.BLOCK_PORT,
@@ -43,31 +44,33 @@ if __name__ == "__main__":
     )
 
     data = []
-    npoints = 301
+    npoints = 41
 
-    freqs = np.arange(12.2, 14.72, 0.014)
-    freqs = 18e9 * freqs
+    freqs = np.arange(220e9, 265e9, 0.1e9)
     print(freqs)
-    voltages2 = np.linspace(-5e-3, 5e-3, npoints)
-    voltages1 = np.linspace(-25e-3, 25e-3, npoints)
+    voltages2 = np.linspace(1e-3, 3e-3, npoints)
+    voltages1 = np.linspace(2e-3, 15e-3, npoints)
 
     try:
-        send_to_telegram("Measure 2SB LO Balance started")
-        logger.info("Measure 2SB LO Balance started")
+        lo.set_power(-80)
+        lo.set_rf_output_state(False)
+        rf.set_power(12)
+        rf.set_rf_output_state(True)
+        send_to_telegram("Measure 2SB RF Balance started")
+        logger.info("Measure 2SB RF Balance started")
         for step_freq, freq in enumerate(freqs, 1):
-            logger.info(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
-            send_to_telegram(f"[{step_freq}/{len(freqs)}] Set freq {freq:.4f}")
-            sg.set_frequency(freq / 18.0)
+            logger.info(f"[{step_freq}/{len(freqs)}] Set freq {freq/1e9:.4f} GHz")
+            send_to_telegram(f"[{step_freq}/{len(freqs)}] Set freq {freq/1e9:.4f} GHz")
+            rf.set_frequency(freq)
             _data = {
                 "frequency": freq,
                 "voltage1": [],
                 "current1": [],
                 "voltage2": [],
                 "current2": [],
-                # "power": [],
+                "power": [],
             }
-            for i, voltage2 in enumerate(voltages2):
-                voltage1 = voltages1[i]
+            for voltage1, voltage2 in zip(voltages1, voltages2):
                 sis2.set_bias_voltage(voltage2)
                 sis1.set_bias_voltage(voltage1)
                 volt2 = sis2.get_bias_voltage()
@@ -81,7 +84,7 @@ if __name__ == "__main__":
                 _data["current1"].append(curr1)
                 # _data["power"].append(power)
                 logger.info(
-                    f"V_2={volt2*1e3:.2f} mV; I_2={curr2*1e6:.2f} mkA; V_1={volt1*1e3:.2f} mV; I_1={curr1*1e6:.2f} mkA;  LO={freq/1e9:.1f} GHz"
+                    f"V_2={volt2*1e3:.2f} mV; I_2={curr2*1e6:.2f} mkA; V_1={volt1*1e3:.2f} mV; I_1={curr1*1e6:.2f} mkA; LO={freq/1e9:.1f} GHz"
                 )
 
             data.append(_data)
@@ -90,7 +93,7 @@ if __name__ == "__main__":
         send_to_telegram(f"Exception: {e}")
 
     with open(
-        f"data/meas_2sb_lo_balance_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+        f"data/meas_2sb_rf_balance_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",
         encoding="utf-8",
     ) as f:

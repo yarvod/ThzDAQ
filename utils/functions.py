@@ -2,11 +2,8 @@ import logging
 from typing import List, Tuple, Union
 
 import numpy as np
-import requests
 from alvar import db_to_absolute
-from requests import RequestException, HTTPError
 
-import settings
 from utils import constants
 
 logger = logging.getLogger(__name__)
@@ -196,22 +193,23 @@ def calc_r2(
 
 
 def send_to_telegram(message: str):
-    try:
-        response = requests.get(
-            f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage?chat_id="
-            f"-{settings.TELEGRAM_CHANNEL_ID}&text="
-            f"{message}",
-            timeout=10,
-        )
-        response.raise_for_status()
-        if not response.status_code == requests.status_codes.codes.ALL_GOOD:
-            logger.error(
-                f"[send_to_telegram] Request to Telegram failed, status_code={response.status_code}"
-            )
-        logger.info(f"[send_to_telegram] message {message}")
-        return response.status_code
-    except (HTTPError, RequestException) as exc:
-        logger.exception(
-            f"[send_to_telegram] Error sending code to Telegram, {str(exc)}"
-        )
-        return None
+    # try:
+    #     response = requests.get(
+    #         f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage?chat_id="
+    #         f"-{settings.TELEGRAM_CHANNEL_ID}&text="
+    #         f"{message}",
+    #         timeout=10,
+    #     )
+    #     response.raise_for_status()
+    #     if not response.status_code == requests.status_codes.codes.ALL_GOOD:
+    #         logger.error(
+    #             f"[send_to_telegram] Request to Telegram failed, status_code={response.status_code}"
+    #         )
+    #     logger.info(f"[send_to_telegram] message {message}")
+    #     return response.status_code
+    # except (HTTPError, RequestException) as exc:
+    #     logger.exception(
+    #         f"[send_to_telegram] Error sending code to Telegram, {str(exc)}"
+    #     )
+    #     return None
+    ...

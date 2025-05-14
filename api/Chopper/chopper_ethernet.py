@@ -80,7 +80,8 @@ class ChopperEthernet(Chopper):
                 di2, di3 = self.read_di23()
             step += 1
         else:
-            self.path0_slow(3)
+            # self.path0_slow(3)
+            ...
         self.motor_direction(0)
         self.set_origin()
         # self.go_to_pos(0)
@@ -116,7 +117,8 @@ class ChopperEthernet(Chopper):
                 di2, di3 = self.read_di23()
             step += 1
         else:
-            self.path0_slow(3)
+            # self.path0_slow(3)
+            ...
         self.motor_direction(0)
         self.set_origin()
 
