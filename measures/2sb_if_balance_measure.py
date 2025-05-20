@@ -46,23 +46,23 @@ if __name__ == "__main__":
         offset_current=0,
     )
 
-    sis2.connect()
-    sis1.connect()
+    inter_frequencies = np.arange(4e9, 12e9, 40e6)
 
-    inter_frequencies = np.arange(3e9, 13e9, 20e6)
-
-    sis_voltage_1 = 4.2e-3
+    sis_voltage_1 = 4e-3
     sis_voltage_2 = 4.8e-3
 
-    # voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2]
-    # voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1]
-    voltages_1 = [sis_voltage_2]
-    voltages_2 = [sis_voltage_2]
+    # voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
+    # voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]
+    voltages_1 = [sis_voltage_1, sis_voltage_2]
+    voltages_2 = [sis_voltage_1, sis_voltage_2]
+    # voltages_1 = [sis_voltage_2]
+    # voltages_2 = [sis_voltage_2]
 
     data = {"if": inter_frequencies.tolist(), "data": []}
     _data = {}
 
     try:
+        rs_power.set_output_state(2, True)  # Turn On YIG
         send_to_telegram("Measuring 2SB IF balance started")
         logger.info("Measuring 2SB IF balance started")
         for bs1, bs2 in zip(voltages_1, voltages_2):
@@ -82,13 +82,12 @@ if __name__ == "__main__":
             }
             for channel in ["ch1", "ch2"]:
                 rs_power.set_output_state(1, channel == "ch2")
-                time.sleep(1)
                 logger.info(f"Start measure channel {channel}")
                 send_to_telegram(f"Start measure channel {channel}")
                 time.sleep(1)
                 for freq in inter_frequencies:
                     yig.set_frequency(freq)
-                    time.sleep(0.05)
+                    # time.sleep(0.01)
                     _data[f"power_{channel}"].append(nrx.get_power())
 
             data["data"].append(_data)

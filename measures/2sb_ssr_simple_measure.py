@@ -10,13 +10,13 @@ from datetime import datetime
 import numpy as np
 import pyqtgraph as pg
 
+from api import SpectrumBlock
 from api.Agilent.signal_generator import SignalGenerator
 from api.Chopper import chopper_manager
 from api.NationalInstruments.yig_filter import NiYIGManager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.power_supply import PowerSupplyHMP2030
 from api.Scontel.sis_block import SisBlock
-from store.state import state
 from threads import Thread
 from utils.functions import send_to_telegram
 
@@ -55,10 +55,17 @@ class MeasThread(Thread):
     data_signal = pg.QtCore.Signal(dict)
 
     def run(self):
-        nrx = NRXPowerMeter(delay=0)
-        lo = SignalGenerator(host=state.PROLOGIX_IP, gpib=19)
-        test_tone = SignalGenerator(host=state.PROLOGIX_IP, gpib=18)
-        yig = NiYIGManager(host=state.NI_IP)
+        nrx = NRXPowerMeter(host="169.254.2.20", delay=0)
+        lo = SignalGenerator(host="169.254.156.103", gpib=19)
+        test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
+        yig = NiYIGManager(host="169.254.0.86")
+        spectrum = SpectrumBlock(
+            host="169.254.156.101",
+            port=1234,
+            gpib=20,
+            adapter="PROLOGIX ETHERNET",
+            delay=0.2,
+        )
         rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
         sis2 = SisBlock(
             host="169.254.190.83",
@@ -81,24 +88,6 @@ class MeasThread(Thread):
         data = {"upper": {}, "lower": {}, "y_factor": {}}
         _data = {}
 
-        measure_y_factor = True
-        lo_frequency = 252e9
-        inter_frequencies = np.arange(4e9, 12e9, 50e6)
-        one_range_len = 10
-        inter_frequencies_reshaped = inter_frequencies.reshape(
-            len(inter_frequencies) // one_range_len, one_range_len
-        )
-
-        sis_voltage_1 = 2.4e-3
-        sis_voltage_2 = 2.4e-3
-
-        if_channels = {
-            "upper": True,
-            "lower": False,
-        }
-
-        side_bands = ["upper", "lower"]
-
         try:
             send_to_telegram("Measuring 2SB SSR started")
             logger.info("Measuring 2SB SSR started")
@@ -106,6 +95,12 @@ class MeasThread(Thread):
             test_tone.set_rf_output_state(True)
             lo.set_rf_output_state(True)
             lo.set_frequency(lo_frequency / 18)
+
+            # spectrum.set_video_bw(2)
+            # spectrum.set_resolution_bw(3000)
+            # spectrum.set_span_frequency(10e6)
+
+            rs_power.set_output_state(2, False)  # turn off YIG
 
             if measure_y_factor:
                 chopper_manager.chopper.align_to_hot()
@@ -132,19 +127,37 @@ class MeasThread(Thread):
                     for if_channel in if_channels.keys():
                         rs_power.set_output_state(1, if_channels[if_channel])
                         time.sleep(1)
-                        for freq in freq_range:
+                        for fi, freq in enumerate(freq_range):
                             test_tone_freq = (
                                 lo_frequency + freq
                                 if side_band == "upper"
                                 else lo_frequency - freq
                             )
                             test_tone.set_frequency(test_tone_freq)
-                            yig.set_frequency(freq)
-                            time.sleep(0.1)
-                            power = nrx.get_power()
+                            spectrum.set_center_frequency(freq)
+                            if fi == 0:
+                                time.sleep(2)
+                            else:
+                                time.sleep(0.5)
+
+                            spectrum.peak_search()
+                            spectrum.peak_search()
+                            spectrum.peak_search()
+                            spectrum.peak_search()
+                            spectrum.get_peak_power()
+                            spectrum.get_peak_power()
+                            spectrum.get_peak_power()
+                            spectrum.get_peak_power()
+                            powers = []
+                            for i in range(10):
+                                p = spectrum.get_peak_power()
+                                powers.append(p)
+                                logger.info(f"{if_channel} IF {freq} Power {p:.4f} dBm")
+                                time.sleep(0.05)
+                            power = np.mean(powers)
                             _data[f"power_{if_channel}"].append(power)
                             logger.info(
-                                f"TT freq {test_tone_freq / 1e9:.4f} power {power:.4f} dBm"
+                                f"TT freq {test_tone_freq / 1e9:.4f} power mean {power:.4f} dBm"
                             )
                             send_to_telegram(
                                 f"TT freq {test_tone_freq / 1e9:.4f} power {power:.4f} dBm"
@@ -174,6 +187,7 @@ class MeasThread(Thread):
 
             if measure_y_factor:
                 chopper_manager.chopper.align_to_cold()
+                rs_power.set_output_state(2, True)  # turn on YIG
                 data["y_factor"] = {
                     "p_upper_hot": [],
                     "p_upper_cold": [],
@@ -218,6 +232,7 @@ class MeasThread(Thread):
                     )
 
                 chopper_manager.chopper.align_to_cold()
+                rs_power.set_output_state(2, False)  # turn off YIG
 
             self.finished.emit()
         except (Exception, KeyboardInterrupt) as e:
@@ -245,6 +260,9 @@ def collect_data(data):
 
 
 def save_data():
+    if StateMeasure.data_is_saved:
+        logger.info("Data is already saved")
+        return
     StateMeasure.data_is_saved = True
     with open(
         f"data/meas_2sb_srr_simple_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
@@ -285,8 +303,7 @@ def plot_data(p, data):
 
 def closeEvent(event):
     StateMeasure.thread_running = False
-    if not StateMeasure.data_is_saved:
-        save_data()
+    save_data()
     event.accept()
 
 
@@ -326,8 +343,29 @@ def main():
 
 
 if __name__ == "__main__":
+    # Parameters
+    ###
+    measure_y_factor = True
+    lo_frequency = 263e9
+    inter_frequencies = np.arange(4e9, 12e9, 40e6)
+    one_range_len = 10
+    inter_frequencies_reshaped = inter_frequencies.reshape(
+        len(inter_frequencies) // one_range_len, one_range_len
+    )
+
+    sis_voltage_1 = 2.4e-3
+    sis_voltage_2 = 2.4e-3
+
+    if_channels = {
+        "upper": True,
+        "lower": False,
+    }
+
+    side_bands = ["upper", "lower"]
+
+    ###
+
     try:
         main()
     except KeyboardInterrupt:
-        if not StateMeasure.data_is_saved:
-            save_data()
+        save_data()

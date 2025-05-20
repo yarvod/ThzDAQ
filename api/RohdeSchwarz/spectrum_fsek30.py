@@ -109,10 +109,20 @@ class SpectrumBlock(BaseInstrument):
         return points, frequency_list[frequency_indxs]
 
     def set_video_bw(self, value: float):
+        """Set video Bandwidth
+        :param value: Frequency in kHz"""
         diff = np.abs(self.available_video_bw_list - value)
         min_ind = np.where(diff == np.min(diff))[0][0]
         bw = self.available_video_bw_list[min_ind]
         self.write(f":BWIDth:VIDeo {bw}kHz")
+
+    def set_resolution_bw(self, value: float):
+        """Set resolution Bandwidth
+        :param value: Frequency in kHz"""
+        diff = np.abs(self.available_video_bw_list - value)
+        min_ind = np.where(diff == np.min(diff))[0][0]
+        bw = self.available_video_bw_list[min_ind]
+        self.write(f":BWIDth:RESolution {bw}kHz")
 
     def set_video_bw_auto(self, value: bool):
         """True - ON, False - OFF"""
