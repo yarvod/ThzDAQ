@@ -6,8 +6,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-from api.Rigol.DP832A import PowerSupplyDP832A
-from store import RigolPowerSupplyManager
+from api import PowerSupplyHMP2030
+from store import RohdeSchwarzPowerSupplyManager
 from interface.components.ui.Button import Button
 from threads import Thread
 from utils.exceptions import DeviceConnectionError
@@ -18,17 +18,17 @@ class SetOutputThread(Thread):
         super().__init__()
         self.cid = cid
         self.channel_value_dict = channel_value_dict
-        self.config = RigolPowerSupplyManager.get_config(self.cid)
-        self.rigol = None
+        self.config = RohdeSchwarzPowerSupplyManager.get_config(self.cid)
+        self.dev = None
 
     def run(self):
         try:
-            self.rigol = PowerSupplyDP832A(**self.config.dict())
+            self.dev = PowerSupplyHMP2030(**self.config.dict())
         except DeviceConnectionError:
             self.finished.emit()
             return
         for channel, value in self.channel_value_dict.items():
-            self.rigol.set_output(channel=channel, value=value)
+            self.dev.set_output_state(channel=channel, value=value)
 
         self.pre_exit()
         self.finished.emit()
@@ -40,7 +40,7 @@ class ManagerWidget(QGroupBox):
         self.setTitle("Output")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.cid = cid
-        self.config = RigolPowerSupplyManager.get_config(cid=self.cid)
+        self.config = RohdeSchwarzPowerSupplyManager.get_config(cid=self.cid)
         self.set_output_thread = None
         layout = QVBoxLayout()
         hlayout = QHBoxLayout()

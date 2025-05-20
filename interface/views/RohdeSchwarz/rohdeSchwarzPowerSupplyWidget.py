@@ -1,8 +1,8 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
-from interface.components.Rigol.rigolPowerSupplyManagerWidget import ManagerWidget
-from interface.components.Rigol.rigolPowerSupplyMonitorWidget import MonitorWidget
+from interface.components.RohdeSchwarz.RSPowerSupplyManagerWidget import ManagerWidget
+from interface.components.RohdeSchwarz.RSPowerSupplyMonitorWidget import MonitorWidget
 
 
 class RohdeSchwarzPowerSupplyWidget(QScrollArea):

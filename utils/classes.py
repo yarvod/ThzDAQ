@@ -17,6 +17,18 @@ class Singleton(type):
         return cls._instances[cls]
 
 
+class SocketMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        host = kwargs.get("host", None)
+        if not host:
+            host = args[0]  # FIXME: improve later
+        if host not in cls._instances:
+            cls._instances[host] = super(SocketMeta, cls).__call__(*args, **kwargs)
+        return cls._instances[host]
+
+
 class PrologixMeta(type):
     _instances = {}
 

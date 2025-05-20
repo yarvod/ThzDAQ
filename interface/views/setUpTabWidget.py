@@ -20,6 +20,9 @@ from interface.components.Lakeshore.setUpTemperatureController import (
     SetUpLakeshoreTemperatureControllerWidget,
 )
 from interface.components.Rigol.setUpRigolPowerSupply import SetUpRigolPowerSupplyWidget
+from interface.components.RohdeSchwarz.setUpRSPowerSupply import (
+    SetUpRSPowerSupplyWidget,
+)
 from interface.components.RohdeSchwarz.setUpVnaZva67 import SetUpVnaZva67Widget
 from interface.components.Scontel.setUpScontelSisBlockWidget import (
     SetUpScontelSisBlockWidget,
@@ -72,6 +75,7 @@ class SetUpTabWidget(QWidget):
         self.layout.addWidget(SetUpDigitalYigGroup(self))
         self.layout.addWidget(SetUpKeithley(self))
         self.layout.addWidget(SetUpRigolPowerSupplyWidget(self))
+        self.layout.addWidget(SetUpRSPowerSupplyWidget(self))
         self.layout.addWidget(SetUpSumitomoF70Widget(self))
         self.layout.addStretch()
 

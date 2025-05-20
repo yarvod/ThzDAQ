@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SOCKET = "SOCKET"
+SOCKET_SINGLE = "SOCKET SINGLE"
 PROLOGIX_ETHERNET = "PROLOGIX ETHERNET"
 PROLOGIX_USB = "PROLOGIX USB"
 HTTP = "HTTP"
@@ -12,6 +13,7 @@ SERIAL = "SERIAL"
 
 ADAPTERS = {
     SOCKET: "api.adapters.socket_adapter.SocketAdapter",
+    SOCKET_SINGLE: "api.adapters.socket_single_adapter.SocketSingleAdapter",
     PROLOGIX_ETHERNET: "api.adapters.prologix.Prologix",
     PROLOGIX_USB: "api.adapters.prologix_usb.PrologixUsb",
     HTTP: "api.adapters.http_adapter.HttpAdapter",

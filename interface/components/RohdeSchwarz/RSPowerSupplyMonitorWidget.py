@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-from api.Rigol.DP832A import PowerSupplyDP832A
-from store import RigolPowerSupplyManager
+from api import PowerSupplyHMP2030
+from store import RohdeSchwarzPowerSupplyManager
 from interface.components.ui.Button import Button
 from threads import Thread
 from utils.exceptions import DeviceConnectionError
@@ -37,67 +37,67 @@ class StreamThread(Thread):
     def __init__(self, cid: int):
         super().__init__()
         self.cid = cid
-        self.config = RigolPowerSupplyManager.get_config(self.cid)
-        self.rigol = None
+        self.config = RohdeSchwarzPowerSupplyManager.get_config(self.cid)
+        self.dev = None
 
     def run(self):
         try:
-            self.rigol = PowerSupplyDP832A(**self.config.dict())
+            self.dev = PowerSupplyHMP2030(**self.config.dict())
         except DeviceConnectionError:
             self.finished.emit()
             return
 
         while self.config.thread_stream:
-            time.sleep(0.2)
+            time.sleep(0.05)
             if self.config.monitor_ch1:
-                measure_1 = self.rigol.measure_all(1)
+                measure_1 = self.dev.measure_all(1)
                 if len(measure_1) == 3:
                     self.measure_1.emit(measure_1)
 
-                voltage_sour_1 = self.rigol.get_voltage(1)
+                voltage_sour_1 = self.dev.get_source_voltage(1)
                 if voltage_sour_1:
                     self.voltage_sour_1.emit(voltage_sour_1)
 
-                current_sour_1 = self.rigol.get_current(1)
+                current_sour_1 = self.dev.get_source_current(1)
                 if current_sour_1:
                     self.current_sour_1.emit(current_sour_1)
 
-                output1 = self.rigol.get_output(1)
-                if output1:
+                output1 = self.dev.get_output_state(1)
+                if output1 in (True, False):
                     self.output_1.emit(output1)
 
             if self.config.monitor_ch2:
-                measure_2 = self.rigol.measure_all(2)
+                measure_2 = self.dev.measure_all(2)
                 if len(measure_2) == 3:
                     self.measure_2.emit(measure_2)
 
-                voltage_sour_2 = self.rigol.get_voltage(2)
+                voltage_sour_2 = self.dev.get_source_voltage(1)
                 if voltage_sour_2:
                     self.voltage_sour_2.emit(voltage_sour_2)
 
-                current_sour_2 = self.rigol.get_current(2)
+                current_sour_2 = self.dev.get_source_current(2)
                 if current_sour_2:
                     self.current_sour_2.emit(current_sour_2)
 
-                output2 = self.rigol.get_output(2)
-                if output2:
+                output2 = self.dev.get_output_state(2)
+                if output2 in (True, False):
                     self.output_2.emit(output2)
 
             if self.config.monitor_ch3:
-                measure_3 = self.rigol.measure_all(3)
+                measure_3 = self.dev.measure_all(3)
                 if len(measure_3) == 3:
                     self.measure_3.emit(measure_3)
 
-                voltage_sour_3 = self.rigol.get_voltage(3)
+                voltage_sour_3 = self.dev.get_source_voltage(3)
                 if voltage_sour_3:
                     self.voltage_sour_3.emit(voltage_sour_3)
 
-                current_sour_3 = self.rigol.get_current(3)
+                current_sour_3 = self.dev.get_source_current(3)
                 if current_sour_3:
                     self.current_sour_3.emit(current_sour_3)
 
-                output3 = self.rigol.get_output(3)
-                if output3:
+                output3 = self.dev.get_output_state(3)
+                if output3 in (True, False):
                     self.output_3.emit(output3)
 
             if not any(
@@ -119,7 +119,7 @@ class MonitorWidget(QGroupBox):
         self.setTitle("Monitor")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.cid = cid
-        self.config = RigolPowerSupplyManager.get_config(cid=self.cid)
+        self.config = RohdeSchwarzPowerSupplyManager.get_config(cid=self.cid)
         self.stream_thread = None
         layout = QVBoxLayout()
         glayout = QGridLayout()
@@ -351,24 +351,24 @@ class MonitorWidget(QGroupBox):
         )
 
     def stop_stream(self):
-        config = RigolPowerSupplyManager.get_config(cid=self.cid)
+        config = RohdeSchwarzPowerSupplyManager.get_config(cid=self.cid)
         config.thread_stream = False
 
     def set_output_1(self, output: str):
-        out = "On" if output == "ON" else "Off"
-        color = "green" if output == "ON" else "red"
+        out = "On" if output else "Off"
+        color = "green" if output else "red"
         self.output1.setText(out)
         self.output1.setStyleSheet(f"color: {color};")
 
     def set_output_2(self, output: str):
-        out = "On" if output == "ON" else "Off"
-        color = "green" if output == "ON" else "red"
+        out = "On" if output else "Off"
+        color = "green" if output else "red"
         self.output2.setText(out)
         self.output2.setStyleSheet(f"color: {color};")
 
     def set_output_3(self, output: str):
-        out = "On" if output == "ON" else "Off"
-        color = "green" if output == "ON" else "red"
+        out = "On" if output else "Off"
+        color = "green" if output else "red"
         self.output3.setText(out)
         self.output3.setStyleSheet(f"color: {color};")
 

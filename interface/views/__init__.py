@@ -10,6 +10,7 @@ from .vnaTabWidget import VNATabWidget
 from .blockTabWidget import BlockTabWidget
 from .powerMeterTabWidget import PowerMeterTabWidget
 from .GridTabWidget import GridTabWidget
+from .RohdeSchwarz import RohdeSchwarzPowerSupplyWidget
 
 # measures
 from .measures import (

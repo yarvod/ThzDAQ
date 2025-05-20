@@ -18,7 +18,7 @@ class PowerSupplyHMP2030(BaseInstrument):
         self,
         host: str = "169.254.0.30",
         gpib: int = None,
-        adapter: str = settings.SOCKET,
+        adapter: str = settings.SOCKET_SINGLE,
         *args,
         **kwargs,
     ):
@@ -71,8 +71,40 @@ class PowerSupplyHMP2030(BaseInstrument):
         self.set_channel(channel)
         return self.query(f"OUTPut:STATe?") == "1"
 
+    def get_voltage(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        return float(self.query(f"MEASure:SCALar:VOLTage?"))
+
+    def get_current(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        return float(self.query(f"MEASure:SCALar:CURRent?"))
+
+    def get_voltage_current(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        voltage = float(self.query(f"MEASure:SCALar:VOLTage?"))
+        current = float(self.query(f"MEASure:SCALar:CURRent?"))
+        return voltage, current
+
+    def get_source_voltage(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        return float(self.query(f"SOURce:VOLTage:LEVel:AMPLitude?"))
+
+    def get_source_current(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        return float(self.query(f"SOURce:CURRent:LEVel:AMPLitude?"))
+
+    def get_source_voltage_current(self, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        voltage = float(self.query(f"SOURce:VOLTage:LEVel:AMPLitude?"))
+        current = float(self.query(f"SOURce:CURRent:LEVel:AMPLitude?"))
+        return voltage, current
+
+    def measure_all(self, channel: HMP2030_CHANNEL_TYPES):
+        voltage, current = self.get_voltage_current(channel)
+        return voltage, current, voltage * current
+
 
 if __name__ == "__main__":
     dev = PowerSupplyHMP2030(host="169.254.0.30", port=5025, delay=0.01)
     print(dev.idn())
-    dev.set_output_state(1, False)
+    print(dev.get_source_voltage(1))

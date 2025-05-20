@@ -316,9 +316,9 @@ class RohdeSchwarzPowerSupplyConfig(DeviceConfig):
 
 class RohdeSchwarzPowerSupplyManager(DeviceManager):
     name = "Rohde Schwarz Power Supply"
-    main_widget_class = "interface.views.RohdeSchwarzPowerSupplyTabWidget"
+    main_widget_class = "interface.views.RohdeSchwarzPowerSupplyWidget"
     configs = DeviceConfigList()
-    config_class = RigolPowerSupplyConfig
+    config_class = RohdeSchwarzPowerSupplyConfig
 
 
 class PrologixManager(AdapterManager):
@@ -334,6 +334,7 @@ def restore_configs(qsettings):
     LakeShoreTemperatureControllerManager.restore_config(qsettings)
     RohdeSchwarzVnaZva67Manager.restore_config(qsettings)
     RohdeSchwarzSpectrumFsek30Manager.restore_config(qsettings)
+    RohdeSchwarzPowerSupplyManager.restore_config(qsettings)
     ScontelSisBlockManager.restore_config(qsettings)
 
 
@@ -346,4 +347,5 @@ def store_configs(qsettings):
     LakeShoreTemperatureControllerManager.store_config(qsettings)
     RohdeSchwarzVnaZva67Manager.store_config(qsettings)
     RohdeSchwarzSpectrumFsek30Manager.store_config(qsettings)
+    RohdeSchwarzPowerSupplyManager.store_config(qsettings)
     ScontelSisBlockManager.store_config(qsettings)
