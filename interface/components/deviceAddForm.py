@@ -6,13 +6,13 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QSpinBox,
     QLineEdit,
     QComboBox,
 )
 
 import settings
 from interface.components.ui.Button import Button
+from interface.components.ui.SpinBox import SpinBox
 
 
 class DeviceAddForm(QDialog):
@@ -55,7 +55,7 @@ class DeviceAddForm(QDialog):
 
         self.gpibLabel = QLabel(self)
         self.gpibLabel.setText("GPIB:")
-        self.gpib = QSpinBox(self)
+        self.gpib = SpinBox(self)
         self.gpib.setRange(0, 31)
         self.gpib.setValue(int(gpib))
         self.gpib.setToolTip("GPIB address")

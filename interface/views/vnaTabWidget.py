@@ -7,13 +7,13 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QSizePolicy,
-    QSpinBox,
     QFormLayout,
     QComboBox,
     QCheckBox,
 )
 
 from interface.components.ui.Button import Button
+from interface.components.ui.SpinBox import SpinBox
 from store import RohdeSchwarzVnaZva67Manager
 from store.base import MeasureModel, MeasureType
 from store.state import state
@@ -148,7 +148,7 @@ class VNATabWidget(QWidget):
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
-        self.vnaPoints = QSpinBox(self)
+        self.vnaPoints = SpinBox(self)
         self.vnaPoints.setMaximum(state.VNA_POINTS_MAX)
         self.vnaPoints.setValue(state.VNA_POINTS)
 
@@ -160,7 +160,7 @@ class VNATabWidget(QWidget):
 
         self.vnaAverageCountLabel = QLabel(self)
         self.vnaAverageCountLabel.setText("Aver count:")
-        self.vnaAverageCount = QSpinBox(self)
+        self.vnaAverageCount = SpinBox(self)
         self.vnaAverageCount.setRange(1, 1000)
         self.vnaAverageCount.setValue(10)
 

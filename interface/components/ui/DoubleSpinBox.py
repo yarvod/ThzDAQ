@@ -7,6 +7,8 @@ class DoubleSpinBox(QDoubleSpinBox):
     def __init__(self, parent, btn_return_method=None):
         super().__init__(parent)
         self.btn_return_method = btn_return_method
+        # Set focus policy to click focus
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def textFromValue(self, value):
         # show + sign for positive values
@@ -48,3 +50,10 @@ class DoubleSpinBox(QDoubleSpinBox):
                 self.btn_return_method()
 
         super().keyPressEvent(event)
+
+    def wheelEvent(self, event):
+        # Process wheel event only if the spinbox has focus
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()

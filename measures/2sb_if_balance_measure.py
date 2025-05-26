@@ -31,30 +31,30 @@ if __name__ == "__main__":
     sis2 = SisBlock(
         host="169.254.190.83",
         port=9876,
-        bias_dev="DEV2",
-        ctrl_dev="DEV4",
-        offset_voltage=-0.187e-3,
-        offset_current=-1.3e-6,
+        bias_dev="DEV4",
+        ctrl_dev="DEV3",
+        offset_voltage=0.04e-3,
+        offset_current=0,
     )
 
     sis1 = SisBlock(
         host="169.254.190.83",
         port=9876,
-        bias_dev="DEV4",
+        bias_dev="DEV2",
         ctrl_dev="DEV1",
-        offset_voltage=0.04e-3,
-        offset_current=0,
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
 
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
 
-    sis_voltage_1 = 4e-3
-    sis_voltage_2 = 4.8e-3
+    sis_voltage_1 = 4.2e-3
+    sis_voltage_2 = 5e-3
 
-    # voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
-    # voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]
-    voltages_1 = [sis_voltage_1, sis_voltage_2]
-    voltages_2 = [sis_voltage_1, sis_voltage_2]
+    voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
+    voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]
+    # voltages_1 = [sis_voltage_1, sis_voltage_2]
+    # voltages_2 = [sis_voltage_1, sis_voltage_2]
     # voltages_1 = [sis_voltage_2]
     # voltages_2 = [sis_voltage_2]
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
                 f"SIS1 voltage {bs1*1e3:.2f}mV; SIS2 voltage {bs2*1e3:.2f}mV;"
             )
             sis1.set_bias_voltage_iterative(bs1)
-            sis2.set_bias_voltage(bs2)
+            sis2.set_bias_voltage_iterative(bs2)
             _data = {
                 "sis1_voltage": bs1,
                 "sis1_current": sis1.get_bias_current(),

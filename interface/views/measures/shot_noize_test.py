@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QGroupBox,
     QFormLayout,
-    QSpinBox,
     QHBoxLayout,
     QProgressBar,
     QLabel,
@@ -19,12 +18,14 @@ from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from interface.components.ui.SpinBox import SpinBox
 from store import ScontelSisBlockManager
 from store.base import MeasureModel
 from store.powerMeterUnitsModel import power_meter_unit_model
 from store.state import state
 from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 from utils.functions import linear_fit, linear, calc_tta
 
 
@@ -33,19 +34,20 @@ class MeasureRnThread(Thread):
     rn2 = Signal(float)
     progress = Signal(int)
 
-    def __init__(self, voltage1, voltage2):
+    def __init__(self, cid, voltage1, voltage2):
         super().__init__()
+        self.config = ScontelSisBlockManager.get_config(cid)
         self.voltage1 = voltage1
         self.voltage2 = voltage2
-        self.sis = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-            bias_dev=state.BLOCK_BIAS_DEV,
-        )
+        self.sis = None
 
     def run(self):
-        self.sis.connect()
+        try:
+            self.sis = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
 
         steps = 42
         step = 0
@@ -86,18 +88,17 @@ class MeasureRnThread(Thread):
         self.pre_exit()
         self.finished.emit()
 
-    def pre_exit(self, *args, **kwargs):
-        self.sis.disconnect()
-
 
 class MeasurePowerThread(Thread):
     current1 = Signal(float)
     current2 = Signal(float)
     result = Signal(dict)
     progress = Signal(int)
+    stream_result = Signal(dict)
 
     def __init__(
         self,
+        cid,
         voltage1,
         voltage2,
         rn1,
@@ -105,22 +106,18 @@ class MeasurePowerThread(Thread):
         freq_start,
         freq_stop,
         freq_points,
-        t_sis=4,
+        t_sis=4.0,
         yig: YigType = "yig_1",
     ):
         super().__init__()
+        self.config = ScontelSisBlockManager.get_config(cid)
         self.voltage1 = voltage1 * 1e-3
         self.voltage2 = voltage2 * 1e-3
         self.rn1 = rn1
         self.rn2 = rn2
         self.freq_range = np.linspace(freq_start, freq_stop, freq_points)
         self.t_sis = t_sis
-        self.sis = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
-            ctrl_dev=state.BLOCK_CTRL_DEV,
-            bias_dev=state.BLOCK_BIAS_DEV,
-        )
+        self.sis = None
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
             aperture_time=state.NRX_APER_TIME,
@@ -135,7 +132,12 @@ class MeasurePowerThread(Thread):
         self.measure.save(False)
 
     def run(self):
-        self.sis.connect()
+        try:
+            self.sis = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
         step = 0
         steps = 2 * len(self.freq_range) + 1
         self.measure.data = {
@@ -168,7 +170,7 @@ class MeasurePowerThread(Thread):
             current_signal = getattr(self, f"current{i}")
             current_signal.emit(current)
             self.current1.emit(current)
-            for freq in self.freq_range:
+            for fi, freq in enumerate(self.freq_range):
                 step += 1
                 self.progress.emit(round(step / steps * 100))
                 freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
@@ -188,6 +190,16 @@ class MeasurePowerThread(Thread):
                 self.measure.data[f"point {i}"]["power"].append(power)
                 self.measure.data[f"point {i}"]["voltage"] = voltage
                 self.measure.data[f"point {i}"]["current"] = current
+
+                self.stream_result.emit(
+                    {
+                        "x": [freq],
+                        "y": [power],
+                        "new_plot": fi == 0,
+                        "measure_id": self.measure.id,
+                        "legend_postfix": f"sis{self.config.cid} {voltage*1e3:.2f} mV",
+                    }
+                )
 
         if (
             len(voltage_get) == 2
@@ -284,7 +296,7 @@ class ShotNoizeMeasurementWidget(QWidget):
         self.frequencyStop.setRange(3, 13)
         self.frequencyStop.setValue(13)
 
-        self.frequencyPoints = QSpinBox(self)
+        self.frequencyPoints = SpinBox(self)
         self.frequencyPoints.setRange(1, 5000)
         self.frequencyPoints.setValue(300)
 
@@ -334,7 +346,9 @@ class ShotNoizeMeasurementWidget(QWidget):
 
     def start_measure_rn(self):
         self.thread_measure_rn = MeasureRnThread(
-            self.voltage1.value(), self.voltage2.value()
+            cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
+            voltage1=self.voltage1.value(),
+            voltage2=self.voltage2.value(),
         )
 
         self.thread_measure_rn.rn1.connect(lambda x: self.rn1.setValue(x))
@@ -357,6 +371,7 @@ class ShotNoizeMeasurementWidget(QWidget):
 
     def start_measure_power(self):
         self.thread_measure_power = MeasurePowerThread(
+            cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
             voltage1=self.voltage1.value(),
             voltage2=self.voltage2.value(),
             rn1=self.rn1.value(),
@@ -381,6 +396,7 @@ class ShotNoizeMeasurementWidget(QWidget):
         )
         self.thread_measure_power.finished.connect(lambda: self.progress_p.setValue(0))
         self.thread_measure_power.result.connect(self.plot_graph_ta_if)
+        self.thread_measure_power.stream_result.connect(self.plot_graph_p_if)
         self.btnStartMeasure.setEnabled(False)
         self.btnStopMeasure.setEnabled(True)
 
@@ -405,3 +421,16 @@ class ShotNoizeMeasurementWidget(QWidget):
             measure_id=results.get("measure_id"),
         )
         graph_tn_if.widget().show()
+
+    def plot_graph_p_if(self, results):
+        graph_p_if = Dock.ex.dock_manager.findDockWidget("P-IF curve")
+        if graph_p_if is None:
+            return
+        graph_p_if.widget().plotNew(
+            x=results.get("x", []),
+            y=results.get("y", []),
+            new_plot=results.get("new_plot"),
+            measure_id=results.get("measure_id"),
+            legend_postfix=results.get("legend_postfix"),
+        )
+        graph_p_if.widget().show()

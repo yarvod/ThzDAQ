@@ -22,17 +22,17 @@ class StreamThread(Thread):
     measure_1 = Signal(list)
     voltage_sour_1 = Signal(float)
     current_sour_1 = Signal(float)
-    output_1 = Signal(str)
+    output_1 = Signal(bool)
 
     measure_2 = Signal(list)
     voltage_sour_2 = Signal(float)
     current_sour_2 = Signal(float)
-    output_2 = Signal(str)
+    output_2 = Signal(bool)
 
     measure_3 = Signal(list)
     voltage_sour_3 = Signal(float)
     current_sour_3 = Signal(float)
-    output_3 = Signal(str)
+    output_3 = Signal(bool)
 
     def __init__(self, cid: int):
         super().__init__()
@@ -354,19 +354,19 @@ class MonitorWidget(QGroupBox):
         config = RohdeSchwarzPowerSupplyManager.get_config(cid=self.cid)
         config.thread_stream = False
 
-    def set_output_1(self, output: str):
+    def set_output_1(self, output: bool):
         out = "On" if output else "Off"
         color = "green" if output else "red"
         self.output1.setText(out)
         self.output1.setStyleSheet(f"color: {color};")
 
-    def set_output_2(self, output: str):
+    def set_output_2(self, output: bool):
         out = "On" if output else "Off"
         color = "green" if output else "red"
         self.output2.setText(out)
         self.output2.setStyleSheet(f"color: {color};")
 
-    def set_output_3(self, output: str):
+    def set_output_3(self, output: bool):
         out = "On" if output else "Off"
         color = "green" if output else "red"
         self.output3.setText(out)

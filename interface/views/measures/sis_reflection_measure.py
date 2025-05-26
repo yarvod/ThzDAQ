@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QSizePolicy,
     QGroupBox,
-    QSpinBox,
     QProgressBar,
     QFormLayout,
     QHBoxLayout,
@@ -24,6 +23,7 @@ from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.Lines import HLine
 from interface.components.ui.MultipleComboBox import MultipleComboBox
+from interface.components.ui.SpinBox import SpinBox
 from store import RohdeSchwarzVnaZva67Manager, ScontelSisBlockManager
 from store.base import MeasureModel
 from store.state import state
@@ -258,7 +258,7 @@ class SisReflectionMeasureWidget(QWidget):
 
         self.vnaPointsLabel = QLabel(self)
         self.vnaPointsLabel.setText("Points count:")
-        self.vnaPoints = QSpinBox(self)
+        self.vnaPoints = SpinBox(self)
         self.vnaPoints.setMaximum(state.VNA_POINTS_MAX)
         self.vnaPoints.setValue(state.VNA_POINTS)
 
@@ -269,13 +269,13 @@ class SisReflectionMeasureWidget(QWidget):
         self.vnaPower.setValue(state.VNA_POWER)
 
         self.vnaSamplesCountLabel = QLabel("VNA samples count")
-        self.vnaSamplesCount = QSpinBox(self)
+        self.vnaSamplesCount = SpinBox(self)
         self.vnaSamplesCount.setRange(1, 1000)
         self.vnaSamplesCount.setValue(state.VNA_SAMPLES_COUNT)
 
         self.vnaAverageCountLabel = QLabel(self)
         self.vnaAverageCountLabel.setText("Aver count:")
-        self.vnaAverageCount = QSpinBox(self)
+        self.vnaAverageCount = SpinBox(self)
         self.vnaAverageCount.setRange(1, 1000)
         self.vnaAverageCount.setValue(10)
 

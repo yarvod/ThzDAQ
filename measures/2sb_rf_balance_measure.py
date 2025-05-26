@@ -26,35 +26,35 @@ if __name__ == "__main__":
     rf = SignalGenerator(host=state.PROLOGIX_IP, gpib=18)
     lo = SignalGenerator(host=state.PROLOGIX_IP, gpib=19)
     sis2 = SisBlock(
-        host=state.BLOCK_ADDRESS,
-        port=state.BLOCK_PORT,
-        bias_dev="DEV2",
-        ctrl_dev="DEV4",
-        offset_voltage=-0.187e-3,
-        offset_current=-1.3e-6,
-    )
-
-    sis1 = SisBlock(
-        host=state.BLOCK_ADDRESS,
-        port=state.BLOCK_PORT,
+        host="169.254.190.83",
+        port=9876,
         bias_dev="DEV4",
-        ctrl_dev="DEV1",
+        ctrl_dev="DEV3",
         offset_voltage=0.04e-3,
         offset_current=0,
     )
 
-    data = []
-    npoints = 41
+    sis1 = SisBlock(
+        host="169.254.190.83",
+        port=9876,
+        bias_dev="DEV2",
+        ctrl_dev="DEV1",
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
+    )
 
-    freqs = np.arange(220e9, 265e9, 0.1e9)
+    data = []
+    npoints = 51
+
+    freqs = np.arange(220e9, 265e9, 0.5e9)
     print(freqs)
-    voltages2 = np.linspace(1e-3, 3e-3, npoints)
-    voltages1 = np.linspace(2e-3, 15e-3, npoints)
+    voltages1 = np.linspace(1e-3, 3e-3, npoints)
+    voltages2 = np.linspace(2e-3, 15e-3, npoints)
 
     try:
         lo.set_power(-80)
         lo.set_rf_output_state(False)
-        rf.set_power(12)
+        rf.set_power(4)
         rf.set_rf_output_state(True)
         send_to_telegram("Measure 2SB RF Balance started")
         logger.info("Measure 2SB RF Balance started")
