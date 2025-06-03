@@ -2,13 +2,13 @@
 
 import json
 import logging
+import os
 from datetime import datetime
 
 import numpy as np
 
 from api.Agilent.signal_generator import SignalGenerator
 from api.Scontel.sis_block import SisBlock
-from store.state import state
 from utils.functions import send_to_telegram
 
 logger = logging.getLogger(__name__)
@@ -23,24 +23,24 @@ logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     # nrx = NRXPowerMeter(delay=0)
-    rf = SignalGenerator(host=state.PROLOGIX_IP, gpib=18)
-    lo = SignalGenerator(host=state.PROLOGIX_IP, gpib=19)
+    rf = SignalGenerator(host="169.254.156.103", gpib=18)
+    lo = SignalGenerator(host="169.254.156.103", gpib=19)
     sis2 = SisBlock(
         host="169.254.190.83",
         port=9876,
-        bias_dev="DEV4",
-        ctrl_dev="DEV3",
-        offset_voltage=0.04e-3,
-        offset_current=0,
+        bias_dev="DEV2",
+        ctrl_dev="DEV4",
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
 
     sis1 = SisBlock(
         host="169.254.190.83",
         port=9876,
-        bias_dev="DEV2",
+        bias_dev="DEV4",
         ctrl_dev="DEV1",
-        offset_voltage=-0.187e-3,
-        offset_current=-1.3e-6,
+        offset_voltage=0.04e-3,
+        offset_current=0,
     )
 
     data = []
@@ -48,8 +48,8 @@ if __name__ == "__main__":
 
     freqs = np.arange(220e9, 265e9, 0.5e9)
     print(freqs)
-    voltages1 = np.linspace(1e-3, 3e-3, npoints)
-    voltages2 = np.linspace(2e-3, 15e-3, npoints)
+    voltages2 = np.linspace(1e-3, 3e-3, npoints)
+    voltages1 = np.linspace(2e-3, 15e-3, npoints)
 
     try:
         lo.set_power(-80)
@@ -91,6 +91,9 @@ if __name__ == "__main__":
     except (Exception, KeyboardInterrupt) as e:
         logger.error(f"Exception: {e}")
         send_to_telegram(f"Exception: {e}")
+
+    if not os.path.exists("data/"):
+        os.mkdir("data/")
 
     with open(
         f"data/meas_2sb_rf_balance_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",

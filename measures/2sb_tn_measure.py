@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -186,6 +187,8 @@ def save_data():
         logger.info("Data is already saved")
         return
     StateMeasure.data_is_saved = True
+    if not os.path.exists("data/"):
+        os.mkdir("data/")
     with open(
         f"data/meas_2sb_tn_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",

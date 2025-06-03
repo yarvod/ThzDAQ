@@ -171,14 +171,32 @@ class SpectrumBlock(BaseInstrument):
         """LIN LOG POW"""
         self.write(f"AVER:TYPE {value}")
 
+    def set_single_sweep_mode(self):
+        self.write(":INITiate:CONTinuous OFF")
+
+    def set_continuous_sweep_mode(self):
+        self.write(":INITiate:CONTinuous ON")
+
+    def get_sweep_mode(self) -> str:
+        """
+        Returns: 1 - continuous, 0 - single
+        """
+        return self.query(":INITiate:CONTinuous?")
+
+    def trigger(self):
+        self.write(":INITiate")
+
 
 if __name__ == "__main__":
-    # block = SpectrumBlock(
-    #     host="169.254.156.103", gpib=21, adapter=settings.PROLOGIX_ETHERNET, port=1234
-    # )
     block = SpectrumBlock(
-        host="169.254.75.176", gpib=None, adapter=settings.SOCKET, port=5025, delay=0
+        host="169.254.156.103", gpib=20, adapter=settings.PROLOGIX_ETHERNET, port=1234
     )
+    # block = SpectrumBlock(
+    #     host="169.254.75.176", gpib=None, adapter=settings.SOCKET, port=5025, delay=0
+    # )
     print(block.idn())
-    print(block.test())
+    block.set_single_sweep_mode()
+    print(block.get_sweep_mode())
+    while 1:
+        block.trigger()
     # print("freq", block.get_start_frequency())

@@ -162,34 +162,34 @@ def calc_m_dsb(
 ) -> np.ndarray[float]:
     """Calculates M_DCB.
 
-    :param p_upper_hot: Power (W) ch1 for HOT load
-    :param p_upper_cold: Power (W) ch1 for COLD load
-    :param p_lower_hot: Power (W) ch1 for HOT load
-    :param p_lower_cold: Power (W) ch1 for COLD load
+    :param p_upper_hot: Power (W) upper for HOT load
+    :param p_upper_cold: Power (W) upper for COLD load
+    :param p_lower_hot: Power (W) lower for HOT load
+    :param p_lower_cold: Power (W) lower for COLD load
     """
     return (p_upper_hot - p_upper_cold) / (p_lower_hot - p_lower_cold)
 
 
 def calc_r1(
-    mu: np.ndarray[float], ml: np.ndarray[float], m_dcb: np.ndarray[float]
+    mu: np.ndarray[float], ml: np.ndarray[float], m_dsb: np.ndarray[float]
 ) -> np.ndarray[float]:
     """Calculates R1.
-    :param mu: Upper power (W) peak ratio for ch1 and ch2
-    :param ml: Lower power (W) peak ratio for ch1 and ch2
-    :param m_dcb: Y-factor ratio
+    :param mu: Upper power (W) peak ratio for upper and lower
+    :param ml: Lower power (W) peak ratio for lower and upper
+    :param m_dsb: Y-factor ratio
     """
-    return mu * (ml * m_dcb - 1) / (mu - m_dcb)
+    return mu * (ml * m_dsb - 1) / (mu - m_dsb)
 
 
 def calc_r2(
-    mu: np.ndarray[float], ml: np.ndarray[float], m_dcb: np.ndarray[float]
+    mu: np.ndarray[float], ml: np.ndarray[float], m_dsb: np.ndarray[float]
 ) -> np.ndarray[float]:
     """Calculates R2.
-    :param mu: Upper power (W) peak ratio for ch1 and ch2
-    :param ml: Lower power (W) peak ratio for ch1 and ch2
-    :param m_dcb: Y-factor ratio
+    :param mu: Upper power (W) peak ratio for upper and lower
+    :param ml: Lower power (W) peak ratio for lower and upper
+    :param m_dsb: Y-factor ratio
     """
-    return ml * (mu - m_dcb) / (ml * m_dcb - 1)
+    return ml * (mu - m_dsb) / (ml * m_dsb - 1)
 
 
 def send_to_telegram(message: str):

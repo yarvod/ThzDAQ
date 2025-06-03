@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -60,11 +61,11 @@ class MeasThread(Thread):
         test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
         yig = NiYIGManager(host="169.254.0.86")
         spectrum = SpectrumBlock(
-            host="169.254.156.101",
+            host="169.254.156.103",
             port=1234,
             gpib=20,
             adapter="PROLOGIX ETHERNET",
-            delay=0.2,
+            delay=0.01,
         )
         rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
         sis2 = SisBlock(
@@ -96,9 +97,10 @@ class MeasThread(Thread):
             lo.set_rf_output_state(True)
             lo.set_frequency(lo_frequency / 18)
 
-            # spectrum.set_video_bw(2)
-            # spectrum.set_resolution_bw(3000)
-            # spectrum.set_span_frequency(10e6)
+            spectrum.set_single_sweep_mode()
+            spectrum.set_video_bw(20)
+            spectrum.set_resolution_bw(200)
+            spectrum.set_span_frequency(100e3)
 
             rs_power.set_output_state(2, False)  # turn off YIG
 
@@ -138,22 +140,27 @@ class MeasThread(Thread):
                             if fi == 0:
                                 time.sleep(2)
                             else:
-                                time.sleep(0.5)
+                                time.sleep(0.1)
 
-                            spectrum.peak_search()
-                            spectrum.peak_search()
-                            spectrum.peak_search()
-                            spectrum.peak_search()
+                            spectrum.trigger()
+                            spectrum.trigger()
+                            spectrum.trigger()
+                            time.sleep(0.05)
                             spectrum.get_peak_power()
                             spectrum.get_peak_power()
                             spectrum.get_peak_power()
                             spectrum.get_peak_power()
+                            spectrum.get_peak_power()
+
                             powers = []
-                            for i in range(10):
+                            for i in range(5):
+                                spectrum.peak_search()
                                 p = spectrum.get_peak_power()
                                 powers.append(p)
-                                logger.info(f"{if_channel} IF {freq} Power {p:.4f} dBm")
-                                time.sleep(0.05)
+                                logger.info(
+                                    f"Points to average {if_channel} IF {freq} Power {p:.4f} dBm"
+                                )
+                                time.sleep(0.01)
                             power = np.mean(powers)
                             _data[f"power_{if_channel}"].append(power)
                             logger.info(
@@ -264,8 +271,10 @@ def save_data():
         logger.info("Data is already saved")
         return
     StateMeasure.data_is_saved = True
+    if not os.path.exists("data/"):
+        os.mkdir("data/")
     with open(
-        f"data/meas_2sb_srr_simple_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+        f"data/meas_2sb_srr_spectrum_lo{lo_frequency/1e9:.0f}ghz_bias{sis_voltage_1*1e3:.2f}mv_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",
         encoding="utf-8",
     ) as f:
@@ -311,20 +320,22 @@ def main():
     app = pg.mkQApp("2SB SRR Measure")
     win = pg.GraphicsLayoutWidget(show=True, title="Basic plotting examples")
     win.resize(1000, 600)
-    win.setWindowTitle("2SB SRR Measure")
+    win.setWindowTitle(f"2SB SRR Measure {lo_frequency/1e9:.0f} GHz")
     pg.setConfigOptions(antialias=True)
     win.setBackground("w")
     styles = {"color": "#413C58", "font-size": "15px"}
 
     p1 = win.addPlot()
-    p1.setTitle("SRR measure", color="#413C58", size="10pt")
+    p1.setTitle(f"SRR measure {lo_frequency/1e9:.0f} GHz", color="#413C58", size="10pt")
     p1.setLabel("bottom", "IF, GHz", **styles)
     p1.setLabel("left", "Power, dBm", **styles)
     p1.addLegend()
     p1.showGrid(x=True, y=True)
 
     p2 = win.addPlot()
-    p2.setTitle("Y-factor measure", color="#413C58", size="10pt")
+    p2.setTitle(
+        f"Y-factor measure {lo_frequency/1e9:.0f} GHz", color="#413C58", size="10pt"
+    )
     p2.setLabel("bottom", "IF, GHz", **styles)
     p2.setLabel("left", "Power, dBm", **styles)
     p2.addLegend()
@@ -346,9 +357,9 @@ if __name__ == "__main__":
     # Parameters
     ###
     measure_y_factor = True
-    lo_frequency = 263e9
-    inter_frequencies = np.arange(4e9, 12e9, 40e6)
-    one_range_len = 10
+    lo_frequency = 223e9
+    inter_frequencies = np.arange(4e9, 12e9, 20e6)
+    one_range_len = 20
     inter_frequencies_reshaped = inter_frequencies.reshape(
         len(inter_frequencies) // one_range_len, one_range_len
     )
@@ -357,8 +368,8 @@ if __name__ == "__main__":
     sis_voltage_2 = 2.4e-3
 
     if_channels = {
-        "upper": True,
-        "lower": False,
+        "upper": False,
+        "lower": True,
     }
 
     side_bands = ["upper", "lower"]

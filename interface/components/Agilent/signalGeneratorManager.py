@@ -33,11 +33,17 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
 
         self.instantUpdateFrequency = QCheckBox(self)
         self.instantUpdateFrequency.setText("Instant frequency set")
+        self.multiplyFrequency = QCheckBox(self)
+        self.multiplyFrequency.setText("÷18 division")
+        self.multiplyFrequency.stateChanged.connect(
+            lambda x: self.config.set_multiply_frequency(x)
+        )
         self.frequencyLabel = QLabel(self)
         self.frequencyLabel.setText("Frequency, GHz")
         self.frequency = DoubleSpinBox(self)
         self.frequency.setRange(1, 300)
         self.frequency.setValue(14)
+        self.frequency.setDecimals(3)
         self.frequency.valueChanged.connect(self.update_stream_frequency)
         self.btnSetFrequency = Button("Set frequency")
         self.btnSetFrequency.clicked.connect(self.set_frequency)
@@ -55,6 +61,7 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         grid_layout.addWidget(self.btnRfOutput, 0, 2)
         grid_layout.addWidget(HLine(self), 1, 0, 1, 3)
         grid_layout.addWidget(self.instantUpdateFrequency, 2, 0)
+        grid_layout.addWidget(self.multiplyFrequency, 2, 1)
         grid_layout.addWidget(self.frequencyLabel, 3, 0)
         grid_layout.addWidget(self.frequency, 3, 1)
         grid_layout.addWidget(self.btnSetFrequency, 3, 2)
@@ -67,8 +74,11 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         self.setLayout(layout)
 
     def set_frequency(self):
+        freq = self.frequency.value()
+        if self.multiplyFrequency.isChecked():
+            freq /= 18
         agilent = SignalGenerator(**self.config.dict())
-        agilent.set_frequency(self.frequency.value() * 1e9)
+        agilent.set_frequency(freq * 1e9)
 
     def set_amplitude(self):
         agilent = SignalGenerator(**self.config.dict())
