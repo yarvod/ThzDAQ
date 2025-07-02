@@ -215,7 +215,7 @@ def main():
     StateMeasure.thread_running = True
 
     setattr(win, "closeEvent", closeEvent)
-    sys.exit(pg.exec())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

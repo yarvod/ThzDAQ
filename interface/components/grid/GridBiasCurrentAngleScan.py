@@ -9,42 +9,61 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QHBoxLayout,
     QVBoxLayout,
+    QComboBox,
 )
 
 from api.Arduino.grid import GridManager
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
+from store import ScontelSisBlockManager
 from store.base import MeasureModel
 from store.state import state
 from threads import Thread
 from utils.dock import Dock
+from utils.exceptions import DeviceConnectionError
 
 
 class MeasureThread(Thread):
     progress = Signal(int)
     stream_ia = Signal(dict)
 
-    def __init__(self):
+    def __init__(
+        self,
+        sis_cid: int,
+        angle_start: float,
+        angle_stop: float,
+        angle_step: float,
+    ):
         super().__init__()
-        self.block = SisBlock(host=state.BLOCK_ADDRESS, port=state.BLOCK_PORT)
-        self.block.connect()
+        self.block = None
+        self.sis_config = ScontelSisBlockManager.get_config(sis_cid)
         self.grid = GridManager(host=state.GRID_ADDRESS)
         self.initial_angle = float(state.GRID_ANGLE.val)
+        self.angle_start = angle_start
+        self.angle_stop = angle_stop
+        self.angle_step = angle_step
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.GRID_IA_CURVE, data={}
         )
         self.measure.save(False)
 
     def run(self):
+        try:
+            self.block = SisBlock(**self.sis_config.dict())
+        except DeviceConnectionError as e:
+            self.pre_exit()
+            self.finished.emit()
+            return
+
         angle_range = np.arange(
-            state.GRID_ANGLE_START,
-            state.GRID_ANGLE_STOP + state.GRID_ANGLE_STEP,
-            state.GRID_ANGLE_STEP,
+            self.angle_start,
+            self.angle_stop + self.angle_step,
+            self.angle_step,
         )
 
-        self.grid.rotate(state.GRID_ANGLE_START)
-        time.sleep(abs(state.GRID_ANGLE_START) / state.GRID_SPEED)
+        self.grid.rotate(self.angle_start)
+        time.sleep(abs(self.angle_start) / state.GRID_SPEED)
 
         results = {
             "angle": [],
@@ -58,7 +77,7 @@ class MeasureThread(Thread):
 
             if i != 0:
                 self.grid.rotate(angle)
-                time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
+                time.sleep(abs(self.angle_step) / state.GRID_SPEED)
 
             voltage = self.block.get_bias_voltage()
             if not voltage:
@@ -89,7 +108,6 @@ class MeasureThread(Thread):
         self.grid.rotate(self.initial_angle)
         self.measure.save()
         self.progress.emit(0)
-        self.block.disconnect()
         state.GRID_CURRENT_ANGLE_THREAD = False
 
 
@@ -102,6 +120,13 @@ class GridBiasCurrentScan(QGroupBox):
         layout = QVBoxLayout()
         flayout = QFormLayout()
         hlayout = QHBoxLayout()
+
+        self.sisConfigLabel = QLabel(self)
+        self.sisConfigLabel.setText("SIS block device")
+        self.sisConfig = QComboBox(self)
+        ScontelSisBlockManager.event_manager.configs_updated.connect(
+            lambda: ScontelSisBlockManager.update_sis_config(self)
+        )
 
         self.angleStartLabel = QLabel(self)
         self.angleStartLabel.setText("Angle start, degree")
@@ -131,6 +156,7 @@ class GridBiasCurrentScan(QGroupBox):
         self.btnStop.clicked.connect(self.stop_measure)
         self.btnStop.setEnabled(False)
 
+        flayout.addRow(self.sisConfigLabel, self.sisConfig)
         flayout.addRow(self.angleStartLabel, self.angleStart)
         flayout.addRow(self.angleStopLabel, self.angleStop)
         flayout.addRow(self.angleStepLabel, self.angleStep)
@@ -143,11 +169,14 @@ class GridBiasCurrentScan(QGroupBox):
 
     def start_measure(self):
         state.GRID_CURRENT_ANGLE_THREAD = True
-        state.GRID_ANGLE_START = self.angleStart.value()
-        state.GRID_ANGLE_STOP = self.angleStop.value()
-        state.GRID_ANGLE_STEP = self.angleStep.value()
+        sis_cid = (ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,)
 
-        self.thread = MeasureThread()
+        self.thread = MeasureThread(
+            sis_cid=sis_cid,
+            angle_start=self.angleStart.value(),
+            angle_stop=self.angleStop.value(),
+            angle_step=self.angleStep.value(),
+        )
 
         self.thread.stream_ia.connect(self.show_graph)
 

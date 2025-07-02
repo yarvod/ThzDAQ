@@ -49,6 +49,10 @@ def to_db(vec: np.ndarray):
     return 20 * np.log10(np.abs(vec))
 
 
+def to_db_10(vec: np.ndarray):
+    return 10 * np.log10(np.abs(vec))
+
+
 def to_w(data: List) -> np.ndarray:
     """
     :param data: Data in dBm

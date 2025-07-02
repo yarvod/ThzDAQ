@@ -59,7 +59,7 @@ class MeasThread(Thread):
         lo = SignalGenerator(host="169.254.156.103", gpib=19)
         test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
         yig = NiYIGManager(host="169.254.0.86")
-        rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
+        rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
         sis2 = SisBlock(
             host="169.254.190.83",
             port=9876,
@@ -176,7 +176,7 @@ class MeasThread(Thread):
                         )
                         rotate()
                         for fi, freq in enumerate(inter_frequencies):
-                            yig.set_frequency(freq)
+                            yig.set_frequency(freq - 1e6)
                             time.sleep(0.05)
                             power = nrx.get_power()
                             data["y_factor"][f"p_{side_band}_{chopper_state}"].append(
@@ -203,7 +203,7 @@ class MeasThread(Thread):
                     )
 
                 chopper_manager.chopper.align_to_cold()
-                rs_power.set_output_state(2, False)  # turn off YIG
+                # rs_power.set_output_state(2, False)  # turn off YIG
 
             self.finished.emit()
         except (Exception, KeyboardInterrupt) as e:
@@ -238,7 +238,7 @@ def save_data():
     if not os.path.exists("data/"):
         os.mkdir("data/")
     with open(
-        f"data/meas_2sb_srr_yig_lo{lo_frequency/1e9:.0f}ghz_bias{sis_voltage_1*1e3:.2f}mv_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
+        f"data/meas_2sb_srr_yig_lo{lo_frequency/1e9:.0f}ghz_bs1_{sis_voltage_1*1e3:.2f}mv_bs2_{sis_voltage_2*1e3:.2f}mv_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json",
         "w",
         encoding="utf-8",
     ) as f:
@@ -323,14 +323,14 @@ if __name__ == "__main__":
     # Parameters
     ###
     measure_y_factor = True
-    lo_frequency = 263e9
-    inter_frequencies = np.arange(4e9, 12e9, 20e6)
+    lo_frequency = 223e9
+    inter_frequencies = np.arange(4e9, 12e9, 40e6)
     one_range_len = 10
     inter_frequencies_reshaped = inter_frequencies.reshape(
         len(inter_frequencies) // one_range_len, one_range_len
     )
 
-    sis_voltage_1 = 2.3e-3
+    sis_voltage_1 = 2.4e-3
     sis_voltage_2 = 2.4e-3
 
     if_channels = {
