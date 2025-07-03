@@ -169,7 +169,7 @@ class GridBiasCurrentScan(QGroupBox):
 
     def start_measure(self):
         state.GRID_CURRENT_ANGLE_THREAD = True
-        sis_cid = (ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,)
+        sis_cid = ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid
 
         self.thread = MeasureThread(
             sis_cid=sis_cid,
