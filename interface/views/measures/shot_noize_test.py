@@ -34,11 +34,12 @@ class MeasureRnThread(Thread):
     rn2 = Signal(float)
     progress = Signal(int)
 
-    def __init__(self, cid, voltage1, voltage2):
+    def __init__(self, cid, voltage1, voltage2, points):
         super().__init__()
         self.config = ScontelSisBlockManager.get_config(cid)
         self.voltage1 = voltage1
         self.voltage2 = voltage2
+        self.points = points
         self.sis = None
 
     def run(self):
@@ -49,10 +50,9 @@ class MeasureRnThread(Thread):
             self.finished.emit()
             return
 
-        steps = 42
         step = 0
         voltage1_range = (
-            np.linspace(self.voltage1 * 0.95, self.voltage1 * 1.05, 20) * 1e-3
+            np.linspace(self.voltage1 * 0.95, self.voltage1 * 1.05, self.points) * 1e-3
         )
         voltage1_get = []
         current1_get = []
@@ -62,10 +62,10 @@ class MeasureRnThread(Thread):
             voltage1_get.append(self.sis.get_bias_voltage())
             current1_get.append(self.sis.get_bias_current())
             step += 1
-            self.progress.emit(round(step / steps * 100))
+            self.progress.emit(round(step / (self.points * 2) * 100))
 
         voltage2_range = (
-            np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, 20) * 1e-3
+            np.linspace(self.voltage2 * 0.95, self.voltage2 * 1.05, self.points) * 1e-3
         )
         voltage2_get = []
         current2_get = []
@@ -75,16 +75,14 @@ class MeasureRnThread(Thread):
             voltage2_get.append(self.sis.get_bias_voltage())
             current2_get.append(self.sis.get_bias_current())
             step += 1
-            self.progress.emit(round(step / steps * 100))
+            self.progress.emit(round(step / (self.points * 2) * 100))
 
         rn1, _ = linear_fit(voltage1_get, current1_get)
         self.rn1.emit(1 / rn1)
-        step += 1
-        self.progress.emit(round(step / steps * 100))
+
         rn2, _ = linear_fit(voltage2_get, current2_get)
         self.rn2.emit(1 / rn2)
-        step += 1
-        self.progress.emit(round(step / steps * 100))
+
         self.pre_exit()
         self.finished.emit()
 
@@ -280,6 +278,10 @@ class ShotNoizeMeasurementWidget(QWidget):
         self.voltage2.setRange(-30, 30)
         self.voltage2.setValue(20)
 
+        self.voltagePoints = SpinBox(self)
+        self.voltagePoints.setRange(10, 1000)
+        self.voltagePoints.setValue(100)
+
         self.rn1 = DoubleSpinBox(self)
         self.rn1.setRange(0, 100)
         self.rn1.setValue(0)
@@ -325,6 +327,7 @@ class ShotNoizeMeasurementWidget(QWidget):
         flayout1.addRow(self.sisConfigLabel, self.sisConfig)
         flayout1.addRow("Voltage 1, mV", self.voltage1)
         flayout1.addRow("Voltage 2, mV", self.voltage2)
+        flayout1.addRow("Points", self.voltagePoints)
         flayout1.addRow("Rn 1, Ohm", self.rn1)
         flayout1.addRow("Rn 2, Ohm", self.rn2)
         flayout1.addRow(self.progress_rn)
@@ -349,6 +352,7 @@ class ShotNoizeMeasurementWidget(QWidget):
             cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
             voltage1=self.voltage1.value(),
             voltage2=self.voltage2.value(),
+            points=self.voltagePoints.value(),
         )
 
         self.thread_measure_rn.rn1.connect(lambda x: self.rn1.setValue(x))
