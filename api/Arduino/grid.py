@@ -1,6 +1,5 @@
 import logging
 import sys
-from typing import Tuple
 
 from serial.tools.list_ports import main as list_ports
 
@@ -58,7 +57,7 @@ class GridDevice:
                 return angle
         self.finish = finish
 
-    def test(self) -> Tuple[bool, str]:
+    def test(self) -> bool:
         """Simple test func"""
         if self.adapter_name == SERIAL:
             try:
