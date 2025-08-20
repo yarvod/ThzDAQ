@@ -76,7 +76,7 @@ class HiCube:
             "slave": slave,
             "reg": reg,
             "name": parameter["description"],
-            "value": typed_value.value,
+            "value": typed_value.value_signal,
             "type": typed_value.__str__(),
         }
         return data

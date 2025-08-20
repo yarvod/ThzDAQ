@@ -2,17 +2,17 @@ from PySide6.QtCore import QObject, Property, Signal
 
 
 class GridAngleModel(QObject):
-    value = Signal(str)
+    value_signal = Signal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._val = "0"
+        self._value = 0.0
 
-    @Property("QString", notify=value)
-    def val(self):
-        return self._val
+    @Property(float)
+    def value(self):
+        return self._value
 
-    @val.setter
-    def val(self, val: str):
-        self._val = val
-        self.value.emit(val)
+    @value.setter
+    def value(self, val: float):
+        self._value = val
+        self.value_signal.emit(val)

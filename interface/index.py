@@ -88,9 +88,6 @@ class App(QMainWindow):
             import_class("interface.views.PowerMeterTabWidget"),
             "device",
         )
-        self.add_dock_widget(
-            "GRID", import_class("interface.views.GridTabWidget"), "device"
-        )
 
         self.add_dock_widget(
             "Chopper", import_class("interface.views.ChopperTabWidget"), "device"

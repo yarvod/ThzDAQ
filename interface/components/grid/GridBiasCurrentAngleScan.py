@@ -12,11 +12,11 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
-from api.Arduino.grid import GridManager
+from api.Arduino.grid import GridDevice
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
-from store import ScontelSisBlockManager
+from store import ScontelSisBlockManager, GridManager, GridConfig
 from store.base import MeasureModel
 from store.state import state
 from threads import Thread
@@ -31,15 +31,18 @@ class MeasureThread(Thread):
     def __init__(
         self,
         sis_cid: int,
+        grid_cid: int,
         angle_start: float,
         angle_stop: float,
         angle_step: float,
     ):
         super().__init__()
         self.block = None
+        self.grid = None
         self.sis_config = ScontelSisBlockManager.get_config(sis_cid)
-        self.grid = GridManager(host=state.GRID_ADDRESS)
-        self.initial_angle = float(state.GRID_ANGLE.val)
+        self.grid_config: GridConfig = GridManager.get_config(grid_cid)
+        self.grid_config.thread_sis_current_scan = True
+        self.initial_angle = self.grid_config.current_angle.value
         self.angle_start = angle_start
         self.angle_stop = angle_stop
         self.angle_step = angle_step
@@ -51,6 +54,7 @@ class MeasureThread(Thread):
     def run(self):
         try:
             self.block = SisBlock(**self.sis_config.dict())
+            self.grid = GridDevice(**self.grid_config.dict())
         except DeviceConnectionError as e:
             self.pre_exit()
             self.finished.emit()
@@ -62,7 +66,10 @@ class MeasureThread(Thread):
             self.angle_step,
         )
 
-        self.grid.rotate(self.angle_start)
+        angle_success = self.grid.rotate(
+            self.angle_start, self.grid_config.current_angle.value
+        )
+        self.grid_config.current_angle.value = angle_success
         time.sleep(abs(self.angle_start) / state.GRID_SPEED)
 
         results = {
@@ -72,11 +79,14 @@ class MeasureThread(Thread):
         }
 
         for i, angle in enumerate(angle_range):
-            if not state.GRID_CURRENT_ANGLE_THREAD:
+            if not self.grid_config.thread_sis_current_scan:
                 break
 
             if i != 0:
-                self.grid.rotate(angle)
+                angle_success = self.grid.rotate(
+                    angle, self.grid_config.current_angle.value
+                )
+                self.grid_config.current_angle.value = angle_success
                 time.sleep(abs(self.angle_step) / state.GRID_SPEED)
 
             voltage = self.block.get_bias_voltage()
@@ -105,17 +115,20 @@ class MeasureThread(Thread):
         self.finished.emit()
 
     def pre_exit(self, *args, **kwargs):
-        self.grid.rotate(self.initial_angle)
+        angle_success = self.grid.rotate(self.initial_angle)
+        self.grid_config.current_angle.value = angle_success
         self.measure.save()
         self.progress.emit(0)
-        state.GRID_CURRENT_ANGLE_THREAD = False
+        self.grid_config.thread_sis_current_scan = False
 
 
 class GridBiasCurrentScan(QGroupBox):
-    def __init__(self, parent):
+    def __init__(self, parent, cid: int):
         super().__init__(parent)
+        self.cid = cid
         self.setTitle("Grid Sis current angle scan")
         self.gridBiasCurrentAngleGraphWindow = None
+        self.plot_number = 1
 
         layout = QVBoxLayout()
         flayout = QFormLayout()
@@ -167,12 +180,14 @@ class GridBiasCurrentScan(QGroupBox):
         layout.addLayout(hlayout)
         self.setLayout(layout)
 
+        ScontelSisBlockManager.update_sis_config(self)
+
     def start_measure(self):
-        state.GRID_CURRENT_ANGLE_THREAD = True
         sis_cid = ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid
 
         self.thread = MeasureThread(
             sis_cid=sis_cid,
+            grid_cid=self.cid,
             angle_start=self.angleStart.value(),
             angle_stop=self.angleStop.value(),
             angle_step=self.angleStep.value(),
@@ -195,14 +210,19 @@ class GridBiasCurrentScan(QGroupBox):
         self.thread.finished.connect(lambda: self.btnStop.setEnabled(False))
 
     def stop_measure(self):
-        state.GRID_CURRENT_ANGLE_THREAD = False
+        grid_config = GridManager.get_config(self.cid)
+        grid_config.thread_sis_current_scan = False
 
     def show_graph(self, results):
         if self.gridBiasCurrentAngleGraphWindow is None:
             return
-        self.gridBiasCurrentAngleGraphWindow.widget().plotNew(
+        if results.get("new_plot"):
+            self.plot_number = (
+                self.gridBiasCurrentAngleGraphWindow.widget().get_last_plot_number() + 1
+            )
+        self.gridBiasCurrentAngleGraphWindow.widget().plot(
             x=results.get("x", []),
             y=results.get("y", []),
-            new_plot=results.get("new_plot", True),
+            plot_num=self.plot_number,
         )
         self.gridBiasCurrentAngleGraphWindow.widget().show()

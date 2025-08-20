@@ -10,6 +10,7 @@ from store.deviceConfig import (
     DeviceConfigList,
     DeviceEventManager,
 )
+from store.gridAngleModel import GridAngleModel
 
 
 class KeithleyPowerSupplyManager(DeviceManager):
@@ -325,6 +326,52 @@ class RohdeSchwarzPowerSupplyManager(DeviceManager):
     config_class = RohdeSchwarzPowerSupplyConfig
 
 
+class GridConfig(DeviceConfig):
+    def __init__(
+        self,
+        name: str,
+        cid: int,
+        adapter: Optional[str] = None,
+        host: Optional[str] = None,
+        port: Union[str, int, None] = None,
+        gpib: int = 0,
+        status: str = settings.NOT_INITIALIZED,
+        delay: float = 0,
+        config_manager=None,
+    ):
+        super().__init__(
+            name=name,
+            cid=cid,
+            adapter=adapter,
+            host=host,
+            port=port,
+            gpib=gpib,
+            status=status,
+            delay=delay,
+            config_manager=config_manager,
+        )
+        self.current_angle = GridAngleModel()
+        self.thread_rotate = False
+        self.thread_sis_current_scan = False
+
+
+class GridManager(DeviceManager):
+    name = "GRID"
+    main_widget_class = "interface.views.GridTabWidget"
+    configs = DeviceConfigList()
+    config_class = GridConfig
+    event_manager = DeviceEventManager()
+
+    @classmethod
+    def update_config(cls, widget):
+        names = cls.configs.list_of_names()
+        config = getattr(widget, "gridConfig")
+        for i in range(config.count()):
+            config.removeItem(i)
+        if len(names):
+            config.insertItems(0, names)
+
+
 class PrologixManager(AdapterManager):
     name = "Prologix ethernet"
 
@@ -340,6 +387,7 @@ def restore_configs(qsettings):
     RohdeSchwarzSpectrumFsek30Manager.restore_config(qsettings)
     RohdeSchwarzPowerSupplyManager.restore_config(qsettings)
     ScontelSisBlockManager.restore_config(qsettings)
+    GridManager.restore_config(qsettings)
 
 
 def store_configs(qsettings):
@@ -353,3 +401,4 @@ def store_configs(qsettings):
     RohdeSchwarzSpectrumFsek30Manager.store_config(qsettings)
     RohdeSchwarzPowerSupplyManager.store_config(qsettings)
     ScontelSisBlockManager.store_config(qsettings)
+    GridManager.store_config(qsettings)

@@ -12,12 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class GridTabWidget(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent, cid: int):
         super().__init__(parent)
+        self.cid = cid
         self._layout = QVBoxLayout(self)
-        self._layout.addWidget(GridManagingGroup(self))
+        self._layout.addWidget(GridManagingGroup(self, cid))
         self._layout.addSpacing(10)
-        self._layout.addWidget(GridBiasCurrentScan(self))
+        self._layout.addWidget(GridBiasCurrentScan(self, cid))
         self._layout.addStretch()
 
         self.setLayout(self._layout)

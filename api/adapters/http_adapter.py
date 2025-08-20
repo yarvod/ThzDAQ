@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Tuple
 
 import requests
-
+from requests import RequestException
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,16 @@ class HttpAdapter:
 
     def post(self, url: str, data: Dict = None) -> Tuple[int, Dict]:
         full_url = self.url + url
-        response = requests.post(
-            full_url, data=json.dumps(data), headers=self.headers, timeout=self.timeout
-        )
+        try:
+            response = requests.post(
+                full_url,
+                data=json.dumps(data),
+                headers=self.headers,
+                timeout=self.timeout,
+            )
+        except (TimeoutError, RequestException, Exception) as e:
+            return 400, {"error": str(e)}
+
         try:
             response_dict = response.json()
         except json.JSONDecodeError:

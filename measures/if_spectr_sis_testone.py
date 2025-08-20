@@ -7,7 +7,7 @@ import numpy as np
 
 from api import SpectrumBlock
 from api.Agilent.signal_generator import SignalGenerator
-from api.Arduino.grid import GridManager
+from api.Arduino.grid import GridDevice
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
 from store.state import state
@@ -25,7 +25,7 @@ sis = SisBlock(
 sis.connect()
 nrx = NRXPowerMeter(delay=0, aperture_time=50)
 spectrum = SpectrumBlock(host="169.254.156.101", port=1234, gpib=20, delay=0.2)
-grid = GridManager()
+grid = GridDevice()
 sg = SignalGenerator(host="169.254.156.103", port=1234, gpib=18)
 
 spectrum.set_span_frequency(10e6)

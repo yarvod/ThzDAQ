@@ -1,4 +1,4 @@
-from typing import Union, Optional, Type
+from typing import Union, Optional, Type, Any
 
 from PySide6.QtCore import QObject, Property, Signal
 
@@ -174,7 +174,7 @@ class DeviceManager:
         return cls.last_id
 
     @classmethod
-    def get_config(cls, cid: int) -> Union[DeviceConfig, None]:
+    def get_config(cls, cid: int) -> DeviceConfig | Any:
         return cls.configs.filter(cid=cid).first()
 
     @classmethod

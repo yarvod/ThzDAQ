@@ -58,7 +58,7 @@ class MeasureThread(Thread):
             )
         self.measure.save(finish=False)
 
-        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
+        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value_signal
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
@@ -99,7 +99,7 @@ class MeasureThread(Thread):
                     break
                 freq_set = self.ni.set_frequency(freq * 1e9)
                 if freq_set:
-                    state.DIGITAL_YIG_MAP[self.yig].value = freq_set
+                    state.DIGITAL_YIG_MAP[self.yig].value_signal = freq_set
                 else:
                     break
                 time.sleep(0.01)
@@ -177,7 +177,7 @@ class MeasureThread(Thread):
         state.NI_STABILITY_MEAS = False
         resp = self.ni.set_frequency(self.initial_freq, yig=self.yig)
         if resp:
-            state.DIGITAL_YIG_MAP[self.yig].value = resp
+            state.DIGITAL_YIG_MAP[self.yig].value_signal = resp
         self.nrx.adapter.close()
         self.measure.save()
 

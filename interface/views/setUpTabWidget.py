@@ -1,18 +1,13 @@
 import logging
-import textwrap
 
 from PySide6.QtCore import Signal, QThread
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QGroupBox,
-    QGridLayout,
-    QLabel,
     QLineEdit,
-    QSizePolicy,
 )
 
-from api.Arduino.grid import GridManager
+from api.Arduino.grid import GridDevice
 from interface.components.Agilent.setUpSignalGenerator import (
     SetUpAgilentSignalGenerator,
 )
@@ -32,10 +27,10 @@ from interface.components.chopper.SetupChopperGroup import SetupChopperGroup
 from interface.components.RohdeSchwarz.setUpSpectrumFsek30 import (
     SetUpSpectrumFsek30Widget,
 )
+from interface.components.grid.setUpGridWidget import SetUpGridWidget
 from interface.components.keithley.setUpKeithley import SetUpKeithley
 from interface.components.power_meter.setUpPowerMeter import SetUpPowerMeter
 from interface.components.prologix.setUpPrologix import SetUpPrologix
-from interface.components.ui.Button import Button
 from interface.components.yig.setupDigitalYig import SetUpDigitalYigGroup
 from store.state import state
 
@@ -46,7 +41,7 @@ class GridThread(QThread):
     status = Signal(str)
 
     def run(self):
-        test_result, test_message = GridManager(host=state.GRID_ADDRESS).test()
+        test_result, test_message = GridDevice(host=state.GRID_ADDRESS).test()
         self.status.emit(test_message)
         self.finished.emit()
 
@@ -60,14 +55,12 @@ class SetUpTabWidget(QWidget):
         self.searchLine.setPlaceholderText("Search device")
         self.searchLine.textChanged.connect(self.search_device)
 
-        self.createGroupGrid()
-
         self.layout.addWidget(self.searchLine)
         self.layout.addWidget(SetUpScontelSisBlockWidget(self))
         self.layout.addWidget(SetUpVnaZva67Widget(self))
         self.layout.addWidget(SetUpPowerMeter(self))
         self.layout.addWidget(SetUpPrologix(self))
-        self.layout.addWidget(self.groupGrid)
+        self.layout.addWidget(SetUpGridWidget(self))
         self.layout.addWidget(SetUpAgilentSignalGenerator(self))
         self.layout.addWidget(SetUpLakeshoreTemperatureControllerWidget(self))
         self.layout.addWidget(SetUpSpectrumFsek30Widget(self))
@@ -101,45 +94,3 @@ class SetUpTabWidget(QWidget):
                 widget.show()
             else:
                 widget.hide()
-
-    def createGroupGrid(self):
-        self.groupGrid = QGroupBox("GRID")
-        self.groupGrid.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
-        layout = QGridLayout()
-
-        self.gridAddressLabel = QLabel(self)
-        self.gridAddressLabel.setText("IP Address:")
-        self.gridAddress = QLineEdit(self)
-        self.gridAddress.setText(state.GRID_ADDRESS)
-
-        self.gridStatusLabel = QLabel(self)
-        self.gridStatusLabel.setText("Status:")
-        self.gridStatus = QLabel(self)
-        self.gridStatus.setText("Doesn't initialized yet!")
-
-        self.btnInitGrid = Button("Initialize", animate=True)
-        self.btnInitGrid.clicked.connect(self.initialize_grid)
-
-        layout.addWidget(self.gridAddressLabel, 1, 0)
-        layout.addWidget(self.gridAddress, 1, 1)
-        layout.addWidget(self.gridStatusLabel, 2, 0)
-        layout.addWidget(self.gridStatus, 2, 1)
-        layout.addWidget(self.btnInitGrid, 3, 0, 1, 2)
-
-        self.groupGrid.setLayout(layout)
-
-    def initialize_grid(self):
-        state.GRID_ADDRESS = self.gridAddress.text()
-        self.grid_thread = GridThread()
-        self.grid_thread.status.connect(self.set_grid_status)
-        self.grid_thread.start()
-        self.btnInitGrid.setEnabled(False)
-        self.grid_thread.finished.connect(lambda: self.btnInitGrid.setEnabled(True))
-
-    def set_grid_status(self, status: str):
-        status = status.replace("'", "")
-        short_status = textwrap.shorten(status, width=40, placeholder="...")
-        self.gridStatus.setText(short_status)
-        self.gridStatus.setToolTip(status)

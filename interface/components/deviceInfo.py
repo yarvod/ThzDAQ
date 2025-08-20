@@ -1,3 +1,4 @@
+import textwrap
 from typing import Union, Optional
 
 from PySide6.QtGui import QIcon
@@ -80,7 +81,11 @@ class DeviceInfo(QWidget):
         self.statusLabel.setText("Status:")
         self.status = QLabel(self)
         self.status.setText(status)
-        self.config.signal_status.connect(lambda x: self.status.setText(f"{x}"))
+        self.config.signal_status.connect(
+            lambda x: self.status.setText(
+                f"{textwrap.shorten(x, width=40, placeholder='...')}"
+            )
+        )
 
         flayout.addRow(self.nameLabel, self.name)
         flayout.addRow(self.adapterLabel, self.adapter)

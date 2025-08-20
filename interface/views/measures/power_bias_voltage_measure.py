@@ -16,13 +16,13 @@ from PySide6.QtWidgets import (
 )
 
 from api import SisBlock
-from api.Arduino.grid import GridManager
+from api.Arduino.grid import GridDevice
 from api.Chopper import chopper_manager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.Lines import HLine
-from store import ScontelSisBlockManager
+from store import ScontelSisBlockManager, GridManager, GridConfig
 from store.base import MeasureModel, MeasureType
 from store.state import state
 from threads import Thread
@@ -52,12 +52,13 @@ class PowerBiasVoltageThread(Thread):
         voltage_points: int,
         voltage_step_delay: float,
         chopper_switch: bool,
+        grid_cid: int = None,
     ):
         super().__init__()
         self.use_grid = use_grid
         self.angle_start = angle_start
         self.angle_stop = angle_stop
-        self.ange_step = angle_step
+        self.angle_step = angle_step
         self.config_sis = ScontelSisBlockManager.get_config(sis_cid)
         self.block = None
         self.voltage_start = voltage_start
@@ -66,14 +67,18 @@ class PowerBiasVoltageThread(Thread):
         self.voltage_step_delay = voltage_step_delay
         self.chopper_switch = chopper_switch
         self.initial_v = 0
-        self.initial_angle = float(state.GRID_ANGLE.val)
 
         self.measure = MeasureModel.objects.create(
             measure_type=self.get_measure_type(), data={}
         )
         self.measure.save(False)
 
-        self.motor = GridManager(host=state.GRID_ADDRESS)
+        self.grid_config = None
+        self.motor = None
+        self.initial_angle = 0
+        if grid_cid and self.use_grid:
+            self.grid_config: GridConfig = GridManager.get_config(grid_cid)
+            self.initial_angle = self.grid_config.current_angle.value
 
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
@@ -97,7 +102,7 @@ class PowerBiasVoltageThread(Thread):
         if self.chopper_switch:
             return {
                 "id": 0,
-                "step": state.GRID_ANGLE_STEP,
+                "step": self.angle_step,
                 "angle": 0,
                 "hot": {
                     "current_get": [],
@@ -118,7 +123,7 @@ class PowerBiasVoltageThread(Thread):
             }
         return {
             "id": 0,
-            "step": state.GRID_ANGLE_STEP,
+            "step": self.angle_step,
             "angle": 0,
             "current_get": [],
             "voltage_set": [],
@@ -130,6 +135,8 @@ class PowerBiasVoltageThread(Thread):
     def run(self):
         try:
             self.block = SisBlock(**self.config_sis.dict())
+            if self.use_grid:
+                self.motor = GridDevice(**self.grid_config.dict())
         except DeviceConnectionError:
             self.measure.save(finish=True)
             self.finished.emit()
@@ -138,8 +145,8 @@ class PowerBiasVoltageThread(Thread):
         angle_range = (
             np.arange(
                 self.angle_start,
-                self.angle_stop + self.ange_step,
-                self.ange_step,
+                self.angle_stop + self.angle_step,
+                self.angle_step,
             )
             if self.use_grid
             else np.array([0])
@@ -157,7 +164,10 @@ class PowerBiasVoltageThread(Thread):
             # chopper_manager.chopper.align()
             chopper_manager.chopper.align_to_hot()
         if self.use_grid:
-            self.motor.rotate(self.angle_start)
+            angle_success = self.motor.rotate(
+                self.angle_start, self.grid_config.current_angle.value
+            )
+            self.grid_config.current_angle.value = angle_success
         time.sleep(abs(self.angle_start) / state.GRID_SPEED)
         for angle_step, angle in enumerate(angle_range):
             if not state.POWER_BIAS_VOLTAGE_MEASURE_THREAD:
@@ -168,8 +178,11 @@ class PowerBiasVoltageThread(Thread):
             results["angle"] = angle
 
             if angle_step != 0:
-                self.motor.rotate(angle)
-            time.sleep(abs(state.GRID_ANGLE_STEP) / state.GRID_SPEED)
+                angle_success = self.motor.rotate(
+                    angle, self.grid_config.current_angle.value
+                )
+                self.grid_config.current_angle.value = angle_success
+            time.sleep(abs(self.angle_step) / state.GRID_SPEED)
             for chopper_step in chopper_range:
                 chopper_state = None
                 if self.chopper_switch:
@@ -270,7 +283,10 @@ class PowerBiasVoltageThread(Thread):
         self.finished.emit()
 
     def pre_exit(self):
-        self.motor.rotate(self.initial_angle, finish=True)
+        if self.use_grid:
+            self.motor.rotate(
+                self.initial_angle, self.grid_config.current_angle.value, finish=True
+            )
         logger.info(
             f"[{self.__class__.__name__}.pre_exit] Setting SIS block initial voltage ..."
         )
@@ -300,6 +316,13 @@ class PowerBiasVoltageMeasureWidget(QWidget):
         self.useGrid = QCheckBox("Use GRID", self)
         self.useGrid.checkStateChanged.connect(self.use_grid)
         self.useGrid.setChecked(False)
+
+        self.gridConfigLabel = QLabel(self)
+        self.gridConfigLabel.setText("Grid device")
+        self.gridConfig = QComboBox(self)
+        GridManager.event_manager.configs_updated.connect(
+            lambda: GridManager.update_config(self)
+        )
 
         self.angleStartLabel = QLabel("Angle start, degree", self)
         self.angleStartLabel.setHidden(~self.useGrid.isChecked())
@@ -373,6 +396,7 @@ class PowerBiasVoltageMeasureWidget(QWidget):
         self.btnStopBiasPowerScan.setEnabled(False)
 
         form_layout.addRow(self.useGrid)
+        form_layout.addRow(self.gridConfigLabel, self.gridConfig)
         form_layout.addRow(self.angleStartLabel, self.angleStart)
         form_layout.addRow(self.angleStopLabel, self.angleStop)
         form_layout.addRow(self.angleStepLabel, self.angleStep)
@@ -396,6 +420,8 @@ class PowerBiasVoltageMeasureWidget(QWidget):
 
     def use_grid(self, check_state: Qt.CheckState):
         if check_state == Qt.CheckState.Checked:
+            self.gridConfigLabel.setHidden(False)
+            self.gridConfig.setHidden(False)
             self.angleStartLabel.setHidden(False)
             self.angleStart.setHidden(False)
             self.angleStopLabel.setHidden(False)
@@ -404,6 +430,8 @@ class PowerBiasVoltageMeasureWidget(QWidget):
             self.angleStep.setHidden(False)
             return
 
+        self.gridConfigLabel.setHidden(True)
+        self.gridConfig.setHidden(True)
         self.angleStartLabel.setHidden(True)
         self.angleStart.setHidden(True)
         self.angleStopLabel.setHidden(True)
@@ -419,12 +447,19 @@ class PowerBiasVoltageMeasureWidget(QWidget):
             angle_start=self.angleStart.value(),
             angle_stop=self.angleStop.value(),
             angle_step=self.angleStep.value(),
-            sis_cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
+            sis_cid=getattr(
+                ScontelSisBlockManager.configs[self.sisConfig.currentIndex()],
+                "cid",
+                None,
+            ),
             voltage_start=self.voltFrom.value(),
             voltage_stop=self.voltTo.value(),
             voltage_points=int(self.voltPoints.value()),
             voltage_step_delay=self.voltStepDelay.value(),
             chopper_switch=self.useChopperSwitch.isChecked(),
+            grid_cid=getattr(
+                GridManager.configs[self.gridConfig.currentIndex()], "cid", None
+            ),
         )
 
         self.gridBiasPowerGraphWindow = Dock.ex.dock_manager.findDockWidget("P-V curve")
