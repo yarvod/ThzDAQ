@@ -123,7 +123,7 @@ class MeasurePowerThread(Thread):
         )
         self.yig_type = yig
         self.yig = NiYIGManager()
-        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value_signal
+        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.TA_SIS_CALIBRATION, data={}
         )
@@ -180,7 +180,7 @@ class MeasurePowerThread(Thread):
                         * 1e-9,
                         2,
                     )
-                    state.DIGITAL_YIG_MAP[self.yig_type].value_signal = freq
+                    state.DIGITAL_YIG_MAP[self.yig_type].value = freq
                 else:
                     break
 

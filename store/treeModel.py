@@ -154,11 +154,11 @@ class JsonModel(QAbstractItemModel):
                 return item.key
 
             if index.column() == 1:
-                return item.value_signal
+                return item.value
 
         elif role == Qt.EditRole:
             if index.column() == 1:
-                return item.value_signal
+                return item.value
 
     def setData(self, index: QModelIndex, value: Any, role: Qt.ItemDataRole):
         """Override from QAbstractItemModel
@@ -174,7 +174,7 @@ class JsonModel(QAbstractItemModel):
         if role == Qt.EditRole:
             if index.column() == 1:
                 item = index.internalPointer()
-                item.value_signal = str(value)
+                item.value = str(value)
 
                 self.dataChanged.emit(index, index, [Qt.EditRole])
 

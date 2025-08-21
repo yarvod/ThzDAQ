@@ -99,7 +99,7 @@ class MeasureThread(Thread):
                     break
                 freq_set = self.ni.set_frequency(freq * 1e9)
                 if freq_set:
-                    state.DIGITAL_YIG_MAP[self.yig].value_signal = freq_set
+                    state.DIGITAL_YIG_MAP[self.yig].value = freq_set
                 else:
                     break
                 time.sleep(0.01)
@@ -177,7 +177,7 @@ class MeasureThread(Thread):
         state.NI_STABILITY_MEAS = False
         resp = self.ni.set_frequency(self.initial_freq, yig=self.yig)
         if resp:
-            state.DIGITAL_YIG_MAP[self.yig].value_signal = resp
+            state.DIGITAL_YIG_MAP[self.yig].value = resp
         self.nrx.adapter.close()
         self.measure.save()
 
