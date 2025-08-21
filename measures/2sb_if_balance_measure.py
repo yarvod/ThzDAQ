@@ -80,28 +80,33 @@ class MeasThread(Thread):
             rs_power.set_output_state(2, True)  # Turn On YIG
             send_to_telegram("Measuring 2SB IF balance started")
             logger.info("Measuring 2SB IF balance started")
-            for bs1, bs2 in zip(voltages_1, voltages_2):
-                logger.info(
-                    f"SIS1 voltage {bs1*1e3:.2f}mV; SIS2 voltage {bs2*1e3:.2f}mV;"
-                )
-                send_to_telegram(
-                    f"SIS1 voltage {bs1*1e3:.2f}mV; SIS2 voltage {bs2*1e3:.2f}mV;"
-                )
-                sis1.set_bias_voltage_iterative(bs1)
-                sis2.set_bias_voltage_iterative(bs2)
+            for channel in ["ch1", "ch2"]:
+                rs_power.set_output_state(1, channel == "ch2")
+                logger.info(f"Start measure channel {channel}")
+                send_to_telegram(f"Start measure channel {channel}")
+                time.sleep(1)
                 _data = {
-                    "sis1_voltage": bs1,
-                    "sis1_current": sis1.get_bias_current(),
-                    "sis2_voltage": bs2,
-                    "sis2_current": sis2.get_bias_current(),
+                    "sis1_voltage": 0,
+                    "sis1_current": 0,
+                    "sis2_voltage": 0,
+                    "sis2_current": 0,
                     "power_ch1": [],
                     "power_ch2": [],
                 }
-                for channel in ["ch1", "ch2"]:
-                    rs_power.set_output_state(1, channel == "ch2")
-                    logger.info(f"Start measure channel {channel}")
-                    send_to_telegram(f"Start measure channel {channel}")
-                    time.sleep(1)
+                for bs1, bs2 in zip(voltages_1, voltages_2):
+                    logger.info(
+                        f"SIS1 voltage {bs1*1e3:.2f}mV; SIS2 voltage {bs2*1e3:.2f}mV;"
+                    )
+                    send_to_telegram(
+                        f"SIS1 voltage {bs1*1e3:.2f}mV; SIS2 voltage {bs2*1e3:.2f}mV;"
+                    )
+                    sis1.set_bias_voltage_iterative(bs1)
+                    sis2.set_bias_voltage_iterative(bs2)
+                    _data["sis1_voltage"] = bs1
+                    _data["sis1_current"] = sis1.get_bias_current()
+                    _data["sis2_voltage"] = bs2
+                    _data["sis2_current"] = sis2.get_bias_current()
+
                     for freg_ind, freq in enumerate(inter_frequencies):
                         yig.set_frequency(freq)
                         power = nrx.get_power()
@@ -115,8 +120,8 @@ class MeasThread(Thread):
                             }
                         )
 
-                data["data"].append(_data)
-                self.data_signal.emit(data)
+                    data["data"].append(_data)
+                    self.data_signal.emit(data)
 
         except (Exception, KeyboardInterrupt) as e:
             data["data"].append(_data)

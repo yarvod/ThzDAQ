@@ -323,19 +323,19 @@ if __name__ == "__main__":
     # Parameters
     ###
     measure_y_factor = True
-    lo_frequency = 223e9
+    lo_frequency = 247e9
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
     one_range_len = 10
     inter_frequencies_reshaped = inter_frequencies.reshape(
         len(inter_frequencies) // one_range_len, one_range_len
     )
 
-    sis_voltage_1 = 2.4e-3
+    sis_voltage_1 = 2.5e-3
     sis_voltage_2 = 2.4e-3
 
     if_channels = {
-        "upper": False,
-        "lower": True,
+        "upper": True,
+        "lower": False,
     }
 
     side_bands = ["upper", "lower"]

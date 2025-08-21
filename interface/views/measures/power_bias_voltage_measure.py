@@ -78,7 +78,7 @@ class PowerBiasVoltageThread(Thread):
         self.initial_angle = 0
         if grid_cid and self.use_grid:
             self.grid_config: GridConfig = GridManager.get_config(grid_cid)
-            self.initial_angle = self.grid_config.current_angle.value
+            self.initial_angle = float(self.grid_config.current_angle.value)
 
         self.nrx = NRXPowerMeter(
             host=state.NRX_IP,
@@ -284,9 +284,10 @@ class PowerBiasVoltageThread(Thread):
 
     def pre_exit(self):
         if self.use_grid:
-            self.motor.rotate(
+            angle_success = self.motor.rotate(
                 self.initial_angle, self.grid_config.current_angle.value, finish=True
             )
+            self.grid_config.current_angle.value = angle_success
         logger.info(
             f"[{self.__class__.__name__}.pre_exit] Setting SIS block initial voltage ..."
         )

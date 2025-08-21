@@ -58,7 +58,7 @@ class MeasureThread(Thread):
             )
         self.measure.save(finish=False)
 
-        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value_signal
+        self.initial_freq = float(state.DIGITAL_YIG_MAP[yig].value)
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:

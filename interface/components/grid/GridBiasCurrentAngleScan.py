@@ -115,7 +115,9 @@ class MeasureThread(Thread):
         self.finished.emit()
 
     def pre_exit(self, *args, **kwargs):
-        angle_success = self.grid.rotate(self.initial_angle)
+        angle_success = self.grid.rotate(
+            self.initial_angle, self.grid_config.current_angle.value
+        )
         self.grid_config.current_angle.value = angle_success
         self.measure.save()
         self.progress.emit(0)

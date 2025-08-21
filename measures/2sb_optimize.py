@@ -368,7 +368,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # lo_frequency = args.lo_frequency
-    lo_frequency = 223e9
+    lo_frequency = 255e9
     inter_frequency = 6e9
 
     voltage_step_1 = 0.1e-3
@@ -377,8 +377,8 @@ if __name__ == "__main__":
     voltage_range_2 = np.arange(2.1e-3, 2.7e-3, voltage_step_2)
 
     if_channels = {
-        "upper": False,
-        "lower": True,
+        "upper": True,
+        "lower": False,
     }
 
     side_bands = ["upper", "lower"]
