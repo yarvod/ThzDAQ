@@ -44,12 +44,12 @@ if __name__ == "__main__":
     )
 
     data = []
-    npoints = 51
+    npoints = 101
 
-    freqs = np.arange(220e9, 265e9, 0.5e9)
+    freqs = np.arange(220e9, 265e9, 1e9)
     print(freqs)
     voltages2 = np.linspace(1e-3, 3e-3, npoints)
-    voltages1 = np.linspace(2e-3, 15e-3, npoints)
+    voltages1 = np.linspace(3e-3, 15e-3, npoints)
 
     try:
         rf.set_power(-80)

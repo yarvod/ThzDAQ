@@ -323,7 +323,7 @@ if __name__ == "__main__":
     # Parameters
     ###
     measure_y_factor = True
-    lo_frequency = 247e9
+    lo_frequency = 223e9
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
     one_range_len = 10
     inter_frequencies_reshaped = inter_frequencies.reshape(

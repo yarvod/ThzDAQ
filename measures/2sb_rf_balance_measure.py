@@ -29,7 +29,7 @@ if __name__ == "__main__":
         host="169.254.190.83",
         port=9876,
         bias_dev="DEV2",
-        ctrl_dev="DEV4",
+        ctrl_dev="DEV1",
         offset_voltage=-0.187e-3,
         offset_current=-1.3e-6,
     )
@@ -38,13 +38,13 @@ if __name__ == "__main__":
         host="169.254.190.83",
         port=9876,
         bias_dev="DEV4",
-        ctrl_dev="DEV1",
+        ctrl_dev="DEV3",
         offset_voltage=0.04e-3,
         offset_current=0,
     )
 
     data = []
-    npoints = 51
+    npoints = 101
 
     freqs = np.arange(220e9, 265e9, 0.5e9)
     print(freqs)

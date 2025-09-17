@@ -312,7 +312,7 @@ def main():
         if "Tn" in name:
             hist_item.gradient.loadPreset("turbo")
         elif "SRR" in name:
-            hist_item.gradient.loadPreset("viridis")
+            hist_item.gradient.loadPreset("plasma")
 
         hist_item.setImageItem(img_item)
         win.addItem(hist_item)
@@ -368,8 +368,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # lo_frequency = args.lo_frequency
-    lo_frequency = 255e9
-    inter_frequency = 6e9
+    lo_frequency = 223e9
+    inter_frequency = 5e9
 
     voltage_step_1 = 0.1e-3
     voltage_step_2 = 0.1e-3
