@@ -55,22 +55,40 @@ class MeasThread(Thread):
         nrx = NRXPowerMeter(host="169.254.2.20", delay=0)
         yig = NiYIGManager(host="169.254.0.86")
         rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
+        # sis1 = SisBlock(
+        #     host="169.254.190.83",
+        #     port=9876,
+        #     bias_dev="DEV4",
+        #     ctrl_dev="DEV3",
+        #     offset_voltage=0.04e-3,
+        #     offset_current=0,
+        # )
+        #
+        # sis2 = SisBlock(
+        #     host="169.254.190.83",
+        #     port=9876,
+        #     bias_dev="DEV2",
+        #     ctrl_dev="DEV1",
+        #     offset_voltage=-0.187e-3,
+        #     offset_current=-1.3e-6,
+        # )
+
         sis1 = SisBlock(
-            host="169.254.190.83",
+            host="169.254.71.6",
             port=9876,
             bias_dev="DEV4",
             ctrl_dev="DEV3",
-            offset_voltage=0.04e-3,
+            offset_voltage=0.040e-3,
             offset_current=0,
         )
 
         sis2 = SisBlock(
-            host="169.254.190.83",
+            host="169.254.71.6",
             port=9876,
             bias_dev="DEV2",
             ctrl_dev="DEV1",
-            offset_voltage=-0.187e-3,
-            offset_current=-1.3e-6,
+            offset_voltage=0.205e-3,
+            offset_current=0.3e-6,
         )
 
         data = {"if": inter_frequencies.tolist(), "data": []}
@@ -224,8 +242,8 @@ if __name__ == "__main__":
 
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
 
-    sis_voltage_1 = 4.2e-3
-    sis_voltage_2 = 4.9e-3
+    sis_voltage_1 = 5e-3
+    sis_voltage_2 = 8e-3
 
     voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
     voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]

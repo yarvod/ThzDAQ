@@ -330,7 +330,7 @@ if __name__ == "__main__":
         len(inter_frequencies) // one_range_len, one_range_len
     )
 
-    sis_voltage_1 = 2.5e-3
+    sis_voltage_1 = 2.6e-3
     sis_voltage_2 = 2.4e-3
 
     if_channels = {

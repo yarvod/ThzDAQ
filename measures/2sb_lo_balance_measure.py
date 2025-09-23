@@ -25,31 +25,49 @@ if __name__ == "__main__":
     # nrx = NRXPowerMeter(delay=0)
     rf = SignalGenerator(host="169.254.156.103", gpib=18)
     lo = SignalGenerator(host="169.254.156.103", gpib=19)
-    sis2 = SisBlock(
-        host="169.254.190.83",
-        port=9876,
-        bias_dev="DEV2",
-        ctrl_dev="DEV4",
-        offset_voltage=-0.187e-3,
-        offset_current=-1.3e-6,
-    )
+    # sis1 = SisBlock(
+    #     host="169.254.190.83",
+    #     port=9876,
+    #     bias_dev="DEV4",
+    #     ctrl_dev="DEV3",
+    #     offset_voltage=0.04e-3,
+    #     offset_current=0,
+    # )
+    #
+    # sis2 = SisBlock(
+    #     host="169.254.190.83",
+    #     port=9876,
+    #     bias_dev="DEV2",
+    #     ctrl_dev="DEV1",
+    #     offset_voltage=-0.187e-3,
+    #     offset_current=-1.3e-6,
+    # )
 
     sis1 = SisBlock(
-        host="169.254.190.83",
+        host="169.254.71.6",
         port=9876,
         bias_dev="DEV4",
-        ctrl_dev="DEV1",
-        offset_voltage=0.04e-3,
+        ctrl_dev="DEV3",
+        offset_voltage=0.040e-3,
         offset_current=0,
     )
 
+    sis2 = SisBlock(
+        host="169.254.71.6",
+        port=9876,
+        bias_dev="DEV2",
+        ctrl_dev="DEV1",
+        offset_voltage=0.205e-3,
+        offset_current=0.3e-6,
+    )
+
     data = []
-    npoints = 101
+    npoints = 3
 
     freqs = np.arange(220e9, 265e9, 1e9)
     print(freqs)
-    voltages2 = np.linspace(1e-3, 3e-3, npoints)
-    voltages1 = np.linspace(3e-3, 15e-3, npoints)
+    voltages2 = np.linspace(2.4e-3, 2.6e-3, npoints)
+    voltages1 = np.linspace(2.4e-3, 2.6e-3, npoints)
 
     try:
         rf.set_power(-80)
