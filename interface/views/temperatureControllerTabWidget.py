@@ -274,7 +274,7 @@ class TemperatureControllerTabWidget(QWidget):
         self.manualOutputLabel.setText("Manual Output, %")
         self.manualOutput = DoubleSpinBox(self)
         self.manualOutput.setRange(0, 100)
-        self.manualOutput.setValue(100)
+        self.manualOutput.setValue(0)
 
         self.setupPointLabel = QLabel(self)
         self.setupPointLabel.setText("Setup Point, K")
