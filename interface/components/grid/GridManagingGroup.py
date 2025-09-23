@@ -24,7 +24,7 @@ class GridThread(Thread):
             self.finished.emit()
             return
         angle = grid.rotate(self.angle_rotate, self.config.current_angle.value)
-        if angle:
+        if angle is not None:
             self.config.current_angle.value = angle
         self.pre_exit()
         self.finished.emit()
