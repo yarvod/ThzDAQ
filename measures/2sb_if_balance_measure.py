@@ -10,13 +10,14 @@ from datetime import datetime
 
 import numpy as np
 import pyqtgraph as pg
+from alvar import db_to_absolute
 
 from api.NationalInstruments.yig_filter import NiYIGManager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.RohdeSchwarz.power_supply import PowerSupplyHMP2030
 from api.Scontel.sis_block import SisBlock
 from threads import Thread
-from utils.functions import send_to_telegram
+from utils.functions import send_to_telegram, linear_fit, calc_tta, to_db
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -49,49 +50,90 @@ class StateMeasure:
 
 class MeasThread(Thread):
     plot_signal = pg.QtCore.Signal(dict)
+    plot_signal_2 = pg.QtCore.Signal(dict)
+    plot_signal_3 = pg.QtCore.Signal(dict)
     data_signal = pg.QtCore.Signal(dict)
 
     def run(self):
         nrx = NRXPowerMeter(host="169.254.2.20", delay=0)
         yig = NiYIGManager(host="169.254.0.86")
         rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
-        # sis1 = SisBlock(
-        #     host="169.254.190.83",
-        #     port=9876,
-        #     bias_dev="DEV4",
-        #     ctrl_dev="DEV3",
-        #     offset_voltage=0.04e-3,
-        #     offset_current=0,
-        # )
-        #
-        # sis2 = SisBlock(
-        #     host="169.254.190.83",
-        #     port=9876,
-        #     bias_dev="DEV2",
-        #     ctrl_dev="DEV1",
-        #     offset_voltage=-0.187e-3,
-        #     offset_current=-1.3e-6,
-        # )
-
         sis1 = SisBlock(
-            host="169.254.71.6",
+            host="169.254.190.83",
             port=9876,
             bias_dev="DEV4",
             ctrl_dev="DEV3",
-            offset_voltage=0.040e-3,
+            offset_voltage=0.04e-3,
             offset_current=0,
         )
-
+        #
         sis2 = SisBlock(
-            host="169.254.71.6",
+            host="169.254.190.83",
             port=9876,
             bias_dev="DEV2",
             ctrl_dev="DEV1",
-            offset_voltage=0.205e-3,
-            offset_current=0.3e-6,
+            offset_voltage=-0.187e-3,
+            offset_current=-1.3e-6,
         )
 
-        data = {"if": inter_frequencies.tolist(), "data": []}
+        # sis1 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV4",
+        #     ctrl_dev="DEV3",
+        #     offset_voltage=0.01e-3,
+        #     offset_current=0.05e-6,
+        # )
+
+        # sis2 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV2",
+        #     ctrl_dev="DEV1",
+        #     offset_voltage=0.205e-3,
+        #     offset_current=0.3e-6,
+        # )
+
+        data = {
+            "if": inter_frequencies.tolist(),
+            "data": [],
+            "sis_1": {
+                "point_1": {
+                    "voltages": [],
+                    "currents": [],
+                    "rd": 0,
+                    "voltage": 0,
+                    "current": 0,
+                },
+                "point_2": {
+                    "voltages": [],
+                    "currents": [],
+                    "rd": 0,
+                    "voltage": 0,
+                    "current": 0,
+                },
+            },
+            "sis_2": {
+                "point_1": {
+                    "voltages": [],
+                    "currents": [],
+                    "rd": 0,
+                    "voltage": 0,
+                    "current": 0,
+                },
+                "point_2": {
+                    "voltages": [],
+                    "currents": [],
+                    "rd": 0,
+                    "voltage": 0,
+                    "current": 0,
+                },
+            },
+            "ta_1": [],
+            "ta_2": [],
+            "im_1": [],
+            "im_2": [],
+        }
         _data = {}
 
         try:
@@ -136,6 +178,116 @@ class MeasThread(Thread):
                 data["data"].append(_data)
                 self.data_signal.emit(data)
 
+            for p_ind, bs in enumerate([sis_voltage_1, sis_voltage_2], 1):
+                for ind, sis in enumerate([sis1, sis2], 1):
+                    voltages = np.linspace(bs * 0.95, bs * 1.05, voltage_points)
+                    sis.set_bias_voltage_iterative(bs)
+                    time.sleep(1)
+                    current = sis.get_bias_current()
+                    voltage = sis.get_bias_voltage()
+                    data[f"sis_{ind}"][f"point_{p_ind}"]["voltage"] = voltage
+                    data[f"sis_{ind}"][f"point_{p_ind}"]["current"] = current
+                    for volt in voltages:
+                        sis.set_bias_voltage_iterative(volt)
+                        data[f"sis_{ind}"][f"point_{p_ind}"]["voltages"].append(
+                            sis.get_bias_voltage()
+                        )
+                        data[f"sis_{ind}"][f"point_{p_ind}"]["currents"].append(
+                            sis.get_bias_current()
+                        )
+                        self.data_signal.emit(data)
+                    rd, _ = linear_fit(
+                        data[f"sis_{ind}"][f"point_{p_ind}"]["currents"],
+                        data[f"sis_{ind}"][f"point_{p_ind}"]["voltages"],
+                    )
+                    data[f"sis_{ind}"][f"point_{p_ind}"]["rd"] = rd
+                    self.data_signal.emit(data)
+
+            inds = [0, 3]
+            if len(voltages_2) == 2:
+                inds = [0, 1]
+
+            ta_1 = calc_tta(
+                p_if_data1={
+                    "power": data["data"][inds[0]]["power_ch1"],
+                    "power_units": "dBm",
+                },
+                p_if_data2={
+                    "power": data["data"][inds[1]]["power_ch1"],
+                    "power_units": "dBm",
+                },
+                v1=data["sis_1"]["point_1"]["voltage"],
+                v2=data["sis_1"]["point_2"]["voltage"],
+                i1=data["sis_1"]["point_1"]["current"],
+                i2=data["sis_1"]["point_2"]["current"],
+                rd1=data["sis_1"]["point_1"]["rd"],
+                rd2=data["sis_1"]["point_2"]["rd"],
+                t_sis=t_sis,
+            )
+
+            ta_2 = calc_tta(
+                p_if_data1={
+                    "power": data["data"][inds[0]]["power_ch2"],
+                    "power_units": "dBm",
+                },
+                p_if_data2={
+                    "power": data["data"][inds[1]]["power_ch2"],
+                    "power_units": "dBm",
+                },
+                v1=data["sis_1"]["point_1"]["voltage"],
+                v2=data["sis_1"]["point_2"]["voltage"],
+                i1=data["sis_1"]["point_1"]["current"],
+                i2=data["sis_1"]["point_2"]["current"],
+                rd1=data["sis_1"]["point_1"]["rd"],
+                rd2=data["sis_1"]["point_2"]["rd"],
+                t_sis=t_sis,
+            )
+
+            data["ta_1"] = ta_1.tolist()
+            data["ta_2"] = ta_2.tolist()
+            self.data_signal.emit(data)
+
+            self.plot_signal_2.emit(
+                {
+                    "new_plot": True,
+                    "legend_postfix": f"ta_1",
+                    "x": inter_frequencies / 1e9,
+                    "y": ta_1,
+                }
+            )
+
+            self.plot_signal_2.emit(
+                {
+                    "new_plot": True,
+                    "legend_postfix": f"ta_2",
+                    "x": inter_frequencies / 1e9,
+                    "y": ta_2,
+                }
+            )
+
+            if len(voltages_2) == 4:
+                im_1, im_2 = calc_gain_imbalance_simple(data)
+                data["im_1"] = to_db(im_1).tolist()
+                data["im_2"] = to_db(im_2).tolist()
+                self.data_signal.emit(data)
+                self.plot_signal_3.emit(
+                    {
+                        "new_plot": True,
+                        "legend_postfix": f"im_1",
+                        "x": inter_frequencies / 1e9,
+                        "y": data["im_1"],
+                    }
+                )
+
+                self.plot_signal_3.emit(
+                    {
+                        "new_plot": True,
+                        "legend_postfix": f"im_2",
+                        "x": inter_frequencies / 1e9,
+                        "y": data["im_2"],
+                    }
+                )
+
         except (Exception, KeyboardInterrupt) as e:
             data["data"].append(_data)
             logger.error(f"Exception: {e}")
@@ -144,6 +296,24 @@ class MeasThread(Thread):
 
         send_to_telegram(f"Measurement successfully finished!")
         self.finished.emit()
+
+
+def calc_gain_imbalance_simple(data):
+    g1_g2_ch2 = (
+        db_to_absolute(data["data"][2]["power_ch2"])
+        - db_to_absolute(data["data"][0]["power_ch2"])
+    ) / (
+        db_to_absolute(data["data"][1]["power_ch2"])
+        - db_to_absolute(data["data"][0]["power_ch2"])
+    )
+    g1_g2_ch1 = (
+        db_to_absolute(data["data"][2]["power_ch1"])
+        - db_to_absolute(data["data"][0]["power_ch1"])
+    ) / (
+        db_to_absolute(data["data"][1]["power_ch1"])
+        - db_to_absolute(data["data"][0]["power_ch1"])
+    )
+    return g1_g2_ch1, g1_g2_ch2
 
 
 def get_plot_items(plot_widget):
@@ -225,8 +395,24 @@ def main():
     p1.addLegend()
     p1.showGrid(x=True, y=True)
 
+    p2 = win.addPlot()
+    p2.setTitle("Tn shot noize", color="#413C58", size="10pt")
+    p2.setLabel("bottom", "IF, GHz", **styles)
+    p2.setLabel("left", "Tn, K", **styles)
+    p2.addLegend()
+    p2.showGrid(x=True, y=True)
+
+    p3 = win.addPlot()
+    p3.setTitle("IF gain imbalance", color="#413C58", size="10pt")
+    p3.setLabel("bottom", "IF, GHz", **styles)
+    p3.setLabel("left", "Gain imbalance, dB", **styles)
+    p3.addLegend()
+    p3.showGrid(x=True, y=True)
+
     thread = MeasThread()
     thread.plot_signal.connect(lambda data: plot_data(p1, data))
+    thread.plot_signal_2.connect(lambda data: plot_data(p2, data))
+    thread.plot_signal_3.connect(lambda data: plot_data(p3, data))
     thread.data_signal.connect(collect_data)
     thread.finished.connect(save_data)
     thread.start()
@@ -240,10 +426,13 @@ if __name__ == "__main__":
     # Parameters
     ###
 
-    inter_frequencies = np.arange(4e9, 12e9, 40e6)
+    inter_frequencies = np.arange(4e9, 12e9, 20e6)
 
-    sis_voltage_1 = 5e-3
-    sis_voltage_2 = 8e-3
+    t_sis = 4.12
+
+    sis_voltage_1 = 4.2e-3
+    sis_voltage_2 = 5e-3
+    voltage_points = 10
 
     voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
     voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]

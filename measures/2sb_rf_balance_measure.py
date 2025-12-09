@@ -25,54 +25,53 @@ if __name__ == "__main__":
     # nrx = NRXPowerMeter(delay=0)
     rf = SignalGenerator(host="169.254.156.103", gpib=18)
     lo = SignalGenerator(host="169.254.156.103", gpib=19)
-    # sis1 = SisBlock(
-    #     host="169.254.190.83",
-    #     port=9876,
-    #     bias_dev="DEV4",
-    #     ctrl_dev="DEV3",
-    #     offset_voltage=0.04e-3,
-    #     offset_current=0,
-    # )
-    #
-    # sis2 = SisBlock(
-    #     host="169.254.190.83",
-    #     port=9876,
-    #     bias_dev="DEV2",
-    #     ctrl_dev="DEV1",
-    #     offset_voltage=-0.187e-3,
-    #     offset_current=-1.3e-6,
-    # )
-
     sis1 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV4",
         ctrl_dev="DEV3",
-        offset_voltage=0.040e-3,
+        offset_voltage=0.04e-3,
         offset_current=0,
     )
-
+    #
     sis2 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV2",
         ctrl_dev="DEV1",
-        offset_voltage=0.205e-3,
-        offset_current=0.3e-6,
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
 
+    # sis2 = SisBlock(
+    #     host="169.254.71.6",
+    #     port=9876,
+    #     bias_dev="DEV4",
+    #     ctrl_dev="DEV3",
+    #     offset_voltage=0.01e-3,
+    #     offset_current=0.05e-6,
+    # )
+
+    # sis1 = SisBlock(
+    #     host="169.254.71.6",
+    #     port=9876,
+    #     bias_dev="DEV2",
+    #     ctrl_dev="DEV1",
+    #     offset_voltage=0.205e-3,
+    #     offset_current=0.3e-6,
+    # )
+
     data = []
-    npoints = 3
 
     freqs = np.arange(220e9, 265e9, 0.5e9)
     print(freqs)
-    voltages2 = np.linspace(2.4e-3, 2.6e-3, npoints)
-    voltages1 = np.linspace(2.4e-3, 2.6e-3, npoints)
+    voltages2 = [2.5e-3]
+    voltages1 = [2.5e-3]
 
     try:
         lo.set_power(-80)
         lo.set_rf_output_state(False)
-        rf.set_power(4)
+        rf.set_power(12)
         rf.set_rf_output_state(True)
         send_to_telegram("Measure 2SB RF Balance started")
         logger.info("Measure 2SB RF Balance started")
@@ -89,8 +88,9 @@ if __name__ == "__main__":
                 "power": [],
             }
             for voltage1, voltage2 in zip(voltages1, voltages2):
-                sis2.set_bias_voltage(voltage2)
-                sis1.set_bias_voltage(voltage1)
+                sis2.set_bias_voltage_iterative(voltage2, 0.005)
+                sis1.set_bias_voltage_iterative(voltage1, 0.005)
+                # time.sleep(0.1)
                 volt2 = sis2.get_bias_voltage()
                 curr2 = sis2.get_bias_current()
                 volt1 = sis1.get_bias_voltage()

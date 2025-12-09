@@ -41,7 +41,7 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         self.frequencyLabel = QLabel(self)
         self.frequencyLabel.setText("Frequency, GHz")
         self.frequency = DoubleSpinBox(self)
-        self.frequency.setRange(1, 300)
+        self.frequency.setRange(1, 900)
         self.frequency.setValue(14)
         self.frequency.setDecimals(3)
         self.frequency.valueChanged.connect(self.update_stream_frequency)

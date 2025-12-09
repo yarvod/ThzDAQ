@@ -60,23 +60,41 @@ class MeasThread(Thread):
         test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
         yig = NiYIGManager(host="169.254.0.86")
         rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
-        sis2 = SisBlock(
-            host="169.254.190.83",
-            port=9876,
-            bias_dev="DEV2",
-            ctrl_dev="DEV4",
-            offset_voltage=-0.187e-3,
-            offset_current=-1.3e-6,
-        )
-
         sis1 = SisBlock(
             host="169.254.190.83",
             port=9876,
             bias_dev="DEV4",
-            ctrl_dev="DEV1",
+            ctrl_dev="DEV3",
             offset_voltage=0.04e-3,
             offset_current=0,
         )
+        #
+        sis2 = SisBlock(
+            host="169.254.190.83",
+            port=9876,
+            bias_dev="DEV2",
+            ctrl_dev="DEV1",
+            offset_voltage=-0.187e-3,
+            offset_current=-1.3e-6,
+        )
+
+        # sis2 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV4",
+        #     ctrl_dev="DEV3",
+        #     offset_voltage=0.01e-3,
+        #     offset_current=0.05e-6,
+        # )
+
+        # sis2 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV2",
+        #     ctrl_dev="DEV1",
+        #     offset_voltage=0.205e-3,
+        #     offset_current=0.3e-6,
+        # )
 
         data = {"upper": {}, "lower": {}, "y_factor": {}}
         _data = {}
@@ -330,12 +348,12 @@ if __name__ == "__main__":
         len(inter_frequencies) // one_range_len, one_range_len
     )
 
-    sis_voltage_1 = 2.6e-3
-    sis_voltage_2 = 2.4e-3
+    sis_voltage_1 = 2.5e-3
+    sis_voltage_2 = 2.5e-3
 
     if_channels = {
-        "upper": True,
-        "lower": False,
+        "upper": False,
+        "lower": True,
     }
 
     side_bands = ["upper", "lower"]
