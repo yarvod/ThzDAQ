@@ -47,13 +47,13 @@ volatile uint16_t lastCode = 0;
 static const IPAddress FALLBACK_IP(169, 254, 1, 77);
 static const IPAddress FALLBACK_DNS(0, 0, 0, 0);
 static const IPAddress FALLBACK_GW(0, 0, 0, 0);
-static const IPAddress FALLBACK_MASK(255, 255, 255, 0);
+static const IPAddress FALLBACK_MASK(255, 255, 0, 0);
 
 static void applyFallback() {
   Ethernet.begin(mac, FALLBACK_IP, FALLBACK_DNS, FALLBACK_GW, FALLBACK_MASK);
 
   Serial.print(F("Fallback ("));
-  Serial.print(F("169.254.1.77/24"));
+  Serial.print(F("169.254.1.77/16"));
   Serial.println(F("):"));
   Serial.print(F("IP: "));
   Serial.println(Ethernet.localIP());
