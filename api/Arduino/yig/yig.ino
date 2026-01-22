@@ -1,6 +1,7 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <EEPROM.h>
+#include "hostname_support.h"
 
 // -------------------- Pin mapping (from your notebook photo) --------------------
 // YIG D0..D11 are device bits; Arduino pins are:
@@ -33,6 +34,8 @@ static const uint16_t SETTLE_US    = 2;      // small settle after data set
 // -------------------- EEPROM MAC storage --------------------
 static const int EEPROM_MAGIC_ADDR = 0;
 static const int EEPROM_MAC_ADDR   = 1;
+
+static const char DEVICE_HOSTNAME[] = "yignano1";
 static const uint8_t EEPROM_MAGIC  = 0xA7;
 
 byte mac[6];
@@ -40,11 +43,23 @@ EthernetServer server(80);
 
 volatile uint16_t lastCode = 0;
 
-// Fallback static if DHCP fails:
-IPAddress fallbackIp(192, 168, 1, 77);
-IPAddress fallbackDns(192, 168, 1, 1);
-IPAddress fallbackGw(192, 168, 1, 1);
-IPAddress fallbackMask(255, 255, 255, 0);
+// Fallback if DHCP fails.
+static const IPAddress FALLBACK_IP(169, 254, 1, 77);
+static const IPAddress FALLBACK_DNS(0, 0, 0, 0);
+static const IPAddress FALLBACK_GW(0, 0, 0, 0);
+static const IPAddress FALLBACK_MASK(255, 255, 255, 0);
+
+static void applyFallback() {
+  Ethernet.begin(mac, FALLBACK_IP, FALLBACK_DNS, FALLBACK_GW, FALLBACK_MASK);
+
+  Serial.print(F("Fallback ("));
+  Serial.print(F("169.254.1.77/24"));
+  Serial.println(F("):"));
+  Serial.print(F("IP: "));
+  Serial.println(Ethernet.localIP());
+  Serial.print(F("Mask: "));
+  Serial.println(FALLBACK_MASK);
+}
 
 // -------------------- Helpers --------------------
 static void printMac(const byte m[6]) {
@@ -217,11 +232,13 @@ void setup() {
   // Ethernet init
   Ethernet.init(PIN_W5500_CS);
 
+  setDhcpHostnameIfSupported(Ethernet, DEVICE_HOSTNAME, 0);
+
   Serial.println(F("DHCP..."));
   int dhcpOk = Ethernet.begin(mac, 8000); // 8s timeout
   if (dhcpOk == 0) {
     Serial.println(F("DHCP failed. Using fallback static IP."));
-    Ethernet.begin(mac, fallbackIp, fallbackDns, fallbackGw, fallbackMask);
+    applyFallback();
   } else {
     Serial.println(F("DHCP OK."));
   }
