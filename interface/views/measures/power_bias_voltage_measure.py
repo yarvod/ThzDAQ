@@ -149,7 +149,7 @@ class PowerBiasVoltageThread(Thread):
                 self.angle_step,
             )
             if self.use_grid
-            else np.array([0])
+            else np.array([0.0])
         )
         volt_range = np.linspace(
             self.voltage_start * 1e-3,
@@ -175,7 +175,7 @@ class PowerBiasVoltageThread(Thread):
 
             results = self.get_results_format()
             results["id"] = angle_step
-            results["angle"] = angle
+            results["angle"] = float(angle)
 
             if angle_step != 0:
                 angle_success = self.motor.rotate(
