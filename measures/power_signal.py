@@ -1,33 +1,31 @@
-# Scanning voltage on power meter versus signal generator power
+# Scanning power on power meter versus signal generator power
 import json
 from datetime import datetime
 
 import numpy as np
 
 from api.Agilent.signal_generator import SignalGenerator
-from api.Keithley.power_supply import PowerSupply
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 
 nrx = NRXPowerMeter(delay=0)
-keithley = PowerSupply(host="169.254.156.103", gpib=22)
 signal = SignalGenerator(host="169.254.156.103", gpib=19)
 
 
-amp_range = np.linspace(-49, 25, 100)
+freq_range = np.linspace(12e9, 15e9, 100)
+power = -6
 result = {
-    "amp": [],
-    "power": [],
-    "voltage": [],
+    "frequency": [],
+    "power_meter": [],
 }
 initial_amp = signal.get_amplitude()
-for amp in amp_range:
-    signal.set_amplitude(amp)
+signal.set_amplitude(power)
+signal.set_rf_output_state(True)
+for freq in freq_range:
     amplitude = signal.get_amplitude()
     power = nrx.get_power()
-    voltage = keithley.get_voltage()
-    result["amp"].append(amplitude)
-    result["power"].append(power)
-    result["voltage"].append(voltage)
+    signal.set_frequency(freq)
+    result["power_meter"].append(power)
+    result["frequency"].append(freq)
 
 signal.set_amplitude(initial_amp)
 

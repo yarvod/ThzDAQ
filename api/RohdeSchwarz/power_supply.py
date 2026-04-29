@@ -89,9 +89,17 @@ class PowerSupplyHMP2030(BaseInstrument):
         self.set_channel(channel)
         return float(self.query(f"SOURce:VOLTage:LEVel:AMPLitude?"))
 
+    def set_source_voltage(self, voltage: float, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        self.write(f"SOURce:VOLTage:LEVel:AMPLitude {voltage}")
+
     def get_source_current(self, channel: HMP2030_CHANNEL_TYPES):
         self.set_channel(channel)
         return float(self.query(f"SOURce:CURRent:LEVel:AMPLitude?"))
+
+    def set_source_current(self, current: float, channel: HMP2030_CHANNEL_TYPES):
+        self.set_channel(channel)
+        self.write(f"SOURce:CURRent:LEVel:AMPLitude {current}")
 
     def get_source_voltage_current(self, channel: HMP2030_CHANNEL_TYPES):
         self.set_channel(channel)

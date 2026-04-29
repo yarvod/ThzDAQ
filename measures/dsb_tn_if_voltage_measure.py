@@ -16,7 +16,7 @@ from api.Chopper import chopper_manager
 from api.NationalInstruments.yig_filter import NiYIGManager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
-from store.state import state
+from threads import Thread
 from utils.functions import send_to_telegram, get_if_tn
 from utils.logger import configure_logger
 
@@ -48,23 +48,22 @@ class StateMeasure:
 
 class MeasThread(Thread):
     plot_signal = pg.QtCore.Signal(dict)
+    plot_tn_signal = pg.QtCore.Signal(dict)
     data_signal = pg.QtCore.Signal(dict)
 
     def run(self):
         # Инициализация оборудования
         sis = SisBlock(
-            host=state.BLOCK_ADDRESS,
-            port=state.BLOCK_PORT,
+            host="169.254.190.83",
+            port=9876,
             bias_dev="DEV2",
             ctrl_dev="DEV1",
+            offset_voltage=-0.187e-3,
+            offset_current=-1.3e-6,
         )
         sis.connect()
-        ni_yig = NiYIGManager(host=state.NI_IP)
-        nrx = NRXPowerMeter(delay=0, aperture_time=50)
-
-        # Параметры измерений
-        voltages_range = np.arange(2.3, 3.2, 0.1) * 1e-3
-        freq_range = np.linspace(3, 13, 300) * 1e9
+        ni_yig = NiYIGManager(host="169.254.0.86")
+        nrx = NRXPowerMeter(host="169.254.2.20", delay=0, aperture_time=50)
 
         data = {
             "type": "Tn(IF) for different SIS bias voltages",
@@ -90,7 +89,7 @@ class MeasThread(Thread):
 
                 # Измерение при горячей нагрузке
                 logger.info("Hot measure...")
-                chopper_manager.chopper.path0()
+                chopper_manager.chopper.align_to_hot()
                 time.sleep(2)
                 sis.set_bias_voltage(voltage)
                 for freq_step, freq in enumerate(freq_range, 1):
@@ -109,7 +108,7 @@ class MeasThread(Thread):
 
                 # Измерение при холодной нагрузке
                 logger.info("Cold measure...")
-                chopper_manager.chopper.path0()
+                chopper_manager.chopper.align_to_cold()
                 time.sleep(2)
                 sis.set_bias_voltage(voltage)
                 for freq_step, freq in enumerate(freq_range, 1):
@@ -119,7 +118,7 @@ class MeasThread(Thread):
                     _data["cold_power"].append(power)
                     self.plot_signal.emit(
                         {
-                            "new_plot": False,
+                            "new_plot": freq_step == 1,
                             "legend_postfix": f"Cold {voltage*1e3:.3f}mV",
                             "x": [freq / 1e9],
                             "y": [power],
@@ -135,11 +134,19 @@ class MeasThread(Thread):
                     th=data["t_hot"],
                     tc=data["t_cold"],
                 ).tolist()
+                self.plot_tn_signal.emit(
+                    {
+                        "new_plot": True,
+                        "legend_postfix": f"Tn {voltage * 1e3:.3f}mV",
+                        "x": freq_range / 1e9,
+                        "y": _data["tn"],
+                    }
+                )
                 data["data"].append(_data)
                 self.data_signal.emit(data)
 
         except (Exception, KeyboardInterrupt) as e:
-            logger.error(f"Exception: {e}")
+            logger.exception(f"Exception: {e}")
             send_to_telegram(f"Exception: {e}")
             sis.set_bias_voltage(0)
             chopper_manager.chopper.align_to_cold()
@@ -228,14 +235,22 @@ def main():
     styles = {"color": "#413C58", "font-size": "15px"}
 
     p1 = win.addPlot()
-    p1.setTitle("Tn(IF) Measure", color="#413C58", size="10pt")
+    p1.setTitle("P(IF) Measure", color="#413C58", size="10pt")
     p1.setLabel("bottom", "IF, GHz", **styles)
     p1.setLabel("left", "Power, dBm", **styles)
     p1.addLegend()
     p1.showGrid(x=True, y=True)
 
+    p2 = win.addPlot()
+    p2.setTitle("Tn(IF) Measure", color="#413C58", size="10pt")
+    p2.setLabel("bottom", "IF, GHz", **styles)
+    p2.setLabel("left", "Tn, K", **styles)
+    p2.addLegend()
+    p2.showGrid(x=True, y=True)
+
     thread = MeasThread()
     thread.plot_signal.connect(lambda data: plot_data(p1, data))
+    thread.plot_tn_signal.connect(lambda data: plot_data(p2, data))
     thread.data_signal.connect(collect_data)
     thread.finished.connect(save_data)
     thread.start()
@@ -246,6 +261,10 @@ def main():
 
 
 if __name__ == "__main__":
+    # Параметры измерений
+    voltages_range = np.arange(2.1, 2.5, 0.1) * 1e-3
+    freq_range = np.linspace(4, 12, 200) * 1e9
+
     try:
         main()
     except KeyboardInterrupt:

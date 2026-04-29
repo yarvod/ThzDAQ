@@ -23,6 +23,8 @@ if __name__ == "__main__":
         port=9876,
         bias_dev="DEV2",
         ctrl_dev="DEV1",
+        offset_voltage=-0.187e-3,
+        offset_current=-1.3e-6,
     )
     sis.connect()
     if_ranges = [

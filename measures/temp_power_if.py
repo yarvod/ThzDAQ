@@ -28,21 +28,12 @@ resistor_voltages = [
     0.4,
     0.8,
     1.2,
-    1.6,
-    2,
-    2.4,
-    2,
-    1.6,
-    1.2,
-    0.8,
-    0.4,
-    0,
 ]
-freqs = np.linspace(3, 13, 300)
+freqs = np.linspace(4, 12, 200)
 data = []
 
 
-def wait_temperature(diff=0.01):
+def wait_temperature(diff=0.05):
     min_max = 20
     step = 1
     mean_temp = None
