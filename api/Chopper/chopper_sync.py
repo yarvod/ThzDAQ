@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class Chopper:
+    CURRENT_REGISTER = int(0x0191)
+    HOLDING_CURRENT_CLOSED_LOOP_REGISTER = int(0x0193)
+    QUICK_STOP_TIME_REGISTER = int(0x6017)
+    PR_CONTROL_REGISTER = int(0x6002)
+
     def __init__(
         self,
         host: str = None,
@@ -92,14 +97,49 @@ class Chopper:
 
     def emergency_stop(self):
         self.client.write_register(
-            address=int(0x6002), value=int(0x040), slave=self.slave_address
+            address=self.PR_CONTROL_REGISTER, value=int(0x040), slave=self.slave_address
         )
         logger.debug("Emergency stop")
+
+    def read_register(self, address: int) -> int:
+        result = self.client.read_holding_registers(
+            address=address, count=1, slave=self.slave_address
+        )
+        return result.registers[0]
+
+    def write_register(self, address: int, value: int):
+        return self.client.write_register(
+            address=address, value=value, slave=self.slave_address
+        )
+
+    def get_peak_current(self) -> float:
+        """Peak current in amperes. Drive register unit is 0.1A."""
+        return self.read_register(self.CURRENT_REGISTER) / 10
+
+    def set_peak_current(self, current_a: float, save: bool = False):
+        """Set peak current in amperes. Use the motor/drive datasheet limits."""
+        value = round(current_a * 10)
+        self.write_register(self.CURRENT_REGISTER, value)
+        if save:
+            self.save_parameters_to_eeprom()
+
+    def get_holding_current_percent(self) -> int:
+        return self.read_register(self.HOLDING_CURRENT_CLOSED_LOOP_REGISTER)
+
+    def set_holding_current_percent(self, percent: int, save: bool = False):
+        if not 0 <= percent <= 100:
+            raise ValueError("holding current percent must be between 0 and 100")
+        self.write_register(self.HOLDING_CURRENT_CLOSED_LOOP_REGISTER, percent)
+        if save:
+            self.save_parameters_to_eeprom()
+
+    def set_quick_stop_time(self, time_ms: int):
+        self.write_register(self.QUICK_STOP_TIME_REGISTER, int(time_ms))
 
     def set_origin(self):
         """Set current position as 'Zero'"""
         self.client.write_register(
-            address=int(0x6002), value=int(0x021), slave=self.slave_address
+            address=self.PR_CONTROL_REGISTER, value=int(0x021), slave=self.slave_address
         )
         pos = self.get_actual_pos()
         logger.debug(f"Origin set, actual position (in pulses): {pos}")
@@ -236,40 +276,16 @@ class Chopper:
     def path2(self):
         logger.debug("[path2]!Axis in rotation!")
         logger.debug("[path2] Slowing down, wait for complete stop ...")
-        while True:
-            self.client.write_register(
-                address=int(0x6210), value=int(0b01000001), slave=self.slave_address
-            )  # relative position mode
-            # position high bits
-            self.client.write_register(
-                address=int(0x6211), value=int(0), slave=self.slave_address
-            )
-            # position low bits
-            self.client.write_register(
-                address=int(0x6212), value=int(0), slave=self.slave_address
-            )
-            # turn speed
-            self.client.write_register(
-                address=int(0x6213), value=int(4), slave=self.slave_address
-            )
-            # acc/decc time
-            self.client.write_register(
-                address=int(0x6214), value=int(12000), slave=self.slave_address
-            )
-            self.client.write_register(
-                address=int(0x6215), value=int(12000), slave=self.slave_address
-            )
-            # trigger PR0 motion
-            self.client.write_register(
-                address=int(0x6002), value=int(0x012), slave=self.slave_address
-            )
+        self.emergency_stop()
+        for _ in range(100):
             if self.get_actual_speed() < 0.1:
-                self.emergency_stop()
                 logger.debug("[path2] Stopped")
                 self.align()
                 logger.debug("[path2] Aligned")
                 break
             time.sleep(0.1)
+        else:
+            logger.warning("[path2] Stop timeout exceeded")
 
     def go_to_pos(self, pulse: int):
         starting_address = int(0x6219)
