@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class Chopper:
+    CONTINUOUS_ACC_TIME = 20000
+    CONTINUOUS_DEC_TIME = 20000
+    QUICK_STOP_TIME = 10000
+
     def __init__(
         self,
         host: str = None,
@@ -108,12 +112,21 @@ class Chopper:
         start_address = int(0x602C)
         count = 2
         result = self.client.read_holding_registers(
-            address=start_address, count=count, slave=1
+            address=start_address, count=count, slave=self.slave_address
         )
         actual_pos = self.client.convert_from_registers(
             registers=result.registers, data_type=self.client.DATATYPE.INT32
         )
         return actual_pos
+
+    def get_motion_status(self) -> int:
+        result = self.client.read_holding_registers(
+            address=int(0x1003), count=1, slave=self.slave_address
+        )
+        return result.registers[0]
+
+    def is_running(self) -> bool:
+        return bool(self.get_motion_status() & 0b100)
 
     def get_actual_speed(self) -> float:
         t1 = time.time()
@@ -221,10 +234,10 @@ class Chopper:
         # self.client.write_register(int(0x0191), 24, slave=self.slave_address)  # set max current 2.4 A
         # acc/dec (ms/1000 rpm)
         self.client.write_register(
-            address=int(0x620C), value=int(10000), slave=self.slave_address
+            address=int(0x620C), value=int(self.CONTINUOUS_ACC_TIME), slave=self.slave_address
         )
         self.client.write_register(
-            address=int(0x620D), value=int(5000), slave=self.slave_address
+            address=int(0x620D), value=int(self.CONTINUOUS_DEC_TIME), slave=self.slave_address
         )
         # trigger PR1 motion
         self.client.write_register(
@@ -236,42 +249,28 @@ class Chopper:
     def path2(self):
         logger.debug("[path2]!Axis in rotation!")
         logger.debug("[path2] Slowing down, wait for complete stop ...")
-        while True:
-            self.client.write_register(
-                address=int(0x6210), value=int(0b01000001), slave=self.slave_address
-            )  # relative position mode
-            # position high bits
-            self.client.write_register(
-                address=int(0x6211), value=int(0), slave=self.slave_address
-            )
-            # position low bits
-            self.client.write_register(
-                address=int(0x6212), value=int(0), slave=self.slave_address
-            )
-            # turn speed
-            self.client.write_register(
-                address=int(0x6213), value=int(4), slave=self.slave_address
-            )
-            # acc/decc time
-            self.client.write_register(
-                address=int(0x6214), value=int(12000), slave=self.slave_address
-            )
-            self.client.write_register(
-                address=int(0x6215), value=int(12000), slave=self.slave_address
-            )
-            # trigger PR0 motion
-            self.client.write_register(
-                address=int(0x6002), value=int(0x012), slave=self.slave_address
-            )
-            if self.get_actual_speed() < 0.1:
-                self.emergency_stop()
+        self.client.write_register(
+            address=int(0x6017), value=int(self.QUICK_STOP_TIME), slave=self.slave_address
+        )
+        self.emergency_stop()
+
+        deadline = time.monotonic() + self.QUICK_STOP_TIME / 1000 + 5
+        while time.monotonic() < deadline:
+            if not self.is_running():
                 logger.debug("[path2] Stopped")
-                self.align()
-                logger.debug("[path2] Aligned")
                 break
             time.sleep(0.1)
+        else:
+            logger.warning("[path2] Stop timeout exceeded")
 
-    def go_to_pos(self, pulse: int):
+    def go_to_pos(
+        self,
+        pulse: int,
+        speed: int = 25,
+        acc_time: int = 3000,
+        dec_time: int = 3000,
+        wait_time: float = 0.3,
+    ):
         starting_address = int(0x6219)
         registers = self.client.convert_to_registers(
             value=pulse, data_type=self.client.DATATYPE.INT32
@@ -286,26 +285,41 @@ class Chopper:
         )  # absolute position mode
         # Angular speed (rpm)
         self.client.write_register(
-            address=int(0x621B), value=int(25), slave=self.slave_address
+            address=int(0x621B), value=int(speed), slave=self.slave_address
         )
-        # acc/dec (ms/100 rpm)
+        # acc/dec (ms/1000 rpm)
         self.client.write_register(
-            address=int(0x621C), value=int(3000), slave=self.slave_address
+            address=int(0x621C), value=int(acc_time), slave=self.slave_address
         )
         self.client.write_register(
-            address=int(0x621D), value=int(3000), slave=self.slave_address
+            address=int(0x621D), value=int(dec_time), slave=self.slave_address
         )
         # trigger PR2 motion
         self.client.write_register(
             address=int(0x6002), value=int(0x013), slave=self.slave_address
         )
-        time.sleep(0.3)
+        time.sleep(wait_time)
 
-    def align(self):
+    def align(
+        self,
+        speed: int = 25,
+        acc_time: int = 3000,
+        dec_time: int = 3000,
+        wait_time: float = 0.3,
+    ):
         actual_pos = self.get_actual_pos()
         logger.debug(f"[align] Actual position: {actual_pos}")
         target = int(round(actual_pos / 2500) * 2500)
-        self.go_to_pos(target)
+        if abs(target - actual_pos) <= 50:
+            logger.debug("[align] Already aligned")
+            return
+        self.go_to_pos(
+            target,
+            speed=speed,
+            acc_time=acc_time,
+            dec_time=dec_time,
+            wait_time=wait_time,
+        )
         logger.debug(f"[align] Chopper aligned")
 
 

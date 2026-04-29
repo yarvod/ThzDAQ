@@ -1,13 +1,13 @@
 import logging
 
-from PySide6.QtCore import QThread, Qt, QTimer
+from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
     QGridLayout,
-    QSlider,
     QLabel,
     QHBoxLayout,
+    QDoubleSpinBox,
 )
 
 from api.Chopper import chopper_manager
@@ -27,39 +27,31 @@ class ChopperRotateCwThread(QThread):
 
     def run(self):
         if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
             return
         chopper_manager.chopper.path0(self.angle)
         logger.info("Finish rotate cw")
-        self.finished.emit()
 
 
 class ChopperStartContinuesRotationThread(QThread):
     def run(self):
         if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
             return
         chopper_manager.chopper.set_frequency(state.CHOPPER_FREQ)
         chopper_manager.chopper.path1()
-        self.finished.emit()
 
 
 class ChopperStopContinuesRotationThread(QThread):
     def run(self):
         if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
             return
         chopper_manager.chopper.path2()
-        self.finished.emit()
 
 
 class ChopperAlignThread(QThread):
     def run(self):
         if not chopper_manager.chopper.client.connected:
-            self.finished.emit()
             return
         chopper_manager.chopper.align_to_hot()
-        self.finished.emit()
 
 
 class ChopperManagingGroup(QGroupBox):
@@ -80,20 +72,16 @@ class ChopperManagingGroup(QGroupBox):
         horizontal_layout.addWidget(self.btnAlign)
         layout.addLayout(horizontal_layout)
 
-        self.speedSliderLabel = QLabel(self)
-        self.speedSliderLabel.setText(f"Speed {state.CHOPPER_FREQ} Hz")
-        self.speedSlider = QSlider(self)
-        self.speedSlider.setMinimum(1)
-        self.speedSlider.setMaximum(20)
-        self.speedSlider.setValue(state.CHOPPER_FREQ)
-        self.speedSlider.setOrientation(Qt.Orientation.Horizontal)
-        self.speedSlider.setInvertedControls(False)
-        self.speedSlider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.speedSlider.setTickInterval(1)
-        self.speedSlider.valueChanged.connect(self.updateChopperFreq)
+        self.frequencyLabel = QLabel(self)
+        self.frequencyLabel.setText("Frequency, Hz")
+        self.frequencyInput = QDoubleSpinBox(self)
+        self.frequencyInput.setRange(0.1, 20)
+        self.frequencyInput.setDecimals(2)
+        self.frequencyInput.setSingleStep(0.1)
+        self.frequencyInput.setValue(float(state.CHOPPER_FREQ))
 
-        grid_layout.addWidget(self.speedSliderLabel, 1, 0)
-        grid_layout.addWidget(self.speedSlider, 1, 1)
+        grid_layout.addWidget(self.frequencyLabel, 1, 0)
+        grid_layout.addWidget(self.frequencyInput, 1, 1)
         layout.addLayout(grid_layout)
 
         self.btnStartContinuesRotate = Button("Continues rotate", animate=True)
@@ -107,72 +95,69 @@ class ChopperManagingGroup(QGroupBox):
 
         self.setLayout(layout)
 
-    # Events methods
-    def updateChopperFreq(self):
-        state.CHOPPER_FREQ = self.speedSlider.value()
-        self.speedSliderLabel.setText(f"Speed {state.CHOPPER_FREQ} Hz")
+    def startThreadWithTimeout(
+        self, thread: QThread, button: Button, timeout_ms: int, label: str
+    ):
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(timeout_ms)
+
+        def cleanup():
+            timer.stop()
+            timer.deleteLater()
+            button.setEnabled(True)
+
+        def terminate_thread():
+            if not thread.isRunning():
+                return
+            logger.warning(f"[{label}] timeout exceeded, terminating thread")
+            thread.terminate()
+            thread.wait(1000)
+
+        button.setEnabled(False)
+        thread.finished.connect(cleanup)
+        timer.timeout.connect(terminate_thread)
+        timer.start()
+        thread.start()
 
     # Buttons methods
     def rotateCw(self, angle: float):
-        self.btnRotateCw.setEnabled(False)
         self.chopper_rotate_cw_thread = ChopperRotateCwThread(angle=angle)
-        self.chopper_rotate_cw_thread.finished.connect(
-            lambda: self.btnRotateCw.setEnabled(True)
+        self.startThreadWithTimeout(
+            thread=self.chopper_rotate_cw_thread,
+            button=self.btnRotateCw,
+            timeout_ms=self.chopper_rotate_cw_thread.timeout * 1000,
+            label="rotateCw",
         )
-        self.chopper_rotate_cw_thread.start()
-
-        self.time_rotate_cw = QTimer()
-        self.time_rotate_cw.setInterval(self.chopper_rotate_cw_thread.timeout * 1000)
-        self.time_rotate_cw.timeout.connect(
-            lambda: self.chopper_rotate_cw_thread.terminate()
-        )
-        self.time_rotate_cw.start()
 
     def startContinuesRotation(self):
-        state.CHOPPER_FREQ = self.speedSlider.value()
+        state.CHOPPER_FREQ = self.frequencyInput.value()
         self.chopper_start_continues_rotation_thread = (
             ChopperStartContinuesRotationThread()
         )
-        self.btnStartContinuesRotate.setEnabled(False)
-        self.chopper_start_continues_rotation_thread.finished.connect(
-            lambda: self.btnStartContinuesRotate.setEnabled(True)
+        self.startThreadWithTimeout(
+            thread=self.chopper_start_continues_rotation_thread,
+            button=self.btnStartContinuesRotate,
+            timeout_ms=10000,
+            label="startContinuesRotation",
         )
-        self.chopper_start_continues_rotation_thread.start()
-
-        self.timer_continues_rotation = QTimer()
-        self.timer_continues_rotation.setInterval(10000)
-        self.timer_continues_rotation.timeout.connect(
-            lambda: self.chopper_start_continues_rotation_thread.terminate()
-        )
-        self.timer_continues_rotation.start()
 
     def stopContinuesRotation(self):
         self.chopper_stop_continues_rotation_thread = (
             ChopperStopContinuesRotationThread()
         )
-        self.btnStopContinuesRotate.setEnabled(False)
-        self.chopper_stop_continues_rotation_thread.finished.connect(
-            lambda: self.btnStopContinuesRotate.setEnabled(True)
+        self.startThreadWithTimeout(
+            thread=self.chopper_stop_continues_rotation_thread,
+            button=self.btnStopContinuesRotate,
+            timeout_ms=25000,
+            label="stopContinuesRotation",
         )
-        self.chopper_stop_continues_rotation_thread.start()
-        self.timer_stop_continues_rotation = QTimer()
-        self.timer_stop_continues_rotation.setInterval(10000)
-        self.timer_stop_continues_rotation.timeout.connect(
-            lambda: self.chopper_stop_continues_rotation_thread.terminate()
-        )
-        self.timer_stop_continues_rotation.start()
 
     def chopperAlign(self):
         self.chopper_align_thread = ChopperAlignThread()
-        self.chopper_align_thread.finished.connect(
-            lambda: self.btnAlign.setEnabled(True)
+        self.startThreadWithTimeout(
+            thread=self.chopper_align_thread,
+            button=self.btnAlign,
+            timeout_ms=10000,
+            label="chopperAlign",
         )
-        self.btnAlign.setEnabled(False)
-        self.chopper_align_thread.start()
-
-        self.timer_chopper_align = QTimer()
-        self.timer_chopper_align.setInterval(10000)
-        self.timer_chopper_align.timeout.connect(
-            lambda: self.chopper_align_thread.terminate()
-        )
-        self.timer_chopper_align.start()
