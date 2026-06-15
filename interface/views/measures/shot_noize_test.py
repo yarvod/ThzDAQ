@@ -123,7 +123,7 @@ class MeasurePowerThread(Thread):
         )
         self.yig_type = yig
         self.yig = NiYIGManager()
-        self.initial_freq = state.DIGITAL_YIG_MAP[yig].value
+        self.initial_freq = float(state.DIGITAL_YIG_MAP[yig].value) * 1e9
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.TA_SIS_CALIBRATION, data={}
         )
