@@ -50,6 +50,12 @@ class SignalGenerator(BaseInstrument):
     def set_frequency(self, value: float) -> None:
         self.adapter.write(f":FREQuency:FIXed {value} ", eq_addr=self.gpib)
 
+    def get_frequency_multiplier(self) -> float:
+        return float(self.adapter.query(":FREQuency:MULTiplier?", eq_addr=self.gpib))
+
+    def set_frequency_multiplier(self, value: float) -> None:
+        self.adapter.write(f":FREQuency:MULTiplier {value}", eq_addr=self.gpib)
+
     def get_attenuation_level(self) -> float:
         return float(self.adapter.query(":POWer:ATTenuation?", eq_addr=self.gpib))
 

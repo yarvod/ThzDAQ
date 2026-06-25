@@ -43,6 +43,15 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         self.btnSetFrequency = Button("Set frequency")
         self.btnSetFrequency.clicked.connect(self.set_frequency)
 
+        self.frequencyMultiplierLabel = QLabel(self)
+        self.frequencyMultiplierLabel.setText("Frequency multiplier")
+        self.frequencyMultiplier = DoubleSpinBox(self)
+        self.frequencyMultiplier.setRange(0.001, 1000)
+        self.frequencyMultiplier.setValue(1)
+        self.frequencyMultiplier.setDecimals(3)
+        self.btnSetFrequencyMultiplier = Button("Set multiplier")
+        self.btnSetFrequencyMultiplier.clicked.connect(self.set_frequency_multiplier)
+
         self.amplitudeLabel = QLabel(self)
         self.amplitudeLabel.setText("Amplitude, dBm")
         self.amplitude = DoubleSpinBox(self)
@@ -59,10 +68,13 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         grid_layout.addWidget(self.frequencyLabel, 3, 0)
         grid_layout.addWidget(self.frequency, 3, 1)
         grid_layout.addWidget(self.btnSetFrequency, 3, 2)
-        grid_layout.addWidget(HLine(self), 4, 0, 1, 3)
-        grid_layout.addWidget(self.amplitudeLabel, 5, 0)
-        grid_layout.addWidget(self.amplitude, 5, 1)
-        grid_layout.addWidget(self.btnSetAmplitude, 5, 2)
+        grid_layout.addWidget(self.frequencyMultiplierLabel, 4, 0)
+        grid_layout.addWidget(self.frequencyMultiplier, 4, 1)
+        grid_layout.addWidget(self.btnSetFrequencyMultiplier, 4, 2)
+        grid_layout.addWidget(HLine(self), 5, 0, 1, 3)
+        grid_layout.addWidget(self.amplitudeLabel, 6, 0)
+        grid_layout.addWidget(self.amplitude, 6, 1)
+        grid_layout.addWidget(self.btnSetAmplitude, 6, 2)
         layout.addLayout(grid_layout)
 
         self.setLayout(layout)
@@ -71,6 +83,10 @@ class AgilentSignalGeneratorManagerWidget(QGroupBox):
         freq = self.frequency.value()
         agilent = SignalGenerator(**self.config.dict())
         agilent.set_frequency(freq * 1e9)
+
+    def set_frequency_multiplier(self):
+        agilent = SignalGenerator(**self.config.dict())
+        agilent.set_frequency_multiplier(self.frequencyMultiplier.value())
 
     def set_amplitude(self):
         agilent = SignalGenerator(**self.config.dict())
