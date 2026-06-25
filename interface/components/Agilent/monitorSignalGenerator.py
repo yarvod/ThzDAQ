@@ -40,8 +40,6 @@ class StreamThread(Thread):
             time.sleep(0.5)
             frequency = self.signal.get_frequency()
             if frequency:
-                if self.config.multiply_frequency:
-                    frequency *= 18
                 self.frequency.emit(frequency)
 
             amplitude = self.signal.get_power()

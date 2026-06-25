@@ -43,11 +43,7 @@ class AgilentSignalGeneratorConfig(DeviceConfig):
             delay=delay,
             config_manager=config_manager,
         )
-        self.multiply_frequency = False
         self.thread_set_config = False
-
-    def set_multiply_frequency(self, value: bool):
-        self.multiply_frequency = value
 
 
 class AgilentSignalGeneratorManager(DeviceManager):
