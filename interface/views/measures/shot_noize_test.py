@@ -124,6 +124,7 @@ class MeasurePowerThread(Thread):
         self.yig_type = yig
         self.yig = NiYIGManager()
         self.initial_freq = float(state.DIGITAL_YIG_MAP[yig].value) * 1e9
+        self._pre_exit_done = False
         self.measure = MeasureModel.objects.create(
             measure_type=MeasureModel.type_class.TA_SIS_CALIBRATION, data={}
         )
@@ -131,10 +132,15 @@ class MeasurePowerThread(Thread):
 
     def run(self):
         try:
-            self.sis = SisBlock(**self.config.dict())
-        except DeviceConnectionError as e:
+            self._run()
+        finally:
             self.pre_exit()
             self.finished.emit()
+
+    def _run(self):
+        try:
+            self.sis = SisBlock(**self.config.dict())
+        except DeviceConnectionError as e:
             return
         step = 0
         steps = 2 * len(self.freq_range) + 1
@@ -172,9 +178,9 @@ class MeasurePowerThread(Thread):
                 step += 1
                 self.progress.emit(round(step / steps * 100))
                 freq_point = linear(freq * 1e9, *state.CALIBRATION_DIGITAL_FREQ_2_POINT)
-                resp = self.yig.write_task(freq_point)
+                resp = self.yig.write_task(freq_point, yig=self.yig_type)
                 resp_int = resp.get("result", None)
-                if resp_int:
+                if resp_int is not None:
                     freq = round(
                         linear(resp_int, *state.CALIBRATION_DIGITAL_POINT_2_FREQ)
                         * 1e-9,
@@ -228,14 +234,21 @@ class MeasurePowerThread(Thread):
         step += 1
         self.progress.emit(round(step / steps * 100))
 
-        self.pre_exit()
-        self.finished.emit()
-
     def pre_exit(self, *args, **kwargs):
-        self.measure.save()
-        self.sis.disconnect()
-        del self.sis
-        del self.nrx
+        if self._pre_exit_done:
+            return
+        self._pre_exit_done = True
+        try:
+            if self.initial_freq > 0:
+                resp = self.yig.set_frequency(self.initial_freq, yig=self.yig_type)
+                if resp is not None:
+                    state.DIGITAL_YIG_MAP[self.yig_type].value = resp
+        finally:
+            self.measure.save()
+            if self.sis is not None:
+                self.sis.disconnect()
+                del self.sis
+            del self.nrx
 
 
 class ShotNoizeMeasurementWidget(QWidget):

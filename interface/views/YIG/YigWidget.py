@@ -59,6 +59,7 @@ class MeasureThread(Thread):
         self.measure.save(finish=False)
 
         self.initial_freq = float(state.DIGITAL_YIG_MAP[yig].value) * 1e9
+        self._pre_exit_done = False
 
     def get_results_format(self):
         if not state.CHOPPER_SWITCH:
@@ -70,6 +71,13 @@ class MeasureThread(Thread):
         }
 
     def run(self):
+        try:
+            self._run()
+        finally:
+            self.pre_exit()
+            self.finished.emit()
+
+    def _run(self):
         results = self.get_results_format()
         freq_range = np.linspace(
             state.NI_FREQ_FROM,
@@ -170,16 +178,22 @@ class MeasureThread(Thread):
 
             chopper_manager.chopper.align_to_cold()
 
-        self.pre_exit()
-        self.finished.emit()
-
     def pre_exit(self):
+        if self._pre_exit_done:
+            return
+        self._pre_exit_done = True
         state.NI_STABILITY_MEAS = False
-        resp = self.ni.set_frequency(self.initial_freq, yig=self.yig)
-        if resp:
-            state.DIGITAL_YIG_MAP[self.yig].value = resp
-        self.nrx.adapter.close()
-        self.measure.save()
+        try:
+            if self.initial_freq > 0:
+                resp = self.ni.set_frequency(self.initial_freq, yig=self.yig)
+            else:
+                resp = None
+                logger.warning("Skip YIG restore: initial frequency is unknown")
+            if resp is not None:
+                state.DIGITAL_YIG_MAP[self.yig].value = resp
+        finally:
+            self.nrx.adapter.close()
+            self.measure.save()
 
 
 class YIGWidget(QWidget):
