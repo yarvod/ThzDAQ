@@ -1,5 +1,7 @@
 .idea
 venv
+.venv
+.uv-cache
 build
 dist
 *__pycache__
