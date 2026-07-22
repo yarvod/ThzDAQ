@@ -1,4 +1,5 @@
 import logging
+import json
 import time
 from datetime import datetime
 
@@ -14,12 +15,15 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QHBoxLayout,
     QCheckBox,
+    QDialog,
+    QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal, QSettings
+from PySide6.QtCore import Qt, Signal
 
 from interface.components.Scontel.sisDemagnetisationWidget import (
     SisDemagnetisationWidget,
 )
+from interface.components.Scontel.sisCalibrationDialog import SisCalibrationDialog
 from interface.components.ui.Button import Button
 from store import ScontelSisBlockManager
 from store.state import state
@@ -80,34 +84,34 @@ class BlockCalibrateThread(Thread):
     def run(self):
         try:
             self.block = SisBlock(**self.config.dict())
-
-            settings = QSettings("settings.ini", QSettings.IniFormat)
-
-            vadc4 = settings.value("SIS_Block_Cals/vadc4", None)
-            cadc4 = settings.value("SIS_Block_Cals/cadc4", None)
-            vadc2 = settings.value("SIS_Block_Cals/vadc2", None)
-            cadc2 = settings.value("SIS_Block_Cals/cadc2", None)
-
-            if vadc4:
-                vadc4 = [float(_) for _ in vadc4]
-                self.block.adapter.query(f"BIAS:DEV4:VADC {vadc4}")
-            if cadc4:
-                cadc4 = [float(_) for _ in cadc4]
-                self.block.adapter.query(f"BIAS:DEV4:CADC {cadc4}")
-
-            if vadc2:
-                vadc2 = [float(_) for _ in vadc2]
-                self.block.adapter.query(f"BIAS:DEV2:VADC {vadc2}")
-            if cadc2:
-                cadc2 = [float(_) for _ in cadc2]
-                self.block.adapter.query(f"BIAS:DEV2:CADC {cadc2}")
-
-            self.block.adapter.query("GENeral:DEVice2:WriteEEProm")
-            self.block.adapter.query("GENeral:DEVice4:WriteEEProm")
-            del self.block
+            payload = json.dumps(
+                self.config.calibration_coefficients,
+                ensure_ascii=True,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+            self.block.adapter.query(f"BIAS:{self.config.bias_dev}:EEPR {payload}")
+            logger.info(
+                "Calibration coefficients written to SIS block %s (%s)",
+                self.config.cid,
+                self.config.bias_dev,
+            )
         except DeviceConnectionError as e:
             logger.exception(f"{e}", exc_info=True)
-        self.finished.emit()
+        except Exception:
+            logger.exception(
+                "Unable to calibrate SIS block %s", self.config.cid, exc_info=True
+            )
+        finally:
+            if self.block is not None:
+                try:
+                    self.block.disconnect()
+                except Exception:
+                    logger.exception(
+                        "Unable to disconnect SIS block %s after calibration",
+                        self.config.cid,
+                    )
+            self.finished.emit()
 
 
 class BlockStreamThread(Thread):
@@ -637,6 +641,10 @@ class BlockTabWidget(QWidget):
 
         self.btnCalibrateBlock = Button("Calibrate sis block", animate=True)
         self.btnCalibrateBlock.clicked.connect(self.calibrate_sis_block)
+        self.btnCalibrationCoefficients = Button("Коэффициенты")
+        self.btnCalibrationCoefficients.clicked.connect(
+            self.edit_calibration_coefficients
+        )
 
         self.offsetVoltageLabel = QLabel("Voltage offset, mV", self)
         self.offsetVoltage = DoubleSpinBox(self)
@@ -675,6 +683,7 @@ class BlockTabWidget(QWidget):
         layout.addWidget(self.offsetCurrent, 5, 1)
         layout.addWidget(self.btnSetOffsetCurrent, 5, 2)
         layout.addWidget(self.btnCalibrateBlock, 6, 0)
+        layout.addWidget(self.btnCalibrationCoefficients, 6, 1)
 
         self.rowValuesSet.setLayout(layout)
 
@@ -713,9 +722,34 @@ class BlockTabWidget(QWidget):
         self.calibrate_thread.finished.connect(
             lambda: self.btnCalibrateBlock.setEnabled(True)
         )
+        self.calibrate_thread.finished.connect(
+            lambda: self.btnCalibrationCoefficients.setEnabled(True)
+        )
 
         self.btnCalibrateBlock.setEnabled(False)
+        self.btnCalibrationCoefficients.setEnabled(False)
         self.calibrate_thread.start()
+
+    def edit_calibration_coefficients(self):
+        config = ScontelSisBlockManager.get_config(self.cid)
+        dialog = SisCalibrationDialog(
+            self,
+            block_name=config.name,
+            bias_dev=config.bias_dev,
+            calibration_coefficients=config.calibration_coefficients,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            ScontelSisBlockManager.save_calibration_coefficients(
+                self.cid, dialog.calibration_coefficients
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "Unable to save calibration coefficients",
+                str(error),
+            )
 
     def createGroupCTRLScan(self):
         self.groupCTRLScan = QGroupBox("Scan CTRL current")

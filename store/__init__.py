@@ -1,6 +1,7 @@
+from copy import deepcopy
 from typing import Union, Optional
 
-from PySide6.QtCore import Property, Signal
+from PySide6.QtCore import Property, QSettings, Signal
 
 import settings
 from store.adapterConfig import AdapterManager
@@ -11,6 +12,10 @@ from store.deviceConfig import (
     DeviceEventManager,
 )
 from store.gridAngleModel import GridAngleModel
+from store.sisCalibration import (
+    default_sis_calibration,
+    normalize_sis_calibration,
+)
 
 
 class KeithleyPowerSupplyManager(DeviceManager):
@@ -202,6 +207,7 @@ class ScontelSisBlockConfig(DeviceConfig):
         delay: float = 0,
         offset_voltage: float = 0,
         offset_current: float = 0,
+        calibration_coefficients: Optional[dict] = None,
         config_manager=None,
     ):
         super().__init__(
@@ -225,6 +231,11 @@ class ScontelSisBlockConfig(DeviceConfig):
         self.thread_demagnetization = False
         self.offset_voltage = offset_voltage
         self.offset_current = offset_current
+        if calibration_coefficients is None:
+            calibration_coefficients = default_sis_calibration(bias_dev)
+        self.calibration_coefficients = normalize_sis_calibration(
+            calibration_coefficients
+        )
 
     @Property("QString", notify=signal_bias_dev)
     def bias_dev(self):
@@ -257,6 +268,7 @@ class ScontelSisBlockConfig(DeviceConfig):
             "ctrl_dev": self._ctrl_dev,
             "offset_voltage": self.offset_voltage,
             "offset_current": self.offset_current,
+            "calibration_coefficients": deepcopy(self.calibration_coefficients),
         }
         old_dict.update(new_dict)
         return old_dict
@@ -281,6 +293,54 @@ class ScontelSisBlockManager(DeviceManager):
     @classmethod
     def get_config(cls, cid: int) -> Union[ScontelSisBlockConfig, None]:
         return super().get_config(cid)
+
+    @classmethod
+    def restore_config(cls, qsettings):
+        configs = qsettings.value(f"Configs/{cls.name}", None)
+        if not configs:
+            return
+
+        initialized = False
+        for stored_config in configs:
+            config = dict(stored_config)
+            if "calibration_coefficients" not in config:
+                bias_dev = config.get("bias_dev", "DEV4")
+                config["calibration_coefficients"] = default_sis_calibration(bias_dev)
+                initialized = True
+            config.pop("cid", None)
+            config.pop("_name", None)
+            cls.add_config(**config)
+
+        cls.add_configs_to_setup_widget()
+        if initialized:
+            cls.store_config(qsettings)
+            qsettings.sync()
+
+    @classmethod
+    def save_calibration_coefficients(
+        cls,
+        cid: int,
+        calibration_coefficients: dict,
+        qsettings=None,
+    ) -> dict:
+        config = cls.get_config(cid)
+        if config is None:
+            raise ValueError(f"SIS block configuration {cid} does not exist")
+
+        normalized = normalize_sis_calibration(calibration_coefficients)
+        previous = deepcopy(config.calibration_coefficients)
+        config.calibration_coefficients = normalized
+        if qsettings is None:
+            qsettings = QSettings("settings.ini", QSettings.IniFormat)
+        try:
+            cls.store_config(qsettings)
+            qsettings.sync()
+            if qsettings.status() != QSettings.Status.NoError:
+                raise OSError("Unable to save calibration coefficients to settings")
+        except Exception:
+            config.calibration_coefficients = previous
+            raise
+        return deepcopy(normalized)
 
 
 class RohdeSchwarzPowerSupplyConfig(DeviceConfig):
