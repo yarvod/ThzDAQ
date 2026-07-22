@@ -1,6 +1,6 @@
 from typing import Union, Optional, Type, Any
 
-from PySide6.QtCore import QObject, Property, Signal
+from PySide6.QtCore import QObject, Property, QSettings, QSignalBlocker, Signal
 
 import settings
 from utils.dock import Dock
@@ -178,9 +178,33 @@ class DeviceManager:
         return cls.configs.filter(cid=cid).first()
 
     @classmethod
+    def update_combobox(cls, combobox):
+        selected_cid = combobox.currentData()
+        selected_text = combobox.currentText()
+        blocker = QSignalBlocker(combobox)
+        combobox.clear()
+        for config in cls.configs:
+            combobox.addItem(config.name, config.cid)
+
+        selected_index = combobox.findData(selected_cid)
+        if selected_index < 0 and selected_text:
+            selected_index = combobox.findText(selected_text)
+        if selected_index >= 0:
+            combobox.setCurrentIndex(selected_index)
+        del blocker
+
+    @classmethod
     def store_config(cls, qsettings):
         configs = [c.dict() for c in cls.configs]
         qsettings.setValue(f"Configs/{cls.name}", configs)
+
+    @classmethod
+    def persist_config(cls, qsettings=None) -> bool:
+        if qsettings is None:
+            qsettings = QSettings("settings.ini", QSettings.IniFormat)
+        cls.store_config(qsettings)
+        qsettings.sync()
+        return qsettings.status() == QSettings.Status.NoError
 
     @classmethod
     def restore_config(cls, qsettings):
@@ -200,12 +224,14 @@ class DeviceManager:
             cls.setup_widget.create_device_info_widget(config, **config.dict())
 
     @classmethod
-    def delete_config(cls, cid: int):
+    def delete_config(cls, cid: int, persist: bool = True):
         Dock.delete_widget_from_dock(
             name=cls.configs.filter(cid=cid).first().name,
         )
         index = cls.configs.get_index_by_cid(cid=cid)
         if index is not None:
             cls.configs.delete_by_index(index)
+            if persist:
+                cls.persist_config()
             if cls.event_manager is not None:
                 cls.event_manager.configs_updated.emit()

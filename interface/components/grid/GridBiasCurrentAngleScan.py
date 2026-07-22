@@ -9,11 +9,12 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QHBoxLayout,
     QVBoxLayout,
-    QComboBox,
+    QMessageBox,
 )
 
 from api.Arduino.grid import GridDevice
 from api.Scontel.sis_block import SisBlock
+from interface.components.deviceComboBox import DeviceComboBox
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from store import ScontelSisBlockManager, GridManager, GridConfig
@@ -138,10 +139,7 @@ class GridBiasCurrentScan(QGroupBox):
 
         self.sisConfigLabel = QLabel(self)
         self.sisConfigLabel.setText("SIS block device")
-        self.sisConfig = QComboBox(self)
-        ScontelSisBlockManager.event_manager.configs_updated.connect(
-            lambda: ScontelSisBlockManager.update_sis_config(self)
-        )
+        self.sisConfig = DeviceComboBox(self, ScontelSisBlockManager)
 
         self.angleStartLabel = QLabel(self)
         self.angleStartLabel.setText("Angle start, degree")
@@ -182,10 +180,11 @@ class GridBiasCurrentScan(QGroupBox):
         layout.addLayout(hlayout)
         self.setLayout(layout)
 
-        ScontelSisBlockManager.update_sis_config(self)
-
     def start_measure(self):
-        sis_cid = ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid
+        sis_cid = self.sisConfig.current_cid()
+        if sis_cid is None:
+            QMessageBox.warning(self, "Device is not selected", "Select a SIS block")
+            return
 
         self.thread = MeasureThread(
             sis_cid=sis_cid,

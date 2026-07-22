@@ -145,12 +145,8 @@ class RohdeSchwarzVnaZva67Manager(DeviceManager):
 
     @classmethod
     def update_vna_config(cls, widget):
-        names = cls.configs.list_of_names()
         vna_config = getattr(widget, "vnaConfig")
-        for i in range(vna_config.count()):
-            vna_config.removeItem(i)
-        if len(names):
-            vna_config.insertItems(0, names)
+        cls.update_combobox(vna_config)
 
 
 class RohdeSchwarzSpectrumFsek30Config(DeviceConfig):
@@ -283,12 +279,8 @@ class ScontelSisBlockManager(DeviceManager):
 
     @classmethod
     def update_sis_config(cls, widget):
-        names = cls.configs.list_of_names()
         sis_config = getattr(widget, "sisConfig")
-        for i in range(sis_config.count()):
-            sis_config.removeItem(i)
-        if len(names):
-            sis_config.insertItems(0, names)
+        cls.update_combobox(sis_config)
 
     @classmethod
     def get_config(cls, cid: int) -> Union[ScontelSisBlockConfig, None]:
@@ -420,12 +412,8 @@ class GridManager(DeviceManager):
 
     @classmethod
     def update_config(cls, widget):
-        names = cls.configs.list_of_names()
         config = getattr(widget, "gridConfig")
-        for i in range(config.count()):
-            config.removeItem(i)
-        if len(names):
-            config.insertItems(0, names)
+        cls.update_combobox(config)
 
 
 class PrologixManager(AdapterManager):

@@ -12,13 +12,14 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QCheckBox,
     QProgressBar,
-    QComboBox,
+    QMessageBox,
 )
 
 from api import SisBlock
 from api.Arduino.grid import GridDevice
 from api.Chopper import chopper_manager
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
+from interface.components.deviceComboBox import DeviceComboBox
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.Lines import HLine
@@ -320,10 +321,7 @@ class PowerBiasVoltageMeasureWidget(QWidget):
 
         self.gridConfigLabel = QLabel(self)
         self.gridConfigLabel.setText("Grid device")
-        self.gridConfig = QComboBox(self)
-        GridManager.event_manager.configs_updated.connect(
-            lambda: GridManager.update_config(self)
-        )
+        self.gridConfig = DeviceComboBox(self, GridManager)
 
         self.angleStartLabel = QLabel("Angle start, degree", self)
         self.angleStartLabel.setHidden(~self.useGrid.isChecked())
@@ -352,10 +350,7 @@ class PowerBiasVoltageMeasureWidget(QWidget):
 
         self.sisConfigLabel = QLabel(self)
         self.sisConfigLabel.setText("SIS block device")
-        self.sisConfig = QComboBox(self)
-        ScontelSisBlockManager.event_manager.configs_updated.connect(
-            lambda: ScontelSisBlockManager.update_sis_config(self)
-        )
+        self.sisConfig = DeviceComboBox(self, ScontelSisBlockManager)
 
         self.voltFromLabel = QLabel(self)
         self.voltFromLabel.setText("Bias voltage from, mV")
@@ -441,6 +436,15 @@ class PowerBiasVoltageMeasureWidget(QWidget):
         self.angleStep.setHidden(True)
 
     def start_measure_step_bias_power(self):
+        sis_cid = self.sisConfig.current_cid()
+        grid_cid = self.gridConfig.current_cid() if self.useGrid.isChecked() else None
+        if sis_cid is None:
+            QMessageBox.warning(self, "Device is not selected", "Select a SIS block")
+            return
+        if self.useGrid.isChecked() and grid_cid is None:
+            QMessageBox.warning(self, "Device is not selected", "Select a GRID device")
+            return
+
         state.POWER_BIAS_VOLTAGE_MEASURE_THREAD = True
 
         self.power_bias_thread = PowerBiasVoltageThread(
@@ -448,19 +452,13 @@ class PowerBiasVoltageMeasureWidget(QWidget):
             angle_start=self.angleStart.value(),
             angle_stop=self.angleStop.value(),
             angle_step=self.angleStep.value(),
-            sis_cid=getattr(
-                ScontelSisBlockManager.configs[self.sisConfig.currentIndex()],
-                "cid",
-                None,
-            ),
+            sis_cid=sis_cid,
             voltage_start=self.voltFrom.value(),
             voltage_stop=self.voltTo.value(),
             voltage_points=int(self.voltPoints.value()),
             voltage_step_delay=self.voltStepDelay.value(),
             chopper_switch=self.useChopperSwitch.isChecked(),
-            grid_cid=getattr(
-                GridManager.configs[self.gridConfig.currentIndex()], "cid", None
-            ),
+            grid_cid=grid_cid,
         )
 
         self.gridBiasPowerGraphWindow = Dock.ex.dock_manager.findDockWidget("P-V curve")

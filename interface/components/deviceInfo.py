@@ -126,6 +126,7 @@ class DeviceInfo(QWidget):
     def update_config_initialize(self, kwargs):
         for k, v in kwargs.items():
             self.config.__setattr__(k, v)
+        self.config.config_manager.persist_config()
         self.initialize()
 
     def edit(self):

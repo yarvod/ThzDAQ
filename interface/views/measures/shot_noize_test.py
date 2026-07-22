@@ -10,12 +10,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QProgressBar,
     QLabel,
-    QComboBox,
+    QMessageBox,
 )
 
 from api.NationalInstruments.yig_filter import NiYIGManager, YigType
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
 from api.Scontel.sis_block import SisBlock
+from interface.components.deviceComboBox import DeviceComboBox
 from interface.components.ui.Button import Button
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
 from interface.components.ui.SpinBox import SpinBox
@@ -278,10 +279,7 @@ class ShotNoizeMeasurementWidget(QWidget):
 
         self.sisConfigLabel = QLabel(self)
         self.sisConfigLabel.setText("SIS block device")
-        self.sisConfig = QComboBox(self)
-        ScontelSisBlockManager.event_manager.configs_updated.connect(
-            lambda: ScontelSisBlockManager.update_sis_config(self)
-        )
+        self.sisConfig = DeviceComboBox(self, ScontelSisBlockManager)
 
         self.voltage1 = DoubleSpinBox(self)
         self.voltage1.setRange(-30, 30)
@@ -361,8 +359,12 @@ class ShotNoizeMeasurementWidget(QWidget):
         self.groupInitialCalibration.setLayout(layout_main)
 
     def start_measure_rn(self):
+        sis_cid = self.sisConfig.current_cid()
+        if sis_cid is None:
+            QMessageBox.warning(self, "Device is not selected", "Select a SIS block")
+            return
         self.thread_measure_rn = MeasureRnThread(
-            cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
+            cid=sis_cid,
             voltage1=self.voltage1.value(),
             voltage2=self.voltage2.value(),
             points=self.voltagePoints.value(),
@@ -387,8 +389,12 @@ class ShotNoizeMeasurementWidget(QWidget):
         self.thread_measure_rn.terminate()
 
     def start_measure_power(self):
+        sis_cid = self.sisConfig.current_cid()
+        if sis_cid is None:
+            QMessageBox.warning(self, "Device is not selected", "Select a SIS block")
+            return
         self.thread_measure_power = MeasurePowerThread(
-            cid=ScontelSisBlockManager.configs[self.sisConfig.currentIndex()].cid,
+            cid=sis_cid,
             voltage1=self.voltage1.value(),
             voltage2=self.voltage2.value(),
             rn1=self.rn1.value(),

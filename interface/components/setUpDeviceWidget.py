@@ -46,6 +46,7 @@ class SetUpDeviceWidget(QGroupBox):
     def init_device(self, kwargs):
         cid = self.manager_class.add_config(**kwargs)
         config = self.manager_class.get_config(cid)
+        self.manager_class.persist_config()
         dev_info = self.create_device_info_widget(config, **kwargs)
         dev_info.initialize()
 
