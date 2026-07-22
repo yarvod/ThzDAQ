@@ -26,6 +26,7 @@ from interface.components.Scontel.sisDemagnetisationWidget import (
 from interface.components.Scontel.sisCalibrationDialog import SisCalibrationDialog
 from interface.components.ui.Button import Button
 from store import ScontelSisBlockManager
+from store.sisCalibration import evaluate_sis_calibration
 from store.state import state
 from api.Scontel.sis_block import SisBlock
 from interface.components.ui.DoubleSpinBox import DoubleSpinBox
@@ -84,8 +85,11 @@ class BlockCalibrateThread(Thread):
     def run(self):
         try:
             self.block = SisBlock(**self.config.dict())
+            calibration_coefficients = evaluate_sis_calibration(
+                self.config.calibration_coefficients
+            )
             payload = json.dumps(
-                self.config.calibration_coefficients,
+                calibration_coefficients,
                 ensure_ascii=True,
                 allow_nan=False,
                 separators=(",", ":"),
@@ -641,7 +645,7 @@ class BlockTabWidget(QWidget):
 
         self.btnCalibrateBlock = Button("Calibrate sis block", animate=True)
         self.btnCalibrateBlock.clicked.connect(self.calibrate_sis_block)
-        self.btnCalibrationCoefficients = Button("Коэффициенты")
+        self.btnCalibrationCoefficients = Button("Coefficients")
         self.btnCalibrationCoefficients.clicked.connect(
             self.edit_calibration_coefficients
         )

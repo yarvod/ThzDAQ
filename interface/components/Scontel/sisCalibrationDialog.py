@@ -35,8 +35,10 @@ class SisCalibrationDialog(QDialog):
 
         layout = QVBoxLayout(self)
         description = QLabel(
-            "Edit the complete calibration JSON. All fields are required; vector "
-            "fields must contain exactly two finite numbers.",
+            "Edit the complete calibration JSON. A coefficient can be a finite "
+            "number or a quoted arithmetic expression, for example "
+            '"5.476e-9 / 5". Supported operators: +, -, *, /, ** and parentheses. '
+            "Vector fields must contain exactly two coefficients.",
             self,
         )
         description.setWordWrap(True)

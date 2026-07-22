@@ -13,6 +13,8 @@ from store.deviceConfig import DeviceConfigList
 from store.sisCalibration import (
     CALIBRATION_FIELDS,
     default_sis_calibration,
+    evaluate_numeric_expression,
+    evaluate_sis_calibration,
     normalize_sis_calibration,
 )
 
@@ -80,6 +82,34 @@ class SisCalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing calibration fields"):
             normalize_sis_calibration(invalid)
 
+    def test_arithmetic_expressions_are_validated_and_preserved(self):
+        calibration = default_sis_calibration("DEV2")
+        calibration["CurrentADC"] = [
+            "5.4767381740816745e-09 / 5",
+            "-(0.04757314547896385 / 5)",
+        ]
+        calibration["CurrentMonitorResistance"] = "2 ** 3 + 2"
+
+        normalized = normalize_sis_calibration(calibration)
+        evaluated = evaluate_sis_calibration(normalized)
+
+        self.assertEqual(normalized["CurrentADC"][0], "5.4767381740816745e-09 / 5")
+        self.assertAlmostEqual(evaluated["CurrentADC"][0], 5.4767381740816745e-09 / 5)
+        self.assertAlmostEqual(evaluated["CurrentADC"][1], -(0.04757314547896385 / 5))
+        self.assertEqual(evaluated["CurrentMonitorResistance"], 10)
+
+    def test_unsafe_or_invalid_expressions_are_rejected(self):
+        expressions = [
+            "value * 2",
+            "__import__('os').system('echo unsafe')",
+            "1 / 0",
+            "10 ** 1000",
+            "5 % 2",
+        ]
+        for expression in expressions:
+            with self.subTest(expression=expression), self.assertRaises(ValueError):
+                evaluate_numeric_expression(expression)
+
     def test_coefficients_are_saved_for_each_block(self):
         first_cid = ScontelSisBlockManager.add_config(
             adapter="SOCKET",
@@ -96,7 +126,7 @@ class SisCalibrationTest(unittest.TestCase):
             ctrl_dev="DEV1",
         )
         first_calibration = default_sis_calibration("DEV4")
-        first_calibration["VoltageAdc"][1] = -0.123
+        first_calibration["VoltageAdc"][1] = "-0.246 / 2"
 
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = QSettings(
@@ -109,7 +139,7 @@ class SisCalibrationTest(unittest.TestCase):
 
         self.assertEqual(
             stored_configs[0]["calibration_coefficients"]["VoltageAdc"][1],
-            -0.123,
+            "-0.246 / 2",
         )
         self.assertNotEqual(
             stored_configs[0]["calibration_coefficients"],
@@ -182,7 +212,7 @@ class SisCalibrationTest(unittest.TestCase):
             ctrl_dev="DEV1",
         )
         calibration = default_sis_calibration("DEV2")
-        calibration["CurrentMonitorResistance"] = 42
+        calibration["CurrentMonitorResistance"] = "6 * 7"
         ScontelSisBlockManager.get_config(cid).calibration_coefficients = calibration
         _SisBlockStub.instances = []
 
@@ -192,7 +222,7 @@ class SisCalibrationTest(unittest.TestCase):
         block = _SisBlockStub.instances[0]
         command, payload = block.adapter.queries[0].split(" ", 1)
         self.assertEqual(command, "BIAS:DEV2:EEPR")
-        self.assertEqual(json.loads(payload), calibration)
+        self.assertEqual(json.loads(payload), evaluate_sis_calibration(calibration))
         self.assertTrue(block.disconnected)
 
 
