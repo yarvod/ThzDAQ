@@ -19,6 +19,7 @@ class MeasureType:
     GRID_IA_CURVE = "grid_ia_curve"
     POWER_STREAM = "power_stream"
     TEMPERATURE_STREAM = "temperature_stream"
+    SIS_BLOCK_STREAM = "sis_block_stream"
     SIF_VNA = "sif_vna"
     PIF_CURVE = "pif_curve"
     PIF_CURVE_HOT_COLD = "pif_curve_hot_cold"
@@ -36,6 +37,7 @@ class MeasureType:
             (GRID_IA_CURVE, "I-A curve"),
             (POWER_STREAM, "P-t curve"),
             (TEMPERATURE_STREAM, "T-t curve"),
+            (SIS_BLOCK_STREAM, "SIS block monitoring"),
             (SIF_VNA, "S-IF VNA curve"),
             (PIF_CURVE, "P-IF curve"),
             (PIF_CURVE_HOT_COLD, "P-IF curve hot/cold"),

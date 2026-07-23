@@ -124,51 +124,112 @@ class BlockStreamThread(Thread):
     bias_current = Signal(float)
     plot_data = Signal(dict)
 
-    def __init__(self, cid: int, stream_plot: bool = False):
+    def __init__(
+        self,
+        cid: int,
+        polling_interval: float,
+        stream_plot: bool = False,
+        store_data: bool = False,
+    ):
         self.config = ScontelSisBlockManager.get_config(cid)
+        self.cid = cid
+        self.polling_interval = float(polling_interval)
+        if not 0 <= self.polling_interval <= 5:
+            raise ValueError("Polling interval must be between 0 and 5 seconds")
         self.config.thread_stream = True
         self.stream_plot = stream_plot
+        self.store_data = store_data
+        self.measure = None
+        if self.store_data:
+            self.measure = MeasureModel.objects.create(
+                measure_type=MeasureType.SIS_BLOCK_STREAM,
+                data={
+                    "block_cid": self.cid,
+                    "polling_interval_s": self.polling_interval,
+                    "time_s": [],
+                    "bias_voltage_mV": [],
+                    "bias_current_uA": [],
+                    "ctrl_current_mA": [],
+                },
+            )
+            self.measure.save(finish=False)
         super().__init__()
 
     def run(self):
+        block = None
         try:
             block = SisBlock(**self.config.dict())
-        except DeviceConnectionError as e:
-            self.pre_exit()
-            self.finished.emit()
-            return
-        i = 1
-        while 1:
-            if not self.config.thread_stream:
-                break
-            time.sleep(0.2)
+            start_time = time.monotonic()
+            plot_started = False
 
-            bias_voltage = block.get_bias_voltage()
-            if bias_voltage:
-                self.bias_voltage.emit(bias_voltage)
-
-            bias_current = block.get_bias_current()
-            if bias_current:
-                self.bias_current.emit(bias_current)
-
-            if i % 2 == 0:
+            while self.config.thread_stream:
+                sample_started = time.monotonic()
+                bias_voltage = block.get_bias_voltage()
+                bias_current = block.get_bias_current()
                 cl_current = block.get_ctrl_current()
-                if cl_current:
+
+                if bias_voltage is not None:
+                    self.bias_voltage.emit(bias_voltage)
+                if bias_current is not None:
+                    self.bias_current.emit(bias_current)
+                if cl_current is not None:
                     self.cl_current.emit(cl_current)
 
-            if self.stream_plot and bias_voltage and bias_current:
-                self.plot_data.emit(
-                    {
-                        "x": [bias_voltage * 1e3],
-                        "y": [bias_current * 1e6],
-                        "new_plot": i == 1,
-                    }
-                )
+                elapsed = time.monotonic() - start_time
+                bias_voltage_mv = None if bias_voltage is None else bias_voltage * 1e3
+                bias_current_ua = None if bias_current is None else bias_current * 1e6
+                ctrl_current_ma = None if cl_current is None else cl_current * 1e3
 
-            i += 1
+                if self.measure is not None:
+                    self.measure.data["time_s"].append(elapsed)
+                    self.measure.data["bias_voltage_mV"].append(bias_voltage_mv)
+                    self.measure.data["bias_current_uA"].append(bias_current_ua)
+                    self.measure.data["ctrl_current_mA"].append(ctrl_current_ma)
 
-        block.disconnect()
-        self.pre_exit()
+                if (
+                    self.stream_plot
+                    and bias_voltage_mv is not None
+                    and bias_current_ua is not None
+                ):
+                    self.plot_data.emit(
+                        {
+                            "x": [bias_voltage_mv],
+                            "y": [bias_current_ua],
+                            "new_plot": not plot_started,
+                            "measure_id": (
+                                self.measure.id if self.measure is not None else None
+                            ),
+                        }
+                    )
+                    plot_started = True
+
+                if not self._wait_for_next_poll(sample_started):
+                    break
+        except DeviceConnectionError:
+            logger.exception("Unable to connect to SIS block %s", self.cid)
+        except Exception:
+            logger.exception("SIS block %s monitoring failed", self.cid)
+        finally:
+            if block is not None:
+                try:
+                    block.disconnect()
+                except Exception:
+                    logger.exception(
+                        "Unable to disconnect SIS block %s after monitoring",
+                        self.cid,
+                    )
+            if self.measure is not None:
+                self.measure.save()
+            self.pre_exit()
+
+    def _wait_for_next_poll(self, sample_started: float) -> bool:
+        deadline = sample_started + self.polling_interval
+        while self.config.thread_stream:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return True
+            time.sleep(min(0.05, remaining))
+        return False
 
     def pre_exit(self, *args, **kwargs):
         self.config.thread_stream = False
@@ -359,6 +420,7 @@ class BlockTabWidget(QWidget):
         self.iv_plot_number = 1
         self.icl_plot_number = 1
         self.block_bias_scan_thread = None
+        self.stream_thread = None
 
         layout = QVBoxLayout(self)
         self.createGroupMonitor()
@@ -504,7 +566,10 @@ class BlockTabWidget(QWidget):
 
     def startStreamBlock(self):
         self.stream_thread = BlockStreamThread(
-            cid=self.cid, stream_plot=self.plotStream.isChecked()
+            cid=self.cid,
+            polling_interval=self.streamPollingInterval.value(),
+            stream_plot=self.plotStream.isChecked(),
+            store_data=self.storeStreamData.isChecked(),
         )
 
         self.stream_thread.cl_current.connect(
@@ -533,9 +598,20 @@ class BlockTabWidget(QWidget):
         self.stream_thread.finished.connect(
             lambda: self.btnStopStreamBlock.setEnabled(False)
         )
+        self.plotStream.setEnabled(False)
+        self.storeStreamData.setEnabled(False)
+        self.streamPollingInterval.setEnabled(False)
+        self.stream_thread.finished.connect(lambda: self.plotStream.setEnabled(True))
+        self.stream_thread.finished.connect(
+            lambda: self.storeStreamData.setEnabled(True)
+        )
+        self.stream_thread.finished.connect(
+            lambda: self.streamPollingInterval.setEnabled(True)
+        )
 
     def stopStreamBlock(self):
-        self.stream_thread.terminate()
+        if self.stream_thread is not None:
+            self.stream_thread.quit()
 
     def createGroupMonitor(self):
         self.groupMonitor = QGroupBox("Block Monitor")
@@ -574,6 +650,18 @@ class BlockTabWidget(QWidget):
         self.plotStream = QCheckBox("Plot stream")
         self.plotStream.setChecked(False)
 
+        self.storeStreamData = QCheckBox("Store stream data")
+        self.storeStreamData.setChecked(False)
+
+        self.streamPollingIntervalLabel = QLabel("Polling interval, s")
+        self.streamPollingInterval = DoubleSpinBox(self)
+        self.streamPollingInterval.setRange(0, 5)
+        self.streamPollingInterval.setDecimals(2)
+        self.streamPollingInterval.setValue(0.2)
+        self.streamPollingInterval.setToolTip(
+            "Delay between SIS block polling cycles, from 0 to 5 seconds"
+        )
+
         layout.addWidget(
             self.sisVoltageGetLabel, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter
         )
@@ -596,6 +684,9 @@ class BlockTabWidget(QWidget):
         hlayout.addWidget(self.btnStartStreamBlock)
         hlayout.addWidget(self.btnStopStreamBlock)
         hlayout.addWidget(self.plotStream)
+        hlayout.addWidget(self.storeStreamData)
+        hlayout.addWidget(self.streamPollingIntervalLabel)
+        hlayout.addWidget(self.streamPollingInterval)
 
         vlayout.addLayout(layout)
         vlayout.addLayout(hlayout)
