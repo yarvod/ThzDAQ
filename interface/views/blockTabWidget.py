@@ -620,7 +620,8 @@ class BlockTabWidget(QWidget):
         )
         vlayout = QVBoxLayout()
         layout = QGridLayout()
-        hlayout = QHBoxLayout()
+        options_layout = QGridLayout()
+        buttons_layout = QHBoxLayout()
 
         self.sisVoltageGetLabel = QLabel(self)
         self.sisVoltageGetLabel.setText("<h4>BIAS voltage, mV</h4>")
@@ -681,15 +682,24 @@ class BlockTabWidget(QWidget):
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
 
-        hlayout.addWidget(self.btnStartStreamBlock)
-        hlayout.addWidget(self.btnStopStreamBlock)
-        hlayout.addWidget(self.plotStream)
-        hlayout.addWidget(self.storeStreamData)
-        hlayout.addWidget(self.streamPollingIntervalLabel)
-        hlayout.addWidget(self.streamPollingInterval)
+        options_layout.addWidget(self.plotStream, 0, 0, 1, 2)
+        options_layout.addWidget(self.storeStreamData, 1, 0, 1, 2)
+        options_layout.addWidget(self.streamPollingIntervalLabel, 2, 0)
+        options_layout.addWidget(
+            self.streamPollingInterval,
+            2,
+            1,
+            alignment=Qt.AlignmentFlag.AlignLeft,
+        )
+        options_layout.setColumnStretch(1, 1)
+
+        buttons_layout.addWidget(self.btnStartStreamBlock)
+        buttons_layout.addWidget(self.btnStopStreamBlock)
 
         vlayout.addLayout(layout)
-        vlayout.addLayout(hlayout)
+        vlayout.addSpacing(6)
+        vlayout.addLayout(options_layout)
+        vlayout.addLayout(buttons_layout)
 
         self.groupMonitor.setLayout(vlayout)
 
