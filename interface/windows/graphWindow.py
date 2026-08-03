@@ -3,6 +3,7 @@ import re
 from typing import Iterable
 
 from PySide6 import QtGui
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QHBoxLayout
 import pyqtgraph as pg
 
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class GraphWindow(QWidget):
+    curves_changed = Signal()
+
     window_title = "Graph"
     graph_title = "Base Graph"
     y_label = "y label"
@@ -32,23 +35,27 @@ class GraphWindow(QWidget):
         super().__init__(parent)
         self.setWindowIcon(QtGui.QIcon("./assets/logo_small.png"))
         self.setWindowTitle(self.window_title)
-        vlayout = QVBoxLayout()
-        hlayout = QHBoxLayout()
+        self.main_layout = QVBoxLayout()
+        self.actions_layout = QHBoxLayout()
         self.graphWidget = pg.PlotWidget()
         self.btnRemoveHiddenCurves = QPushButton("Remove hidden curves")
         self.btnRemoveHiddenCurves.clicked.connect(self.remove_hidden_graphs)
         self.btnRemoveAllCurves = QPushButton("Remove all curves")
         self.btnRemoveAllCurves.clicked.connect(self.remove_all_graphs)
-        hlayout.addWidget(self.btnRemoveHiddenCurves)
-        hlayout.addWidget(self.btnRemoveAllCurves)
-        vlayout.addLayout(hlayout)
-        vlayout.addWidget(self.graphWidget)
+        self.actions_layout.addWidget(self.btnRemoveHiddenCurves)
+        self.actions_layout.addWidget(self.btnRemoveAllCurves)
+        self.main_layout.addLayout(self.actions_layout)
+        self.main_layout.addWidget(self.graphWidget)
         self.prepare()
-        self.setLayout(vlayout)
+        self.setLayout(self.main_layout)
 
     def get_plot_items(self):
         plotItem = self.graphWidget.getPlotItem()
-        return {item.name(): item for item in plotItem.items}
+        return {
+            item.name(): item
+            for item in plotItem.listDataItems()
+            if item.name() is not None
+        }
 
     def prepare(self) -> None:
         self.graphWidget.setBackground("w")
@@ -98,12 +105,14 @@ class GraphWindow(QWidget):
             y_data = list(item.yData)
             y_data.extend(y)
             items.get(graph_id).setData(x_data, y_data)
+            self.curves_changed.emit()
             return graph_id
 
         pen = pg.mkPen(color=self.get_color(plot_num), width=2)
         self.graphWidget.plot(
             x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
+        self.curves_changed.emit()
         return graph_id
 
     def plot(
@@ -130,24 +139,30 @@ class GraphWindow(QWidget):
             y_data = list(item.yData)
             y_data.extend(y)
             items.get(graph_id).setData(x_data, y_data)
+            self.curves_changed.emit()
             return plot_num
 
         pen = pg.mkPen(color=self.get_color(plot_num), width=2)
         self.graphWidget.plot(
             x, y, name=f"{graph_id}", pen=pen, symbolSize=6, symbolBrush=pen.color()
         )
+        self.curves_changed.emit()
         return plot_num
 
     def remove_hidden_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
-        items_to_remove = {
-            item.name(): item for item in plotItem.items if not item.isVisible()
-        }
-        for item in items_to_remove.values():
+        items_to_remove = [
+            item for item in plotItem.listDataItems() if not item.isVisible()
+        ]
+        for item in items_to_remove:
             plotItem.removeItem(item)
+        if items_to_remove:
+            self.curves_changed.emit()
 
     def remove_all_graphs(self):
         plotItem = self.graphWidget.getPlotItem()
-        items_to_remove = {item.name(): item for item in plotItem.items}
-        for item in items_to_remove.values():
+        items_to_remove = list(plotItem.listDataItems())
+        for item in items_to_remove:
             plotItem.removeItem(item)
+        if items_to_remove:
+            self.curves_changed.emit()
