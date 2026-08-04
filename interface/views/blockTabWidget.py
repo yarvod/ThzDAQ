@@ -163,7 +163,6 @@ class BlockStreamThread(Thread):
             plot_started = False
 
             while self.config.thread_stream:
-                sample_started = time.monotonic()
                 bias_voltage = block.get_bias_voltage()
                 bias_current = block.get_bias_current()
                 cl_current = block.get_ctrl_current()
@@ -203,7 +202,7 @@ class BlockStreamThread(Thread):
                     )
                     plot_started = True
 
-                if not self._wait_for_next_poll(sample_started):
+                if not self._wait_for_next_poll():
                     break
         except DeviceConnectionError:
             logger.exception("Unable to connect to SIS block %s", self.cid)
@@ -222,8 +221,10 @@ class BlockStreamThread(Thread):
                 self.measure.save()
             self.pre_exit()
 
-    def _wait_for_next_poll(self, sample_started: float) -> bool:
-        deadline = sample_started + self.polling_interval
+    def _wait_for_next_poll(self) -> bool:
+        # The configured value is an idle delay between complete read cycles.
+        # This avoids making the monitor more aggressive when device reads are fast.
+        deadline = time.monotonic() + self.polling_interval
         while self.config.thread_stream:
             remaining = deadline - time.monotonic()
             if remaining <= 0:

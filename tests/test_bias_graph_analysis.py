@@ -51,6 +51,10 @@ class BiasGraphAnalysisTest(unittest.TestCase):
         )
 
         self.assertEqual(self.window.analysisCurveSelector.count(), 2)
+        self.assertLessEqual(self.window.analysisCurveSelector.maximumWidth(), 170)
+        self.assertLessEqual(self.window.btnAnalyzeCurve.maximumWidth(), 75)
+        self.assertLessEqual(self.window.btnClearAnalysis.maximumWidth(), 55)
+        self.assertTrue(self.window.analysisResultLabel.isHidden())
         second_curve_name = self.window.analysisCurveSelector.itemData(1)
         self.window.analysisCurveSelector.setCurrentIndex(1)
         self.window.analyze_selected_curve()
@@ -64,6 +68,7 @@ class BiasGraphAnalysisTest(unittest.TestCase):
         self.assertEqual(self.window._analyzed_curve_name, second_curve_name)
         self.assertIn("Rn:</b> 20.00 Ω", self.window.analysisResultLabel.text())
         self.assertIn("Rj:</b> 40.00 Ω", self.window.analysisResultLabel.text())
+        self.assertFalse(self.window.analysisResultLabel.isHidden())
         overlay_count = sum(
             is_analysis_overlay(item)
             for item in self.window.graphWidget.getPlotItem().listDataItems()
@@ -75,6 +80,7 @@ class BiasGraphAnalysisTest(unittest.TestCase):
 
         self.assertEqual(self.window.analysisCurveSelector.count(), 0)
         self.assertIsNone(self.window._analyzed_curve_name)
+        self.assertTrue(self.window.analysisResultLabel.isHidden())
         self.assertEqual(
             len(self.window.graphWidget.getPlotItem().listDataItems()),
             0,
