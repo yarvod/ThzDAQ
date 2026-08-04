@@ -52,6 +52,7 @@ class DeviceInfo(QWidget):
         self.nameLabel.setText("Name:")
         self.name = QLabel(self)
         self.name.setText(self.config.name)
+        self.config.signal_name.connect(self.name.setText)
 
         self.adapterLabel = QLabel(self)
         self.adapterLabel.setText("Adapter:")
@@ -124,6 +125,13 @@ class DeviceInfo(QWidget):
         self.btnInitialize.setEnabled(False)
 
     def update_config_initialize(self, kwargs):
+        kwargs = dict(kwargs)
+        name = kwargs.pop("name", self.config.name)
+        self.config.config_manager.rename_config(
+            self.config.cid,
+            name,
+            persist=False,
+        )
         for k, v in kwargs.items():
             self.config.__setattr__(k, v)
         self.config.config_manager.persist_config()
@@ -132,6 +140,10 @@ class DeviceInfo(QWidget):
     def edit(self):
         self.form = self.device_add_form_class(
             self,
+            name=self.config.name,
+            default_name=self.config.config_manager.default_config_name(
+                self.config.cid
+            ),
             **self.get_initialize_kwargs(),
         )
         self.form.init.connect(self.update_config_initialize)

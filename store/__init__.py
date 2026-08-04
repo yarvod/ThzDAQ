@@ -294,13 +294,11 @@ class ScontelSisBlockManager(DeviceManager):
 
         initialized = False
         for stored_config in configs:
-            config = dict(stored_config)
+            config = cls.restore_config_kwargs(stored_config)
             if "calibration_coefficients" not in config:
                 bias_dev = config.get("bias_dev", "DEV4")
                 config["calibration_coefficients"] = default_sis_calibration(bias_dev)
                 initialized = True
-            config.pop("cid", None)
-            config.pop("_name", None)
             cls.add_config(**config)
 
         cls.add_configs_to_setup_widget()

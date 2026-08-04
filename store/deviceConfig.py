@@ -8,6 +8,7 @@ from utils.functions import import_class
 
 
 class DeviceConfig(QObject):
+    signal_name = Signal(str)
     signal_adapter = Signal(str)
     signal_host = Signal(str)
     signal_port = Signal(str)
@@ -27,8 +28,10 @@ class DeviceConfig(QObject):
         config_manager: Type["DeviceManager"] = None,
     ):
         super().__init__()
-        self._name = name
+        self._name = ""
+        self.name = name
         self.cid = cid
+        self.dock_name = None
         self.adapter = adapter
         self.host = host
         self.port = port
@@ -44,9 +47,17 @@ class DeviceConfig(QObject):
 
     __repr__ = __str__
 
-    @property
+    @Property("QString", notify=signal_name)
     def name(self):
-        return f"{self._name} {self.cid}"
+        return self._name
+
+    @name.setter
+    def name(self, value: str):
+        value = str(value).strip()
+        if not value:
+            raise ValueError("Device name cannot be empty")
+        self._name = value
+        self.signal_name.emit(value)
 
     @Property("QString", notify=signal_adapter)
     def adapter(self):
@@ -98,7 +109,7 @@ class DeviceConfig(QObject):
 
     def dict(self):
         return dict(
-            _name=self._name,
+            name=self._name,
             cid=self.cid,
             adapter=self._adapter,
             host=self._host,
@@ -155,23 +166,66 @@ class DeviceManager:
     main_widget_class = None
     event_manager: QObject = None
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.event_manager = DeviceEventManager()
+
+    @classmethod
+    def default_config_name(cls, cid: Optional[int] = None) -> str:
+        if cid is None:
+            cid = cls.last_id + 1
+        return f"{cls.name} {cid}"
+
+    @classmethod
+    def normalize_config_name(cls, name, cid: int) -> str:
+        normalized = str(name).strip() if name is not None else ""
+        return normalized or cls.default_config_name(cid)
+
     @classmethod
     def add_config(cls, **kwargs) -> int:
         cls.last_id += 1
-        config = cls.config_class(
-            name=cls.name, cid=cls.last_id, config_manager=cls, **kwargs
+        config_name = cls.normalize_config_name(
+            kwargs.pop("name", None),
+            cls.last_id,
         )
+        config = cls.config_class(
+            name=config_name,
+            cid=cls.last_id,
+            config_manager=cls,
+            **kwargs,
+        )
+        config.dock_name = cls.default_config_name(config.cid)
         cls.configs.append(config)
         if cls.event_manager is not None:
             cls.event_manager.configs_updated.emit()
         if cls.main_widget_class:
             Dock.add_widget_to_dock(
-                name=config.name,
+                name=config.dock_name,
+                title=config.name,
                 widget_class=import_class(cls.main_widget_class),
                 cid=config.cid,
                 menu="device",
             )
         return cls.last_id
+
+    @classmethod
+    def rename_config(cls, cid: int, name: str, persist: bool = True) -> str:
+        config = cls.get_config(cid)
+        if config is None:
+            raise ValueError(f"Device configuration {cid} does not exist")
+
+        name = cls.normalize_config_name(name, cid)
+        if name == config.name:
+            return name
+
+        config.name = name
+        if cls.main_widget_class and config.dock_name:
+            Dock.rename_widget_in_dock(config.dock_name, name)
+        if cls.event_manager is not None:
+            cls.event_manager.configs_updated.emit()
+        if persist:
+            cls.persist_config()
+        return name
 
     @classmethod
     def get_config(cls, cid: int) -> DeviceConfig | Any:
@@ -211,11 +265,20 @@ class DeviceManager:
         configs = qsettings.value(f"Configs/{cls.name}", None)
         if not configs:
             return
-        for config in configs:
-            config.pop("cid", None)
-            config.pop("_name", None)
-            cls.add_config(**config)
+        for stored_config in configs:
+            cls.add_config(**cls.restore_config_kwargs(stored_config))
         cls.add_configs_to_setup_widget()
+
+    @classmethod
+    def restore_config_kwargs(cls, stored_config: dict) -> dict:
+        config = dict(stored_config)
+        config.pop("cid", None)
+        stored_name = config.pop("name", None)
+        legacy_name = config.pop("_name", None)
+        if stored_name is None and legacy_name and legacy_name != cls.name:
+            stored_name = legacy_name
+        config["name"] = cls.normalize_config_name(stored_name, cls.last_id + 1)
+        return config
 
     @classmethod
     def add_configs_to_setup_widget(cls):
@@ -225,9 +288,11 @@ class DeviceManager:
 
     @classmethod
     def delete_config(cls, cid: int, persist: bool = True):
-        Dock.delete_widget_from_dock(
-            name=cls.configs.filter(cid=cid).first().name,
-        )
+        config = cls.configs.filter(cid=cid).first()
+        if config is None:
+            return
+        if cls.main_widget_class and config.dock_name:
+            Dock.delete_widget_from_dock(name=config.dock_name)
         index = cls.configs.get_index_by_cid(cid=cid)
         if index is not None:
             cls.configs.delete_by_index(index)

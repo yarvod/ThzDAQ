@@ -21,6 +21,8 @@ class DeviceAddForm(QDialog):
     def __init__(
         self,
         parent,
+        name: str = "",
+        default_name: str = "",
         adapter: str = settings.SOCKET,
         host: str = "",
         port: str = "",
@@ -32,6 +34,14 @@ class DeviceAddForm(QDialog):
         layout = QVBoxLayout()
         flayout = QFormLayout()
         hlayout = QHBoxLayout()
+
+        self.default_name = str(default_name or name).strip()
+        self.nameLabel = QLabel(self)
+        self.nameLabel.setText("Name:")
+        self.name = QLineEdit(self)
+        self.name.setText(str(name).strip() or self.default_name)
+        self.name.setPlaceholderText(self.default_name)
+        self.name.setToolTip("Device name; the generated default is used when empty")
 
         self.adapterLabel = QLabel(self)
         self.adapterLabel.setText("Adapter:")
@@ -60,6 +70,7 @@ class DeviceAddForm(QDialog):
         self.gpib.setValue(int(gpib))
         self.gpib.setToolTip("GPIB address")
 
+        flayout.addRow(self.nameLabel, self.name)
         flayout.addRow(self.adapterLabel, self.adapter)
         flayout.addRow(self.hostLabel, self.host)
         flayout.addRow(self.portLabel, self.port)
@@ -85,6 +96,7 @@ class DeviceAddForm(QDialog):
 
     def get_initialize_kwargs(self):
         return dict(
+            name=self.name.text().strip() or self.default_name,
             adapter=self.adapter.currentText(),
             host=self.host.text(),
             port=self.port.text(),

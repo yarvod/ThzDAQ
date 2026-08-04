@@ -35,7 +35,12 @@ class SetUpDeviceWidget(QGroupBox):
         self.setLayout(self._layout)
 
     def open_form_add_device(self):
-        self.form = self.device_add_form_class(self)
+        default_name = self.manager_class.default_config_name()
+        self.form = self.device_add_form_class(
+            self,
+            name=default_name,
+            default_name=default_name,
+        )
         self.form.init.connect(self.init_device)
         self.form.show()
 

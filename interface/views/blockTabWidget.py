@@ -659,6 +659,7 @@ class BlockTabWidget(QWidget):
         self.streamPollingInterval.setRange(0, 5)
         self.streamPollingInterval.setDecimals(2)
         self.streamPollingInterval.setValue(0.2)
+        self.streamPollingInterval.setMinimumWidth(180)
         self.streamPollingInterval.setToolTip(
             "Delay between SIS block polling cycles, from 0 to 5 seconds"
         )
@@ -682,15 +683,10 @@ class BlockTabWidget(QWidget):
             self.ctrlCurrentGet, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter
         )
 
-        options_layout.addWidget(self.plotStream, 0, 0, 1, 2)
-        options_layout.addWidget(self.storeStreamData, 1, 0, 1, 2)
-        options_layout.addWidget(self.streamPollingIntervalLabel, 2, 0)
-        options_layout.addWidget(
-            self.streamPollingInterval,
-            2,
-            1,
-            alignment=Qt.AlignmentFlag.AlignLeft,
-        )
+        options_layout.addWidget(self.plotStream, 0, 0)
+        options_layout.addWidget(self.storeStreamData, 0, 1)
+        options_layout.addWidget(self.streamPollingIntervalLabel, 1, 0)
+        options_layout.addWidget(self.streamPollingInterval, 1, 1)
         options_layout.setColumnStretch(1, 1)
 
         buttons_layout.addWidget(self.btnStartStreamBlock)

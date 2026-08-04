@@ -168,9 +168,12 @@ class App(QMainWindow):
         name: str,
         widget_class,
         menu: Literal["base", "device", "graph", "measure"] = "base",
+        title: str = None,
         **kwargs,
     ):
         dock_widget = QtAds.CDockWidget(name)
+        if title:
+            dock_widget.setWindowTitle(title)
         widget = widget_class(self, **kwargs)
         dock_widget.setWidget(widget)
         if menu == "base":
@@ -185,6 +188,11 @@ class App(QMainWindow):
             QtAds.DockWidgetArea.NoDockWidgetArea, dock_widget
         )
         dock_widget.closeDockWidget()
+
+    def rename_dock_widget(self, name: str, title: str):
+        dock_widget = self.dock_manager.findDockWidget(name)
+        if dock_widget is not None:
+            dock_widget.setWindowTitle(title)
 
     def delete_dock_widget(self, name: str):
         dock_widget = self.dock_manager.findDockWidget(name)
