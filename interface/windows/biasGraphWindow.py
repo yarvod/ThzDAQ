@@ -1,9 +1,9 @@
-from html import escape
 from typing import Optional
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -17,7 +17,13 @@ from interface.windows.ivAnalysisOverlay import (
     format_analysis_result,
     is_analysis_overlay,
 )
-from utils.iv_analysis import IVAnalyzer, NumpyIVResistanceAnalyzer
+from interface.windows.ivAnalysisParametersDialog import IVAnalysisParametersDialog
+from utils.iv_analysis import (
+    IVAnalysisParameters,
+    IVAnalyzer,
+    IVAnalyzerFactory,
+    NumpyIVAnalyzerFactory,
+)
 
 
 class BiasGraphWindow(GraphWindow):
@@ -30,9 +36,18 @@ class BiasGraphWindow(GraphWindow):
         self,
         parent,
         analyzer: Optional[IVAnalyzer] = None,
+        analyzer_factory: Optional[IVAnalyzerFactory] = None,
+        analysis_parameters: Optional[IVAnalysisParameters] = None,
         overlay_renderer_factory=IVAnalysisOverlayRenderer,
+        parameters_dialog_class=IVAnalysisParametersDialog,
     ):
-        self.analyzer = analyzer or NumpyIVResistanceAnalyzer()
+        self.analysis_parameters = analysis_parameters or IVAnalysisParameters()
+        self.analyzer_factory = analyzer_factory or NumpyIVAnalyzerFactory()
+        self._manages_analyzer = analyzer is None
+        self.analyzer = analyzer or self.analyzer_factory.create(
+            self.analysis_parameters
+        )
+        self.parameters_dialog_class = parameters_dialog_class
         super().__init__(parent)
         self.overlay_renderer = overlay_renderer_factory(self.graphWidget.getPlotItem())
         self._analyzed_curve_name = None
@@ -59,8 +74,17 @@ class BiasGraphWindow(GraphWindow):
 
         self.btnAnalyzeCurve = QPushButton("Analyze", self)
         self.btnAnalyzeCurve.setMaximumWidth(75)
-        self.btnAnalyzeCurve.setToolTip("Calculate Rn, Rj and Q for the selected curve")
+        self.btnAnalyzeCurve.setToolTip(
+            "Calculate Rn, Rj, Rj/Rn, Vgap and Igap for the selected curve"
+        )
         self.btnAnalyzeCurve.clicked.connect(self.analyze_selected_curve)
+        self.btnAnalysisParameters = QPushButton("Parameters", self)
+        self.btnAnalysisParameters.setMaximumWidth(85)
+        self.btnAnalysisParameters.setToolTip(
+            "Configure I-V analysis ranges and filter"
+        )
+        self.btnAnalysisParameters.setEnabled(self._manages_analyzer)
+        self.btnAnalysisParameters.clicked.connect(self.open_analysis_parameters)
         self.btnClearAnalysis = QPushButton("Clear", self)
         self.btnClearAnalysis.setMaximumWidth(55)
         self.btnClearAnalysis.setToolTip("Remove the I-V analysis from the graph")
@@ -69,27 +93,26 @@ class BiasGraphWindow(GraphWindow):
         analysis_layout.addWidget(curve_label)
         analysis_layout.addWidget(self.analysisCurveSelector)
         analysis_layout.addWidget(self.btnAnalyzeCurve)
+        analysis_layout.addWidget(self.btnAnalysisParameters)
         analysis_layout.addWidget(self.btnClearAnalysis)
         analysis_layout.addStretch(1)
 
-        self.analysisResultLabel = QLabel(self)
-        self.analysisResultLabel.setWordWrap(True)
-        self.analysisResultLabel.setMinimumWidth(0)
-        self.analysisResultLabel.setSizePolicy(
-            QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Fixed,
-        )
+        self.analysisResultLabel = QLabel(self.graphWidget)
+        self.analysisResultLabel.setWordWrap(False)
         self.analysisResultLabel.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
+            Qt.TextInteractionFlag.NoTextInteraction
+        )
+        self.analysisResultLabel.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
         )
         self.analysisResultLabel.setStyleSheet(
-            "QLabel { background: #f5f6f8; border: 1px solid #d7d9de; "
-            "border-radius: 3px; padding: 6px; color: #30333a; }"
+            "QLabel { background: rgba(245, 246, 248, 225); "
+            "border: 1px solid #d7d9de; "
+            "border-radius: 3px; padding: 3px; color: #30333a; }"
         )
         self.analysisResultLabel.hide()
 
         self.main_layout.insertLayout(1, analysis_layout)
-        self.main_layout.insertWidget(2, self.analysisResultLabel)
 
     def _source_curve_items(self):
         return {
@@ -150,23 +173,36 @@ class BiasGraphWindow(GraphWindow):
         try:
             result = self.analyzer.analyze(voltage_mv, current_ua)
         except (ValueError, RuntimeError) as error:
-            self.analysisResultLabel.setText(
-                f"<b>{escape(self._curve_label(curve_name))}</b><br>"
-                f"Analysis error: {escape(str(error))}"
-            )
-            self.analysisResultLabel.show()
+            self.analysisResultLabel.clear()
+            self.analysisResultLabel.hide()
             self.btnClearAnalysis.setEnabled(False)
             QMessageBox.warning(self, "I-V analysis", str(error))
             return
 
         self.overlay_renderer.render(result)
         self._analyzed_curve_name = curve_name
-        self.analysisResultLabel.setText(
-            f"<b>{escape(self._curve_label(curve_name))}</b><br>"
-            f"{format_analysis_result(result)}"
-        )
+        self.analysisResultLabel.setText(format_analysis_result(result))
+        self.analysisResultLabel.adjustSize()
+        self.analysisResultLabel.move(8, 28)
         self.analysisResultLabel.show()
+        self.analysisResultLabel.raise_()
         self.btnClearAnalysis.setEnabled(True)
+
+    def open_analysis_parameters(self):
+        if not self._manages_analyzer:
+            return
+        dialog = self.parameters_dialog_class(self, self.analysis_parameters)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.set_analysis_parameters(dialog.parameters)
+
+    def set_analysis_parameters(self, parameters: IVAnalysisParameters):
+        if not self._manages_analyzer:
+            raise RuntimeError("The injected I-V analyzer is not configurable")
+        analyzer = self.analyzer_factory.create(parameters)
+        self.clear_analysis()
+        self.analysis_parameters = parameters
+        self.analyzer = analyzer
 
     def clear_analysis(self):
         self.overlay_renderer.clear()

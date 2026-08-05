@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
@@ -15,19 +13,18 @@ def is_analysis_overlay(item) -> bool:
 
 
 def format_analysis_result(result: IVResistanceAnalysis) -> str:
-    rn_fit = result.rn_fit
-    tangent = result.rj_tangent
-    r_squared = f"{rn_fit.r_squared:.5f}" if math.isfinite(rn_fit.r_squared) else "n/a"
+    gap = result.gap
+    gap_text = (
+        f"<b>Vgap:</b> {gap.voltage_mv:.3f} mV &nbsp; "
+        f"<b>Igap:</b> {gap.current_step_ua:.3f} µA"
+        if gap is not None
+        else "<b>Vgap:</b> n/a &nbsp; <b>Igap:</b> n/a"
+    )
     return (
-        f"<span style='color:#a61e2a'><b>Rn:</b> {result.rn_ohm:.2f} Ω; "
-        f"<b>R²:</b> {r_squared}</span> &nbsp; "
-        f"<span style='color:#267326'><b>Rj:</b> {result.rj_ohm:.2f} Ω; "
-        f"<b>Q = Rj/Rn:</b> {result.q:.2f}</span><br>"
-        f"<b>Rn reference:</b> {rn_fit.reference_voltage_mv:.3f} mV, "
-        f"{rn_fit.reference_current_ua:.3f} µA &nbsp; "
-        f"<b>Rj touch:</b> {tangent.touch_voltage_mv:.3f} mV, "
-        f"{tangent.touch_current_ua:.3f} µA<br>"
-        f"<b>Fit points:</b> Rn {rn_fit.point_count}, Rj {tangent.point_count}"
+        f"<b>Rn:</b> {result.rn_ohm:.2f} Ω &nbsp; "
+        f"<b>Rj:</b> {result.rj_ohm:.2f} Ω &nbsp; "
+        f"<b>Rj/Rn:</b> {result.q:.4g}<br>"
+        f"{gap_text}"
     )
 
 
@@ -41,7 +38,14 @@ class IVAnalysisOverlayRenderer:
         rn_fit = result.rn_fit
         tangent = result.rj_tangent
 
-        rn_voltage = np.linspace(*rn_fit.line_voltage_range_mv, 200)
+        rn_line_start = rn_fit.line_voltage_range_mv[0]
+        if result.gap is not None:
+            rn_line_start = min(rn_line_start, result.gap.lower_voltage_mv)
+        rn_voltage = np.linspace(
+            rn_line_start,
+            rn_fit.line_voltage_range_mv[1],
+            200,
+        )
         rj_voltage = np.linspace(*tangent.line_voltage_range_mv, 200)
         rn_line = self.plot_item.plot(
             rn_voltage,
@@ -75,6 +79,36 @@ class IVAnalysisOverlayRenderer:
         )
 
         self._items = [rn_line, rj_line, rn_point, rj_point]
+        if result.gap is not None:
+            gap = result.gap
+            gap_lower_point = self.plot_item.plot(
+                [gap.lower_voltage_mv],
+                [gap.lower_current_ua],
+                pen=None,
+                symbol="t1",
+                symbolSize=10,
+                symbolBrush="#9467bd",
+                symbolPen=pg.mkPen("#202020", width=1),
+            )
+            gap_upper_point = self.plot_item.plot(
+                [gap.upper_voltage_mv],
+                [gap.upper_current_ua],
+                pen=None,
+                symbol="t",
+                symbolSize=10,
+                symbolBrush="#9467bd",
+                symbolPen=pg.mkPen("#202020", width=1),
+            )
+            gap_center_point = self.plot_item.plot(
+                [gap.voltage_mv],
+                [(gap.lower_current_ua + gap.upper_current_ua) / 2.0],
+                pen=None,
+                symbol="d",
+                symbolSize=9,
+                symbolBrush="#202020",
+                symbolPen=pg.mkPen("#f5f5f5", width=1),
+            )
+            self._items.extend([gap_lower_point, gap_upper_point, gap_center_point])
         for item in self._items:
             setattr(item, ANALYSIS_OVERLAY_ATTRIBUTE, True)
             item.setZValue(10)

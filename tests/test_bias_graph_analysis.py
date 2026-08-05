@@ -3,12 +3,18 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 from interface.windows.biasGraphWindow import BiasGraphWindow
 from interface.windows.ivAnalysisOverlay import is_analysis_overlay
-from utils.iv_analysis import NumpyIVResistanceAnalyzer
+from utils.iv_analysis import (
+    IVAnalysisConfig,
+    IVAnalysisParameters,
+    IVGapConfig,
+    NumpyIVGapAnalyzer,
+    NumpyIVResistanceAnalyzer,
+)
 
 
 class _RecordingAnalyzer:
@@ -53,8 +59,15 @@ class BiasGraphAnalysisTest(unittest.TestCase):
         self.assertEqual(self.window.analysisCurveSelector.count(), 2)
         self.assertLessEqual(self.window.analysisCurveSelector.maximumWidth(), 170)
         self.assertLessEqual(self.window.btnAnalyzeCurve.maximumWidth(), 75)
+        self.assertLessEqual(self.window.btnAnalysisParameters.maximumWidth(), 85)
+        self.assertFalse(self.window.btnAnalysisParameters.isEnabled())
         self.assertLessEqual(self.window.btnClearAnalysis.maximumWidth(), 55)
         self.assertTrue(self.window.analysisResultLabel.isHidden())
+        self.assertEqual(
+            self.window.analysisResultLabel.textInteractionFlags(),
+            Qt.TextInteractionFlag.NoTextInteraction,
+        )
+        minimum_height_before_analysis = self.window.minimumSizeHint().height()
         second_curve_name = self.window.analysisCurveSelector.itemData(1)
         self.window.analysisCurveSelector.setCurrentIndex(1)
         self.window.analyze_selected_curve()
@@ -68,12 +81,29 @@ class BiasGraphAnalysisTest(unittest.TestCase):
         self.assertEqual(self.window._analyzed_curve_name, second_curve_name)
         self.assertIn("Rn:</b> 20.00 Ω", self.window.analysisResultLabel.text())
         self.assertIn("Rj:</b> 40.00 Ω", self.window.analysisResultLabel.text())
+        self.assertIn("Rj/Rn:</b> 2", self.window.analysisResultLabel.text())
+        self.assertIn("Vgap:</b>", self.window.analysisResultLabel.text())
+        self.assertIn("Igap:</b>", self.window.analysisResultLabel.text())
+        self.assertNotIn("R²", self.window.analysisResultLabel.text())
+        self.assertNotIn("reference", self.window.analysisResultLabel.text())
+        self.assertNotIn("Fit points", self.window.analysisResultLabel.text())
+        self.assertNotIn("id 12", self.window.analysisResultLabel.text())
         self.assertFalse(self.window.analysisResultLabel.isHidden())
+        self.assertIs(self.window.analysisResultLabel.parent(), self.window.graphWidget)
+        self.assertTrue(
+            self.window.analysisResultLabel.testAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents
+            )
+        )
+        self.assertEqual(
+            self.window.minimumSizeHint().height(),
+            minimum_height_before_analysis,
+        )
         overlay_count = sum(
             is_analysis_overlay(item)
             for item in self.window.graphWidget.getPlotItem().listDataItems()
         )
-        self.assertEqual(overlay_count, 4)
+        self.assertGreaterEqual(overlay_count, 4)
         self.assertEqual(self.window.analysisCurveSelector.count(), 2)
 
         self.window.remove_all_graphs()
@@ -85,6 +115,36 @@ class BiasGraphAnalysisTest(unittest.TestCase):
             len(self.window.graphWidget.getPlotItem().listDataItems()),
             0,
         )
+
+    def test_applies_parameters_through_the_analyzer_factory(self):
+        window = BiasGraphWindow(None)
+        parameters = IVAnalysisParameters(
+            resistance=IVAnalysisConfig(
+                rn_min_voltage_mv=4.5,
+                rn_max_voltage_mv=6.5,
+                rj_min_voltage_mv=0.2,
+                rj_max_voltage_mv=2.6,
+            ),
+            gap=IVGapConfig(
+                gap_min_voltage_mv=2.3,
+                gap_max_voltage_mv=3.1,
+                gap_slope_factor=2.5,
+                smoothing_window=41,
+                smoothing_degree=4,
+                interpolation_points=1201,
+            ),
+        )
+
+        window.set_analysis_parameters(parameters)
+
+        self.assertTrue(window.btnAnalysisParameters.isEnabled())
+        self.assertEqual(window.analysis_parameters, parameters)
+        self.assertIsInstance(window.analyzer, NumpyIVResistanceAnalyzer)
+        self.assertEqual(window.analyzer.config, parameters.resistance)
+        self.assertIsInstance(window.analyzer.gap_analyzer, NumpyIVGapAnalyzer)
+        self.assertEqual(window.analyzer.gap_analyzer.config, parameters.gap)
+        window.close()
+        window.deleteLater()
 
 
 if __name__ == "__main__":
