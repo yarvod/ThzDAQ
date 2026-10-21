@@ -14,6 +14,7 @@ This repository is a Python 3 desktop application for SIS mixer control and meas
 - `sh build.sh` builds the Linux/macOS PyInstaller distribution.
 - `uvx pre-commit run --all-files` runs formatting and hygiene hooks before committing.
 - `uv run --isolated --package thzdaq-instruments pytest packages/thzdaq-instruments` runs the instrument layer tests (uv workspace member, see `docs/architecture.md`). `--isolated` keeps the app `.venv` untouched.
+- `uv run --isolated --package thzdaq-core pytest packages/thzdaq-core` runs the station/core tests; `uv run --isolated --package thzdaq-core thzdaq-station check stations/2sb.example.yaml --simulate` checks a bench profile without hardware.
 
 ## RTK (Rust Token Killer) — Required
 

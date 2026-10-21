@@ -191,19 +191,34 @@ class IfSelector:                  # выбор боковой полосы IF �
 ```
 Завтра IF переключает реле на Arduino — пишется ещё один `Switchable`, процедуры не меняются (OCP).
 
-### 4.5 Station — профиль стенда
-Связка «роль → прибор/канал/опции» описывается один раз и хранится в файле (`stations/2sb.yaml`):
+### 4.5 Station — профиль стенда ✅
+Связка «роль → прибор/канал/опции» описывается один раз в YAML (`stations/*.yaml`, пример —
+`stations/2sb.example.yaml`):
 ```yaml
 instruments:
-  rigol: {driver: rigol.dp832a, connection: {kind: socket, host: 169.254.0.14, port: 5555}}
-  lo_gen: {driver: agilent.e8247c, connection: {kind: prologix, host: 169.254.156.103, gpib: 19}}
+  rigol:     {driver: rigol.dp832a, connection: {kind: socket, host: 169.254.0.14, port: 5555}}
+  lo_gen:    {driver: agilent.e8247c, connection: {kind: prologix, host: 169.254.156.103, gpib: 19}}
+  sis_block: {driver: scontel.sis_block, connection: {...}}
+  nrx:       {driver: rs.nrx, connection: {...}, options: {aperture_time: 0.05}, sim_options: {power: -30}}
 roles:
-  if_switch: {instrument: rigol, channel: 2, inverted: false}
-  lo:        {instrument: lo_gen, multiplier: 18}
-  sis1:      {instrument: sis_block, channel: DEV4, offset_voltage: 0.033e-3}
+  if_selector: {instrument: rigol, channel: 2, adapter: sideband_selector, options: {upper_when_on: true}}
+  lo:          {instrument: lo_gen, adapter: scaled_frequency, options: {multiplier: 18}}
+  sis1:        {instrument: sis_block, channel: DEV4, attributes: {offset_voltage: 3.3e-5}}
+  coil1:       {instrument: sis_block, channel: DEV3, accessor: ctrl}
 ```
-`Station` собирает из конфигурации готовые порты и отдаёт их по ролям. Процедура объявляет, какие
-роли и каких типов ей нужны — проверка до старта, а не посреди измерения.
+- Роль = прибор → часть (`accessor(channel)`, по умолчанию `channel`) → атрибуты (смещения) →
+  адаптер порта. Адаптеры делегируют всё, что не переопределяют: LO за `scaled_frequency`
+  по-прежнему умеет `set_output`/`set_power`.
+- Адаптеры: `switch` (с инверсией), `scaled_frequency`, `sideband_selector`; новые — через
+  `register_adapter()` без правок `Station` (OCP).
+- `Station` открывает приборы лениво, роли кэшируются, один прибор делится между ролями
+  (`sis1`, `sis2` на одном блоке). `station.require({...})` строит роли и проверяет возможности,
+  сообщая обо всех проблемах сразу. `snapshot()` — профиль + `*IDN?` для метаданных измерения.
+- `simulate=True` (или `simulate: true` у прибора) подставляет симулятор драйвера с `sim_options`.
+- Импорт старого `settings.ini` (`[Configs]`, QVariant — нужен PySide6) → профиль: два «SIS-блока»
+  на одном хосте сливаются в один прибор с ролями `sisN`/`sisN_ctrl`, адаптеры Prologix
+  пропускаются, NRX/YIG/чоппер берутся из старых констант `state`.
+- CLI: `thzdaq-station import-legacy | show | check [--simulate]`.
 
 ### 4.6 Procedure — измерение без Qt
 ```python
@@ -285,8 +300,8 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
    Agilent E8247C, Scontel SIS, NI YIG (HTTP), Modbus-чоппер, LakeShore 336, SRS SR830,
    Sumitomo F-70 (RS-232 и REST), Pfeiffer TC 110 и вакуумметры (RS-485), Arduino grid —
    с симуляторами, эмуляторами протоколов и контрактными тестами.
-3. **Станция**: конфиги приборов + профиль стенда (YAML), редактор в UI, импорт текущих
-   `Configs/*` из `settings.ini`.
+3. **Станция** ✅: пакет `thzdaq-core` — профиль стенда (YAML), роли, адаптеры портов, `Station`,
+   импорт `Configs/*` из `settings.ini`, CLI `thzdaq-station`. Редактор профиля в UI — на этапе 5.
 4. **Измерения**: `Procedure`/`Runner`/`Dataset`/автоформы/`PlotSpec`; перенос I-V, P-V, Y-factor,
    VNA, shot noise, затем 2SB из ветки `2sb`.
 5. **UI**: новая главная форма, панели по capability, `PollingService`, каталог данных.

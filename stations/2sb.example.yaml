@@ -1,0 +1,69 @@
+# 2SB mixer bench. Copy to stations/<name>.yaml and adjust addresses.
+# Check without hardware:  uv run --package thzdaq-core thzdaq-station check stations/2sb.example.yaml --simulate
+version: 1
+name: 2sb
+description: Sideband separating SIS mixer bench
+instruments:
+  sis_block:
+    driver: scontel.sis_block
+    connection: {kind: socket, host: 169.254.190.83, port: 9876, read_delay: 0.05, read_termination: null}
+    title: Scontel SIS block
+  lo_generator:
+    driver: agilent.e8247c
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 19}
+  test_tone_generator:
+    driver: agilent.e8247c
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 18}
+  if_switch_supply:
+    driver: rigol.dp832a
+    connection: {kind: socket, host: 169.254.0.14, port: 5555}
+  yig_supply:
+    driver: rs.hmp2030
+    connection: {kind: socket, host: 169.254.0.30, port: 5025}
+  nrx:
+    driver: rs.nrx
+    connection: {kind: socket, host: 169.254.2.20, port: 5025}
+    options: {aperture_time: 0.05, averaging: false}
+  yig:
+    driver: ni.yig
+    connection: {kind: http, host: 169.254.0.86, timeout: 5.0}
+  chopper:
+    driver: chopper.modbus
+    connection: {kind: modbus_tcp, host: 169.254.54.24, port: 1111}
+  spectrum:
+    driver: rs.fsek30
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 20, read_delay: 0.01}
+roles:
+  sis1:
+    instrument: sis_block
+    channel: DEV4
+    attributes: {offset_voltage: 3.3e-05, offset_current: 0.0}
+  sis2:
+    instrument: sis_block
+    channel: DEV2
+    attributes: {offset_voltage: 0.0002, offset_current: -5.0e-07}
+  lo:
+    instrument: lo_generator
+    adapter: scaled_frequency
+    options: {multiplier: 18}
+    description: LO frequency at the mixer, generator x18
+  test_tone:
+    instrument: test_tone_generator
+  if_selector:
+    instrument: if_switch_supply
+    channel: 2
+    adapter: sideband_selector
+    options: {upper_when_on: true}
+  yig_power:
+    instrument: yig_supply
+    channel: 2
+    adapter: switch
+  detector:
+    instrument: nrx
+  yig_filter:
+    instrument: yig
+    channel: yig_1
+  load:
+    instrument: chopper
+  spectrum:
+    instrument: spectrum
