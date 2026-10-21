@@ -32,6 +32,7 @@ from thzdaq_instruments.errors import (
     InstrumentConnectionError,
     InstrumentError,
     InstrumentResponseError,
+    InstrumentTimeoutError,
 )
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim import SimPowerSupply, SimYigFilter
@@ -343,6 +344,22 @@ class TestJsonHttpClient:
         client = JsonHttpClient(ConnectionSpec(HTTP, host="127.0.0.1", port=port))
         with pytest.raises(InstrumentConnectionError):
             client.get("/")
+
+    def test_connect_and_read_timeouts(self, monkeypatch):
+        import requests
+
+        client = JsonHttpClient(ConnectionSpec(HTTP, host="127.0.0.1", port=1))
+        for error, expected in (
+            (requests.ConnectTimeout, InstrumentConnectionError),
+            (requests.ReadTimeout, InstrumentTimeoutError),
+        ):
+
+            def fail(*args, **kwargs):
+                raise error("simulated")
+
+            monkeypatch.setattr(client._session, "request", fail)
+            with pytest.raises(expected):
+                client.get("/")
 
 
 def make_chopper(**kwargs):

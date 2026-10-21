@@ -43,6 +43,9 @@ class JsonHttpClient:
                 data=None if data is None else json.dumps(data),
                 timeout=self.timeout,
             )
+        except self._requests.ConnectTimeout as e:
+            # Windows reports a closed port as a connect timeout, not a refusal
+            raise InstrumentConnectionError(f"{method} {url}: no connection") from e
         except self._requests.Timeout as e:
             raise InstrumentTimeoutError(f"{method} {url}: timeout") from e
         except self._requests.RequestException as e:
