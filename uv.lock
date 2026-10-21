@@ -20,15 +20,6 @@ wheels = [
 ]
 
 [[package]]
-name = "alvar"
-version = "0.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/36/fa/2e032461df744fdd8e8d8e6159e12d27bc3ae816e620566d7201b5388849/alvar-0.1.2.tar.gz", hash = "sha256:51ec8a2cfd9778f0adf62b2709bb1200a27a87ae7792d4dbc831093f8b9751e9", size = 1774, upload-time = "2023-10-12T10:40:50.518Z" }
-
-[[package]]
 name = "certifi"
 version = "2025.1.31"
 source = { registry = "https://pypi.org/simple" }
@@ -161,18 +152,6 @@ wheels = [
 ]
 
 [[package]]
-name = "port-calibration"
-version = "0.14"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/88/83b866e6d04875c9309fad3d213be1bb31607d5fcff74a2bba977add9daf/port_calibration-0.14.tar.gz", hash = "sha256:82461098495dd0191ce51be4e2d6d2b639a9c48d0d78090428b5ac74aabadf6f", size = 3821, upload-time = "2026-01-14T18:02:40.691Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/da/95548414be87c5d5ff9fc315da7d402190be46e3285072fac97e06d97679/port_calibration-0.14-py3-none-any.whl", hash = "sha256:36847a3d41c17a5b3d9cc5b66c38cec3581b41991d34f3996c87215f754a4002", size = 4664, upload-time = "2026-01-14T18:02:39.514Z" },
-]
-
-[[package]]
 name = "pygments"
 version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
@@ -229,30 +208,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/3a/a6958507d6f9c0c50f11cd299b056161c10f3cef7c227b44bc183a7e7854/pymodbus-3.8.6.tar.gz", hash = "sha256:7689b56cc3ad05a594e1486e772abb9d9646c01737935df492db04455680baf6", size = 162341, upload-time = "2025-02-10T11:53:24.596Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/84/23/8f30f094b4a00428bd3c28dd3b6a2b3715164ab85520673e197bd4bba2e7/pymodbus-3.8.6-py3-none-any.whl", hash = "sha256:b82373295fb98c9a9bf9338235240a8b2e97bcc49c0d833168cade7ba2fa90e6", size = 164366, upload-time = "2025-02-10T11:53:22.384Z" },
-]
-
-[[package]]
-name = "pyopengl"
-version = "3.1.7"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/72/b6/970868d44b619292f1f54501923c69c9bd0ab1d2d44cf02590eac2706f4f/PyOpenGL-3.1.7.tar.gz", hash = "sha256:eef31a3888e6984fd4d8e6c9961b184c9813ca82604d37fe3da80eb000a76c86", size = 1896446, upload-time = "2023-05-23T13:17:04.907Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/48/00e31747821d3fc56faddd00a4725454d1e694a8b67d715cf20f531506a5/PyOpenGL-3.1.7-py3-none-any.whl", hash = "sha256:a6ab19cf290df6101aaf7470843a9c46207789855746399d0af92521a0a92b7a", size = 2416834, upload-time = "2023-05-23T13:17:01.293Z" },
-]
-
-[[package]]
-name = "pyopengl-accelerate"
-version = "3.1.7"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/93/09/d08b3d07dbd88258276496a47273778f330f5ccf8390cb21b16b29d660de/PyOpenGL-accelerate-3.1.7.tar.gz", hash = "sha256:2b123621273a939f7fd2ec227541e399f9b5d4e815d69ae0bdb1b6c70a293680", size = 562094, upload-time = "2023-05-23T05:49:15.386Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/56/dcbae824e7b6ed5193c674da9ccabe866bae775bed9594cb9cb9228e00af/PyOpenGL_accelerate-3.1.7-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:ad8e2d186878946e5c4896d1c241af6b5f8cd87433e46741d29c3fdea6eba2c5", size = 380889, upload-time = "2023-05-23T05:48:07.025Z" },
-    { url = "https://files.pythonhosted.org/packages/d9/5f/4d88d6d8aa0277e087e9d2e821a2c92640158db2d82f0ebb2cdde63e1f0d/PyOpenGL_accelerate-3.1.7-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6c1b2b93d25e9ec8475416ed18c27a0231f29dffe0b524d827276802534a3cde", size = 2325392, upload-time = "2023-05-23T05:48:09.826Z" },
-    { url = "https://files.pythonhosted.org/packages/84/58/d1aff3b46ecb5ac4d6f1bf0fa029ccffc57c046f46f579c86f2a09b40377/PyOpenGL_accelerate-3.1.7-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ed4efe15eedc79415ee192a9ca8bec04f19c7e313444ac50e50ea26c80606ce2", size = 2499207, upload-time = "2023-05-23T05:48:11.993Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/92/e58891603797f7b28551f682fc6e8a38c3ed7aaf546e8720c690f85e6f7e/PyOpenGL_accelerate-3.1.7-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:e8b41f94a185c71d4c2658e9ee1a6f14e555e8b83bd4e18e6367d66da6a39242", size = 2331966, upload-time = "2023-05-23T05:48:13.616Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/bb/2e5d5305d338ab9aa077de9698258bb383e8d2e2995727e073c2fc67ddf0/PyOpenGL_accelerate-3.1.7-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:71b8a862ab85e02b7f88d935045be25ebc4104c3676263f0b90a91a520b66bd5", size = 2467429, upload-time = "2023-05-23T05:48:15.519Z" },
-    { url = "https://files.pythonhosted.org/packages/af/04/01ddea04df9a40cfac42323cc84b527594589bf5116bb3fed34e4e55fce1/PyOpenGL_accelerate-3.1.7-cp311-cp311-win32.whl", hash = "sha256:67b9f9d86ed5a928ebf93ace86dd8a4959388e04e89e115075575bbbe72c6546", size = 268879, upload-time = "2023-05-23T05:48:17.243Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/e3/e4c02ccbba4012e16ece90f0e1ccc8e2aa781edd95d6ab193e1d4a9dd63d/PyOpenGL_accelerate-3.1.7-cp311-cp311-win_amd64.whl", hash = "sha256:d3678b03e2cb41f87c84411313c441466497b7b829678ad5801944820f986cb7", size = 311914, upload-time = "2023-05-23T05:48:19.334Z" },
 ]
 
 [[package]]
@@ -322,23 +277,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyside6-qtads"
-version = "4.3.1.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyside6-essentials" },
-    { name = "shiboken6" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/40/6ee534ca0747aae07d75c3f9e24b9af122c45b31242068256f2053ac11d6/pyside6_qtads-4.3.1.4.tar.gz", hash = "sha256:0b2afa10c1578732e8045b33d192855a1bd260980154505790fc6ef43a29f2c4", size = 21553642, upload-time = "2025-02-12T23:03:49.549Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/c0/7a6e212ff85258598ce0be4e3edc427ec72a5b788e3e215fc2b6c4e584ba/PySide6_QtAds-4.3.1.4-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:67bf6759950c41e273a723e616b44ca65cc72157472245287521ea4c7ebba485", size = 612931, upload-time = "2025-02-12T23:03:39.941Z" },
-    { url = "https://files.pythonhosted.org/packages/ae/fc/d34fa052e609d1b72e0c5d95d02d978ea7e2f42bf14ca9625809fd7671f0/PySide6_QtAds-4.3.1.4-cp39-abi3-macosx_11_0_x86_64.whl", hash = "sha256:17916ffae001bae94f0eefcd8f4b8ea20257414c891a0f185e3e566753363d1a", size = 641707, upload-time = "2025-02-12T23:03:41.824Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/a7/d63814d36504aee8a67847055c1e1930ff6f153a17992ec7be3a7252bd76/PySide6_QtAds-4.3.1.4-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:896bb43b9174d510b9f5029c58792bcfecdcd68900c28378906d4e04dcfe0053", size = 835546, upload-time = "2025-02-12T23:03:43.314Z" },
-    { url = "https://files.pythonhosted.org/packages/fa/d4/3ace421546905695efdca4f72f08dc70c3a88507131aa7c8196657cdfe1d/PySide6_QtAds-4.3.1.4-cp39-abi3-manylinux_2_38_aarch64.whl", hash = "sha256:6001a995009911f539e74d6788d5693e6208a3cfef3f1def23eac0a82d685a12", size = 841115, upload-time = "2025-02-12T23:03:45.257Z" },
-    { url = "https://files.pythonhosted.org/packages/e4/8b/83c5ff8d39e9e13712644e0465cf9929b96c906e6333c588c8fb14c4ac19/PySide6_QtAds-4.3.1.4-cp39-abi3-win_amd64.whl", hash = "sha256:bd7d82252265f6658bb22f3fe023ad58afefc63d68b5860f77a2288c27143a28", size = 476378, upload-time = "2025-02-12T23:03:46.417Z" },
-]
-
-[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -352,15 +290,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
-]
-
-[[package]]
-name = "python-dotenv"
-version = "1.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bc/57/e84d88dfe0aec03b7a2d4327012c1627ab5f03652216c63d49846d7a6c58/python-dotenv-1.0.1.tar.gz", hash = "sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca", size = 39115, upload-time = "2024-01-23T06:33:00.505Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/3e/b68c118422ec867fa7ab88444e1274aa40681c606d59ac27de5a5588f082/python_dotenv-1.0.1-py3-none-any.whl", hash = "sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a", size = 19863, upload-time = "2024-01-23T06:32:58.246Z" },
 ]
 
 [[package]]
@@ -438,65 +367,33 @@ wheels = [
 
 [[package]]
 name = "thzdaq"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "altgraph" },
-    { name = "alvar" },
-    { name = "certifi" },
-    { name = "charset-normalizer" },
-    { name = "idna" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pefile" },
+    { name = "thzdaq-core" },
+    { name = "thzdaq-gui" },
+    { name = "thzdaq-instruments" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "pillow" },
-    { name = "port-calibration" },
     { name = "pyinstaller" },
-    { name = "pyinstaller-hooks-contrib" },
-    { name = "pymodbus" },
-    { name = "pyopengl" },
-    { name = "pyopengl-accelerate" },
-    { name = "pyqtgraph" },
-    { name = "pyserial" },
-    { name = "pyside6" },
-    { name = "pyside6-addons" },
-    { name = "pyside6-essentials" },
-    { name = "pyside6-qtads" },
-    { name = "python-dotenv" },
-    { name = "pywin32-ctypes" },
-    { name = "requests" },
-    { name = "shiboken6" },
-    { name = "urllib3" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "altgraph", specifier = "==0.17.5" },
-    { name = "alvar", specifier = "==0.1.2" },
-    { name = "certifi", specifier = "==2025.1.31" },
-    { name = "charset-normalizer", specifier = "==3.4.1" },
-    { name = "idna", specifier = "==3.10" },
-    { name = "numpy", specifier = "==1.26.4" },
-    { name = "packaging", specifier = "==24.2" },
-    { name = "pefile", specifier = "==2023.2.7" },
+    { name = "thzdaq-core", editable = "packages/thzdaq-core" },
+    { name = "thzdaq-gui", editable = "packages/thzdaq-gui" },
+    { name = "thzdaq-instruments", editable = "packages/thzdaq-instruments" },
+]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "pillow", specifier = "==11.1.0" },
-    { name = "port-calibration", specifier = ">=0.14" },
     { name = "pyinstaller", specifier = "==6.12.0" },
-    { name = "pyinstaller-hooks-contrib", specifier = "==2025.1" },
-    { name = "pymodbus", specifier = "==3.8.6" },
-    { name = "pyopengl", specifier = "==3.1.7" },
-    { name = "pyopengl-accelerate", specifier = "==3.1.7" },
-    { name = "pyqtgraph", specifier = "==0.13.7" },
-    { name = "pyserial", specifier = "==3.5" },
-    { name = "pyside6", specifier = "==6.8.2.1" },
-    { name = "pyside6-addons", specifier = "==6.8.2.1" },
-    { name = "pyside6-essentials", specifier = "==6.8.2.1" },
-    { name = "pyside6-qtads", specifier = "==4.3.1.4" },
-    { name = "python-dotenv", specifier = "==1.0.1" },
-    { name = "pywin32-ctypes", specifier = "==0.2.3" },
-    { name = "requests", specifier = "==2.32.3" },
-    { name = "shiboken6", specifier = "==6.8.2.1" },
-    { name = "urllib3", specifier = "==2.3.0" },
+    { name = "pytest", specifier = ">=8.2" },
 ]
 
 [[package]]

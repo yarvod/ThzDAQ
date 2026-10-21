@@ -1,36 +1,20 @@
 [project]
 name = "thzdaq"
-version = "0.1.0"
+version = "0.2.0"
 description = "Desktop application for SIS mixer control and measurements"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "altgraph==0.17.5",
-    "alvar==0.1.2",
-    "certifi==2025.1.31",
-    "charset-normalizer==3.4.1",
-    "idna==3.10",
-    "numpy==1.26.4",
-    "packaging==24.2",
-    "pefile==2023.2.7",
-    "pillow==11.1.0",
-    "port-calibration>=0.14",
+    "thzdaq-gui",
+    "thzdaq-core",
+    "thzdaq-instruments",
+]
+
+[dependency-groups]
+dev = [
+    "pillow==11.1.0",  # PyInstaller converts the PNG icon with it
     "pyinstaller==6.12.0",
-    "pyinstaller-hooks-contrib==2025.1",
-    "pymodbus==3.8.6",
-    "pyopengl==3.1.7",
-    "pyopengl-accelerate==3.1.7",
-    "pyqtgraph==0.13.7",
-    "pyserial==3.5",
-    "pyside6==6.8.2.1",
-    "pyside6-addons==6.8.2.1",
-    "pyside6-essentials==6.8.2.1",
-    "pyside6-qtads==4.3.1.4",
-    "python-dotenv==1.0.1",
-    "pywin32-ctypes==0.2.3",
-    "requests==2.32.3",
-    "shiboken6==6.8.2.1",
-    "urllib3==2.3.0",
+    "pytest>=8.2",
 ]
 
 [tool.uv]
@@ -38,3 +22,17 @@ package = false
 
 [tool.uv.workspace]
 members = ["packages/*"]
+
+[tool.uv.sources]
+thzdaq-gui = { workspace = true }
+thzdaq-core = { workspace = true }
+thzdaq-instruments = { workspace = true }
+
+[tool.pytest.ini_options]
+# Each package keeps its own tests; conftest files put helpers on sys.path
+testpaths = [
+    "packages/thzdaq-instruments/tests",
+    "packages/thzdaq-core/tests",
+    "packages/thzdaq-gui/tests",
+]
+addopts = "--import-mode=importlib"

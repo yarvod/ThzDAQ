@@ -108,11 +108,20 @@ class TestCli:
         __import__("importlib").util.find_spec("PySide6") is None,
         reason="legacy settings.ini needs PySide6",
     )
-    def test_import_real_settings_file(self, tmp_path):
-        settings = Path(__file__).parents[3] / "settings.ini"
+    def test_import_legacy_settings_file(self, tmp_path):
+        from PySide6.QtCore import QSettings
+
+        settings_path = tmp_path / "settings.ini"
+        settings = QSettings(str(settings_path), QSettings.IniFormat)
+        for section, entries in LEGACY.items():
+            settings.setValue(f"Configs/{section}", entries)
+        settings.sync()
+
         output = tmp_path / "lab.yaml"
-        assert main(["import-legacy", str(settings), "-o", str(output)]) == 0
-        assert load_station(output).instruments
+        assert main(["import-legacy", str(settings_path), "-o", str(output)]) == 0
+        config = load_station(output)
+        assert config.roles["sis2"].attributes["offset_voltage"] == -0.000187
+        assert config.instruments["agilent_signal_generator_2"].connection.gpib == 18
 
     def test_console_script_entry(self):
         result = subprocess.run(

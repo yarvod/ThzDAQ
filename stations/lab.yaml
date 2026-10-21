@@ -1,0 +1,207 @@
+version: 1
+name: lab
+description: Imported from the legacy settings.ini
+instruments:
+  agilent_signal_generator_1:
+    driver: agilent.e8247c
+    connection:
+      kind: prologix
+      host: 169.254.156.103
+      port: 1234
+      gpib: 19
+    title: Agilent Signal Generator 1
+  agilent_signal_generator_2:
+    driver: agilent.e8247c
+    connection:
+      kind: prologix
+      host: 169.254.156.103
+      port: 1234
+      gpib: 18
+    title: Agilent Signal Generator 2
+  grid_1:
+    driver: arduino.grid
+    connection:
+      kind: http
+      host: 169.254.0.52
+      port: 80
+      timeout: 30.0
+    title: GRID 1
+  grid_2:
+    driver: arduino.grid
+    connection:
+      kind: http
+      host: 169.254.0.53
+      port: 80
+      timeout: 30.0
+    title: GRID 2
+  keithley_power_supply_1:
+    driver: keithley.2200
+    connection:
+      kind: prologix
+      host: 169.254.156.103
+      port: 1234
+      gpib: 22
+    title: Keithley Power Supply 1
+  keithley_power_supply_2:
+    driver: keithley.2200
+    connection:
+      kind: prologix
+      host: 169.254.156.103
+      port: 1234
+      gpib: 20
+    title: Keithley Power Supply 2
+  lakeshore_temperature_controller_1:
+    driver: lakeshore.336
+    connection:
+      kind: prologix
+      host: 169.254.156.101
+      port: 1234
+      gpib: 12
+    title: LakeShore Temperature Controller 1
+  rigol_power_supply_1:
+    driver: rigol.dp832a
+    connection:
+      kind: socket
+      host: 169.254.0.14
+      port: 5555
+    title: Rigol Power Supply 1
+  rigol_power_supply_2:
+    driver: rigol.dp832a
+    connection:
+      kind: socket
+      host: 169.254.0.15
+      port: 5555
+    title: Rigol Power Supply 2
+  rohde_schwarz_power_supply_1:
+    driver: rs.hmp2030
+    connection:
+      kind: socket
+      host: 169.254.0.30
+      port: 5025
+    title: Rohde Schwarz Power Supply 1
+  rohde_schwarz_spectrum_fsek_30_1:
+    driver: rs.fsek30
+    connection:
+      kind: socket
+      host: 169.254.75.176
+      port: 5025
+    title: Rohde Schwarz Spectrum FSEK 30 1
+  rohde_schwarz_vna_zva_67_1:
+    driver: rs.zva67
+    connection:
+      kind: socket
+      host: 169.254.106.189
+      port: 5025
+    title: Rohde Schwarz VNA ZVA 67 1
+  sis_block_1:
+    driver: scontel.sis_block
+    connection:
+      kind: socket
+      host: 169.254.190.83
+      port: 9876
+      read_delay: 0.05
+      read_termination: null
+    title: Scontel SIS block
+  sumitomo_f70_compressor_1:
+    driver: sumitomo.f70_rest
+    connection:
+      kind: http
+      host: 192.168.129.106
+      port: 21024
+      timeout: 10.0
+    title: Sumitomo F70 Compressor 1
+  nrx:
+    driver: rs.nrx
+    connection:
+      kind: socket
+      host: 169.254.2.20
+      port: 5025
+    options:
+      aperture_time: 0.05
+      averaging: false
+    title: R&S NRX
+  yig:
+    driver: ni.yig
+    connection:
+      kind: http
+      host: 169.254.0.86
+      timeout: 5.0
+    title: NI YIG
+  chopper:
+    driver: chopper.modbus
+    connection:
+      kind: modbus_tcp
+      host: 169.254.54.24
+      port: 1111
+    title: Chopper
+roles:
+  sis1:
+    instrument: sis_block_1
+    channel: DEV4
+    attributes:
+      offset_voltage: 4.0e-05
+      offset_current: 0.0
+    description: bias of Scontel SIS Block 1
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 5.4767381740816745e-09 / 5
+        - -0.04757314547896385 / 5
+        CurrentDAC:
+        - -1322560
+        - 32801.19921875
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 20
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 0.24375 * 6.53895619339726e-09
+        - -0.056775 * 0.24375
+        VoltageDac:
+        - -1322980
+        - 32810.3984375
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis1_ctrl:
+    instrument: sis_block_1
+    channel: DEV3
+    accessor: ctrl
+    description: coil of Scontel SIS Block 1
+  sis2:
+    instrument: sis_block_1
+    channel: DEV2
+    attributes:
+      offset_voltage: -0.000187
+      offset_current: -1.3e-06
+    description: bias of Scontel SIS Block 2
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 2.7199096308549997e-09
+        - -0.02362622693181038
+        CurrentDAC:
+        - -1382090
+        - 32661.900390625
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 10
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 6.597875135128106e-09
+        - -0.057308197021484375
+        VoltageDac:
+        - -1177910
+        - 32684.30078125
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis2_ctrl:
+    instrument: sis_block_1
+    channel: DEV1
+    accessor: ctrl
+    description: coil of Scontel SIS Block 2

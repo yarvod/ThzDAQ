@@ -1,1 +1,0 @@
-from .YigWidget import YIGWidget
