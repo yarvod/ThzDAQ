@@ -50,116 +50,106 @@ ui  ──►  application  ──►  domain  ◄──  hardware (drivers)  �
 Правило: стрелки только вниз/внутрь. `domain` не импортирует ничего из проекта и не знает про Qt.
 Драйверы не знают про Qt, UI и конфиги. UI не создаёт драйверы сам — получает сервисы.
 
+Репозиторий — uv workspace из трёх дистрибутивов. Границы слоёв держатся зависимостями:
+в `thzdaq-instruments` физически нет Qt и numpy, тест `test_package_does_not_import_gui_or_numpy`
+это проверяет.
+
 ```
-thzdaq/
-  domain/
-    units.py           # соглашение: СИ внутри (Гц, В, А, K), мощность в дБм
-    errors.py          # InstrumentError → ConnectionError / TimeoutError / ResponseError
-    capabilities.py    # интерфейсы по возможностям (раздел 4)
-    readings.py        # ChannelReading, PowerReading, Trace ...
-    analysis/          # iv.py, noise.py, two_sb.py — чистые расчёты
-  hardware/
-    transport/         # base.py, socket.py, prologix.py, serial.py, http.py, pool.py
-    instrument.py      # Instrument, Channel — базовые классы
-    drivers/           # rigol/dp832a.py, rohde_schwarz/hmp2030.py, scontel/sis_block.py, ...
-    sim/               # симуляторы каждого интерфейса
-    registry.py        # каталог драйверов
-  station/
-    config.py          # InstrumentConfig, RoleSpec, StationConfig (dataclass'ы)
-    ports.py           # ChannelSwitch, ScaledFrequencySource, IfSelector ...
-    station.py         # Station: роли → готовые порты
-    storage.py         # YAML/JSON профили стендов
-  measurements/
-    base.py            # Procedure, Parameter, Context, PlotSpec
-    runner.py          # исполнитель без Qt: отмена, прогресс, запись данных
-    procedures/        # iv_curve.py, pv_curve.py, y_factor.py, two_sb/*.py ...
-  data/
-    dataset.py         # Dataset: метаданные + записи
-    store.py           # автосохранение по ходу (JSON lines / HDF5)
-  ui/
-    main_window.py     # окно, docks, перспективы
-    qt_runner.py       # QThread-обёртка над runner → сигналы
-    forms.py           # форма из Parameter'ов процедуры
-    plots/             # PlotPanel по PlotSpec
-    panels/            # ручное управление по capability: PowerSupplyPanel, SignalSourcePanel ...
-    setup/             # редактор приборов и профиля стенда
-  app.py               # composition root
-main.py                # точка входа: from thzdaq.app import run
+packages/
+  thzdaq-instruments/          # import thzdaq_instruments — без Qt, можно отдать отдельно
+    src/thzdaq_instruments/
+      errors.py                # InstrumentError → Connection / Timeout / Response / Configuration
+      units.py                 # соглашение: СИ внутри (Гц, В, А, K), мощность в дБм
+      readings.py              # ChannelReading ...
+      capabilities.py          # интерфейсы по возможностям (раздел 4.3)
+      instrument.py            # Instrument, ScpiInstrument, Channel
+      registry.py              # каталог драйверов, open() через пул
+      transport/               # base.py, links.py (TCP, serial), prologix.py, pool.py, fake.py
+      drivers/                 # rigol/, rohde_schwarz/, agilent/, scontel/ ... (этап 2)
+      sim/                     # симуляторы каждого интерфейса
+  thzdaq-core/                 # import thzdaq_core — без Qt (этапы 3–4)
+    src/thzdaq_core/
+      station/                 # конфиги приборов, роли, порты, профили стендов (YAML)
+      measurements/            # Procedure, Parameter, Context, PlotSpec, runner, procedures/
+      data/                    # Dataset, автосохранение
+      analysis/                # iv, noise, two_sb — чистые расчёты
+      cli.py                   # thzdaq run <procedure> --station stations/2sb.yaml
+app/                           # thzdaq-gui (этап 5): PySide6, pyqtgraph, QtAds
+  main_window.py, qt_runner.py, forms.py, plots/, panels/, setup/
+  app.py                       # composition root
 ```
+
+Тесты пакета: `uv run --isolated --package thzdaq-instruments pytest packages/thzdaq-instruments`.
 
 ## 4. Ключевые абстракции
 
 ### 4.1 Transport — «физический порт»
-```python
-class Transport(Protocol):
-    def write(self, command: str) -> None: ...
-    def query(self, command: str) -> str: ...
-    def close(self) -> None: ...
+Два уровня:
+- `Link` — физическое соединение построчно (`SocketLink`, `SerialLink`), со своим `RLock`.
+- `Transport` — доступ одного прибора к линку: `write`, `read`, `query`, `transaction()`.
+  `MessageTransport` пишет напрямую, `PrologixTransport` перед командой выбирает GPIB-адрес
+  (`++addr` только при смене) и читает через `++read eoi`.
 
+```python
 @dataclass(frozen=True)
 class ConnectionSpec:
-    kind: str            # "socket" | "prologix" | "serial" | "http" | "visa"
+    kind: str                 # "socket" | "serial" | "prologix" | "prologix_usb"
     host: str | None = None
-    port: int | None = None
+    port: int | None = None   # для prologix по умолчанию 1234
+    serial_port: str | None = None
     gpib: int | None = None
     timeout: float = 2.0
+    read_delay: float = 0.0
+    read_termination: str | None = "\n"   # None — старый режим «один recv»
 ```
-- `TransportPool.acquire(spec) -> Transport`: одно физическое соединение на конечную точку
-  (Prologix-хост, сокет), подсчёт ссылок, закрывается последним пользователем.
-- Блокировка на физическую шину: `query` атомарен, GPIB-адрес выбирается под той же блокировкой.
-- Драйвер получает готовый `Transport` в конструкторе (DIP) — в тестах подставляется фейк.
+- `TransportPool.acquire(spec) -> Transport`: один линк на физическую точку (`spec.link_key`),
+  подсчёт ссылок, линк закрывается последним `transport.close()`. Prologix настраивается один
+  раз на линк.
+- Каждый `query` держит блокировку линка от записи до чтения: генераторы и спектроанализатор за
+  одним Prologix не перемешивают команды (есть тест, который без блокировки падает).
+- `FakeLink` записывает команды и отвечает по сценарию — на нём тестируются драйверы.
+- HTTP-приборы (YIG на NI) — отдельный клиент на этапе 2, это не построчный транспорт.
 
 ### 4.2 Instrument и Channel
 ```python
-class Instrument(ABC):
-    def __init__(self, transport: Transport): ...
-    def identify(self) -> str: ...
-    def close(self) -> None: ...
+class Instrument:                  # база драйверов и симуляторов: имя, каналы, close()
+    channel_class: type[Channel] | None = None
+    channel_keys: tuple = ()
+    def channel(self, key) -> Channel: ...
+
+class ScpiInstrument(Instrument):  # текстовые команды поверх Transport
+    def __init__(self, transport: Transport, *, name=None): ...
+    def query_float / query_int / query_bool(...)  # мусор в ответе → InstrumentResponseError
+    def identify(self) -> str: ...                 # *IDN?
 
 class Channel:                     # часть прибора, как InstrumentChannel в QCoDeS
-    def __init__(self, parent: Instrument, index: int): ...
+    def __init__(self, instrument, key): ...
 ```
-Многоканальные приборы отдают каналы: `supply.channel(2)`, `sis_block.bias("DEV4")`.
+Многоканальные приборы отдают каналы: `supply.channel(2)`, `sis_block.channel("DEV4")`.
 Потребитель работает с каналом, а не с «прибором + номером».
 
 ### 4.3 Capabilities — маленькие интерфейсы (ISP)
-Интерфейс описывает одну возможность; прибор/канал реализует несколько.
+Интерфейс описывает одну возможность; прибор/канал реализует несколько. Это `Protocol` только из
+методов, поэтому реестр выводит возможности драйвера из класса (`issubclass`), без ручных списков.
 ```python
-class Switchable(Protocol):        # выход вкл/выкл
-    def set_output(self, value: bool) -> None: ...
-    def get_output(self) -> bool: ...
-
-class VoltageSource(Protocol):
-    def set_voltage(self, volts: float) -> None: ...
-
-class VoltageCurrentMeter(Protocol):
-    def measure(self) -> ChannelReading: ...
-
-class FrequencySource(Protocol):   # Гц на выходе, с учётом множителя
-    def set_frequency(self, hz: float) -> None: ...
-
-class PowerLevel(Protocol):
-    def set_power(self, dbm: float) -> None: ...
-
-class PowerDetector(Protocol):
-    def read_power(self) -> float: ...           # дБм, бросает InstrumentError
-
-class TunableFilter(Protocol):
-    def set_frequency(self, hz: float) -> float: ...
-
-class LoadSwitch(Protocol):
-    def hot(self) -> None: ...
-    def cold(self) -> None: ...
-
-class BiasPort(Protocol):          # один SIS-канал
-    def set_voltage(self, volts: float) -> None: ...
-    def read(self) -> ChannelReading: ...
+class Identifiable(Protocol):       def identify(self) -> str
+class Switchable(Protocol):         set_output(bool), get_output() -> bool
+class VoltageSource(Protocol):      set_voltage(V), get_voltage() -> V   # уставка
+class CurrentSource(Protocol):      set_current(A), get_current() -> A   # уставка/предел
+class VoltageCurrentMeter(Protocol): measure() -> ChannelReading         # факт
+class FrequencySource(Protocol):    set_frequency(Hz), get_frequency() -> Hz
+class PowerLevel(Protocol):         set_power(dBm), get_power() -> dBm
+class PowerDetector(Protocol):      read_power() -> dBm                  # ошибка — исключение
+class TunableFilter(Protocol):      tune(Hz) -> Hz                       # реально выставленная
+class LoadSwitch(Protocol):         to_hot(), to_cold()
 ```
-Плюс `SpectrumAnalyzer`, `NetworkAnalyzer`, `Thermometer`, `Rotator` (grid), `Compressor`,
+Отдельного `BiasPort` нет: SIS-канал — это `VoltageSource + VoltageCurrentMeter`, канал блока
+питания — `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`.
+Позже добавятся `SpectrumAnalyzer`, `NetworkAnalyzer`, `Thermometer`, `Rotator`, `Compressor`,
 `VacuumGauge` — по мере переноса приборов.
 
-Пример: канал Rigol, канал R&S и Keithley все реализуют `Switchable + VoltageSource +
-VoltageCurrentMeter`. Различия в SCPI спрятаны в драйвере (LSP: подменяемы без `if vendor`).
+Для каждой возможности есть контрактный тест (`tests/contracts.py`): симуляторы и драйверы
+(на `FakeLink`) проходят одни и те же проверки — так держится LSP.
 
 ### 4.4 Ports — логические порты поверх каналов
 Измерению нужна роль, а не конкретный прибор. Порты — маленькие адаптеры (Decorator/Adapter):
@@ -200,7 +190,8 @@ roles:
 ```python
 class TnProcedure(Procedure):
     title = "2SB Tn"
-    requires = {"sis1": BiasPort, "sis2": BiasPort, "if_selector": IfSelector,
+    requires = {"sis1": (VoltageSource, VoltageCurrentMeter),
+                "sis2": (VoltageSource, VoltageCurrentMeter), "if_selector": IfSelector,
                 "detector": PowerDetector, "yig": TunableFilter, "load": LoadSwitch}
     lo_frequency = FloatParameter("LO frequency", unit="GHz", default=263)
     if_sweep = SweepParameter("IF", unit="GHz", default=(4, 12, 201))
@@ -269,9 +260,9 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
 
 ## 7. План перехода (в этой ветке, приложение рабочее после каждого этапа)
 
-1. **Каркас**: пакет `thzdaq/`, `domain` (units, errors, capabilities, readings), `transport` с
-   пулом и блокировками, `Instrument/Channel`, реестр, симуляторы. Тесты.
-2. **Драйверы**: перенос по одному в `hardware/drivers` с реализацией capability
+1. **Каркас** ✅: uv workspace, пакет `thzdaq-instruments` (errors, units, readings, capabilities,
+   transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы). Тесты.
+2. **Драйверы**: перенос по одному в `thzdaq_instruments/drivers` с реализацией capability
    (сначала блоки питания, генераторы, NRX, SIS, YIG, chopper). Старый `api/` временно реэкспортирует.
 3. **Станция**: конфиги приборов + профиль стенда (YAML), редактор в UI, импорт текущих
    `Configs/*` из `settings.ini`.

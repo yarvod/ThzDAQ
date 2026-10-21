@@ -1,0 +1,24 @@
+[project]
+name = "thzdaq-instruments"
+version = "0.1.0"
+description = "Laboratory instrument drivers, transports and simulators for ThzDAQ"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq_instruments"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

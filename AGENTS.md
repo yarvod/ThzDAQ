@@ -13,6 +13,7 @@ This repository is a Python 3 desktop application for SIS mixer control and meas
 - `uv run build.bat [app_name]` builds a Windows PyInstaller distribution; the default name is `SIS_manager`.
 - `sh build.sh` builds the Linux/macOS PyInstaller distribution.
 - `uvx pre-commit run --all-files` runs formatting and hygiene hooks before committing.
+- `uv run --isolated --package thzdaq-instruments pytest packages/thzdaq-instruments` runs the instrument layer tests (uv workspace member, see `docs/architecture.md`). `--isolated` keeps the app `.venv` untouched.
 
 ## RTK (Rust Token Killer) — Required
 
