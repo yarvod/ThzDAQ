@@ -17,4 +17,5 @@ from .measures import (
     SisReflectionMeasureWidget,
     ShotNoizeMeasurementWidget,
     PowerBiasVoltageMeasureWidget,
+    TwoSbMeasureWidget,
 )

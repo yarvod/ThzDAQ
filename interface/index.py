@@ -113,6 +113,11 @@ class App(QMainWindow):
             import_class("interface.views.PowerBiasVoltageMeasureWidget"),
             "measure",
         )
+        self.add_dock_widget(
+            "2SB measures",
+            import_class("interface.views.TwoSbMeasureWidget"),
+            "measure",
+        )
 
         # Add graph widgets
         self.add_dock_widget(
@@ -161,6 +166,19 @@ class App(QMainWindow):
         )
         self.add_dock_widget(
             "Tn-IF curve", import_class("interface.windows.TnIFGraphWindow"), "graph"
+        )
+        self.add_dock_widget(
+            "SRR-IF curve", import_class("interface.windows.SrrIFGraphWindow"), "graph"
+        )
+        self.add_dock_widget(
+            "2SB I-F curve",
+            import_class("interface.windows.TwoSbCurrentFrequencyGraphWindow"),
+            "graph",
+        )
+        self.add_dock_widget(
+            "2SB Tn-SRR maps",
+            import_class("interface.windows.TwoSbMapsGraphWindow"),
+            "graph",
         )
 
     def add_dock_widget(

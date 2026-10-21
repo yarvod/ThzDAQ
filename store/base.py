@@ -24,6 +24,11 @@ class MeasureType:
     PIF_CURVE = "pif_curve"
     PIF_CURVE_HOT_COLD = "pif_curve_hot_cold"
     TA_SIS_CALIBRATION = "ta_sis_calibration"
+    TWO_SB_IF_BALANCE = "2sb_if_balance"
+    TWO_SB_PUMP_BALANCE = "2sb_pump_balance"
+    TWO_SB_SRR = "2sb_srr"
+    TWO_SB_TN = "2sb_tn"
+    TWO_SB_OPTIMIZATION = "2sb_optimization"
 
     CHOICES = dict(
         (
@@ -42,6 +47,11 @@ class MeasureType:
             (PIF_CURVE, "P-IF curve"),
             (PIF_CURVE_HOT_COLD, "P-IF curve hot/cold"),
             (TA_SIS_CALIBRATION, "Ta SIS calibration"),
+            (TWO_SB_IF_BALANCE, "2SB IF balance"),
+            (TWO_SB_PUMP_BALANCE, "2SB LO/RF balance"),
+            (TWO_SB_SRR, "2SB SRR"),
+            (TWO_SB_TN, "2SB Tn"),
+            (TWO_SB_OPTIMIZATION, "2SB SRR/Tn optimization"),
         )
     )
 

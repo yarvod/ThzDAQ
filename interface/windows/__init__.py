@@ -11,3 +11,8 @@ from .biasPowerGraphWindow import (
     TnGraphWindow,
 )
 from .vnaGraphWindow import VNAGraphWindow
+from .twoSbGraphWindows import (
+    SrrIFGraphWindow,
+    TwoSbCurrentFrequencyGraphWindow,
+    TwoSbMapsGraphWindow,
+)
