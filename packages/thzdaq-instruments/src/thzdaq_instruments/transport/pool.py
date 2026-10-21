@@ -59,6 +59,10 @@ class TransportPool:
         self._entries: Dict[tuple, _Entry] = {}
 
     def acquire(self, spec: ConnectionSpec) -> Transport:
+        if not spec.is_message_based:
+            raise ConfigurationError(
+                f"{spec.kind} connections are opened by the driver"
+            )
         key = spec.link_key
         with self._lock:
             entry = self._entries.get(key)

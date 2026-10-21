@@ -78,7 +78,7 @@ class TestSimulators:
         assert bias.measure().current == pytest.approx(-above)
 
     def test_yig_quantizes_and_clamps(self):
-        yig = SimYigFilter(start_frequency=3e9, step=2e6, max_code=100)
+        yig = SimYigFilter(start_frequency=3e9, step=2e6, max_code=100).channel("yig_1")
         assert yig.tune(3.0031e9) == pytest.approx(3.004e9)
         assert yig.tune(1e9) == pytest.approx(3e9)
         assert yig.tune(10e9) == pytest.approx(3.2e9)

@@ -2,8 +2,12 @@ from thzdaq_instruments.sim.chopper import SimChopper
 from thzdaq_instruments.sim.power_meter import SimPowerMeter
 from thzdaq_instruments.sim.power_supply import SimPowerSupply, SimSupplyChannel
 from thzdaq_instruments.sim.signal_generator import SimSignalGenerator
-from thzdaq_instruments.sim.sis_block import SimSisBiasChannel, SimSisBlock
-from thzdaq_instruments.sim.yig_filter import SimYigFilter
+from thzdaq_instruments.sim.sis_block import (
+    SimSisBiasChannel,
+    SimSisBlock,
+    SimSisCtrlChannel,
+)
+from thzdaq_instruments.sim.yig_filter import SimYigChannel, SimYigFilter
 
 SIMULATORS = {
     "sim.power_supply": (SimPowerSupply, "Simulated power supply"),
@@ -28,7 +32,9 @@ __all__ = [
     "SimSignalGenerator",
     "SimSisBiasChannel",
     "SimSisBlock",
+    "SimSisCtrlChannel",
     "SimSupplyChannel",
+    "SimYigChannel",
     "SimYigFilter",
     "register_simulators",
 ]

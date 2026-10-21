@@ -170,17 +170,18 @@ class TestRegistry:
     def test_default_registry_has_simulators(self):
         registry = default_registry()
         assert "sim.power_supply" in registry
-        detectors = [info.key for info in registry.find(PowerDetector)]
-        assert detectors == ["sim.power_meter"]
+        detectors = {info.key for info in registry.find(PowerDetector)}
+        assert "sim.power_meter" in detectors
         sources = {info.key for info in registry.find(VoltageSource)}
-        assert sources == {"sim.power_supply", "sim.sis_block"}
+        assert {"sim.power_supply", "sim.sis_block"} <= sources
         assert isinstance(registry.open("sim.chopper"), Instrument)
 
 
 def test_package_does_not_import_gui_or_numpy():
     code = (
         "import sys, thzdaq_instruments, thzdaq_instruments.sim, "
-        "thzdaq_instruments.transport.fake;"
+        "thzdaq_instruments.drivers, thzdaq_instruments.transport.fake;"
+        "thzdaq_instruments.default_registry();"
         "print(sorted(m for m in sys.modules "
         "if m.split('.')[0] in ('PySide6', 'pyqtgraph', 'numpy', 'store', 'interface')))"
     )

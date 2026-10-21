@@ -11,7 +11,12 @@ SOCKET = "socket"
 SERIAL = "serial"
 PROLOGIX = "prologix"  # Prologix GPIB-Ethernet
 PROLOGIX_USB = "prologix_usb"
-KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB)
+# Not line based: drivers open their own clients, the pool doesn't share them
+HTTP = "http"
+MODBUS_TCP = "modbus_tcp"
+MODBUS_RTU = "modbus_rtu"
+MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB)
+KINDS = MESSAGE_KINDS + (HTTP, MODBUS_TCP, MODBUS_RTU)
 
 PROLOGIX_DEFAULT_PORT = 1234
 
@@ -35,14 +40,15 @@ class ConnectionSpec:
     def __post_init__(self):
         if self.kind not in KINDS:
             raise ConfigurationError(f"Unknown connection kind {self.kind!r}")
-        if self.kind in (SOCKET, PROLOGIX):
+        if self.kind in (SOCKET, PROLOGIX, HTTP, MODBUS_TCP):
             if not self.host:
                 raise ConfigurationError(f"{self.kind} connection requires host")
             if self.port is None:
-                if self.kind == SOCKET:
-                    raise ConfigurationError("socket connection requires port")
-                object.__setattr__(self, "port", PROLOGIX_DEFAULT_PORT)
-        if self.kind in (SERIAL, PROLOGIX_USB) and not self.serial_port:
+                if self.kind in (SOCKET, MODBUS_TCP):
+                    raise ConfigurationError(f"{self.kind} connection requires port")
+                if self.kind == PROLOGIX:
+                    object.__setattr__(self, "port", PROLOGIX_DEFAULT_PORT)
+        if self.kind in (SERIAL, PROLOGIX_USB, MODBUS_RTU) and not self.serial_port:
             raise ConfigurationError(f"{self.kind} connection requires serial_port")
         if self.is_prologix and (self.gpib is None or not 0 <= self.gpib <= 30):
             raise ConfigurationError("Prologix connection requires GPIB address 0..30")
@@ -54,10 +60,16 @@ class ConnectionSpec:
         return self.kind in (PROLOGIX, PROLOGIX_USB)
 
     @property
+    def is_message_based(self) -> bool:
+        return self.kind in MESSAGE_KINDS
+
+    @property
     def link_key(self) -> tuple:
         """Identifies the physical connection shared by instruments."""
-        if self.kind in (SOCKET, PROLOGIX):
+        if self.kind in (SOCKET, PROLOGIX, MODBUS_TCP):
             return ("tcp", self.host, int(self.port))
+        if self.kind == HTTP:
+            return ("http", self.host, self.port)
         return ("serial", self.serial_port)
 
     def with_gpib(self, gpib: int) -> "ConnectionSpec":

@@ -6,6 +6,16 @@ with a FakeLink-backed transport, so drivers and simulators pass the same checks
 
 import math
 
+from emulators import (
+    AgilentEmulator,
+    FakeJsonClient,
+    HmpEmulator,
+    KeithleyEmulator,
+    MotorRegisters,
+    NrxEmulator,
+    RigolEmulator,
+    SisEmulator,
+)
 from thzdaq_instruments.capabilities import (
     CurrentSource,
     FrequencySource,
@@ -18,6 +28,16 @@ from thzdaq_instruments.capabilities import (
     VoltageCurrentMeter,
     VoltageSource,
 )
+from thzdaq_instruments.drivers import (
+    AgilentE8247C,
+    Keithley2200,
+    ModbusChopper,
+    NiYigFilter,
+    RigolDP832A,
+    RohdeSchwarzHMP2030,
+    RohdeSchwarzNRX,
+    ScontelSisBlock,
+)
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim import (
     SimChopper,
@@ -27,6 +47,53 @@ from thzdaq_instruments.sim import (
     SimSisBlock,
     SimYigFilter,
 )
+
+
+def driver(cls, emulator):
+    transport, _ = emulator.transport()
+    return cls(transport)
+
+
+def rigol():
+    return driver(RigolDP832A, RigolEmulator())
+
+
+def hmp():
+    return driver(RohdeSchwarzHMP2030, HmpEmulator())
+
+
+def keithley():
+    return driver(Keithley2200, KeithleyEmulator())
+
+
+def agilent():
+    return driver(AgilentE8247C, AgilentEmulator())
+
+
+def nrx():
+    return driver(RohdeSchwarzNRX, NrxEmulator())
+
+
+def sis():
+    return driver(ScontelSisBlock, SisEmulator())
+
+
+def yig():
+    return NiYigFilter(client=FakeJsonClient())
+
+
+def chopper():
+    return ModbusChopper(
+        registers=MotorRegisters(), move_wait=0, align_wait=0, step_wait=0
+    )
+
+
+SUPPLY_CHANNELS = {
+    "sim supply channel": lambda: SimPowerSupply().channel(1),
+    "rigol channel": lambda: rigol().channel(2),
+    "hmp channel": lambda: hmp().channel(3),
+    "keithley channel": lambda: keithley().channel(1),
+}
 
 
 def check_identifiable(device):
@@ -41,9 +108,9 @@ def check_switchable(device):
     assert device.get_output() is False
 
 
-def check_voltage_source(device):
-    device.set_voltage(1.5e-3)
-    assert math.isclose(device.get_voltage(), 1.5e-3, rel_tol=1e-6)
+def check_voltage_source(device, voltage=1.5):
+    device.set_voltage(voltage)
+    assert math.isclose(device.get_voltage(), voltage, rel_tol=1e-6)
 
 
 def check_current_source(device):
@@ -92,45 +159,77 @@ CONTRACTS = {
             "sim sis block": SimSisBlock,
             "sim yig filter": SimYigFilter,
             "sim chopper": SimChopper,
+            "rigol": rigol,
+            "hmp": hmp,
+            "keithley": keithley,
+            "agilent": agilent,
+            "nrx": nrx,
+            "sis": sis,
+            "yig": yig,
+            "chopper": chopper,
         },
     ),
     Switchable: (
         check_switchable,
         {
-            "sim supply channel": lambda: SimPowerSupply().channel(1),
+            **SUPPLY_CHANNELS,
             "sim signal generator": SimSignalGenerator,
+            "agilent": agilent,
         },
     ),
     VoltageSource: (
         check_voltage_source,
         {
-            "sim supply channel": lambda: SimPowerSupply().channel(2),
-            "sim sis bias": lambda: SimSisBlock().channel("DEV4"),
+            **SUPPLY_CHANNELS,
+            "sim sis bias": (
+                lambda: SimSisBlock().channel("DEV4"),
+                {"voltage": 1.5e-3},
+            ),
+            "sis bias": (lambda: sis().channel("DEV4"), {"voltage": 1.5e-3}),
         },
     ),
     CurrentSource: (
         check_current_source,
-        {"sim supply channel": lambda: SimPowerSupply().channel(3)},
+        {
+            **SUPPLY_CHANNELS,
+            "sim sis ctrl": lambda: SimSisBlock().ctrl("DEV3"),
+            "sis ctrl": lambda: sis().ctrl("DEV3"),
+        },
     ),
     VoltageCurrentMeter: (
         check_voltage_current_meter,
         {
-            "sim supply channel": lambda: SimPowerSupply().channel(1),
+            **SUPPLY_CHANNELS,
             "sim sis bias": lambda: SimSisBlock().channel("DEV2"),
+            "sis bias": lambda: sis().channel("DEV2"),
         },
     ),
     FrequencySource: (
         check_frequency_source,
-        {"sim signal generator": SimSignalGenerator},
+        {"sim signal generator": SimSignalGenerator, "agilent": agilent},
     ),
-    PowerLevel: (check_power_level, {"sim signal generator": SimSignalGenerator}),
-    PowerDetector: (check_power_detector, {"sim power meter": SimPowerMeter}),
-    TunableFilter: (check_tunable_filter, {"sim yig filter": SimYigFilter}),
-    LoadSwitch: (check_load_switch, {"sim chopper": SimChopper}),
+    PowerLevel: (
+        check_power_level,
+        {"sim signal generator": SimSignalGenerator, "agilent": agilent},
+    ),
+    PowerDetector: (
+        check_power_detector,
+        {"sim power meter": SimPowerMeter, "nrx": nrx},
+    ),
+    TunableFilter: (
+        check_tunable_filter,
+        {
+            "sim yig filter": lambda: SimYigFilter().channel("yig_1"),
+            "yig": lambda: yig().channel("yig_2"),
+        },
+    ),
+    LoadSwitch: (check_load_switch, {"sim chopper": SimChopper, "chopper": chopper}),
 }
 
 
 def contract_cases():
+    """(id, capability, check, factory, check kwargs); a factory may come with kwargs."""
     for capability, (check, factories) in CONTRACTS.items():
         for label, factory in factories.items():
-            yield f"{capability.__name__}-{label}", capability, check, factory
+            factory, kwargs = factory if isinstance(factory, tuple) else (factory, {})
+            yield f"{capability.__name__}-{label}", capability, check, factory, kwargs

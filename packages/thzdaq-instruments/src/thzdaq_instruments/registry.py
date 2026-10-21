@@ -113,8 +113,10 @@ class DriverRegistry:
 @lru_cache(maxsize=1)
 def default_registry() -> DriverRegistry:
     """Registry with every built-in driver and simulator."""
+    from thzdaq_instruments.drivers import register_drivers
     from thzdaq_instruments.sim import register_simulators
 
     registry = DriverRegistry()
+    register_drivers(registry)
     register_simulators(registry)
     return registry

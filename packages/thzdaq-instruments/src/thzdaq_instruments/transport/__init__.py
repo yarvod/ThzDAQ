@@ -1,5 +1,8 @@
 from thzdaq_instruments.transport.base import (
+    HTTP,
     KINDS,
+    MODBUS_RTU,
+    MODBUS_TCP,
     PROLOGIX,
     PROLOGIX_USB,
     SERIAL,
@@ -19,7 +22,10 @@ from thzdaq_instruments.transport.pool import (
 from thzdaq_instruments.transport.prologix import PrologixController, PrologixTransport
 
 __all__ = [
+    "HTTP",
     "KINDS",
+    "MODBUS_RTU",
+    "MODBUS_TCP",
     "PROLOGIX",
     "PROLOGIX_USB",
     "SERIAL",

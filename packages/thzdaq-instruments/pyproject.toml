@@ -5,7 +5,9 @@ description = "Laboratory instrument drivers, transports and simulators for ThzD
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pymodbus>=3.8,<3.9",
     "pyserial>=3.5",
+    "requests>=2.31",
 ]
 
 [dependency-groups]

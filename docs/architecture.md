@@ -65,7 +65,8 @@ packages/
       instrument.py            # Instrument, ScpiInstrument, Channel
       registry.py              # каталог драйверов, open() через пул
       transport/               # base.py, links.py (TCP, serial), prologix.py, pool.py, fake.py
-      drivers/                 # rigol/, rohde_schwarz/, agilent/, scontel/ ... (этап 2)
+      drivers/                 # power_supply (шаблон), rigol, rohde_schwarz, keithley, agilent,
+                               # scontel, national_instruments, chopper
       sim/                     # симуляторы каждого интерфейса
   thzdaq-core/                 # import thzdaq_core — без Qt (этапы 3–4)
     src/thzdaq_core/
@@ -108,7 +109,9 @@ class ConnectionSpec:
 - Каждый `query` держит блокировку линка от записи до чтения: генераторы и спектроанализатор за
   одним Prologix не перемешивают команды (есть тест, который без блокировки падает).
 - `FakeLink` записывает команды и отвечает по сценарию — на нём тестируются драйверы.
-- HTTP-приборы (YIG на NI) — отдельный клиент на этапе 2, это не построчный транспорт.
+- HTTP (YIG на NI) и Modbus (чоппер) не построчные: драйвер сам открывает клиент
+  (`JsonHttpClient`, `PymodbusRegisters`) по `ConnectionSpec(kind="http" | "modbus_tcp" | "modbus_rtu")`;
+  пул такие соединения не выдаёт. Клиенты подменяются в тестах (`client=`, `registers=`).
 
 ### 4.2 Instrument и Channel
 ```python
@@ -147,6 +150,11 @@ class LoadSwitch(Protocol):         to_hot(), to_cold()
 питания — `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`.
 Позже добавятся `SpectrumAnalyzer`, `NetworkAnalyzer`, `Thermometer`, `Rotator`, `Compressor`,
 `VacuumGauge` — по мере переноса приборов.
+
+Блоки питания реализуют канал один раз (`SupplyChannel`), вендор задаёт только SCPI-примитивы
+(`_set_output`, `_set_voltage`, `_measure`, ...) — шаблонный метод вместо трёх копий.
+У каждого драйвера есть `connection(...)` с рекомендуемыми настройками связи (порт, терминатор,
+задержка), например SIS-блок читает ответы кусками с паузой 50 мс, как старый адаптер.
 
 Для каждой возможности есть контрактный тест (`tests/contracts.py`): симуляторы и драйверы
 (на `FakeLink`) проходят одни и те же проверки — так держится LSP.
@@ -262,8 +270,9 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
 
 1. **Каркас** ✅: uv workspace, пакет `thzdaq-instruments` (errors, units, readings, capabilities,
    transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы). Тесты.
-2. **Драйверы**: перенос по одному в `thzdaq_instruments/drivers` с реализацией capability
-   (сначала блоки питания, генераторы, NRX, SIS, YIG, chopper). Старый `api/` временно реэкспортирует.
+2. **Драйверы** (первая партия ✅): Rigol DP832A, R&S HMP2030, Keithley 2200, Agilent E8247C,
+   R&S NRX, Scontel SIS, NI YIG (HTTP), Modbus-чоппер — с симуляторами и контрактными тестами на
+   эмуляторах SCPI. Дальше: VNA, спектроанализатор, LakeShore, Sumitomo, Pfeiffer, grid, lock-in.
 3. **Станция**: конфиги приборов + профиль стенда (YAML), редактор в UI, импорт текущих
    `Configs/*` из `settings.ini`.
 4. **Измерения**: `Procedure`/`Runner`/`Dataset`/автоформы/`PlotSpec`; перенос I-V, P-V, Y-factor,

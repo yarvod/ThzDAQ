@@ -473,7 +473,9 @@ name = "thzdaq-instruments"
 version = "0.1.0"
 source = { editable = "packages/thzdaq-instruments" }
 dependencies = [
+    { name = "pymodbus" },
     { name = "pyserial" },
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -482,7 +484,11 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyserial", specifier = ">=3.5" }]
+requires-dist = [
+    { name = "pymodbus", specifier = ">=3.8,<3.9" },
+    { name = "pyserial", specifier = ">=3.5" },
+    { name = "requests", specifier = ">=2.31" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.2" }]
