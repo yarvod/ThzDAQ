@@ -43,7 +43,9 @@ def main() -> int:
     git("tag", "-a", tag, "-m", f"ThzDAQ {tag}")
     print(f"tagged {tag} on {git('rev-parse', '--abbrev-ref', 'HEAD')}")
     if not args.no_push:
-        subprocess.run(["git", "push", "--follow-tags"], check=True)
+        # A tag pushed together with its branch may not start the release workflow
+        subprocess.run(["git", "push"], check=True)
+        subprocess.run(["git", "push", "origin", tag], check=True)
         print("pushed; GitHub Actions builds the Windows release")
     return 0
 
