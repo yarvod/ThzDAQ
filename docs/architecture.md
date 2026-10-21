@@ -220,41 +220,59 @@ roles:
   пропускаются, NRX/YIG/чоппер берутся из старых констант `state`.
 - CLI: `thzdaq-station import-legacy | show | check [--simulate]`.
 
-### 4.6 Procedure — измерение без Qt
+### 4.6 Procedure — измерение без Qt ✅
 ```python
-class TnProcedure(Procedure):
-    title = "2SB Tn"
-    requires = {"sis1": (VoltageSource, VoltageCurrentMeter),
-                "sis2": (VoltageSource, VoltageCurrentMeter), "if_selector": IfSelector,
-                "detector": PowerDetector, "yig": TunableFilter, "load": LoadSwitch}
-    lo_frequency = FloatParameter("LO frequency", unit="GHz", default=263)
-    if_sweep = SweepParameter("IF", unit="GHz", default=(4, 12, 201))
-    plots = [PlotSpec("P-IF", x="if", y="power", group_by=("side_band", "load"))]
+@register_procedure
+class IFNoise(Procedure):
+    name = "if.hot_cold"
+    title = "IF noise (hot/cold)"
+    requires = {"detector": PowerDetector, "if_filter": TunableFilter, "load": LoadSwitch}
+    plots = (PlotSpec("power", "P-IF", stream="power", x="frequency", y="power",
+                      x_scale=GHZ, group_by=("load",)), ...)
 
-    def run(self, ctx: Context):
-        for side_band in ("upper", "lower"):
-            ctx.station.if_selector.select(side_band)
-            for load in ("cold", "hot"):
+    frequency = SweepParameter("IF", default=(4e9, 12e9, 201), unit="Hz",
+                               display_unit="GHz", display_scale=GHZ)
+    t_hot = FloatParameter("Hot load", default=300.0, minimum=0, unit="K")
+
+    def run(self, ctx):
+        detector, if_filter, load = ctx["detector"], ctx["if_filter"], ctx["load"]
+        ctx.on_exit(load.to_cold)
+        for state in ("cold", "hot"):
+            getattr(load, f"to_{state}")()
+            for f in self.frequency.values():
                 ...
-                ctx.record(if_=f, power=p, side_band=side_band, load=load)
-                ctx.check_cancel()
+                ctx.record("power", frequency=f, load=state, power=p)
+                ctx.progress()
 ```
-- Параметры декларативны (PyMeasure): из них строится форма, валидация, сохранение в метаданные.
-- `ctx.record()` — запись в набор данных и одновременно событие для графиков. Процедура не знает про
-  dock-окна (DIP): UI подписывается по `PlotSpec`.
-- `ctx.check_cancel()`, `ctx.sleep()`, `ctx.progress()` — отмена без `terminate()`.
-- Восстановление состояния — через `ctx.on_exit(...)` или `try/finally` в процедуре.
+- Параметры декларативны (PyMeasure): значения в СИ, у каждого — единица показа и масштаб
+  (`display_unit="GHz"`, `display_scale=GHZ`), поэтому форма и CLI работают в ГГц/мВ, а код — в Гц/В.
+  Типы: `Float`, `Int`, `Bool`, `Choice`, `FloatList`, `Sweep(start, stop, points)`.
+  `describe()` отдаёт всё, что нужно для автоформы; `check()` — проверки между параметрами.
+- `ctx["role"]` — порт стенда; `ctx.record(stream, **values)` — запись в набор данных, в файл и
+  событие для графиков. Процедура не знает про dock-окна (DIP): UI подписывается по `PlotSpec`.
+- `ctx.sleep()` просыпается сразу при отмене, `ctx.check_cancel()`, `ctx.progress()` — без `terminate()`.
+- `ctx.on_exit(callback)` — восстановление состояния (LIFO), выполняется при успехе, отмене и ошибке.
+- Реестр процедур: `@register_procedure`, `get_procedure(name)`, `procedures()`.
+- Пока перенесены эталонные `sis.iv_curve` и `if.hot_cold`; остальные измерения — следующий шаг.
 
-### 4.7 Runner
-- `MeasurementRunner` (чистый Python): открывает станцию, создаёт `Dataset`, вызывает
-  `procedure.run(ctx)`, гарантирует закрытие и запись ошибки в данные.
-- `QtRunner` в `ui/` — тонкая обёртка: QThread + сигналы `progress`, `record`, `error`, `finished`.
-- Очередь измерений и запрет параллельного доступа к одним ролям (аренда ресурсов).
+### 4.7 Runner ✅
+- `MeasurementRunner(station, store, observers)` (чистый Python): проверяет параметры, строит роли
+  (`roles={"bias": "sis1"}` сопоставляет роли процедуры и стенда), создаёт `Dataset` со снимком стенда,
+  вызывает `run(ctx)`, выполняет cleanup и пишет статус `completed | cancelled | failed`.
+  Не хватает роли — ошибка до создания файла.
+- `RunObserver`: `on_started / on_record / on_progress / on_log / on_finished`; упавший наблюдатель
+  (например, график) не останавливает измерение. `QtRunner` в GUI будет таким наблюдателем,
+  переносящим события в Qt-сигналы.
+- Один раннер — одно измерение за раз; `cancel()` из другого потока.
 
-### 4.8 Данные
-- `Dataset`: метаданные (процедура, параметры, снимок станции, `*IDN?` приборов, версия, время) +
-  записи. Пишется на диск по ходу (JSON lines или HDF5) — краш не теряет данные.
-- Таблица Data в UI становится каталогом файлов + открытые в сессии наборы.
+### 4.8 Данные ✅
+- `Dataset`: id, процедура, параметры (JSON), снимок стенда с `*IDN?`, время, статус, ошибка,
+  потоки записей, результаты, метаданные (роли, traceback, ошибки cleanup).
+- `DataStore(root)`: `<root>/<дата>/<id>_<процедура>.jsonl` — JSON Lines, строка на запись,
+  flush после каждой (опционально fsync). Файл без «футера» читается как `interrupted`,
+  оборванная последняя строка игнорируется. Комплексные числа и NaN/inf сохраняются без потерь.
+- CLI: `thzdaq list | describe <procedure> | run <procedure> --station ... [--simulate]
+  [--role bias=sis1] [--set voltage=0:7:351] | show <file>`.
 
 ### 4.9 Мониторинг и ручное управление
 - `PollingService`: один планировщик опроса на прибор вместо отдельного потока в каждом виджете
@@ -302,8 +320,9 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
    с симуляторами, эмуляторами протоколов и контрактными тестами.
 3. **Станция** ✅: пакет `thzdaq-core` — профиль стенда (YAML), роли, адаптеры портов, `Station`,
    импорт `Configs/*` из `settings.ini`, CLI `thzdaq-station`. Редактор профиля в UI — на этапе 5.
-4. **Измерения**: `Procedure`/`Runner`/`Dataset`/автоформы/`PlotSpec`; перенос I-V, P-V, Y-factor,
-   VNA, shot noise, затем 2SB из ветки `2sb`.
+4. **Измерения**: каркас ✅ (`Procedure`, параметры, `PlotSpec`, `MeasurementRunner`, `Dataset`,
+   JSON Lines, CLI `thzdaq`) и эталонные `sis.iv_curve`, `if.hot_cold`. Дальше — перенос P-V,
+   Y-factor по напряжению, VNA, shot noise, grid и 2SB из ветки `2sb`.
 5. **UI**: новая главная форма, панели по capability, `PollingService`, каталог данных.
 6. **Удаление старого**: `api/`, `store/`, `interface/`, `threads/`, глобального `state`.
 7. Мерж в `master`.

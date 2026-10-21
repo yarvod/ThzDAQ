@@ -10,6 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
+thzdaq = "thzdaq_core.cli:main"
 thzdaq-station = "thzdaq_core.station.cli:main"
 
 [dependency-groups]
