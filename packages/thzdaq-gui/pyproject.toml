@@ -8,6 +8,7 @@ dependencies = [
     "numpy==1.26.4",
     "pyqtgraph==0.13.7",
     "pyside6==6.8.2.1",
+    "requests>=2.31",
     "thzdaq-core",
 ]
 

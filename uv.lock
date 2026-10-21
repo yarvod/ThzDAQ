@@ -429,6 +429,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pyqtgraph" },
     { name = "pyside6" },
+    { name = "requests" },
     { name = "thzdaq-core" },
 ]
 
@@ -442,6 +443,7 @@ requires-dist = [
     { name = "numpy", specifier = "==1.26.4" },
     { name = "pyqtgraph", specifier = "==0.13.7" },
     { name = "pyside6", specifier = "==6.8.2.1" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "thzdaq-core", editable = "packages/thzdaq-core" },
 ]
 

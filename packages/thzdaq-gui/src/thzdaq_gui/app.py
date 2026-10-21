@@ -34,7 +34,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if icon.exists():
         app.setWindowIcon(QIcon(str(icon)))
     session = Session(args.data)
-    window = MainWindow(session)
+    window = MainWindow(session, check_updates=args.quit_after is None)
     if args.station:
         try:
             session.load_station(args.station, args.simulate)

@@ -19,6 +19,11 @@ if errorlevel 1 exit /b %errorlevel%
 uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\logo2.png" --noconsole --windowed -y --add-data "assets;assets"
 if errorlevel 1 exit /b %errorlevel%
 
+rem Updater for in-app updates: standard library only, so a small one-file exe
+uv run pyinstaller updater.py -n updater --onefile --noconsole -y --distpath .\build\updater_dist --workpath .\build\updater_work --specpath .\build
+if errorlevel 1 exit /b %errorlevel%
+copy /Y ".\build\updater_dist\updater.exe" "%app_dir%\updater.exe" >nul
+
 xcopy /E /I /Y ".\stations" "%app_dir%\stations" >nul
 if exist "%stations_backup%" xcopy /E /I /Y "%stations_backup%" "%app_dir%\stations" >nul
 

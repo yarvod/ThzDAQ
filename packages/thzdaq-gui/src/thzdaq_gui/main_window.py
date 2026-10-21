@@ -1,6 +1,12 @@
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QDockWidget, QLabel, QMainWindow, QMessageBox
+from PySide6.QtWidgets import (
+    QDockWidget,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+)
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.registry import get_procedure
 
@@ -11,16 +17,26 @@ from thzdaq_gui.panels.monitor_panel import MonitorPanel
 from thzdaq_gui.panels.sis_panel import SisPanel
 from thzdaq_gui.panels.station_panel import StationPanel
 from thzdaq_gui.plots import PlotPanel
+from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
+from thzdaq_gui.updates import can_self_update, latest_update
+from thzdaq_gui.version import __version__
 
 SETTINGS = ("ThzDAQ", "thzdaq-gui")
 LAYOUT_VERSION = 2
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, session, parent=None, restore_layout: bool = True):
+    def __init__(
+        self,
+        session,
+        parent=None,
+        restore_layout: bool = True,
+        check_updates: bool = True,
+    ):
         super().__init__(parent)
         self.session = session
-        self.setWindowTitle("ThzDAQ")
+        self.updateDialog = None
+        self.setWindowTitle(f"ThzDAQ {__version__}")
         self.resize(1400, 850)
 
         self.plots = PlotPanel()
@@ -66,6 +82,10 @@ class MainWindow(QMainWindow):
         self.show_station(session.station)
         if restore_layout:
             self.restore_layout()
+        if check_updates and can_self_update():
+            self.updateCheck = Background(fetch_job, self)
+            self.updateCheck.done.connect(self.offer_update)
+            self.updateCheck.start()
 
     def build_menu(self) -> None:
         file = self.menuBar().addMenu("&File")
@@ -85,6 +105,40 @@ class MainWindow(QMainWindow):
         view = self.menuBar().addMenu("&View")
         for dock in self.docks.values():
             view.addAction(dock.toggleViewAction())
+
+        help_menu = self.menuBar().addMenu("&Help")
+        updates_action = QAction("Check for updates…", self)
+        updates_action.triggered.connect(self.show_updates)
+        help_menu.addAction(updates_action)
+        about_action = QAction("About ThzDAQ", self)
+        about_action.triggered.connect(
+            lambda: QMessageBox.about(
+                self,
+                "About ThzDAQ",
+                f"ThzDAQ {__version__}<br>SIS mixer control and measurements",
+            )
+        )
+        help_menu.addAction(about_action)
+
+    def show_updates(self) -> None:
+        if self.updateDialog is None:
+            self.updateDialog = UpdateDialog(
+                quit_app=self.close,
+                busy=lambda: self.session.runner.running,
+                parent=self,
+            )
+        self.updateDialog.check()
+        self.updateDialog.show()
+        self.updateDialog.raise_()
+
+    def offer_update(self, releases) -> None:
+        release = latest_update(releases)
+        if release is None:
+            return
+        button = QPushButton(f"Update to {release.tag}")
+        button.setFlat(True)
+        button.clicked.connect(self.show_updates)
+        self.statusBar().addPermanentWidget(button)
 
     def show_station(self, station) -> None:
         if station is None:
