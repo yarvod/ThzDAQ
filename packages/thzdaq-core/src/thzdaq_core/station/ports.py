@@ -86,6 +86,9 @@ class SidebandSelector(PortAdapter):
         return "upper" if on == self.upper_when_on else "lower"
 
 
+# Role level abstractions defined here, on top of the instrument capabilities
+ROLE_PROTOCOLS = (SidebandSwitch,)
+
 AdapterFactory = Callable[..., Any]
 ADAPTERS: Dict[str, AdapterFactory] = {
     "switch": SwitchPort,

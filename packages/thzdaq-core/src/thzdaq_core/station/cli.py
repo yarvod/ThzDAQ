@@ -8,6 +8,7 @@ from thzdaq_instruments import InstrumentError, default_registry
 from thzdaq_instruments.capabilities import ALL_CAPABILITIES, Identifiable
 
 from thzdaq_core.station.legacy import import_legacy_settings
+from thzdaq_core.station.ports import ROLE_PROTOCOLS
 from thzdaq_core.station.station import Station
 from thzdaq_core.station.storage import dump_station, load_station, save_station
 
@@ -15,7 +16,7 @@ from thzdaq_core.station.storage import dump_station, load_station, save_station
 def capability_names(port) -> List[str]:
     return [
         c.__name__
-        for c in ALL_CAPABILITIES
+        for c in ALL_CAPABILITIES + ROLE_PROTOCOLS
         if c is not Identifiable and isinstance(port, c)
     ]
 

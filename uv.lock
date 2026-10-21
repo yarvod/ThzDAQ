@@ -6,6 +6,7 @@ requires-python = "==3.11.*"
 members = [
     "thzdaq",
     "thzdaq-core",
+    "thzdaq-gui",
     "thzdaq-instruments",
 ]
 
@@ -516,6 +517,33 @@ dev = [
 requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "thzdaq-instruments", editable = "packages/thzdaq-instruments" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.2" }]
+
+[[package]]
+name = "thzdaq-gui"
+version = "0.1.0"
+source = { editable = "packages/thzdaq-gui" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pyqtgraph" },
+    { name = "pyside6" },
+    { name = "thzdaq-core" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = "==1.26.4" },
+    { name = "pyqtgraph", specifier = "==0.13.7" },
+    { name = "pyside6", specifier = "==6.8.2.1" },
+    { name = "thzdaq-core", editable = "packages/thzdaq-core" },
 ]
 
 [package.metadata.requires-dev]
