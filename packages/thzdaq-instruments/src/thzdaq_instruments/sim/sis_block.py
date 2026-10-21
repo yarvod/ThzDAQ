@@ -17,6 +17,7 @@ class SimSisBiasChannel(Channel):
         # Same knobs as the real driver; an ideal simulated circuit has no offset
         self.offset_voltage = 0.0
         self.offset_current = 0.0
+        self.calibration = None
 
     def set_voltage(self, voltage: float) -> None:
         if abs(voltage) > self.instrument.max_voltage:
@@ -36,6 +37,10 @@ class SimSisBiasChannel(Channel):
 
     def measure(self) -> ChannelReading:
         return ChannelReading(self.read_voltage(), self.read_current())
+
+    def write_calibration(self, coefficients: dict) -> str:
+        self.calibration = dict(coefficients)
+        return "OK"
 
     def set_voltage_precise(self, voltage: float, **kwargs) -> float:
         self.set_voltage(voltage)

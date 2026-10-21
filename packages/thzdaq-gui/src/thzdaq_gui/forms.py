@@ -102,6 +102,14 @@ def make_editor(parameter: Parameter) -> Editor:
                 check.setChecked(choice in values)
 
         return Editor(box, get_multi, set_multi)
+    if kind == "string_list":
+        line = QLineEdit()
+        line.setPlaceholderText("comma separated")
+        return Editor(
+            line,
+            lambda: parameter.parse(line.text()),
+            lambda v: line.setText(", ".join(v)),
+        )
     if kind == "float_list":
         line = QLineEdit()
         line.setPlaceholderText(f"comma separated, {parameter.display_unit}")

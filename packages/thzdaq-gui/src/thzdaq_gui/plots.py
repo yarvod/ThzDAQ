@@ -31,11 +31,21 @@ class LinePlot(QWidget):
         layout.addWidget(self.plot)
         self.points: Dict[GroupKey, List[Tuple[float, float]]] = {}
         self.curves: Dict[GroupKey, pg.PlotDataItem] = {}
+        self.analysis = None
+        if spec.analysis == "iv":
+            from thzdaq_gui.iv_analysis import IVAnalysisBar
+
+            self.analysis = IVAnalysisBar(self)
+            layout.addWidget(self.analysis)
 
     def clear(self) -> None:
+        if self.analysis is not None:
+            self.analysis.clear()
         self.plot.clear()
         self.points.clear()
         self.curves.clear()
+        if self.analysis is not None:
+            self.analysis.refresh_curves()
 
     def add(self, record: Mapping) -> None:
         point = self.spec.point(record)
@@ -52,6 +62,8 @@ class LinePlot(QWidget):
                 name=self.spec.label(group) or None,
             )  # fmt: skip
             self.curves[group] = curve
+            if self.analysis is not None:
+                self.analysis.refresh_curves()
         xs, ys = zip(*self.points[group])
         curve.setData(list(xs), list(ys))
 

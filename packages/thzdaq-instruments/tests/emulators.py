@@ -212,6 +212,14 @@ class SisEmulator(ScpiEmulator):
         self.route(r"(BIAS|CTRL):(DEV\d):SHOR ([01])", set_short)
         self.route(r"(BIAS|CTRL):(DEV\d):SHOR\?", lambda k, d: self.shorts[f"{k}:{d}"])
         self.route(r"GEN:(DEV\d):STAT\?", lambda d: "OK")
+        self.eeprom = {}
+        self.route(r"BIAS:(DEV\d):EEPR (.+)", self._eeprom)
+
+    def _eeprom(self, dev, payload):
+        import json
+
+        self.eeprom[dev] = json.loads(payload)
+        return "OK"
 
     def actual(self, dev: str) -> float:
         return self.setpoints[dev] * self.gain + self.offset

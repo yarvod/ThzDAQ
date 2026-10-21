@@ -241,6 +241,17 @@ class TestSisBlock:
             block.ctrl("DEV9")
         assert emulator.errors == []
 
+    def test_write_calibration_to_eeprom(self):
+        emulator = SisEmulator()
+        block, link = make(ScontelSisBlock, emulator)
+        coefficients = {"VoltageStep": 1e-05, "CurrentDAC": [-1322560, 32801.2]}
+        assert block.channel("DEV4").write_calibration(coefficients) == "OK"
+        assert emulator.eeprom["DEV4"] == coefficients
+        assert (
+            link.written[0].startswith("BIAS:DEV4:EEPR {")
+            and " " not in link.written[0][15:]
+        )
+
     def test_recommended_connection_reads_chunks(self):
         spec = ScontelSisBlock.connection()
         assert spec.read_termination is None and spec.read_delay == 0.05

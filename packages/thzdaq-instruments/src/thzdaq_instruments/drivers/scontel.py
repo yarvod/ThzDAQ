@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from typing import Dict, Optional
@@ -104,6 +105,13 @@ class SisBiasChannel(Channel):
 
     def get_data(self) -> str:
         return self.instrument.command(f"BIAS:{self.key}:DATA?")
+
+    def write_calibration(self, coefficients: dict) -> str:
+        """Store evaluated DAC/ADC coefficients in the device EEPROM."""
+        payload = json.dumps(
+            coefficients, ensure_ascii=True, allow_nan=False, separators=(",", ":")
+        )
+        return self.instrument.command(f"BIAS:{self.key}:EEPR {payload}")
 
 
 class SisCtrlChannel(Channel):

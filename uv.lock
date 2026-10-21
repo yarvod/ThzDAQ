@@ -504,6 +504,7 @@ name = "thzdaq-core"
 version = "0.1.0"
 source = { editable = "packages/thzdaq-core" }
 dependencies = [
+    { name = "numpy" },
     { name = "pyyaml" },
     { name = "thzdaq-instruments" },
 ]
@@ -515,6 +516,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "numpy", specifier = ">=1.26,<2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "thzdaq-instruments", editable = "packages/thzdaq-instruments" },
 ]

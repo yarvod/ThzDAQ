@@ -6,6 +6,7 @@ from thzdaq_core.measurements.parameters import (
     IntParameter,
     MultiChoiceParameter,
     Parameter,
+    StringListParameter,
     Sweep,
     SweepParameter,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "PlotSpec",
     "Procedure",
     "RunObserver",
+    "StringListParameter",
     "Sweep",
     "SweepParameter",
     "get_procedure",

@@ -30,6 +30,8 @@ class PlotSpec:
     z: Optional[str] = None
     z_label: str = ""
     z_scale: float = 1.0
+    # Optional analysis a viewer may offer on this plot, e.g. "iv" (Rn, Rj, gap)
+    analysis: Optional[str] = None
 
     def group_key(self, record: Mapping[str, Any]) -> GroupKey:
         return tuple(record.get(key) for key in self.group_by)

@@ -7,11 +7,13 @@ from thzdaq_core.measurements.registry import get_procedure
 from thzdaq_gui.panels.control_panel import ControlPanel
 from thzdaq_gui.panels.data_panel import DataPanel
 from thzdaq_gui.panels.measure_panel import MeasurePanel
+from thzdaq_gui.panels.monitor_panel import MonitorPanel
+from thzdaq_gui.panels.sis_panel import SisPanel
 from thzdaq_gui.panels.station_panel import StationPanel
 from thzdaq_gui.plots import PlotPanel
 
 SETTINGS = ("ThzDAQ", "thzdaq-gui")
-LAYOUT_VERSION = 1
+LAYOUT_VERSION = 2
 
 
 class MainWindow(QMainWindow):
@@ -28,11 +30,15 @@ class MainWindow(QMainWindow):
         self.measurePanel = MeasurePanel(session)
         self.dataPanel = DataPanel(session)
         self.controlPanel = ControlPanel(session)
+        self.sisPanel = SisPanel(session)
+        self.monitorPanel = MonitorPanel(session)
         self.docks = {}
         for name, title, widget, area in (
             ("station", "Station", self.stationPanel, Qt.LeftDockWidgetArea),
             ("measure", "Measurement", self.measurePanel, Qt.LeftDockWidgetArea),
             ("control", "Manual control", self.controlPanel, Qt.RightDockWidgetArea),
+            ("sis", "SIS tools", self.sisPanel, Qt.RightDockWidgetArea),
+            ("monitor", "Monitor", self.monitorPanel, Qt.RightDockWidgetArea),
             ("data", "Data", self.dataPanel, Qt.BottomDockWidgetArea),
         ):
             dock = QDockWidget(title, self)
@@ -41,7 +47,10 @@ class MainWindow(QMainWindow):
             self.addDockWidget(area, dock)
             self.docks[name] = dock
         self.tabifyDockWidget(self.docks["station"], self.docks["measure"])
+        self.tabifyDockWidget(self.docks["control"], self.docks["sis"])
+        self.tabifyDockWidget(self.docks["control"], self.docks["monitor"])
         self.docks["measure"].raise_()
+        self.docks["control"].raise_()
 
         self.stationLabel = QLabel()
         self.statusBar().addPermanentWidget(self.stationLabel)

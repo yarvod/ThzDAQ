@@ -21,6 +21,8 @@ class Session(QObject):
         self.store = DataStore(data_root)
         self.worker = DeviceWorker(self)
         self.runner = QtRunner(self)
+        # Panels with their own runners (monitoring) register here for shutdown
+        self.extra_runners = []
         self.station: Optional[Station] = None
         self.path: Optional[Path] = None
         self.simulate = False
@@ -48,8 +50,9 @@ class Session(QObject):
             self.station = None
 
     def shutdown(self, timeout: float = 5.0) -> None:
-        if self.runner.running:
-            self.runner.cancel()
-            self.runner.wait(timeout)
+        for runner in [self.runner, *self.extra_runners]:
+            if runner.running:
+                runner.cancel()
+                runner.wait(timeout)
         self._close_station()
         self.worker.stop(timeout)

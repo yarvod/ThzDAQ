@@ -60,6 +60,11 @@ class DeviceWorker(QObject):
                 self._done.emit(on_error, None, e)
             else:
                 self._done.emit(on_result, result, None)
+            # Callbacks hold widgets: their last reference must die in the GUI
+            # thread (after delivery), never here, or Qt deletes a widget from
+            # this thread and crashes
+            del item, job, on_result, on_error
+            result = None
 
     def _deliver(self, callback, result, error):
         if error is not None:

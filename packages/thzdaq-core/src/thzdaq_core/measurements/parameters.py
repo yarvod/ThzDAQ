@@ -227,6 +227,29 @@ class FloatListParameter(Parameter):
         return f"{shown} {self.display_unit}".strip()
 
 
+class StringListParameter(Parameter):
+    """Free list of names, e.g. station roles to monitor."""
+
+    kind = "string_list"
+
+    def validate(self, value: Any) -> Tuple[str, ...]:
+        if isinstance(value, str) or not hasattr(value, "__iter__"):
+            raise ProcedureError(f"expected a list of names, got {value!r}")
+        values = tuple(str(v).strip() for v in value if str(v).strip())
+        if not values:
+            raise ProcedureError("list is empty")
+        return values
+
+    def parse(self, text: str) -> Tuple[str, ...]:
+        return self.validate(re.split(r"[,;\s]+", str(text).strip()))
+
+    def to_json(self, value) -> List[str]:
+        return list(value)
+
+    def format(self, value) -> str:
+        return ", ".join(value)
+
+
 class MultiChoiceParameter(Parameter):
     """Several of the choices, in the given order: e.g. S-parameters to measure."""
 

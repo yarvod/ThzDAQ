@@ -44,6 +44,16 @@ roles:
     instrument: sis_block
     channel: DEV2
     attributes: {offset_voltage: 0.0002, offset_current: -5.0e-07}
+  sis1_ctrl:
+    instrument: sis_block
+    channel: DEV3
+    accessor: ctrl
+    description: magnet coil of SIS1
+  sis2_ctrl:
+    instrument: sis_block
+    channel: DEV1
+    accessor: ctrl
+    description: magnet coil of SIS2
   lo:
     instrument: lo_generator
     adapter: scaled_frequency

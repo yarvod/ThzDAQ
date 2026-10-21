@@ -24,6 +24,7 @@ class IVCurve(Procedure):
             y_label="Current, μA",
             x_scale=MV,
             y_scale=UA,
+            analysis="iv",
         ),
     )
 

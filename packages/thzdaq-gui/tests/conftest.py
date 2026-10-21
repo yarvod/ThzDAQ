@@ -37,3 +37,9 @@ def session(app, tmp_path):
     session.load_station(EXAMPLE, simulate=True)
     yield session
     session.shutdown()
+
+
+# tests import EXAMPLE from here
+import sys  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).parent))

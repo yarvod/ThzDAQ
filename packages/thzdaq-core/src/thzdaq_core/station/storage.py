@@ -16,7 +16,7 @@ FORMAT_VERSION = 1
 PathLike = Union[str, Path]
 
 
-class _Loader(yaml.SafeLoader):
+class ProfileLoader(yaml.SafeLoader):
     """SafeLoader that reads 1e9 / 2.5e-3 as numbers, like YAML 1.2 and JSON.
 
     YAML 1.1 (PyYAML) needs a dot and a signed exponent, so "500.0e9" or "5e9"
@@ -24,7 +24,7 @@ class _Loader(yaml.SafeLoader):
     """
 
 
-_Loader.add_implicit_resolver(
+ProfileLoader.add_implicit_resolver(
     "tag:yaml.org,2002:float",
     re.compile(
         r"""^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+]?[0-9]+)?
@@ -193,7 +193,7 @@ def station_from_dict(data: Dict[str, Any]) -> StationConfig:
 
 def load_station(path: PathLike) -> StationConfig:
     try:
-        data = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=_Loader)
+        data = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=ProfileLoader)
     except OSError as e:
         raise StationError(f"Can't read station profile {path}: {e}") from e
     except yaml.YAMLError as e:

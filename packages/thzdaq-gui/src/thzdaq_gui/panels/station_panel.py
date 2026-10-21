@@ -24,6 +24,8 @@ class StationPanel(QWidget):
         buttons = QHBoxLayout()
         self.btnOpen = QPushButton("Open profile…")
         self.btnOpen.clicked.connect(self.open_profile)
+        self.btnEdit = QPushButton("Edit…")
+        self.btnEdit.clicked.connect(self.edit_profile)
         self.btnReload = QPushButton("Reload")
         self.btnReload.clicked.connect(
             lambda: self.session.reload(self.simulate.isChecked())
@@ -31,6 +33,7 @@ class StationPanel(QWidget):
         self.simulate = QCheckBox("Simulate")
         self.simulate.toggled.connect(self.toggle_simulate)
         buttons.addWidget(self.btnOpen)
+        buttons.addWidget(self.btnEdit)
         buttons.addWidget(self.btnReload)
         buttons.addWidget(self.simulate)
         buttons.addStretch()
@@ -64,6 +67,16 @@ class StationPanel(QWidget):
         if path:
             self.session.load_station(path, self.simulate.isChecked())
 
+    def edit_profile(self) -> None:
+        from thzdaq_gui.profile_editor import ProfileEditor
+
+        station = self.session.station
+        if station is None:
+            return
+        editor = ProfileEditor(station.config, str(self.session.path), self)
+        if editor.exec() and editor.saved_config is not None:
+            self.session.load_station(editor.path, self.simulate.isChecked())
+
     def toggle_simulate(self, value: bool) -> None:
         if self.session.station is not None and self.session.simulate != value:
             self.session.reload(value)
@@ -73,6 +86,7 @@ class StationPanel(QWidget):
         self.role_items.clear()
         has_station = station is not None
         self.btnReload.setEnabled(has_station)
+        self.btnEdit.setEnabled(has_station)
         self.btnCheck.setEnabled(has_station)
         if not has_station:
             self.title.setText("No station: open a profile from stations/")

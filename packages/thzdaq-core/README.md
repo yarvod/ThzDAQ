@@ -65,9 +65,13 @@ uv run --isolated --package thzdaq-core thzdaq run sis.iv_curve \
 ```
 
 Procedures: `sis.iv_curve`, `sis.pv_curve`, `sis.y_factor_voltage`, `sis.reflection`,
-`sis.shot_noise`, `grid.current_angle`, `if.hot_cold`, `two_sb.if_balance`,
+`sis.shot_noise`, `sis.demagnetize`, `monitor.time`, `grid.current_angle`, `if.hot_cold`,
+`two_sb.if_balance`,
 `two_sb.pump_balance`, `two_sb.srr`, `two_sb.tn`, `two_sb.optimization`
 (`thzdaq describe <name>` for parameters and roles).
+
+Also: `thzdaq_core.analysis.iv` (Rn, Rj, gap of an I-V curve) and `thzdaq_core.sis`
+(calibration coefficients with safe expressions, demagnetization sequence).
 
 Bench profiles accept numbers like `5e9` and `500.0e9` (YAML 1.2 style).
 

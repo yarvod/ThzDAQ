@@ -36,7 +36,7 @@ class PVCurve(Procedure):
         PlotSpec(
             "iv", "I-V", "pv", "voltage", "current",
             x_label="Voltage, mV", y_label="Current, μA", x_scale=MV, y_scale=UA,
-            group_by=("angle", "load"),
+            group_by=("angle", "load"), analysis="iv",
         ),
         PlotSpec(
             "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
