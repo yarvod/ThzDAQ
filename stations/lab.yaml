@@ -1,8 +1,8 @@
 version: 1
 name: lab
-description: Imported from the legacy settings.ini
+description: Production bench, imported from the legacy settings.ini
 instruments:
-  agilent_signal_generator_1:
+  signal_generator_1:
     driver: agilent.e8247c
     connection:
       kind: prologix
@@ -10,7 +10,7 @@ instruments:
       port: 1234
       gpib: 19
     title: Agilent Signal Generator 1
-  agilent_signal_generator_2:
+  signal_generator_2:
     driver: agilent.e8247c
     connection:
       kind: prologix
@@ -18,6 +18,13 @@ instruments:
       port: 1234
       gpib: 18
     title: Agilent Signal Generator 2
+  signal_generator_3:
+    driver: agilent.e8247c
+    connection:
+      kind: prologix_usb
+      serial_port: COM12
+      gpib: 19
+    title: Agilent Signal Generator 3
   grid_1:
     driver: arduino.grid
     connection:
@@ -34,7 +41,7 @@ instruments:
       port: 80
       timeout: 30.0
     title: GRID 2
-  keithley_power_supply_1:
+  power_supply_1:
     driver: keithley.2200
     connection:
       kind: prologix
@@ -42,7 +49,7 @@ instruments:
       port: 1234
       gpib: 22
     title: Keithley Power Supply 1
-  keithley_power_supply_2:
+  power_supply_2:
     driver: keithley.2200
     connection:
       kind: prologix
@@ -50,7 +57,7 @@ instruments:
       port: 1234
       gpib: 20
     title: Keithley Power Supply 2
-  lakeshore_temperature_controller_1:
+  temperature_controller_1:
     driver: lakeshore.336
     connection:
       kind: prologix
@@ -58,35 +65,35 @@ instruments:
       port: 1234
       gpib: 12
     title: LakeShore Temperature Controller 1
-  rigol_power_supply_1:
+  power_supply_3:
     driver: rigol.dp832a
     connection:
       kind: socket
       host: 169.254.0.14
       port: 5555
     title: Rigol Power Supply 1
-  rigol_power_supply_2:
+  power_supply_4:
     driver: rigol.dp832a
     connection:
       kind: socket
       host: 169.254.0.15
       port: 5555
     title: Rigol Power Supply 2
-  rohde_schwarz_power_supply_1:
+  power_supply_5:
     driver: rs.hmp2030
     connection:
       kind: socket
       host: 169.254.0.30
       port: 5025
     title: Rohde Schwarz Power Supply 1
-  rohde_schwarz_spectrum_fsek_30_1:
+  spectrum_analyzer_1:
     driver: rs.fsek30
     connection:
       kind: socket
       host: 169.254.75.176
       port: 5025
     title: Rohde Schwarz Spectrum FSEK 30 1
-  rohde_schwarz_vna_zva_67_1:
+  vna_1:
     driver: rs.zva67
     connection:
       kind: socket
@@ -101,8 +108,17 @@ instruments:
       port: 9876
       read_delay: 0.05
       read_termination: null
-    title: Scontel SIS block
-  sumitomo_f70_compressor_1:
+    title: Scontel SIS block 1
+  sis_block_2:
+    driver: scontel.sis_block
+    connection:
+      kind: socket
+      host: 169.254.71.6
+      port: 9876
+      read_delay: 0.05
+      read_termination: null
+    title: Scontel SIS block 2
+  compressor_1:
     driver: sumitomo.f70_rest
     connection:
       kind: http
@@ -110,7 +126,7 @@ instruments:
       port: 21024
       timeout: 10.0
     title: Sumitomo F70 Compressor 1
-  nrx:
+  power_meter_1:
     driver: rs.nrx
     connection:
       kind: socket
@@ -120,14 +136,14 @@ instruments:
       aperture_time: 0.05
       averaging: false
     title: R&S NRX
-  yig:
+  yig_filter_1:
     driver: ni.yig
     connection:
       kind: http
       host: 169.254.0.86
       timeout: 5.0
     title: NI YIG
-  chopper:
+  chopper_1:
     driver: chopper.modbus
     connection:
       kind: modbus_tcp
@@ -139,14 +155,14 @@ roles:
     instrument: sis_block_1
     channel: DEV4
     attributes:
-      offset_voltage: 4.0e-05
+      offset_voltage: 0.0
       offset_current: 0.0
-    description: bias of Scontel SIS Block 1
+    description: bias of SIS b1d4
     metadata:
       calibration_coefficients:
         CurrentADC:
-        - 5.4767381740816745e-09 / 5
-        - -0.04757314547896385 / 5
+        - 5.4767381740816745e-09 * 1
+        - -0.04757314547896385 * 1
         CurrentDAC:
         - -1322560
         - 32801.19921875
@@ -156,8 +172,8 @@ roles:
         CurrentMonitorResistance: 20
         CurrentStep: 9.999999974752427e-07
         VoltageAdc:
-        - 0.24375 * 6.53895619339726e-09
-        - -0.056775 * 0.24375
+        - 6.567045574001895e-09
+        - -0.05704041197896004
         VoltageDac:
         - -1322980
         - 32810.3984375
@@ -169,14 +185,119 @@ roles:
     instrument: sis_block_1
     channel: DEV3
     accessor: ctrl
-    description: coil of Scontel SIS Block 1
+    description: coil of SIS b1d4
   sis2:
     instrument: sis_block_1
     channel: DEV2
     attributes:
-      offset_voltage: -0.000187
+      offset_voltage: -0.0002
       offset_current: -1.3e-06
-    description: bias of Scontel SIS Block 2
+    description: bias of SIS b1d2
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 2.7199096308549997e-09
+        - -0.023626226931810386
+        CurrentDAC:
+        - -1382090
+        - 32661.900390625
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 10
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 6.597875135128106e-09
+        - -0.057308197021484375
+        VoltageDac:
+        - -1177910
+        - 32684.30078125
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis2_ctrl:
+    instrument: sis_block_1
+    channel: DEV1
+    accessor: ctrl
+    description: coil of SIS b1d2
+  sis3:
+    instrument: sis_block_1
+    channel: DEV2
+    attributes:
+      offset_voltage: 0.0002
+      offset_current: -1.0e-07
+    description: bias of SIS b2d2
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 3.2778026043888086e-09 * 1.806453017
+        - -0.028452610355275732 * 1.806453017
+        CurrentDAC:
+        - -1382090
+        - 32661.900390625
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 10
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 6.528142486063483e-09 * 0.987896073
+        - -0.056971324169590866 * 0.987896073
+        VoltageDac:
+        - -1177910
+        - 32684.30078125
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis3_ctrl:
+    instrument: sis_block_1
+    channel: DEV1
+    accessor: ctrl
+    description: coil of SIS b2d2
+  sis4:
+    instrument: sis_block_2
+    channel: DEV4
+    attributes:
+      offset_voltage: 0.0
+      offset_current: 4.0e-07
+    description: bias of SIS b2d4 battery
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 5.4767381740816745e-09
+        - -0.04757314547896385
+        CurrentDAC:
+        - -1322560
+        - 32801.19921875
+        CurrentLimits:
+        - -0.0025000000949949026
+        - 0.0025000000949949026
+        CurrentMonitorResistance: 20
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 0.24375 * 6.53895619339726e-09
+        - -0.056775 * 0.24375
+        VoltageDac:
+        - -1322980
+        - 32810.3984375
+        VoltageLimits:
+        - -0.025999999552965163
+        - 0.025999999552965163
+        VoltageStep: 9.999999747378752e-06
+  sis4_ctrl:
+    instrument: sis_block_2
+    channel: DEV3
+    accessor: ctrl
+    description: coil of SIS b2d4 battery
+  sis5:
+    instrument: sis_block_1
+    channel: DEV2
+    attributes:
+      offset_voltage: -0.00018
+      offset_current: -1.2e-06
+    description: bias of SIS b1d2 5p1
     metadata:
       calibration_coefficients:
         CurrentADC:
@@ -200,8 +321,78 @@ roles:
         - -0.019999999552965164
         - 0.019999999552965164
         VoltageStep: 9.999999747378752e-06
-  sis2_ctrl:
+  sis5_ctrl:
     instrument: sis_block_1
     channel: DEV1
     accessor: ctrl
-    description: coil of Scontel SIS Block 2
+    description: coil of SIS b1d2 5p1
+  sis6:
+    instrument: sis_block_2
+    channel: DEV4
+    attributes:
+      offset_voltage: -1.0e-05
+      offset_current: 6.0e-07
+    description: bias of SIS b2d4 5p1 battery
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 5.4767381740816745e-09
+        - -0.04757314547896385
+        CurrentDAC:
+        - -1322560
+        - 32801.19921875
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 20
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 0.24375 * 6.53895619339726e-09
+        - -0.056775 * 0.24375
+        VoltageDac:
+        - -1322980
+        - 32810.3984375
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis6_ctrl:
+    instrument: sis_block_2
+    channel: DEV3
+    accessor: ctrl
+    description: coil of SIS b2d4 5p1 battery
+  sis7:
+    instrument: sis_block_1
+    channel: DEV4
+    attributes:
+      offset_voltage: 0.0
+      offset_current: 0.0
+    description: bias of SIS b1d4 5p1
+    metadata:
+      calibration_coefficients:
+        CurrentADC:
+        - 5.4767381740816745e-09 / 5
+        - -0.04757314547896385 / 5
+        CurrentDAC:
+        - -1322560
+        - 32801.19921875
+        CurrentLimits:
+        - -0.0020000000949949026
+        - 0.0020000000949949026
+        CurrentMonitorResistance: 20
+        CurrentStep: 9.999999974752427e-07
+        VoltageAdc:
+        - 0.24375 * 6.53895619339726e-09
+        - -0.056775 * 0.24375
+        VoltageDac:
+        - -1322980
+        - 32810.3984375
+        VoltageLimits:
+        - -0.019999999552965164
+        - 0.019999999552965164
+        VoltageStep: 9.999999747378752e-06
+  sis7_ctrl:
+    instrument: sis_block_1
+    channel: DEV3
+    accessor: ctrl
+    description: coil of SIS b1d4 5p1

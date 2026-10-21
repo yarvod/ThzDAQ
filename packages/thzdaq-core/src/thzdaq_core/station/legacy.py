@@ -35,6 +35,19 @@ LEGACY_DRIVERS = {
     "Scontel SIS Block": "scontel.sis_block",
     "GRID": "arduino.grid",
 }
+# Ids name the kind of device (power_supply_2); vendor and model live in driver and title
+DEVICE_TYPES = {
+    "keithley.2200": "power_supply",
+    "rigol.dp832a": "power_supply",
+    "rs.hmp2030": "power_supply",
+    "agilent.e8247c": "signal_generator",
+    "sumitomo.f70_rest": "compressor",
+    "lakeshore.336": "temperature_controller",
+    "rs.zva67": "vna",
+    "rs.fsek30": "spectrum_analyzer",
+    "scontel.sis_block": "sis_block",
+    "arduino.grid": "grid",
+}
 # Connection adapters, not instruments: their address is already in each device config
 LEGACY_ADAPTER_SECTIONS = {"Prologix ethernet"}
 LEGACY_KINDS = {
@@ -50,6 +63,13 @@ LEGACY_KINDS = {
 def slug(text: str) -> str:
     value = re.sub(r"[^0-9a-zA-Z]+", "_", text).strip("_").lower()
     return value if value and not value[0].isdigit() else f"i_{value}"
+
+
+def next_id(device_type: str, taken: Mapping[str, Any]) -> str:
+    number = 1
+    while f"{device_type}_{number}" in taken:
+        number += 1
+    return f"{device_type}_{number}"
 
 
 def legacy_connection(entry: Mapping[str, Any], driver: str) -> ConnectionSpec:
@@ -90,17 +110,17 @@ def _entry_name(section: str, entry: Mapping[str, Any]) -> str:
 def _state_defaults() -> Dict[str, InstrumentConfig]:
     """Instruments the legacy app addressed through hard-coded state constants."""
     return {
-        "nrx": InstrumentConfig(
+        "power_meter_1": InstrumentConfig(
             driver="rs.nrx",
             connection=RohdeSchwarzNRX.connection(),
             # The legacy driver configured the meter like this on every connect
             options={"aperture_time": 0.05, "averaging": False},
             title="R&S NRX",
         ),
-        "yig": InstrumentConfig(
+        "yig_filter_1": InstrumentConfig(
             driver="ni.yig", connection=NiYigFilter.connection(), title="NI YIG"
         ),
-        "chopper": InstrumentConfig(
+        "chopper_1": InstrumentConfig(
             driver="chopper.modbus",
             connection=ModbusChopper.connection(),
             title="Chopper",
@@ -136,7 +156,7 @@ def station_from_legacy(
                 key = connection.link_key
                 instrument_id = sis_blocks.get(key)
                 if instrument_id is None:
-                    instrument_id = f"sis_block_{len(sis_blocks) + 1}"
+                    instrument_id = next_id("sis_block", instruments)
                     sis_blocks[key] = instrument_id
                     instruments[instrument_id] = InstrumentConfig(
                         driver=driver, connection=connection, title="Scontel SIS block"
@@ -165,9 +185,9 @@ def station_from_legacy(
                     description=f"coil of {title}",
                 )
                 continue
-            instrument_id = slug(title)
-            while instrument_id in instruments:
-                instrument_id += "_x"
+            instrument_id = next_id(
+                DEVICE_TYPES.get(driver, slug(section)), instruments
+            )
             instruments[instrument_id] = InstrumentConfig(
                 driver=driver, connection=connection, title=title
             )

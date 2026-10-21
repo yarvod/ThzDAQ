@@ -103,10 +103,10 @@ class TestProfileEditor:
         editor.add_instrument("extra", {"driver": "acme.thing"})
         assert editor.validate() is None and "acme.thing" in editor.problems.text()
         editor.instruments.removeRow(editor.instruments.rowCount() - 1)
-        editor.add_role("spare", {"instrument": "nrx"})
+        editor.add_role("spare", {"instrument": "power_meter"})
         editor.save()
         saved = load_station(tmp_path / "out.yaml")
-        assert saved.roles["spare"].instrument == "nrx"
+        assert saved.roles["spare"].instrument == "power_meter"
 
     def test_cells(self):
         assert flow("DEV4") == "DEV4" and flow(2) == "2" and flow("2") == "'2'"

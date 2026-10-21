@@ -36,17 +36,19 @@ class TestLegacyImport:
     def test_instruments_roles_and_notes(self):
         config, notes = station_from_legacy(LEGACY, name="lab")
         assert set(config.instruments) == {
-            "agilent_signal_generator_1",
-            "agilent_signal_generator_2",
-            "if_switch",
+            "signal_generator_1",
+            "signal_generator_2",
+            "power_supply_1",
             "sis_block_1",
             "grid_1",
-            "sumitomo_f70_compressor_1",
-            "nrx",
-            "yig",
-            "chopper",
+            "compressor_1",
+            "power_meter_1",
+            "yig_filter_1",
+            "chopper_1",
         }
-        assert config.instruments["agilent_signal_generator_2"].connection.gpib == 18
+        assert config.instruments["signal_generator_2"].connection.gpib == 18
+        # The user's name is only the title, the id names the kind of device
+        assert config.instruments["power_supply_1"].title == "IF switch"
         assert any("merged into sis_block_1" in note for note in notes)
         assert any("Mystery Box" in note for note in notes)
         assert any("Prologix ethernet" in note for note in notes)
@@ -74,7 +76,7 @@ class TestLegacyImport:
 
     def test_without_state_defaults(self):
         config, _ = station_from_legacy(LEGACY, include_state_defaults=False)
-        assert "nrx" not in config.instruments
+        assert "power_meter_1" not in config.instruments
 
     def test_slug(self):
         assert slug("Rohde Schwarz VNA ZVA 67 1") == "rohde_schwarz_vna_zva_67_1"
@@ -121,7 +123,7 @@ class TestCli:
         assert main(["import-legacy", str(settings_path), "-o", str(output)]) == 0
         config = load_station(output)
         assert config.roles["sis2"].attributes["offset_voltage"] == -0.000187
-        assert config.instruments["agilent_signal_generator_2"].connection.gpib == 18
+        assert config.instruments["signal_generator_2"].connection.gpib == 18
 
     def test_console_script_entry(self):
         result = subprocess.run(

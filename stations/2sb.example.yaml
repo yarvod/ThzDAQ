@@ -22,7 +22,7 @@ instruments:
   yig_supply:
     driver: rs.hmp2030
     connection: {kind: socket, host: 169.254.0.30, port: 5025}
-  nrx:
+  power_meter:
     driver: rs.nrx
     connection: {kind: socket, host: 169.254.2.20, port: 5025}
     options: {aperture_time: 0.05, averaging: false}
@@ -71,7 +71,7 @@ roles:
     channel: 2
     adapter: switch
   detector:
-    instrument: nrx
+    instrument: power_meter
   if_filter:
     instrument: yig
     channel: yig_1
