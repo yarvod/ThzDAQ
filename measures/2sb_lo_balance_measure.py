@@ -44,21 +44,21 @@ if __name__ == "__main__":
     # )
 
     sis1 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV4",
         ctrl_dev="DEV3",
-        offset_voltage=0.040e-3,
+        offset_voltage=0.033e-3,
         offset_current=0,
     )
 
     sis2 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV2",
         ctrl_dev="DEV1",
-        offset_voltage=0.205e-3,
-        offset_current=0.3e-6,
+        offset_voltage=0.2e-3,
+        offset_current=-0.5e-6,
     )
 
     data = []

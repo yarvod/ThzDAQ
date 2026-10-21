@@ -12,8 +12,8 @@ import numpy as np
 import pyqtgraph as pg
 
 from api.NationalInstruments.yig_filter import NiYIGManager
+from api.Rigol.DP832A import PowerSupplyDP832A
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from api.RohdeSchwarz.power_supply import PowerSupplyHMP2030
 from api.Scontel.sis_block import SisBlock
 from threads import Thread
 from utils.functions import send_to_telegram
@@ -54,48 +54,49 @@ class MeasThread(Thread):
     def run(self):
         nrx = NRXPowerMeter(host="169.254.2.20", delay=0)
         yig = NiYIGManager(host="169.254.0.86")
-        rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
-        # sis1 = SisBlock(
-        #     host="169.254.190.83",
-        #     port=9876,
-        #     bias_dev="DEV4",
-        #     ctrl_dev="DEV3",
-        #     offset_voltage=0.04e-3,
-        #     offset_current=0,
-        # )
-        #
-        # sis2 = SisBlock(
-        #     host="169.254.190.83",
-        #     port=9876,
-        #     bias_dev="DEV2",
-        #     ctrl_dev="DEV1",
-        #     offset_voltage=-0.187e-3,
-        #     offset_current=-1.3e-6,
-        # )
-
+        # rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025)
+        rs_power = PowerSupplyDP832A(host="169.254.0.14", port=5555)
         sis1 = SisBlock(
-            host="169.254.71.6",
+            host="169.254.190.83",
             port=9876,
             bias_dev="DEV4",
             ctrl_dev="DEV3",
-            offset_voltage=0.040e-3,
+            offset_voltage=0.033e-3,
             offset_current=0,
         )
 
         sis2 = SisBlock(
-            host="169.254.71.6",
+            host="169.254.190.83",
             port=9876,
             bias_dev="DEV2",
             ctrl_dev="DEV1",
-            offset_voltage=0.205e-3,
-            offset_current=0.3e-6,
+            offset_voltage=0.2e-3,
+            offset_current=-0.5e-6,
         )
+
+        # sis1 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV4",
+        #     ctrl_dev="DEV3",
+        #     offset_voltage=0.040e-3,
+        #     offset_current=0,
+        # )
+        #
+        # sis2 = SisBlock(
+        #     host="169.254.71.6",
+        #     port=9876,
+        #     bias_dev="DEV2",
+        #     ctrl_dev="DEV1",
+        #     offset_voltage=0.205e-3,
+        #     offset_current=0.3e-6,
+        # )
 
         data = {"if": inter_frequencies.tolist(), "data": []}
         _data = {}
 
         try:
-            rs_power.set_output_state(2, True)  # Turn On YIG
+            # rs_power.set_output_state(2, True)  # Turn On YIG
             send_to_telegram("Measuring 2SB IF balance started")
             logger.info("Measuring 2SB IF balance started")
             for bs1, bs2 in zip(voltages_1, voltages_2):
@@ -116,7 +117,8 @@ class MeasThread(Thread):
                     "power_ch2": [],
                 }
                 for channel in ["ch1", "ch2"]:
-                    rs_power.set_output_state(1, channel == "ch2")
+                    # rs_power.set_output_state(1, channel == "ch2")
+                    rs_power.set_output(2, channel == "ch2")
                     logger.info(f"Start measure channel {channel}")
                     send_to_telegram(f"Start measure channel {channel}")
                     time.sleep(1)
@@ -243,7 +245,7 @@ if __name__ == "__main__":
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
 
     sis_voltage_1 = 5e-3
-    sis_voltage_2 = 8e-3
+    sis_voltage_2 = 6e-3
 
     voltages_1 = [sis_voltage_1, sis_voltage_1, sis_voltage_2, sis_voltage_2]
     voltages_2 = [sis_voltage_1, sis_voltage_2, sis_voltage_1, sis_voltage_2]

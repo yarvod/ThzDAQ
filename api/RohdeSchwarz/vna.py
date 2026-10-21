@@ -97,7 +97,7 @@ class VNABlock(BaseInstrument):
         lst_params = [_ for _ in lst[1::2]]
         return dict(zip(lst_traces, lst_params))
 
-    def get_data(self) -> Dict:
+    def get_data(self, channel: int = 1) -> Dict:
         """
         Method to get reflection level from VNA
         """
@@ -106,7 +106,7 @@ class VNABlock(BaseInstrument):
         while attempt < attempts:
             time.sleep(0.05)
             attempt += 1
-            response = self.query("CALC:DATA? FDAT").split(",")
+            response = self.query(f"CALCulate{channel}:DATA? FDAT").split(",")
             try:
                 resp = [float(i) for i in response]
             except ValueError:

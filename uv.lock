@@ -126,6 +126,18 @@ wheels = [
 ]
 
 [[package]]
+name = "port-calibration"
+version = "0.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/88/83b866e6d04875c9309fad3d213be1bb31607d5fcff74a2bba977add9daf/port_calibration-0.14.tar.gz", hash = "sha256:82461098495dd0191ce51be4e2d6d2b639a9c48d0d78090428b5ac74aabadf6f", size = 3821, upload-time = "2026-01-14T18:02:40.691Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/da/95548414be87c5d5ff9fc315da7d402190be46e3285072fac97e06d97679/port_calibration-0.14-py3-none-any.whl", hash = "sha256:36847a3d41c17a5b3d9cc5b66c38cec3581b41991d34f3996c87215f754a4002", size = 4664, upload-time = "2026-01-14T18:02:39.514Z" },
+]
+
+[[package]]
 name = "pyinstaller"
 version = "6.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -349,6 +361,7 @@ dependencies = [
     { name = "packaging" },
     { name = "pefile" },
     { name = "pillow" },
+    { name = "port-calibration" },
     { name = "pyinstaller" },
     { name = "pyinstaller-hooks-contrib" },
     { name = "pymodbus" },
@@ -378,6 +391,7 @@ requires-dist = [
     { name = "packaging", specifier = "==24.2" },
     { name = "pefile", specifier = "==2023.2.7" },
     { name = "pillow", specifier = "==11.1.0" },
+    { name = "port-calibration", specifier = ">=0.14" },
     { name = "pyinstaller", specifier = "==6.12.0" },
     { name = "pyinstaller-hooks-contrib", specifier = "==2025.1" },
     { name = "pymodbus", specifier = "==3.8.6" },
