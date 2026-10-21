@@ -10,21 +10,25 @@ from thzdaq_instruments import InstrumentError
 from thzdaq_core.data.dataset import COMPLETED, Dataset
 from thzdaq_core.data.store import DataStore, read_dataset
 from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements.registry import get_procedure, procedures
+from thzdaq_core.measurements.registry import get_procedure, list_procedures
 from thzdaq_core.measurements.runner import MeasurementRunner, RunObserver
 from thzdaq_core.station.station import Station
 
 
 def _requirements(cls) -> str:
+    try:
+        required = cls().roles()  # with default parameters
+    except Exception:
+        required = cls.requires
     parts = []
-    for role, capabilities in cls.requires.items():
+    for role, capabilities in required.items():
         caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
         parts.append(f"{role}({'+'.join(c.__name__ for c in caps)})")
     return ", ".join(parts)
 
 
 def cmd_list(args) -> int:
-    for cls in procedures():
+    for cls in list_procedures():
         print(f"{cls.name:24} {cls.title}")
         print(f"{'':24} roles: {_requirements(cls)}")
     return 0

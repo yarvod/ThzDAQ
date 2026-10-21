@@ -14,7 +14,7 @@ from thzdaq_core.measurements import (
     Procedure,
     RunObserver,
     get_procedure,
-    procedures,
+    list_procedures,
 )
 from thzdaq_core.measurements.procedures import IFNoise, IVCurve
 from thzdaq_core.station import InstrumentConfig, RoleConfig, Station, StationConfig
@@ -190,7 +190,7 @@ class TestRunner:
         assert math.isnan(noise_temperature(-30, -30))
 
     def test_registry(self):
-        names = [cls.name for cls in procedures()]
+        names = [cls.name for cls in list_procedures()]
         assert {"sis.iv_curve", "if.hot_cold"} <= set(names)
         assert get_procedure("sis.iv_curve") is IVCurve
         with pytest.raises(ProcedureError):
@@ -239,3 +239,13 @@ class TestCli:
         )
         assert "--set 'nope=1'" in capsys.readouterr().err
         assert main(["describe", "unknown"]) == 2
+
+
+def test_parameter_names_cannot_shadow_procedure_api():
+    from thzdaq_core.measurements import FloatParameter as F
+
+    with pytest.raises(ProcedureError, match="clash"):
+
+        class Bad(Procedure):
+            name = "bad"
+            parameters = F("oops", default=1.0)

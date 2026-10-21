@@ -227,6 +227,43 @@ class FloatListParameter(Parameter):
         return f"{shown} {self.display_unit}".strip()
 
 
+class MultiChoiceParameter(Parameter):
+    """Several of the choices, in the given order: e.g. S-parameters to measure."""
+
+    kind = "multi_choice"
+
+    def __init__(self, label: str, choices: Sequence[Any], **kwargs):
+        if not choices:
+            raise ProcedureError("MultiChoiceParameter needs choices")
+        self.choices = tuple(choices)
+        super().__init__(label, **kwargs)
+
+    def validate(self, value: Any) -> Tuple[Any, ...]:
+        if isinstance(value, str) or not hasattr(value, "__iter__"):
+            raise ProcedureError(f"expected a list of choices, got {value!r}")
+        values = tuple(value)
+        if not values:
+            raise ProcedureError("select at least one")
+        wrong = [v for v in values if v not in self.choices]
+        if wrong:
+            raise ProcedureError(f"{wrong} not in {self.choices}")
+        return values
+
+    def parse(self, text: str) -> Tuple[Any, ...]:
+        return self.validate(
+            [item for item in re.split(r"[,;\s]+", str(text).strip()) if item]
+        )
+
+    def to_json(self, value) -> List[Any]:
+        return list(value)
+
+    def format(self, value) -> str:
+        return ", ".join(map(str, value))
+
+    def describe(self) -> Dict[str, Any]:
+        return {**super().describe(), "choices": list(self.choices)}
+
+
 class SweepParameter(Parameter):
     kind = "sweep"
 

@@ -64,5 +64,12 @@ uv run --isolated --package thzdaq-core thzdaq run sis.iv_curve \
     --station stations/2sb.example.yaml --simulate --role bias=sis1 --set voltage=0:7:351
 ```
 
+Procedures: `sis.iv_curve`, `sis.pv_curve`, `sis.y_factor_voltage`, `sis.reflection`,
+`sis.shot_noise`, `grid.current_angle`, `if.hot_cold`, `two_sb.if_balance`,
+`two_sb.pump_balance`, `two_sb.srr`, `two_sb.tn`, `two_sb.optimization`
+(`thzdaq describe <name>` for parameters and roles).
+
+Bench profiles accept numbers like `5e9` and `500.0e9` (YAML 1.2 style).
+
 Datasets are JSON Lines under `data/<date>/`, written while the run goes;
 `thzdaq show <file>` prints a summary, `read_dataset()` loads one in Python.

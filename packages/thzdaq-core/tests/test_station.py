@@ -50,7 +50,7 @@ TWO_SB_REQUIREMENTS = {
     "if_selector": Switchable,
     "yig_power": Switchable,
     "detector": PowerDetector,
-    "yig_filter": TunableFilter,
+    "if_filter": TunableFilter,
     "load": LoadSwitch,
     "spectrum": SpectrumAnalyzer,
 }
@@ -310,6 +310,16 @@ class TestStorage:
     def test_invalid_profiles(self, data, message):
         with pytest.raises(StationError, match=message):
             station_from_dict(data)
+
+    def test_exponent_numbers_are_floats(self, tmp_path):
+        path = tmp_path / "bench.yaml"
+        path.write_text(
+            "name: b\ninstruments:\n  gen:\n    driver: sim.signal_generator\n"
+            "    sim_options: {max_frequency: 500.0e9, min_frequency: 1e3}\n",
+            encoding="utf-8",
+        )
+        options = load_station(path).instruments["gen"].sim_options
+        assert options == {"max_frequency": 500e9, "min_frequency": 1e3}
 
     def test_missing_file(self, tmp_path):
         with pytest.raises(StationError, match="Can't read"):

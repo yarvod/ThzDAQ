@@ -74,6 +74,8 @@ class SimNetworkAnalyzer(Instrument):
         super().__init__(name=name)
         self.start, self.stop, self.points = 2e9, 12e9, 201
         self.power = -30.0
+        self.parameter = "S11"
+        self.averaging = 1
         gamma = (load - 50) / (load + 50)
         self.model = model or (
             lambda f: gamma * cmath.exp(-2j * math.pi * f * 2 * delay)
@@ -88,6 +90,12 @@ class SimNetworkAnalyzer(Instrument):
     def set_points(self, points: int) -> None:
         self.points = int(points)
 
+    def select_parameter(self, parameter: str) -> None:
+        self.parameter = parameter
+
+    def set_averaging(self, count: int) -> None:
+        self.averaging = count
+
     def set_power(self, power: float) -> None:
         self.power = power
 
@@ -97,5 +105,5 @@ class SimNetworkAnalyzer(Instrument):
     def read_trace(self) -> ComplexTrace:
         frequency = linspace(self.start, self.stop, self.points)
         return ComplexTrace(
-            tuple(frequency), tuple(self.model(f) for f in frequency), "S11"
+            tuple(frequency), tuple(self.model(f) for f in frequency), self.parameter
         )

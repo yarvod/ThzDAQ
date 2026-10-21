@@ -21,6 +21,19 @@ class Procedure:
     requires: ClassVar[Mapping[str, Capabilities]] = {}
     plots: ClassVar[Tuple[PlotSpec, ...]] = ()
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        reserved = {name for name in dir(Procedure) if not name.startswith("__")}
+        clashes = sorted(
+            key
+            for key, value in vars(cls).items()
+            if isinstance(value, Parameter) and key in reserved
+        )
+        if clashes:
+            raise ProcedureError(
+                f"{cls.__name__}: parameter names {clashes} clash with Procedure attributes"
+            )
+
     def __init__(self, **values: Any):
         self._values: Dict[str, Any] = {}
         parameters = self.parameters()
@@ -60,6 +73,10 @@ class Procedure:
             key: parameter.to_json(getattr(self, key))
             for key, parameter in self.parameters().items()
         }
+
+    def roles(self) -> Dict[str, Capabilities]:
+        """Roles this run needs; override when they depend on parameters."""
+        return dict(self.requires)
 
     def check(self) -> List[str]:
         """Cross-parameter problems; override in procedures."""

@@ -4,6 +4,7 @@ from thzdaq_core.station.ports import (
     PortAdapter,
     ScaledFrequencySource,
     SidebandSelector,
+    SidebandSwitch,
     SwitchPort,
     register_adapter,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "RoleConfig",
     "ScaledFrequencySource",
     "SidebandSelector",
+    "SidebandSwitch",
     "Station",
     "StationConfig",
     "SwitchPort",

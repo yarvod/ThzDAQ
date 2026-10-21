@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, Literal, Tuple
 
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import ScpiInstrument
@@ -41,12 +41,13 @@ class RohdeSchwarzZVA67(ScpiInstrument):
     def get_power(self) -> float:
         return self.query_float("SOUR:POW?")
 
-    def set_averaging(
-        self, value: bool, count: Optional[int] = None, channel: int = 1
-    ) -> None:
-        self.write(f"SENS{channel}:AVER {'ON' if value else 'OFF'}")
-        if count is not None:
+    def set_averaging(self, count: int, channel: int = 1) -> None:
+        """Sweep averaging, count <= 1 switches it off."""
+        if count > 1:
             self.write(f"SENS{channel}:AVER:COUN {int(count)}")
+            self.write(f"SENS{channel}:AVER ON")
+        else:
+            self.write(f"SENS{channel}:AVER OFF")
 
     def set_format(self, data_format: DataFormat = "COMP") -> None:
         self.write(f"CALC:FORM {data_format}")
@@ -58,6 +59,12 @@ class RohdeSchwarzZVA67(ScpiInstrument):
         self, parameter: str = "S11", trace: str = "Trc1", channel: int = 1
     ) -> None:
         self.write(f"CALC{channel}:PAR:DEF {trace},{parameter}")
+
+    def select_parameter(self, parameter: str, channel: int = 1) -> None:
+        """Measure `parameter` on trace Trc1 as complex data."""
+        with self.transport.transaction():
+            self.define_parameter(parameter, "Trc1", channel)
+            self.set_format("COMP")
 
     def parameter_catalog(self, channel: int = 1) -> Dict[str, str]:
         """{"Trc1": "S11", ...}"""

@@ -72,7 +72,11 @@ class TestZva:
         vna, _ = make(RohdeSchwarzZVA67, emulator)
         vna.define_parameter("S21", "Trc2")
         assert vna.parameter_catalog() == {"Trc2": "S21"}
-        vna.set_averaging(True, count=10)
+        vna.set_averaging(10)
+        vna.set_averaging(1)
+        vna.select_parameter("S12")
+        assert vna.parameter_catalog() == {"Trc1": "S12"}
+        assert emulator.data_format == "COMP"
         assert vna.test()
         assert emulator.errors == []
 

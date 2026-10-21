@@ -253,8 +253,11 @@ def check_spectrum_analyzer(device):
 def check_network_analyzer(device):
     device.set_frequency_range(2e9, 12e9)
     device.set_points(11)
+    device.select_parameter("S21")
+    device.set_averaging(4)
     trace = device.read_trace()
     assert isinstance(trace, ComplexTrace) and len(trace.values) == 11
+    assert trace.parameter == "S21"
     assert trace.frequency[0] == 2e9 and trace.frequency[-1] == 12e9
 
 

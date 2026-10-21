@@ -172,16 +172,15 @@ class MeasurementRunner:
         self, procedure: Procedure, comment: str, roles: Dict[str, str]
     ) -> Dataset:
         procedure.validate()
-        unknown = set(roles) - set(procedure.requires)
+        required = procedure.roles()
+        unknown = set(roles) - set(procedure.requires) - set(required)
         if unknown:
             raise ProcedureError(f"{procedure.name} has no roles {sorted(unknown)}")
         # Fails before any file exists when the bench lacks a role
         station_ports = self.station.require(
-            {roles.get(role, role): caps for role, caps in procedure.requires.items()}
+            {roles.get(role, role): caps for role, caps in required.items()}
         )
-        ports = {
-            role: station_ports[roles.get(role, role)] for role in procedure.requires
-        }
+        ports = {role: station_ports[roles.get(role, role)] for role in required}
         self._cancel.clear()
         dataset = Dataset(
             procedure=procedure.name,
@@ -189,9 +188,7 @@ class MeasurementRunner:
             parameters=procedure.to_json(),
             station=self.station.snapshot(),
             comment=comment,
-            metadata={
-                "roles": {role: roles.get(role, role) for role in procedure.requires}
-            },
+            metadata={"roles": {role: roles.get(role, role) for role in required}},
         )
         writer = self.store.writer(dataset) if self.store is not None else None
         self.current = dataset

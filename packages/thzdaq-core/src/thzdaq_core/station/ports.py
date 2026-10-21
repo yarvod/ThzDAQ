@@ -5,13 +5,24 @@ an LO behind ScaledFrequencySource still offers set_output() and set_power().
 New adapters are added with register_adapter() without touching the station.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Protocol, runtime_checkable
 
 from thzdaq_instruments.capabilities import FrequencySource, Switchable
 
 from thzdaq_core.errors import StationError
 
 SIDE_BANDS = ("upper", "lower")
+
+
+@runtime_checkable
+class SidebandSwitch(Protocol):
+    """Routes the upper or lower IF channel of a 2SB mixer to the detector."""
+
+    def select(self, side_band: str) -> None:
+        ...
+
+    def selected(self) -> str:
+        ...
 
 
 class PortAdapter:

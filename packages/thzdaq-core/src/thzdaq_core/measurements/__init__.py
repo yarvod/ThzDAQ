@@ -4,6 +4,7 @@ from thzdaq_core.measurements.parameters import (
     FloatListParameter,
     FloatParameter,
     IntParameter,
+    MultiChoiceParameter,
     Parameter,
     Sweep,
     SweepParameter,
@@ -12,7 +13,7 @@ from thzdaq_core.measurements.plots import PlotSpec
 from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_core.measurements.registry import (
     get_procedure,
-    procedures,
+    list_procedures,
     register_procedure,
 )
 from thzdaq_core.measurements.runner import (
@@ -31,6 +32,7 @@ __all__ = [
     "FloatParameter",
     "IntParameter",
     "MeasurementRunner",
+    "MultiChoiceParameter",
     "Parameter",
     "PlotSpec",
     "Procedure",
@@ -38,6 +40,6 @@ __all__ = [
     "Sweep",
     "SweepParameter",
     "get_procedure",
-    "procedures",
+    "list_procedures",
     "register_procedure",
 ]

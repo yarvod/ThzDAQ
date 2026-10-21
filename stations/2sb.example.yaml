@@ -14,6 +14,8 @@ instruments:
   test_tone_generator:
     driver: agilent.e8247c
     connection: {kind: prologix, host: 169.254.156.103, gpib: 18}
+    # The generator multiplies internally (OEM head), so it takes mixer frequencies
+    sim_options: {max_frequency: 500.0e9}
   if_switch_supply:
     driver: rigol.dp832a
     connection: {kind: socket, host: 169.254.0.14, port: 5555}
@@ -60,7 +62,7 @@ roles:
     adapter: switch
   detector:
     instrument: nrx
-  yig_filter:
+  if_filter:
     instrument: yig
     channel: yig_1
   load:

@@ -253,7 +253,26 @@ class IFNoise(Procedure):
 - `ctx.sleep()` просыпается сразу при отмене, `ctx.check_cancel()`, `ctx.progress()` — без `terminate()`.
 - `ctx.on_exit(callback)` — восстановление состояния (LIFO), выполняется при успехе, отмене и ошибке.
 - Реестр процедур: `@register_procedure`, `get_procedure(name)`, `procedures()`.
-- Пока перенесены эталонные `sis.iv_curve` и `if.hot_cold`; остальные измерения — следующий шаг.
+- `roles()` может зависеть от параметров: P-V с `hot_cold=True` требует ещё `load`, SRR со
+  спектроанализатором — `spectrum` вместо `detector`/`if_filter`.
+- Имена параметров не могут перекрывать API `Procedure` (`parameters`, `roles`, ...) — проверка
+  при объявлении класса.
+- Процедуры (`thzdaq list`):
+
+  | Имя | Что делает | Роли |
+  |---|---|---|
+  | `sis.iv_curve` | I-V | bias |
+  | `sis.pv_curve` | P-V, опционально hot/cold (Y, Tn от V) и углы сетки | bias, detector (+load, +grid) |
+  | `sis.y_factor_voltage` | P-V с hot/cold по умолчанию | bias, detector, load |
+  | `sis.reflection` | S-параметры VNA по развёртке смещения | bias, vna |
+  | `sis.shot_noise` | Rd в двух точках, P-IF, шум ПЧ-усилителя | bias, detector, if_filter |
+  | `grid.current_angle` | ток SIS от угла сетки | grid, bias |
+  | `if.hot_cold` | P-IF hot/cold, Y и Tn | detector, if_filter, load |
+  | `two_sb.if_balance` | P-IF обоих каналов для пар смещений | sis1, sis2, if_selector, detector, if_filter |
+  | `two_sb.pump_balance` | токи накачки от частоты LO или RF | sis1, sis2, lo/test_tone (+detector) |
+  | `two_sb.srr` | test tone в каждой полосе → SRR по ПЧ; опц. Y/Tn | + test_tone, detector или spectrum, load |
+  | `two_sb.tn` | Y и Tn верхнего и нижнего каналов | sis1, sis2, if_selector, detector, if_filter, load |
+  | `two_sb.optimization` | карты SRR и Tn по сетке SIS1×SIS2 | все роли 2SB |
 
 ### 4.7 Runner ✅
 - `MeasurementRunner(station, store, observers)` (чистый Python): проверяет параметры, строит роли
@@ -320,9 +339,8 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
    с симуляторами, эмуляторами протоколов и контрактными тестами.
 3. **Станция** ✅: пакет `thzdaq-core` — профиль стенда (YAML), роли, адаптеры портов, `Station`,
    импорт `Configs/*` из `settings.ini`, CLI `thzdaq-station`. Редактор профиля в UI — на этапе 5.
-4. **Измерения**: каркас ✅ (`Procedure`, параметры, `PlotSpec`, `MeasurementRunner`, `Dataset`,
-   JSON Lines, CLI `thzdaq`) и эталонные `sis.iv_curve`, `if.hot_cold`. Дальше — перенос P-V,
-   Y-factor по напряжению, VNA, shot noise, grid и 2SB из ветки `2sb`.
+4. **Измерения** ✅: каркас (`Procedure`, параметры, `PlotSpec`, `MeasurementRunner`, `Dataset`,
+   JSON Lines, CLI `thzdaq`) и все измерения старого приложения и ветки `2sb` как процедуры.
 5. **UI**: новая главная форма, панели по capability, `PollingService`, каталог данных.
 6. **Удаление старого**: `api/`, `store/`, `interface/`, `threads/`, глобального `state`.
 7. Мерж в `master`.

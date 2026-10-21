@@ -130,6 +130,12 @@ class NetworkAnalyzer(Protocol):
     def set_points(self, points: int) -> None:
         ...
 
+    def select_parameter(self, parameter: str) -> None:
+        """Measure this S-parameter ("S11", "S21", ...) as complex data."""
+
+    def set_averaging(self, count: int) -> None:
+        """Sweep averaging, count <= 1 switches it off."""
+
     def read_trace(self) -> ComplexTrace:
         ...
 

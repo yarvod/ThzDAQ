@@ -31,6 +31,6 @@ def get_procedure(name: str) -> Type[Procedure]:
         ) from None
 
 
-def procedures() -> List[Type[Procedure]]:
+def list_procedures() -> List[Type[Procedure]]:
     _load_builtin()
     return [PROCEDURES[name] for name in sorted(PROCEDURES)]
