@@ -166,3 +166,87 @@ class SerialLink(Link):
         if not terminated:
             raise InstrumentTimeoutError(f"{self!r}: read timeout")
         return data.decode(self.encoding).rstrip("\r\n\x00")
+
+
+class VisaLink(Link):
+    """Any VISA resource through pyvisa (install the `visa` extra and a VISA backend).
+
+    Covers GPIB adapters other than Prologix (NI GPIB-USB-HS, Keysight 82357B),
+    USBTMC and LXI instruments. VISA addresses the bus itself, so each resource
+    is its own link.
+    """
+
+    def __init__(
+        self,
+        resource: str,
+        timeout: float = 2.0,
+        write_termination: str = "\n",
+        read_termination: Optional[str] = "\n",
+        backend: str = "",
+    ):
+        super().__init__()
+        self.resource = resource
+        self.timeout = timeout
+        self.write_termination = write_termination
+        self.read_termination = read_termination
+        self.backend = backend
+        self._instrument = None
+
+    def __repr__(self):
+        return f"VisaLink({self.resource})"
+
+    @property
+    def is_open(self) -> bool:
+        return self._instrument is not None
+
+    def _errors(self):
+        import pyvisa
+
+        return pyvisa.errors.VisaIOError, pyvisa.constants.StatusCode.error_timeout
+
+    def open(self) -> None:
+        if self._instrument is not None:
+            return
+        try:
+            import pyvisa
+        except ImportError as e:
+            raise InstrumentConnectionError(
+                "pyvisa is not installed: add the thzdaq-instruments[visa] extra"
+            ) from e
+        try:
+            manager = pyvisa.ResourceManager(self.backend)
+            instrument = manager.open_resource(self.resource)
+        except (pyvisa.errors.VisaIOError, OSError, ValueError) as e:
+            raise InstrumentConnectionError(f"{self!r}: {e}") from e
+        instrument.timeout = int(self.timeout * 1e3)
+        instrument.write_termination = self.write_termination
+        instrument.read_termination = self.read_termination
+        self._instrument = instrument
+
+    def close(self) -> None:
+        if self._instrument is None:
+            return
+        try:
+            self._instrument.close()
+        finally:
+            self._instrument = None
+
+    def _require(self):
+        if self._instrument is None:
+            raise InstrumentConnectionError(f"{self!r} is not open")
+        return self._instrument
+
+    def _call(self, func, *args):
+        visa_error, timeout_code = self._errors()
+        try:
+            return func(*args)
+        except visa_error as e:
+            if getattr(e, "error_code", None) == timeout_code:
+                raise InstrumentTimeoutError(f"{self!r}: timeout") from e
+            raise InstrumentConnectionError(f"{self!r}: {e}") from e
+
+    def write_line(self, line: str) -> None:
+        self._call(self._require().write, line)
+
+    def read_line(self) -> str:
+        return self._call(self._require().read).rstrip("\r\n")

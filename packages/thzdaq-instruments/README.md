@@ -8,8 +8,12 @@ Instrument layer of ThzDAQ without any GUI dependency:
   one physical connection between instruments and serializes access with a lock.
 - `instrument` — `Instrument`, `ScpiInstrument` and `Channel` base classes.
 - `registry` — driver catalog: key → class, capabilities are derived from the class.
-- `drivers` — Rigol DP832A, R&S HMP2030, Keithley 2200, Agilent E8247C, R&S NRX,
-  Scontel SIS block, NI YIG (HTTP), Modbus chopper.
+- `drivers` — Rigol DP832A, R&S HMP2030 / NRX / ZVA67 / FSEK30, Keithley 2200,
+  Agilent E8247C, Scontel SIS block, NI YIG (HTTP), Modbus chopper, LakeShore 336,
+  SRS SR830, Sumitomo F-70 (RS-232 and REST), Pfeiffer TC 110 and gauges (RS-485),
+  Arduino wire grid.
+- GPIB through Prologix Ethernet/USB, or any VISA resource with the `visa` extra
+  (`pip install thzdaq-instruments[visa]`).
 - `sim` — simulators for every capability, used for tests and running without hardware.
 
 ```python

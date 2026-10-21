@@ -10,6 +10,9 @@ dependencies = [
     "requests>=2.31",
 ]
 
+[project.optional-dependencies]
+visa = ["pyvisa>=1.13"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.2",

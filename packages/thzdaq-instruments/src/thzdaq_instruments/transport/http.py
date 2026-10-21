@@ -51,10 +51,14 @@ class JsonHttpClient:
             raise InstrumentResponseError(
                 f"{method} {url}: HTTP {response.status_code} {response.text[:200]!r}"
             )
+        if not response.content:
+            return {}
         try:
-            return response.json()
-        except ValueError as e:
-            raise InstrumentResponseError(f"{method} {url}: answer is not JSON") from e
+            data = response.json()
+        except ValueError:
+            # Simple firmwares (e.g. the Arduino grid) answer plain text
+            return {"text": response.text}
+        return data if isinstance(data, dict) else {"data": data}
 
     def get(self, path: str) -> Dict[str, Any]:
         return self._request("GET", path)

@@ -8,45 +8,74 @@ import math
 
 from emulators import (
     AgilentEmulator,
+    F70Emulator,
     FakeJsonClient,
+    FsekEmulator,
     HmpEmulator,
     KeithleyEmulator,
+    LakeShoreEmulator,
     MotorRegisters,
     NrxEmulator,
+    PfeifferBus,
     RigolEmulator,
     SisEmulator,
+    Sr830Emulator,
+    ZvaEmulator,
 )
 from thzdaq_instruments.capabilities import (
+    Compressor,
     CurrentSource,
     FrequencySource,
     Identifiable,
     LoadSwitch,
+    NetworkAnalyzer,
     PowerDetector,
     PowerLevel,
+    Rotator,
+    SpectrumAnalyzer,
     Switchable,
+    Thermometer,
     TunableFilter,
+    VacuumGauge,
     VoltageCurrentMeter,
     VoltageSource,
 )
 from thzdaq_instruments.drivers import (
     AgilentE8247C,
+    ArduinoGrid,
     Keithley2200,
+    LakeShore336,
     ModbusChopper,
     NiYigFilter,
+    PfeifferGauge,
+    PfeifferTurboPump,
     RigolDP832A,
+    RohdeSchwarzFSEK30,
     RohdeSchwarzHMP2030,
     RohdeSchwarzNRX,
+    RohdeSchwarzZVA67,
     ScontelSisBlock,
+    StanfordSR830,
+    SumitomoF70,
+    SumitomoF70Rest,
 )
-from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
 from thzdaq_instruments.sim import (
     SimChopper,
+    SimCompressor,
+    SimNetworkAnalyzer,
     SimPowerMeter,
     SimPowerSupply,
+    SimRotator,
     SimSignalGenerator,
     SimSisBlock,
+    SimSpectrumAnalyzer,
+    SimTemperatureController,
+    SimVacuumGauge,
     SimYigFilter,
 )
+from thzdaq_instruments.transport.base import MessageTransport
+from thzdaq_instruments.transport.fake import FakeLink
 
 
 def driver(cls, emulator):
@@ -76,6 +105,62 @@ def nrx():
 
 def sis():
     return driver(ScontelSisBlock, SisEmulator())
+
+
+def zva():
+    return driver(RohdeSchwarzZVA67, ZvaEmulator())
+
+
+def fsek():
+    return driver(RohdeSchwarzFSEK30, FsekEmulator())
+
+
+def lakeshore():
+    return driver(LakeShore336, LakeShoreEmulator())
+
+
+def sr830():
+    return driver(StanfordSR830, Sr830Emulator())
+
+
+def f70():
+    return driver(SumitomoF70, F70Emulator())
+
+
+class FakeF70Service(FakeJsonClient):
+    def get(self, path):
+        if "temperatures" in path:
+            return {"temperatures": [22.0, 21.5, 20.0]}
+        return {"pressures": [230.0]}
+
+
+def f70_rest():
+    return SumitomoF70Rest(client=FakeF70Service())
+
+
+def pfeiffer_bus():
+    link = FakeLink(
+        PfeifferBus(
+            {
+                1: {309: "000820", 349: "TC 110", 340: "150016", 10: "000000"},
+                2: {740: "250017", 349: "TPR280"},
+            }
+        )
+    )
+    link.open()
+    return MessageTransport(link)
+
+
+def tc110():
+    return PfeifferTurboPump(pfeiffer_bus(), address=1)
+
+
+def gauge():
+    return PfeifferGauge(pfeiffer_bus(), address=2)
+
+
+def grid():
+    return ArduinoGrid(client=FakeJsonClient())
 
 
 def yig():
@@ -149,6 +234,49 @@ def check_load_switch(device):
     device.to_cold()
 
 
+def check_thermometer(device):
+    temperature = device.read_temperature()
+    assert isinstance(temperature, float) and temperature > 0
+
+
+def check_spectrum_analyzer(device):
+    device.set_center_frequency(5e9)
+    device.set_span(1e6)
+    device.set_resolution_bandwidth(1e3)
+    device.set_video_bandwidth(1e3)
+    frequency, power = device.read_peak()
+    assert isinstance(frequency, float) and isinstance(power, float)
+    trace = device.read_trace()
+    assert isinstance(trace, Trace) and len(trace.values) > 0
+
+
+def check_network_analyzer(device):
+    device.set_frequency_range(2e9, 12e9)
+    device.set_points(11)
+    trace = device.read_trace()
+    assert isinstance(trace, ComplexTrace) and len(trace.values) == 11
+    assert trace.frequency[0] == 2e9 and trace.frequency[-1] == 12e9
+
+
+def check_vacuum_gauge(device):
+    pressure = device.read_pressure()
+    assert isinstance(pressure, float) and pressure > 0
+
+
+def check_rotator(device):
+    assert device.rotate_to(30.0) == 30.0
+    assert device.get_angle() == 30.0
+
+
+def check_compressor(device):
+    device.turn_on()
+    temperatures = device.read_temperatures()
+    pressures = device.read_pressures()
+    assert temperatures and all(isinstance(t, float) and t > 200 for t in temperatures)
+    assert pressures and all(isinstance(p, float) for p in pressures)
+    device.turn_off()
+
+
 CONTRACTS = {
     Identifiable: (
         check_identifiable,
@@ -167,6 +295,15 @@ CONTRACTS = {
             "sis": sis,
             "yig": yig,
             "chopper": chopper,
+            "zva": zva,
+            "fsek": fsek,
+            "lakeshore": lakeshore,
+            "sr830": sr830,
+            "f70": f70,
+            "f70 rest": f70_rest,
+            "tc110": tc110,
+            "gauge": gauge,
+            "grid": grid,
         },
     ),
     Switchable: (
@@ -210,7 +347,12 @@ CONTRACTS = {
     ),
     PowerLevel: (
         check_power_level,
-        {"sim signal generator": SimSignalGenerator, "agilent": agilent},
+        {
+            "sim signal generator": SimSignalGenerator,
+            "agilent": agilent,
+            "sim network analyzer": SimNetworkAnalyzer,
+            "zva": zva,
+        },
     ),
     PowerDetector: (
         check_power_detector,
@@ -224,6 +366,30 @@ CONTRACTS = {
         },
     ),
     LoadSwitch: (check_load_switch, {"sim chopper": SimChopper, "chopper": chopper}),
+    Thermometer: (
+        check_thermometer,
+        {
+            "sim input": lambda: SimTemperatureController().channel("A"),
+            "lakeshore input": lambda: lakeshore().channel("B"),
+        },
+    ),
+    SpectrumAnalyzer: (
+        check_spectrum_analyzer,
+        {"sim spectrum analyzer": SimSpectrumAnalyzer, "fsek": fsek},
+    ),
+    NetworkAnalyzer: (
+        check_network_analyzer,
+        {"sim network analyzer": SimNetworkAnalyzer, "zva": zva},
+    ),
+    VacuumGauge: (
+        check_vacuum_gauge,
+        {"sim gauge": SimVacuumGauge, "gauge": gauge, "tc110": tc110},
+    ),
+    Rotator: (check_rotator, {"sim rotator": SimRotator, "grid": grid}),
+    Compressor: (
+        check_compressor,
+        {"sim compressor": SimCompressor, "f70": f70, "f70 rest": f70_rest},
+    ),
 }
 
 

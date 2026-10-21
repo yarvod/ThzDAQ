@@ -103,6 +103,11 @@ class ConnectionSpec:
     read_delay: float = 0.0
     read_termination: str | None = "\n"   # None — старый режим «один recv»
 ```
+- GPIB: Prologix Ethernet (`prologix`), Prologix USB (`prologix_usb`, через serial) и любой
+  VISA-ресурс (`visa`, `resource="GPIB0::19::INSTR"`): адаптеры NI GPIB-USB-HS, Keysight 82357B,
+  а также USBTMC/LXI. VISA — опциональная зависимость `thzdaq-instruments[visa]` (pyvisa +
+  бэкенд NI-VISA или pyvisa-py). Последовательные приборы за шлюзом serial→Ethernet
+  (WaveShare и т.п.) — это обычный `socket` с нужными терминаторами.
 - `TransportPool.acquire(spec) -> Transport`: один линк на физическую точку (`spec.link_key`),
   подсчёт ссылок, линк закрывается последним `transport.close()`. Prologix настраивается один
   раз на линк.
@@ -145,11 +150,17 @@ class PowerLevel(Protocol):         set_power(dBm), get_power() -> dBm
 class PowerDetector(Protocol):      read_power() -> dBm                  # ошибка — исключение
 class TunableFilter(Protocol):      tune(Hz) -> Hz                       # реально выставленная
 class LoadSwitch(Protocol):         to_hot(), to_cold()
+class Thermometer(Protocol):        read_temperature() -> K
+class SpectrumAnalyzer(Protocol):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
+class NetworkAnalyzer(Protocol):    set_frequency_range(), set_points(), read_trace() -> ComplexTrace
+class VacuumGauge(Protocol):        read_pressure() -> Pa
+class Rotator(Protocol):            rotate_to(deg), get_angle()
+class Compressor(Protocol):         turn_on/off(), read_temperatures() -> K, read_pressures() -> Pa
 ```
 Отдельного `BiasPort` нет: SIS-канал — это `VoltageSource + VoltageCurrentMeter`, канал блока
 питания — `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`.
-Позже добавятся `SpectrumAnalyzer`, `NetworkAnalyzer`, `Thermometer`, `Rotator`, `Compressor`,
-`VacuumGauge` — по мере переноса приборов.
+Единицы — СИ (К, Па) даже там, где прибор отдаёт °C, psig или гПа: пересчёт в драйвере,
+обратный — только в UI. Углы — в градусах.
 
 Блоки питания реализуют канал один раз (`SupplyChannel`), вендор задаёт только SCPI-примитивы
 (`_set_output`, `_set_voltage`, `_measure`, ...) — шаблонный метод вместо трёх копий.
@@ -270,9 +281,10 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
 
 1. **Каркас** ✅: uv workspace, пакет `thzdaq-instruments` (errors, units, readings, capabilities,
    transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы). Тесты.
-2. **Драйверы** (первая партия ✅): Rigol DP832A, R&S HMP2030, Keithley 2200, Agilent E8247C,
-   R&S NRX, Scontel SIS, NI YIG (HTTP), Modbus-чоппер — с симуляторами и контрактными тестами на
-   эмуляторах SCPI. Дальше: VNA, спектроанализатор, LakeShore, Sumitomo, Pfeiffer, grid, lock-in.
+2. **Драйверы** ✅: Rigol DP832A, R&S HMP2030 / NRX / ZVA67 / FSEK30, Keithley 2200,
+   Agilent E8247C, Scontel SIS, NI YIG (HTTP), Modbus-чоппер, LakeShore 336, SRS SR830,
+   Sumitomo F-70 (RS-232 и REST), Pfeiffer TC 110 и вакуумметры (RS-485), Arduino grid —
+   с симуляторами, эмуляторами протоколов и контрактными тестами.
 3. **Станция**: конфиги приборов + профиль стенда (YAML), редактор в UI, импорт текущих
    `Configs/*` из `settings.ini`.
 4. **Измерения**: `Procedure`/`Runner`/`Dataset`/автоформы/`PlotSpec`; перенос I-V, P-V, Y-factor,

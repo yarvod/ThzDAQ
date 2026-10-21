@@ -10,9 +10,9 @@ Examples:
     signal generator      -> FrequencySource, PowerLevel, Switchable
 """
 
-from typing import Protocol, runtime_checkable
+from typing import List, Protocol, Tuple, runtime_checkable
 
-from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
 
 
 @runtime_checkable
@@ -95,6 +95,77 @@ class LoadSwitch(Protocol):
         ...
 
 
+@runtime_checkable
+class Thermometer(Protocol):
+    def read_temperature(self) -> float:
+        """K"""
+
+
+@runtime_checkable
+class SpectrumAnalyzer(Protocol):
+    def set_center_frequency(self, frequency: float) -> None:
+        """Hz"""
+
+    def set_span(self, span: float) -> None:
+        """Hz"""
+
+    def set_resolution_bandwidth(self, bandwidth: float) -> None:
+        """Hz, the nearest supported value is used"""
+
+    def set_video_bandwidth(self, bandwidth: float) -> None:
+        """Hz, the nearest supported value is used"""
+
+    def read_peak(self) -> Tuple[float, float]:
+        """(frequency Hz, power dBm) of the highest peak"""
+
+    def read_trace(self) -> Trace:
+        ...
+
+
+@runtime_checkable
+class NetworkAnalyzer(Protocol):
+    def set_frequency_range(self, start: float, stop: float) -> None:
+        """Hz"""
+
+    def set_points(self, points: int) -> None:
+        ...
+
+    def read_trace(self) -> ComplexTrace:
+        ...
+
+
+@runtime_checkable
+class VacuumGauge(Protocol):
+    def read_pressure(self) -> float:
+        """Pa"""
+
+
+@runtime_checkable
+class Rotator(Protocol):
+    """Angles in degrees (the one non-SI unit, as on every lab drawing)."""
+
+    def rotate_to(self, angle: float) -> float:
+        """Rotate to an absolute angle, returns the angle reached."""
+
+    def get_angle(self) -> float:
+        ...
+
+
+@runtime_checkable
+class Compressor(Protocol):
+    def turn_on(self) -> None:
+        ...
+
+    def turn_off(self) -> None:
+        ...
+
+    def read_temperatures(self) -> List[float]:
+        """K"""
+
+    def read_pressures(self) -> List[float]:
+        """Pa, gauge pressure"""
+
+
 ALL_CAPABILITIES: tuple[type, ...] = (
     Identifiable,
     Switchable,
@@ -106,6 +177,12 @@ ALL_CAPABILITIES: tuple[type, ...] = (
     PowerDetector,
     TunableFilter,
     LoadSwitch,
+    Thermometer,
+    SpectrumAnalyzer,
+    NetworkAnalyzer,
+    VacuumGauge,
+    Rotator,
+    Compressor,
 )
 
 

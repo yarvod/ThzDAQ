@@ -1,4 +1,4 @@
-"""Unit convention: SI inside the library (Hz, V, A, K, s), power in dBm.
+"""Unit convention: SI inside the library (Hz, V, A, K, s, Pa), power in dBm, angles in degrees.
 
 Scale factors convert UI values at the boundary: ``5 * GHZ`` -> Hz, ``hz / GHZ`` -> GHz.
 """
@@ -33,3 +33,16 @@ def ratio_to_db(ratio: float) -> float:
     if ratio <= 0:
         raise ValueError("Ratio must be positive to convert to dB")
     return 10 * math.log10(ratio)
+
+
+ZERO_CELSIUS = 273.15  # K
+PSI = 6894.757293168  # Pa
+HPA = 100.0  # Pa
+
+
+def celsius_to_kelvin(celsius: float) -> float:
+    return celsius + ZERO_CELSIUS
+
+
+def kelvin_to_celsius(kelvin: float) -> float:
+    return kelvin - ZERO_CELSIUS

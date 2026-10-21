@@ -11,11 +11,14 @@ SOCKET = "socket"
 SERIAL = "serial"
 PROLOGIX = "prologix"  # Prologix GPIB-Ethernet
 PROLOGIX_USB = "prologix_usb"
+VISA = (
+    "visa"  # any VISA resource: NI/Keysight GPIB adapters, USBTMC, LXI (pyvisa extra)
+)
 # Not line based: drivers open their own clients, the pool doesn't share them
 HTTP = "http"
 MODBUS_TCP = "modbus_tcp"
 MODBUS_RTU = "modbus_rtu"
-MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB)
+MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB, VISA)
 KINDS = MESSAGE_KINDS + (HTTP, MODBUS_TCP, MODBUS_RTU)
 
 PROLOGIX_DEFAULT_PORT = 1234
@@ -30,6 +33,7 @@ class ConnectionSpec:
     port: Optional[int] = None
     serial_port: Optional[str] = None
     gpib: Optional[int] = None
+    resource: Optional[str] = None  # VISA resource, e.g. "GPIB0::19::INSTR"
     timeout: float = 2.0  # s
     read_delay: float = 0.0  # s, pause between write and read in query()
     baudrate: int = 9600
@@ -50,6 +54,8 @@ class ConnectionSpec:
                     object.__setattr__(self, "port", PROLOGIX_DEFAULT_PORT)
         if self.kind in (SERIAL, PROLOGIX_USB, MODBUS_RTU) and not self.serial_port:
             raise ConfigurationError(f"{self.kind} connection requires serial_port")
+        if self.kind == VISA and not self.resource:
+            raise ConfigurationError("visa connection requires resource")
         if self.is_prologix and (self.gpib is None or not 0 <= self.gpib <= 30):
             raise ConfigurationError("Prologix connection requires GPIB address 0..30")
         if self.timeout <= 0:
@@ -70,6 +76,8 @@ class ConnectionSpec:
             return ("tcp", self.host, int(self.port))
         if self.kind == HTTP:
             return ("http", self.host, self.port)
+        if self.kind == VISA:
+            return ("visa", self.resource)
         return ("serial", self.serial_port)
 
     def with_gpib(self, gpib: int) -> "ConnectionSpec":

@@ -7,12 +7,13 @@ from thzdaq_instruments.transport.base import (
     PROLOGIX_USB,
     SERIAL,
     SOCKET,
+    VISA,
     ConnectionSpec,
     Link,
     MessageTransport,
     Transport,
 )
-from thzdaq_instruments.transport.links import SerialLink, SocketLink
+from thzdaq_instruments.transport.links import SerialLink, SocketLink, VisaLink
 from thzdaq_instruments.transport.pool import (
     LinkFactory,
     TransportPool,
@@ -39,6 +40,8 @@ __all__ = [
     "SerialLink",
     "SocketLink",
     "Transport",
+    "VISA",
+    "VisaLink",
     "TransportPool",
     "default_link_factory",
     "default_pool",

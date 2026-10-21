@@ -7,12 +7,13 @@ from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.transport.base import (
     PROLOGIX,
     SOCKET,
+    VISA,
     ConnectionSpec,
     Link,
     MessageTransport,
     Transport,
 )
-from thzdaq_instruments.transport.links import SerialLink, SocketLink
+from thzdaq_instruments.transport.links import SerialLink, SocketLink, VisaLink
 from thzdaq_instruments.transport.prologix import PrologixController, PrologixTransport
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,13 @@ LinkFactory = Callable[[ConnectionSpec], Link]
 
 
 def default_link_factory(spec: ConnectionSpec) -> Link:
+    if spec.kind == VISA:
+        return VisaLink(
+            resource=spec.resource,
+            timeout=spec.timeout,
+            write_termination=spec.write_termination,
+            read_termination=spec.read_termination,
+        )
     if spec.kind in (SOCKET, PROLOGIX):
         return SocketLink(
             host=spec.host,

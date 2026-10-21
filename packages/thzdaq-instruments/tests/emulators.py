@@ -311,3 +311,217 @@ class MotorRegisters:
 
     def close(self):
         self.closed = True
+
+
+class ZvaEmulator(ScpiEmulator):
+    def __init__(self, zeros_before: int = 0):
+        super().__init__()
+        self.points, self.start, self.stop = 11, 2e9, 12e9
+        self.power = -30.0
+        self.data_format = "COMP"
+        self.zeros_before = zeros_before
+        self.parameters = {"Trc1": "S11"}
+
+        def define(_channel, trace, parameter):
+            self.parameters = {trace: parameter}
+
+        self.route(
+            r"\*IDN\?", lambda: "Rohde&Schwarz,ZVA67-4Port,1145111052100151,3.60"
+        )
+        self.route(r"SWE:POIN (\d+)", lambda v: setattr(self, "points", int(v)))
+        self.route(r"SWE:POIN\?", lambda: str(self.points))
+        self.route(r"SENS:FREQ:STAR (\S+)", lambda v: setattr(self, "start", float(v)))
+        self.route(r"SENS:FREQ:STOP (\S+)", lambda v: setattr(self, "stop", float(v)))
+        self.route(r"SENS:FREQ:STAR\?", lambda: f"{self.start}")
+        self.route(r"SENS:FREQ:STOP\?", lambda: f"{self.stop}")
+        self.route(r"SOUR:POW (\S+)", lambda v: setattr(self, "power", float(v)))
+        self.route(r"SOUR:POW\?", lambda: f"{self.power}")
+        self.route(r"SENS(\d):AVER (ON|OFF)", lambda c, v: None)
+        self.route(r"SENS(\d):AVER:COUN (\d+)", lambda c, v: None)
+        self.route(r"CALC:FORM (\w+)", lambda v: setattr(self, "data_format", v))
+        self.route(r"CALC:FORM\?", lambda: self.data_format)
+        self.route(r"CALC(\d):PAR:DEF (\w+),(\w+)", define)
+        self.route(
+            r"CALC(\d):PAR:CAT\?",
+            lambda c: ",".join(f"'{t},{p}" + "'" for t, p in self.parameters.items()),
+        )
+        self.route(r"CALC(\d):DATA\? FDAT", self._data)
+
+    def _data(self, _channel):
+        if self.zeros_before > 0:
+            self.zeros_before -= 1
+            return ",".join(["0"] * (2 * self.points))
+        return ",".join(f"{0.1 * i},{-0.05 * i}" for i in range(self.points))
+
+
+class FsekEmulator(ScpiEmulator):
+    def __init__(self, tone: float = 5.0001e9, level: float = -42.5):
+        super().__init__()
+        self.center, self.span = 5e9, 1e6
+        self.tone, self.level = tone, level
+        self.rbw = self.vbw = None
+        self.continuous = True
+        self.marker = (0.0, -100.0)
+
+        def set_start(v):
+            stop = self.center + self.span / 2
+            self.center, self.span = (float(v) + stop) / 2, stop - float(v)
+
+        def set_stop(v):
+            start = self.center - self.span / 2
+            self.center, self.span = (start + float(v)) / 2, float(v) - start
+
+        self.route(r"\*IDN\?", lambda: "Rohde&Schwarz,FSEK 30,834157/005,3.40")
+        self.route(r":FREQ:CENT (\S+)Hz", lambda v: setattr(self, "center", float(v)))
+        self.route(r":FREQ:CENT\?", lambda: f"{self.center}")
+        self.route(r":FREQ:SPAN (\S+)Hz", lambda v: setattr(self, "span", float(v)))
+        self.route(r":FREQ:SPAN\?", lambda: f"{self.span}")
+        self.route(r":FREQ:STAR (\S+)Hz", set_start)
+        self.route(r":FREQ:STOP (\S+)Hz", set_stop)
+        self.route(r":FREQ:STAR\?", lambda: f"{self.center - self.span / 2}")
+        self.route(r":FREQ:STOP\?", lambda: f"{self.center + self.span / 2}")
+        self.route(r":BAND:RES (\S+)Hz", lambda v: setattr(self, "rbw", float(v)))
+        self.route(r":BAND:VID (\S+)Hz", lambda v: setattr(self, "vbw", float(v)))
+        self.route(r":BAND:VID:AUTO (ON|OFF)", lambda v: None)
+        self.route(r"AVER:TYPE (\w+)", lambda v: None)
+        self.route(
+            r":INIT:CONT (ON|OFF)", lambda v: setattr(self, "continuous", v == "ON")
+        )
+        self.route(r":INIT:CONT\?", lambda: "1" if self.continuous else "0")
+        self.route(r":INIT", lambda: None)
+        self.route(
+            r"CALC:MARK:MAX", lambda: setattr(self, "marker", (self.tone, self.level))
+        )
+        self.route(r"CALC:MARK:X\?", lambda: f"{self.marker[0]}")
+        self.route(r"CALC:MARK:Y\?", lambda: f"{self.marker[1]}")
+        self.route(r":TRAC:DATA\? (\w+)", lambda t: "-90,-80,garbage,-42.5,-90")
+
+
+class LakeShoreEmulator(ScpiEmulator):
+    def __init__(self):
+        super().__init__()
+        self.temperatures = {"A": 4.215, "B": 41.7, "C": 77.3, "D": 295.0}
+        self.setpoints = {1: 0.0, 2: 0.0}
+        self.ranges = {1: 0, 2: 0}
+        self.manual = {1: 0.0, 2: 0.0}
+        self.heater_setup = {1: "1,2,0.000,1", 2: "1,2,0.000,1"}
+        self.out_mode = {1: "1,1,0", 2: "0,0,0"}
+        self.mode = 1
+
+        def store(target):
+            def setter(output, value):
+                target[int(output)] = type(target[int(output)])(value)
+
+            return setter
+
+        self.route(r"\*IDN\?", lambda: "LSCI,MODEL336,LSA2CMQ/LSA2C8R,2.9")
+        self.route(r"KRDG\? ([A-D])", lambda k: f"+{self.temperatures[k]:.3f}")
+        self.route(r"SRDG\? ([A-D])", lambda k: "+1234.5")
+        self.route(r"SETP (\d),(\S+)", store(self.setpoints))
+        self.route(r"SETP\? (\d)", lambda o: f"+{self.setpoints[int(o)]:.3f}")
+        self.route(r"RANGE (\d),(\d)", store(self.ranges))
+        self.route(r"RANGE\? (\d)", lambda o: str(self.ranges[int(o)]))
+        self.route(r"MOUT (\d),(\S+)", store(self.manual))
+        self.route(r"MOUT\? (\d)", lambda o: f"+{self.manual[int(o)]:.2f}")
+        self.route(r"HTR\? (\d)", lambda o: "+012.5")
+        self.route(r"HTRST\? (\d)", lambda o: "0")
+        self.route(
+            r"HTRSET (\d),(\S+)", lambda o, v: self.heater_setup.__setitem__(int(o), v)
+        )
+        self.route(r"HTRSET\? (\d)", lambda o: self.heater_setup[int(o)])
+        self.route(
+            r"OUTMODE (\d),(\S+)", lambda o, v: self.out_mode.__setitem__(int(o), v)
+        )
+        self.route(r"OUTMODE\? (\d)", lambda o: self.out_mode[int(o)])
+        self.route(r"MODE ([0-2])", lambda v: setattr(self, "mode", int(v)))
+        self.route(r"MODE\?", lambda: str(self.mode))
+
+
+class Sr830Emulator(ScpiEmulator):
+    def __init__(self):
+        super().__init__()
+        self.state = {"FREQ": 1000.0, "PHAS": 0.0, "SLVL": 0.1, "OFLT": 10, "SENS": 22}
+        self.route(
+            r"\*IDN\?", lambda: "Stanford_Research_Systems,SR830,s/n00000,ver1.07"
+        )
+        self.route(
+            r"OUTP\? ([1-4])",
+            lambda i: ["", "1.0E-3", "-2.0E-3", "2.236E-3", "-63.43"][int(i)],
+        )
+        self.route(r"SNAP\? 1,2", lambda: "1.0E-3,-2.0E-3")
+        for key in ("FREQ", "PHAS", "SLVL", "OFLT", "SENS"):
+            self.route(
+                rf"{key} (\S+)", lambda v, k=key: self.state.__setitem__(k, float(v))
+            )
+            self.route(rf"{key}\?", lambda k=key: f"{self.state[k]:g}")
+        self.route(r"AGAN", lambda: None)
+        self.route(r"APHS", lambda: None)
+
+
+class F70Emulator:
+    """F-70 RS-232 protocol with CRC-16/MODBUS on every frame."""
+
+    def __init__(self):
+        from thzdaq_instruments.drivers.sumitomo import crc16_modbus
+
+        self.crc = crc16_modbus
+        self.running = False
+        self.errors: List[str] = []
+
+    def transport(self):
+        link = FakeLink(self)
+        link.open()
+        return MessageTransport(link), link
+
+    def _frame(self, fields):
+        head = ",".join(fields) + ","
+        return head + self.crc(head)
+
+    def __call__(self, line):
+        command, checksum = line[:4], line[4:]
+        if self.crc(command) != checksum:
+            self.errors.append(line)
+            return "$???,3A5E"
+        if command == "$TEA":
+            return self._frame(
+                ["$TEA", "068" if self.running else "022", "034", "032", "000"]
+            )
+        if command == "$PRA":
+            return self._frame(["$PRA", "280" if self.running else "230", "000"])
+        if command == "$STA":
+            return self._frame(["$STA", "0301" if self.running else "0000"])
+        if command in ("$ON1", "$OFF", "$RS1", "$CHR", "$CHP", "$POF"):
+            self.running = {"$ON1": True, "$OFF": False}.get(command, self.running)
+            return line
+        self.errors.append(line)
+        return None
+
+
+class PfeifferBus:
+    """Devices on one RS-485 line: {address: {parameter: raw data}}."""
+
+    def __init__(self, devices):
+        from thzdaq_instruments.drivers.pfeiffer import checksum
+
+        self.checksum = checksum
+        self.devices = devices
+        self.errors: List[str] = []
+
+    def __call__(self, line):
+        body, check = line[:-3], line[-3:]
+        if self.checksum(body) != check:
+            self.errors.append(line)
+            return None
+        address, action, number = int(body[:3]), body[3:5], int(body[5:8])
+        if address not in self.devices:
+            return None  # nobody answers on the bus
+        params = self.devices[address]
+        data = body[10:]
+        if action == "00":
+            data = params.get(number, "NO_DEF")
+        elif number in params:
+            params[number] = data
+        else:
+            data = "NO_DEF"
+        reply = f"{address:03d}10{number:03d}{len(data):02d}{data}"
+        return reply + self.checksum(reply)
