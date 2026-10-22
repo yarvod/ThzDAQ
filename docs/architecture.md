@@ -1,8 +1,8 @@
-# ThzDAQ: целевая архитектура (ветка `arch-refactor`)
+# ThzDAQ: архитектура
 
-Документ — план переписывания приложения. Цель: прибор, стенд, измерение, данные и UI
-развязаны так, что новый прибор или новое измерение добавляется одним модулем, без правки
-остального кода, и всё, кроме UI, тестируется без железа.
+Как устроено приложение в ветке `arch-refactor`. Цель переписывания: прибор, стенд, измерение,
+данные и интерфейс развязаны так, что новый прибор или новое измерение добавляется одним
+модулем без правки остального кода, а всё, кроме интерфейса, тестируется без железа.
 
 ## 1. Что мешало в старом приложении
 
@@ -20,73 +20,87 @@
 | Данные не сохраняются по ходу | Измерение живёт в памяти до ручного сохранения или dump при выходе | — |
 | Часть приборов вне конфигов | NRX, YIG, chopper берутся из `state` по IP | OCP |
 
+Организацию интерфейса старого приложения сохранили: доки Qt Advanced Docking System,
+перспективы, док Setup со списком приборов, отдельный док на прибор и на измерение, окна
+графиков по типу кривой. Переписано то, что под ними.
+
 ## 2. На что опираемся
 
-Готового «novasoft» найти не удалось. Близкие по задаче открытые фреймворки, идеи из которых берём
-(не зависимость, а образец):
+Близкие по задаче открытые фреймворки, идеи из которых взяты (как образец, не зависимость):
 
-- **QCoDeS** (Microsoft / QuTech Delft) — драйвер = соединение + дерево `InstrumentChannel` с
-  `Parameter` (имя, единицы, пределы, get/set). Берём: каналы как объекты, параметры с единицами.
-- **Bluesky + ophyd** (NSLS-II) — единый интерфейс устройств (`read()`, `set()`), эксперимент как
-  план, исполняемый RunEngine, данные как поток документов с метаданными. Берём: процедура отдельно от
-  исполнителя, поток записей с метаданными, «цифровой двойник» (симулятор) вместо железа.
-- **NOMAD CAMELS** (FAU) — GUI поверх bluesky: менеджер приборов, протоколы измерений, ручное
-  управление, самоописывающие данные (HDF5/NeXus). Берём: разделение «приборы / протоколы / ручное
-  управление», полные метаданные в файле.
-- **PyMeasure** — `Procedure` с типизированными `Parameter`, из которых автоматически строится форма
-  в GUI; `Worker` исполняет, `Results` пишутся по ходу. Берём: декларативные параметры → автоформа.
+- **QCoDeS** (Microsoft / QuTech Delft) — драйвер = соединение + каналы с `Parameter` (имя,
+  единицы, get/set). Взято: каналы как объекты, величины с единицами.
+- **Bluesky + ophyd** (NSLS-II) — единый интерфейс устройств, эксперимент как план, исполняемый
+  RunEngine, данные с метаданными. Взято: процедура отдельно от исполнителя, симулятор вместо железа.
+- **NOMAD CAMELS** (FAU) — менеджер приборов, протоколы измерений, ручное управление,
+  самоописывающие данные. Взято: разделение «приборы / измерения / ручное управление», полные
+  метаданные в файле.
+- **PyMeasure** — `Procedure` с типизированными параметрами, из которых строится форма.
+  Взято: декларативные параметры → автоформа.
 
-Сам bluesky/QCoDeS не тянем: для одного стенда с ~15 приборами это лишний вес; нам нужен тонкий
-собственный каркас с теми же идеями.
+Сами bluesky/QCoDeS не используются: для одного стенда с ~20 приборами это лишний вес.
 
-## 3. Слои
+## 3. Пакеты и зависимости
+
+uv workspace из трёх дистрибутивов, зависимости только в одну сторону:
 
 ```
-ui  ──►  application  ──►  domain  ◄──  hardware (drivers)  ──►  transport
- │            ▲                                   ▲
- └──── app (composition root: собирает всё, внедряет зависимости) ────┘
+thzdaq-gui  ──►  thzdaq-core  ──►  thzdaq-instruments
+(PySide6, QtAds,   (numpy, pyyaml)    (pyserial, requests, pymodbus; pyvisa — extra [visa])
+ pyqtgraph, qtawesome)
 ```
 
-Правило: стрелки только вниз/внутрь. `domain` не импортирует ничего из проекта и не знает про Qt.
-Драйверы не знают про Qt, UI и конфиги. UI не создаёт драйверы сам — получает сервисы.
-
-Репозиторий — uv workspace из трёх дистрибутивов. Границы слоёв держатся зависимостями:
-в `thzdaq-instruments` физически нет Qt и numpy, тест `test_package_does_not_import_gui_or_numpy`
-это проверяет.
+`thzdaq-instruments` и `thzdaq-core` не импортируют Qt (тесты `test_package_does_not_import_gui_or_numpy`
+и `test_core_does_not_import_gui`), поэтому драйверы, станция и измерения работают из CLI,
+скриптов и тестов без интерфейса.
 
 ```
 packages/
-  thzdaq-instruments/          # import thzdaq_instruments — без Qt, можно отдать отдельно
-    src/thzdaq_instruments/
-      errors.py                # InstrumentError → Connection / Timeout / Response / Configuration
-      units.py                 # соглашение: СИ внутри (Гц, В, А, K), мощность в дБм
-      readings.py              # ChannelReading ...
-      capabilities.py          # интерфейсы по возможностям (раздел 4.3)
-      instrument.py            # Instrument, ScpiInstrument, Channel
-      registry.py              # каталог драйверов, open() через пул
-      transport/               # base.py, links.py (TCP, serial), prologix.py, pool.py, fake.py
-      drivers/                 # power_supply (шаблон), rigol, rohde_schwarz, keithley, agilent,
-                               # scontel, national_instruments, chopper
-      sim/                     # симуляторы каждого интерфейса
-  thzdaq-core/                 # import thzdaq_core — без Qt (этапы 3–4)
-    src/thzdaq_core/
-      station/                 # конфиги приборов, роли, порты, профили стендов (YAML)
-      measurements/            # Procedure, Parameter, Context, PlotSpec, runner, procedures/
-      data/                    # Measurement, Table, Column; JSON-стор
-      analysis/                # iv, noise, two_sb — чистые расчёты
-      cli.py                   # thzdaq run <procedure> --station stations/2sb.yaml
-app/                           # thzdaq-gui (этап 5): PySide6, pyqtgraph, QtAds
-  main_window.py, theme.py, graphs.py, forms.py, docks/ (setup, devices, measure, data, log)
-  app.py                       # composition root
+  thzdaq-instruments/src/thzdaq_instruments/
+    errors.py            # InstrumentError → Connection / Timeout / Response / Configuration
+    units.py             # СИ внутри (Гц, В, А, K, Па, с), мощность в дБм, углы в градусах
+    readings.py          # ChannelReading, Trace, ComplexTrace
+    capabilities.py      # интерфейсы по возможностям (4.3)
+    quantities.py        # величины частей прибора (4.4)
+    instrument.py        # Instrument, ScpiInstrument, Channel, SubdeviceType
+    registry.py          # каталог драйверов, open() через пул
+    transport/           # base (ConnectionSpec, Link, Transport), links (TCP, serial, VISA),
+                         # prologix, pool, http, modbus, fake
+    drivers/             # power_supply (шаблон), rigol, rohde_schwarz/, keithley, agilent,
+                         # scontel, national_instruments, chopper, lakeshore, srs, sumitomo,
+                         # pfeiffer, arduino
+    sim/                 # симуляторы каждого вида приборов
+  thzdaq-core/src/thzdaq_core/
+    parameters.py        # декларативные параметры процедур и настроек устройств
+    station/             # config, kinds (виды устройств), ports (адаптеры), station, storage
+                         # (YAML), legacy (импорт settings.ini), cli (thzdaq-station)
+    measurements/        # procedure, plots (PlotSpec), runner, registry, procedures/
+    data/                # measurement (DTO), store (JSON)
+    analysis/            # iv, noise, shot_noise, two_sb — чистые расчёты
+    sis/                 # калибровка SIS-блока, размагничивание
+    cli.py               # thzdaq list | describe | run | show
+  thzdaq-gui/src/thzdaq_gui/
+    app.py               # точка входа (composition root): тема, сессия, окно
+    main_window.py       # доки QtAds, меню, перспективы
+    session.py           # станция, стор, DeviceWorker, раннеры
+    docks/               # setup, devices, measure, data, log
+    graphs.py            # окна графиков и маршрутизация записей
+    forms.py             # формы из параметров, выбор устройств по слотам
+    measurements.py      # модель таблицы измерений
+    theme.py, resources/docks.css, wheel.py, prefs.py, iv_analysis.py
+    updates.py, update_dialog.py, updater.py, version.py   # обновления из GitHub Releases
+stations/                # профили стендов (YAML)
+main.py                  # запуск GUI и вход PyInstaller
+release.py               # выпуск версии
 ```
 
-Тесты пакета: `uv run --isolated --package thzdaq-instruments pytest packages/thzdaq-instruments`.
+Тесты: `uv run pytest` из корня (GUI — offscreen).
 
 ## 4. Ключевые абстракции
 
 ### 4.1 Transport — «физический порт»
 Два уровня:
-- `Link` — физическое соединение построчно (`SocketLink`, `SerialLink`), со своим `RLock`.
+- `Link` — физическое соединение построчно (`SocketLink`, `SerialLink`, `VisaLink`) со своим `RLock`.
 - `Transport` — доступ одного прибора к линку: `write`, `read`, `query`, `transaction()`.
   `MessageTransport` пишет напрямую, `PrologixTransport` перед командой выбирает GPIB-адрес
   (`++addr` только при смене) и читает через `++read eoi`.
@@ -94,51 +108,63 @@ app/                           # thzdaq-gui (этап 5): PySide6, pyqtgraph, Qt
 ```python
 @dataclass(frozen=True)
 class ConnectionSpec:
-    kind: str                 # "socket" | "serial" | "prologix" | "prologix_usb"
+    kind: str                 # socket | serial | prologix | prologix_usb | visa | http | modbus_tcp | modbus_rtu
     host: str | None = None
     port: int | None = None   # для prologix по умолчанию 1234
     serial_port: str | None = None
     gpib: int | None = None
+    resource: str | None = None   # VISA, "GPIB0::19::INSTR"
     timeout: float = 2.0
     read_delay: float = 0.0
-    read_termination: str | None = "\n"   # None — старый режим «один recv»
+    baudrate: int = 9600
+    write_termination: str = "\n"
+    read_termination: str | None = "\n"   # None — чтение кусками с паузой (SIS-блок)
 ```
-- GPIB: Prologix Ethernet (`prologix`), Prologix USB (`prologix_usb`, через serial) и любой
-  VISA-ресурс (`visa`, `resource="GPIB0::19::INSTR"`): адаптеры NI GPIB-USB-HS, Keysight 82357B,
-  а также USBTMC/LXI. VISA — опциональная зависимость `thzdaq-instruments[visa]` (pyvisa +
-  бэкенд NI-VISA или pyvisa-py). Последовательные приборы за шлюзом serial→Ethernet
-  (WaveShare и т.п.) — это обычный `socket` с нужными терминаторами.
-- `TransportPool.acquire(spec) -> Transport`: один линк на физическую точку (`spec.link_key`),
-  подсчёт ссылок, линк закрывается последним `transport.close()`. Prologix настраивается один
-  раз на линк.
-- Каждый `query` держит блокировку линка от записи до чтения: генераторы и спектроанализатор за
-  одним Prologix не перемешивают команды (есть тест, который без блокировки падает).
+- GPIB: Prologix Ethernet, Prologix USB (через serial) и любой VISA-ресурс (NI GPIB-USB-HS,
+  Keysight 82357B, USBTMC/LXI); VISA — опциональная зависимость `thzdaq-instruments[visa]`.
+  Приборы за шлюзом serial→Ethernet — обычный `socket` с нужными терминаторами.
+- `TransportPool.acquire(spec)`: один линк на физическую точку (`spec.link_key`), подсчёт
+  ссылок, линк закрывается последним `transport.close()`; Prologix настраивается один раз.
+- `query` держит блокировку линка от записи до чтения: приборы за одним Prologix не
+  перемешивают команды, а измерения, мониторинг и ручное управление идут параллельно.
+- HTTP (YIG на NI, сетка, Sumitomo REST) и Modbus (чоппер) не построчные: драйвер открывает
+  клиент (`JsonHttpClient`, `PymodbusRegisters`) сам; в тестах клиенты подменяются.
 - `FakeLink` записывает команды и отвечает по сценарию — на нём тестируются драйверы.
-- HTTP (YIG на NI) и Modbus (чоппер) не построчные: драйвер сам открывает клиент
-  (`JsonHttpClient`, `PymodbusRegisters`) по `ConnectionSpec(kind="http" | "modbus_tcp" | "modbus_rtu")`;
-  пул такие соединения не выдаёт. Клиенты подменяются в тестах (`client=`, `registers=`).
+- У каждого драйвера есть `connection(...)` с рекомендуемыми настройками связи; Setup
+  подставляет их кнопкой «Recommended connection».
 
-### 4.2 Instrument и Channel
+### 4.2 Instrument, каналы и подустройства
 ```python
-class Instrument:                  # база драйверов и симуляторов: имя, каналы, close()
-    channel_class: type[Channel] | None = None
-    channel_keys: tuple = ()
-    def channel(self, key) -> Channel: ...
+class Instrument:                     # база драйверов и симуляторов
+    channel_class: type[Channel] | None
+    channel_keys: tuple               # физические каналы модели: (1, 2, 3), ("A", "B", "C", "D")
+    subdevices: dict[str, SubdeviceType]   # что пользователь добавляет: sis_bias, sis_coil
+    def channel(self, key) -> Channel
+    def part(self, accessor, key)     # channel(key), ctrl(key), ... по виду подустройства
+    @classmethod
+    def fixed_channels(cls) -> tuple  # каналы, которые показываются сами по себе
 
-class ScpiInstrument(Instrument):  # текстовые команды поверх Transport
-    def __init__(self, transport: Transport, *, name=None): ...
-    def query_float / query_int / query_bool(...)  # мусор в ответе → InstrumentResponseError
-    def identify(self) -> str: ...                 # *IDN?
+class ScpiInstrument(Instrument):     # текстовые команды поверх Transport
+    def query_float / query_int / query_bool(...)   # мусор в ответе → InstrumentResponseError
+    def identify(self) -> str                       # *IDN?
 
-class Channel:                     # часть прибора, как InstrumentChannel в QCoDeS
-    def __init__(self, instrument, key): ...
+@dataclass(frozen=True)
+class SubdeviceType:                  # вид функционального устройства на приборе
+    title: str
+    accessor: str = "channel"         # метод прибора, отдающий часть
+    keys: tuple = ()                  # допустимые каналы, DEV1–DEV4
+    part_class: type | None = None    # класс части — возможности известны без открытия
 ```
-Многоканальные приборы отдают каналы: `supply.channel(2)`, `sis_block.channel("DEV4")`.
-Потребитель работает с каналом, а не с «прибором + номером».
+Два вида «частей» прибора:
+- **каналы** — физические одинаковые выходы, заданные моделью (CH1–CH3 блока питания, входы
+  LakeShore, каналы YIG); есть всегда, показываются внутри дока прибора;
+- **подустройства** — функциональные устройства, которые настраивает пользователь: на
+  SIS-блоке каждый DEV может быть смещением (`sis_bias`, `channel()`) или катушкой
+  (`sis_coil`, `ctrl()`). Если подустройства используют `channel`, каналы отдельно не показываются.
 
 ### 4.3 Capabilities — маленькие интерфейсы (ISP)
-Интерфейс описывает одну возможность; прибор/канал реализует несколько. Это `Protocol` только из
-методов, поэтому реестр выводит возможности драйвера из класса (`issubclass`), без ручных списков.
+Интерфейс описывает одну возможность; прибор или его часть реализует несколько. Это `Protocol`
+только из методов, поэтому реестр выводит возможности драйвера из класса (`issubclass`).
 ```python
 class Identifiable(Protocol):       def identify(self) -> str
 class Switchable(Protocol):         set_output(bool), get_output() -> bool
@@ -152,49 +178,35 @@ class TunableFilter(Protocol):      tune(Hz) -> Hz                       # ре�
 class LoadSwitch(Protocol):         to_hot(), to_cold()
 class Thermometer(Protocol):        read_temperature() -> K
 class SpectrumAnalyzer(Protocol):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
-class NetworkAnalyzer(Protocol):    set_frequency_range(), set_points(), read_trace() -> ComplexTrace
+class NetworkAnalyzer(Protocol):    set_frequency_range(), set_points(), select_parameter(), set_averaging(), read_trace()
 class VacuumGauge(Protocol):        read_pressure() -> Pa
 class Rotator(Protocol):            rotate_to(deg), get_angle()
 class Compressor(Protocol):         turn_on/off(), read_temperatures() -> K, read_pressures() -> Pa
 ```
-Отдельного `BiasPort` нет: SIS-канал — это `VoltageSource + VoltageCurrentMeter`, канал блока
-питания — `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`.
-Единицы — СИ (К, Па) даже там, где прибор отдаёт °C, psig или гПа: пересчёт в драйвере,
-обратный — только в UI. Углы — в градусах.
+SIS-смещение — это `VoltageSource + VoltageCurrentMeter`, канал блока питания —
+`Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`. Единицы — СИ (К, Па) даже
+там, где прибор отдаёт °C, psig или гПа: пересчёт в драйвере, обратный — только в интерфейсе.
 
 Блоки питания реализуют канал один раз (`SupplyChannel`), вендор задаёт только SCPI-примитивы
 (`_set_output`, `_set_voltage`, `_measure`, ...) — шаблонный метод вместо трёх копий.
-У каждого драйвера есть `connection(...)` с рекомендуемыми настройками связи (порт, терминатор,
-задержка), например SIS-блок читает ответы кусками с паузой 50 мс, как старый адаптер.
+Для каждой возможности есть контрактный тест (`tests/contracts.py`): симуляторы и драйверы на
+`FakeLink` проходят одни и те же проверки — так держится LSP.
 
-Для каждой возможности есть контрактный тест (`tests/contracts.py`): симуляторы и драйверы
-(на `FakeLink`) проходят одни и те же проверки — так держится LSP.
+### 4.4 Величины
+`Quantity` (`thzdaq_instruments.quantities`) — то, что часть прибора читает или задаёт: ключ,
+название, единица (СИ, dBm, deg), вид (`float`/`bool`), get/set. Величины выводятся из
+возможностей (`VoltageSource` → «Voltage setpoint, V», `VoltageCurrentMeter` → «Voltage» и
+«Current» из одного `measure()`, `PowerDetector` → «Power, dBm», ...); драйвер добавляет свои
+атрибутом `quantities` (закоротка SIS — `SHORT`). `read_values(part)` читает все сразу, общий
+вызов делается один раз. Из величин строятся доки устройств, мониторинг и графики — новый
+драйвер сразу получает рабочий док.
 
-### 4.4 Величины и подустройства
-- **Величина** (`thzdaq_instruments.quantities.Quantity`): то, что часть прибора читает или
-  задаёт, — ключ, название, единица СИ (или dBm/deg), get/set. Величины выводятся из
-  возможностей: `VoltageSource` → «Voltage setpoint, V», `VoltageCurrentMeter` → «Voltage»,
-  «Current» (один вызов `measure()` на оба), `PowerDetector` → «Power, dBm» и т. д.; драйвер
-  добавляет свои через `quantities` (закоротка SIS — `SHORT`). Из величин строятся элементы
-  управления и мониторинг в доках, поэтому новый драйвер сразу получает рабочий док.
-- **Каналы** (`channel_keys`) — физические одинаковые выходы, заданные моделью: CH1–CH3 блока
-  питания, входы LakeShore, каналы YIG. Показываются внутри дока своего прибора.
-- **Подустройства** (`Instrument.subdevices: {kind: SubdeviceType}`) — функциональные устройства,
-  которые пользователь добавляет к прибору: на SIS-блоке `sis_bias` (DEV1–DEV4, `channel()`) и
-  `sis_coil` (`ctrl()`). У каждого своё имя, настройки и док; на одном DEV может быть несколько
-  конфигов (разные смесители с разными смещениями и калибровками) — `AttributePort` применяет
-  настройки своего конфига перед каждым вызовом.
-- **Адаптеры** поверх прибора или канала — тоже виды устройств: `frequency_multiplier` (LO ×18),
-  `sideband_selector` (переключатель IF на канале блока питания), `switch` (с инверсией).
-  Делегируют всё, что не переопределяют: LO за умножителем умеет `set_output`/`set_power`.
-- Виды и их настройки — `thzdaq_core.station.kinds`: у каждого вида настройки описаны
-  параметрами с единицами (как у процедур), из них строится форма в Setup.
-
-### 4.5 Station — профиль стенда ✅
+### 4.5 Станция — профиль стенда
 Профиль (`stations/*.yaml`, версия 2) — приборы и устройства на них. Id называет тип прибора
 (`power_supply_3`, `power_meter_1`), вендор и модель — в `driver` и `title`:
 ```yaml
 version: 2
+name: lab
 instruments:
   sis_block_1:
     driver: scontel.sis_block
@@ -213,24 +225,33 @@ instruments:
     connection: {kind: socket, host: 169.254.0.14, port: 5555}
     devices:
       if_switch_1: {kind: sideband_selector, channel: 2, settings: {upper_when_on: true}}
-  power_meter_1: {driver: rs.nrx, connection: {...}, options: {aperture_time: 0.05}}
+  power_meter_1: {driver: rs.nrx, connection: {kind: socket, host: 169.254.2.20, port: 5025}}
 ```
-- Ссылки на устройства: сам прибор (`power_meter_1`), канал (`power_supply_1:2`) или
-  настроенное устройство (`sis_bias_1`; id уникальны в станции).
-- `Station.devices()` — список `DeviceInfo` (ссылка, название, вид, возможности) без открытия
-  приборов: по нему строятся меню, доки и списки выбора в измерениях. `quantities(ref)` — величины.
-- Приборы открываются лениво, устройства кэшируются. `require(devices, requirements)` строит
-  устройства для слотов измерения и проверяет возможности, сообщая обо всех проблемах сразу.
-  `reconfigure(config)` принимает изменённый профиль и переоткрывает только приборы с новой связью.
-  `snapshot()` и `device_use(ref)` — метаданные для измерения.
-- `simulate=True` (или `simulate: true` у прибора) подставляет симулятор с `sim_options`.
-- Профили версии 1 (роли) читаются и переводятся в устройства автоматически.
+- **Устройство** — то, чем пользуются: сам прибор (`power_meter_1`), его канал
+  (`power_supply_1:2`) или настроенное устройство (`sis_bias_1`); id уникальны в станции.
+- **Виды настроенных устройств** (`station/kinds.py`): подустройства драйвера (`sis_bias`,
+  `sis_coil`) и адаптеры поверх прибора или канала — `frequency_multiplier` (LO ×18),
+  `sideband_selector` (переключатель IF), `switch` (с инверсией). Адаптеры делегируют всё, что
+  не переопределяют: LO за умножителем умеет `set_output`/`set_power`. Настройки каждого вида
+  описаны параметрами с единицами — из них строятся форма в Setup и проверка.
+- На одном DEV может быть несколько конфигов (разные смесители с разными смещениями и
+  калибровками): `AttributePort` применяет настройки своего конфига перед каждым вызовом.
+- `Station`:
+  - `devices()` — список `DeviceInfo` (ссылка, название, вид, возможности) без открытия
+    приборов: по нему строятся меню, доки и списки выбора в измерениях; `quantities(ref)`;
+  - приборы открываются лениво, устройства кэшируются; `device(ref)` / `station[ref]`;
+  - `require(devices, requirements)` строит устройства для слотов измерения и проверяет
+    возможности, сообщая обо всех проблемах сразу;
+  - `reconfigure(config)` принимает изменённый профиль и закрывает только приборы с новой связью;
+  - `snapshot()` и `device_use(ref)` — метаданные для измерения;
+  - `simulate=True` (или `simulate: true` у прибора) подставляет симулятор с `sim_options`.
+- Профили версии 1 (с ролями) читаются и переводятся в устройства автоматически.
 - Импорт старого `settings.ini` (`[Configs]`, QVariant — нужен PySide6): SIS-конфиги одного
-  хоста сливаются в один блок с устройствами `sis_bias_N`/`sis_coil_N`, названия из старых
-  конфигов становятся `title`; адаптеры Prologix пропускаются; NRX/YIG/чоппер — из констант `state`.
+  хоста сливаются в один блок с устройствами `sis_bias_N`/`sis_coil_N`, названия становятся
+  `title`; адаптеры Prologix пропускаются; NRX/YIG/чоппер — из старых констант `state`.
 - CLI: `thzdaq-station import-legacy | show | check [--simulate] [--devices ...]`.
 
-### 4.6 Procedure — измерение без Qt ✅
+### 4.6 Procedure — измерение без Qt
 ```python
 @register_procedure
 class IFNoise(Procedure):
@@ -256,14 +277,16 @@ class IFNoise(Procedure):
 ```
 - Процедура объявляет **слоты** устройств (`requires`, `slots()`) с нужными возможностями;
   какое устройство стенда играет слот, выбирает пользователь (комбобоксы в доке измерения,
-  `--device bias=sis_bias_1` в CLI). `slot_kinds` подсказывает вид: слот `bias` показывает
-  SIS bias, а не каждый канал блока питания.
-- Параметры декларативны (PyMeasure): значения в СИ, у каждого — единица показа и масштаб.
-  Типы: `Float`, `Int`, `Bool`, `Choice`, `FloatList`, `Sweep(start, stop, points)`.
-- `ctx["slot"]` — устройство; `ctx.record(table, **values)` — строка таблицы измерения и событие
-  для графиков. Процедура не знает про доки (DIP): GUI подписывается по `PlotSpec`.
-- `ctx.sleep()` просыпается сразу при отмене; `ctx.on_exit(callback)` — восстановление (LIFO).
-- `slots()` может зависеть от параметров: P-V с `hot_cold=True` требует ещё `load`.
+  `--device bias=sis_bias_1` в CLI). `slot_kinds` подсказывает вид: слот `bias` предлагает
+  SIS-смещения, а не каждый канал блока питания. `slots()` может зависеть от параметров:
+  P-V с `hot_cold=True` требует ещё `load`.
+- Параметры декларативны: значения в СИ, у каждого — единица показа и масштаб, поэтому форма
+  и CLI работают в ГГц/мВ, а код — в Гц/В. Типы: `Float`, `Int`, `Bool`, `Choice`,
+  `MultiChoice`, `FloatList`, `StringList`, `Sweep(start, stop, points)`.
+- `ctx["slot"]` — устройство; `ctx.record(table, **values)` — строка таблицы измерения и
+  событие для графиков; `ctx.sleep()` просыпается сразу при отмене; `ctx.on_exit(callback)` —
+  восстановление состояния (LIFO) при успехе, отмене и ошибке. Процедура не знает про доки
+  (DIP): интерфейс подписывается по `PlotSpec`.
 - Процедуры (`thzdaq list`):
 
   | Имя | Что делает | Слоты |
@@ -284,19 +307,19 @@ class IFNoise(Procedure):
   | `two_sb.tn` | Y и Tn верхнего и нижнего каналов | sis1, sis2, if_selector, detector, if_filter, load |
   | `two_sb.optimization` | карты SRR и Tn по сетке SIS1×SIS2 | все слоты 2SB |
 
-### 4.7 Runner ✅
+### 4.7 Runner
 - `MeasurementRunner(station, store, observers)` (чистый Python): проверяет параметры, строит
-  устройства слотов (`devices={"bias": "sis_bias_1"}`), создаёт `Measurement` со снимком стенда и
-  описанием использованных устройств, вызывает `run(ctx)`, выполняет cleanup и пишет статус
+  устройства слотов (`devices={"bias": "sis_bias_1"}`), создаёт `Measurement` со снимком стенда
+  и описанием использованных устройств, вызывает `run(ctx)`, выполняет cleanup и ставит статус
   `completed | cancelled | failed`. Нет устройства — ошибка до создания файла.
 - Автосохранение: при старте, раз в несколько секунд по мере записей и в конце.
-- `RunObserver`: `on_started / on_record / on_progress / on_log / on_finished`; упавший наблюдатель
-  не останавливает измерение. В GUI у каждого дока измерения свой `QtRunner`, поэтому измерения
-  идут параллельно (общие приборы защищены блокировками транспорта).
+- `RunObserver`: `on_started / on_record / on_progress / on_log / on_finished`; упавший
+  наблюдатель (график) не останавливает измерение. Один раннер — одно измерение за раз,
+  `cancel()` из другого потока.
 
-### 4.8 Данные ✅
-- DTO `thzdaq_core.data.measurement`: `Measurement` (id, процедура, статус, время, комментарий,
-  параметры, `devices: {слот: DeviceUse}`, `tables`, результаты, снимок стенда, метаданные);
+### 4.8 Данные
+- DTO (`data/measurement.py`): `Measurement` — id, процедура, статус, время, комментарий,
+  параметры, `devices: {слот: DeviceUse}`, `tables`, результаты, снимок стенда, метаданные.
   `Table` хранит данные по колонкам словарём, как старый стор (`{"voltage": [...], ...}`), и
   описание колонок `Column(key, title, unit)` — графики и экспорт знают, что и в каких единицах.
   Названия и единицы обычных ключей — `KNOWN_COLUMNS`, процедура может уточнить `columns`.
@@ -307,97 +330,108 @@ class IFNoise(Procedure):
 - CLI: `thzdaq list | describe <procedure> | run <procedure> --station ... [--simulate]
   [--device bias=sis_bias_1] [--set voltage=0:7:351] | show <file>`.
 
-### 4.9 GUI (`thzdaq-gui`) ✅
-Интерфейс старого приложения на Qt Advanced Docking System (PySide6-QtAds): каждая часть —
-док, который можно поставить куда угодно, отцепить, свернуть в боковую панель.
+### 4.9 Интерфейс (`thzdaq-gui`)
+Организация старого приложения на Qt Advanced Docking System (PySide6-QtAds): каждая часть —
+док, который можно поставить куда угодно, отцепить или свернуть в боковую панель.
 - Меню **Base** (Setup, Data, Event log), **Devices** (док на каждый прибор и настроенное
   устройство), **Measures** (док на каждую процедуру), **Graphs** (окно на каждый вид кривой:
   I-V, P-V, Y-V, Tn-V, P-IF, P-t, ... и свои через «New graph…»), **Help** (обновления).
-- **Перспективы** — именованные раскладки доков (Create / Update / Delete / Restore defaults
-  в тулбаре); хранятся с раскладкой окна в `settings.ini` рядом с программой.
+- **Перспективы** — именованные раскладки доков (Create / Update / Delete / Restore defaults в
+  тулбаре); с раскладкой окна хранятся в `settings.ini`.
 - **Setup** — профиль стенда: карточки приборов (драйвер, связь, статус, Connect / Edit /
-  Delete / Add device) и устройства на них; формы добавления прибора (связь по виду адаптера,
-  «Recommended connection») и устройства (вид, канал, имя, настройки). Изменения сразу
-  сохраняются в YAML, доки устройств появляются и исчезают вместе с ними.
+  Delete / Add device) и устройства на них; формы добавления прибора (поля связи по виду
+  адаптера, «Recommended connection») и устройства (вид, канал, имя, настройки). Изменения
+  сразу сохраняются в YAML (`Session.update_config` → `Station.reconfigure`), доки устройств
+  появляются и исчезают вместе с ними.
 - **Доки устройств** строятся из величин: значение, поле с СИ-префиксами и Set, On/Off, Read,
-  Monitor с интервалом, Plot (мониторинг в графики P-t, V-t, I-t, ...). Дополнительно: SIS bias —
-  смещения, калибровка (редактор с выражениями, запись в EEPROM), I-V скан; катушка — I-CL скан и
+  Monitor с интервалом, Plot (в графики P-t, V-t, I-t, ...). Дополнительно: SIS bias — смещения,
+  калибровка (редактор с выражениями, запись в EEPROM), I-V скан; катушка — I-CL скан и
   размагничивание; чоппер — Hot/Cold; компрессор; спектроанализатор и VNA — трасса.
 - **Доки измерений**: устройства по слотам (только подходящие), параметры (последние значения
   запоминаются), комментарий, Start/Stop, прогресс, лог. Записи идут в окна графиков по
   `PlotSpec`; каждый запуск — свои кривые «#N устройство группа».
-- **Графики**: кривые из любых измерений; «Add curve» — измерение, таблица, колонки x/y с
-  единицами; Remove hidden / all; анализ I-V (Rn, Rj, Q, щель) на I-V.
+- **Графики** (`GraphHub`): окно на вид кривой, кривые из любых измерений; «Add curve» —
+  измерение, таблица, колонки x/y с единицами; Remove hidden / all; анализ I-V (Rn, Rj, Q, щель).
 - **Data** — таблица измерений сессии и открытых файлов: комментарий редактируется и сразу
   сохраняется в файл; Plot, Save as JSON, CSV, Details, папка данных.
-- Тёмная тема с оранжевым акцентом (`theme.py`: палитра Fusion, стили доков по
-  `focus_highlighting_dark.css` ADS, иконки Material Design через qtawesome).
-- Потоки: `DeviceWorker` — один поток для ручных обращений к приборам и опроса; `QtRunner` на
-  каждый док измерения. Результаты приходят Qt-сигналами в GUI-поток.
+- Потоки: `DeviceWorker` — один поток с очередью для ручных обращений к приборам и опроса;
+  у каждого дока измерения свой `QtRunner`, поэтому измерения идут параллельно. Результаты
+  приходят Qt-сигналами в GUI-поток.
+- Тема (`theme.py`): тёмная палитра Fusion с оранжевым акцентом, стили доков по
+  `focus_highlighting_dark.css` ADS (`resources/docks.css`), иконки Material Design (qtawesome).
+  `wheel.py`: колесо мыши меняет спинбокс или список только после клика в него, иначе
+  прокручивает док.
 - Обновления (Help → Check for updates): `updates.py` читает GitHub Releases (теги `vX.Y.Z`,
   архив `ThzDAQ_Windows_x64_<тег>.zip`), скачивает и распаковывает сборку; `updater.py`
   (только stdlib, собирается в `updater.exe`) ждёт выхода программы, заменяет файлы с резервом
   и откатом, сохраняет отредактированные профили `stations/` и запускает новую версию.
-  Релиз: `release.py` → тег → `.github/workflows/release.yml` (тесты, `build.bat`, smoke, релиз).
-- Запуск: `thzdaq-gui --station stations/2sb.example.yaml --simulate`.
+- Запуск: `uv run python main.py --station stations/2sb.example.yaml --simulate`.
 
 ### 4.10 Реестр драйверов и симуляторы
 ```python
-registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=SimPowerSupply)
+registry.register("rigol.dp832a", RigolDP832A, title="Rigol DP832A power supply", sim=SimPowerSupply)
+registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
 ```
-- Один `InstrumentManager` вместо 10 менеджеров в `store/__init__.py`.
-- `DeviceComboBox(capability=Switchable)` показывает все подходящие каналы любых вендоров.
-- `main.py --sim stations/2sb.yaml` запускает всё приложение на симуляторах: разработка на маке,
-  демо, тесты процедур целиком.
+- `default_registry()` — все встроенные драйверы (`drivers.DRIVERS`) и симуляторы (`sim.*`).
+- Возможности драйвера и его каналов выводятся из классов (`DriverInfo.capabilities`,
+  `channel_capabilities`), `find(capability)` ищет подходящие драйверы.
+- `open(..., simulate=True)` создаёт симулятор: приложение целиком работает на симуляторах
+  (`--simulate`) — разработка без стенда, демо, тесты процедур.
 
-### 4.11 Конфигурация приложения
-- Глобальный `state` заменяется типизированным `AppSettings` (dataclass) + профили стендов.
-- `settings.ini` остаётся только для геометрии окон и перспектив QtAds.
+### 4.11 Конфигурация
+- **Профиль стенда** (`stations/*.yaml`) — приборы и устройства; редактируется в Setup.
+- **`settings.ini`** рядом с программой (из исходников — в рабочей папке): геометрия окна,
+  раскладка доков, перспективы, путь к последнему профилю. Обновление его не трогает.
+- **Личные настройки** (`prefs.py`, INI в папке пользователя): последние параметры и выбранные
+  устройства каждого измерения, параметры анализа I-V.
+- Аргументы запуска: `--station`, `--simulate`, `--data`, `--settings`.
 
 ## 5. SOLID — как выполняется
 
 | Принцип | Решение |
 |---|---|
-| SRP | Драйвер — только протокол прибора; Procedure — только логика измерения; Runner — исполнение; Measurement/Store — хранение; виджет — отображение |
-| OCP | Новый прибор = драйвер + регистрация; новое измерение = файл Procedure; ядро не правится |
-| LSP | Все реализации capability взаимозаменяемы (контрактные тесты одной пачкой для всех драйверов и симулятора) |
-| ISP | Мелкие capability вместо «толстого» класса прибора; процедура зависит только от нужных ролей |
-| DIP | Процедуры и UI зависят от интерфейсов; конкретику внедряет `app.py` (composition root) |
+| SRP | Драйвер — только протокол прибора; Procedure — только логика измерения; Runner — исполнение; Measurement/Store — хранение; док — отображение и управление |
+| OCP | Новый прибор = драйвер + регистрация (док строится из величин); новое измерение = файл Procedure (док и графики — из параметров и `PlotSpec`); новый вид устройства = запись в `kinds.py` |
+| LSP | Все реализации capability взаимозаменяемы: контрактные тесты одной пачкой для всех драйверов и симуляторов |
+| ISP | Мелкие capability вместо «толстого» класса прибора; процедура зависит только от возможностей своих слотов |
+| DIP | Процедуры и интерфейс зависят от интерфейсов; конкретику (станцию, стор, драйверы) собирает `app.py` |
 
 ## 6. Тестирование
-- `domain/analysis` — обычные юнит-тесты.
-- Драйверы — тесты на фейковом `Transport` (проверяем SCPI-строки и разбор ответов).
-- Контрактные тесты capability: один набор тестов прогоняется на каждом драйвере-фейке и симуляторе.
-- Процедуры — целиком на симуляторной станции.
-- UI — smoke-тест offscreen: окно собирается, формы строятся из параметров.
+- Чистые расчёты (`analysis`, `sis`) — обычные юнит-тесты.
+- Драйверы — на `FakeLink` и эмуляторах протоколов (SCPI-строки и разбор ответов).
+- Контрактные тесты capability: один набор на каждом драйвере-фейке и симуляторе.
+- Станция, профили, импорт старого `settings.ini`, процедуры и раннер — на симуляторах.
+- Интерфейс — offscreen: окно собирается, доки следуют за Setup, измерение из дока строит
+  графики и сохраняет JSON, перспективы сохраняются и восстанавливаются, колесо не меняет поля
+  без фокуса.
+- CI (`.github/workflows/ci.yml`) гоняет все тесты на Windows на каждый пуш; релиз — тесты,
+  сборка и smoke-запуск собранного exe.
 
-## 7. План перехода (в этой ветке, приложение рабочее после каждого этапа)
+## 7. Этапы переписывания
 
-1. **Каркас** ✅: uv workspace, пакет `thzdaq-instruments` (errors, units, readings, capabilities,
-   transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы). Тесты.
+1. **Каркас** ✅: uv workspace, `thzdaq-instruments` (errors, units, readings, capabilities,
+   transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы).
 2. **Драйверы** ✅: Rigol DP832A, R&S HMP2030 / NRX / ZVA67 / FSEK30, Keithley 2200,
    Agilent E8247C, Scontel SIS, NI YIG (HTTP), Modbus-чоппер, LakeShore 336, SRS SR830,
-   Sumitomo F-70 (RS-232 и REST), Pfeiffer TC 110 и вакуумметры (RS-485), Arduino grid —
-   с симуляторами, эмуляторами протоколов и контрактными тестами.
-3. **Станция** ✅: пакет `thzdaq-core` — профиль стенда (YAML), роли, адаптеры портов, `Station`,
-   импорт `Configs/*` из `settings.ini`, CLI `thzdaq-station`. Редактор профиля в UI — на этапе 5.
-4. **Измерения** ✅: каркас (`Procedure`, параметры, `PlotSpec`, `MeasurementRunner`, `Measurement`,
-   JSON Lines, CLI `thzdaq`) и все измерения старого приложения и ветки `2sb` как процедуры.
-5. **UI**: первая версия ✅ (`thzdaq-gui`: стенд, измерения с автоформами, графики по PlotSpec,
-   данные, ручное управление по возможностям). Дальше — функции старого окна из раздела 4.9.
+   Sumitomo F-70 (RS-232 и REST), Pfeiffer TC 110 и вакуумметры, Arduino grid — с симуляторами,
+   эмуляторами протоколов и контрактными тестами.
+3. **Станция** ✅: `thzdaq-core` — профиль стенда (YAML), `Station`, импорт `settings.ini`,
+   CLI `thzdaq-station`.
+4. **Измерения** ✅: `Procedure`, параметры, `PlotSpec`, `MeasurementRunner`, все измерения
+   старого приложения и ветки `2sb` как процедуры, CLI `thzdaq`.
+5. **Интерфейс** ✅: доки QtAds и перспективы как в старом приложении поверх нового ядра.
+   Вместе с ним роли заменены устройствами на приборах (профиль версии 2), добавлены величины
+   и подустройства, данные — DTO с сохранением в JSON.
 6. **Удаление старого** ✅: `api/`, `store/`, `interface/`, `threads/`, `utils/`, `measures/`,
-   `settings*.py/.ini` удалены; настройки приборов перенесены в `stations/lab.yaml`;
-   `main.py` запускает `thzdaq-gui`; корневой проект — workspace, `uv sync` и `uv run pytest`
-   работают из корня; сборка PyInstaller (`build.sh`, `build.bat`) проверена.
-7. Мерж в `master`.
-
-Принцип переноса — strangler: новое пишется рядом, старое удаляется по мере замены, а не
-«большим взрывом» в конце.
+   `settings*.py/.ini` удалены; приборы продового `settings.ini` перенесены в `stations/lab.yaml`.
+7. **Сборка и релизы** ✅: PyInstaller (`build.sh`, `build.bat`), релизы Windows x64 из GitHub
+   Actions по тегу (`release.py`), обновление из программы.
+8. Мерж в `master`.
 
 ## 8. Чего не делаем
 - Не тянем bluesky/QCoDeS/EPICS целиком — берём идеи.
-- Не вводим библиотеку единиц (pint) — соглашение «СИ внутри, пересчёт на границе UI».
-- Не делаем DI-фреймворк и плагины через entry points — хватает реестра и `app.py`.
+- Не вводим библиотеку единиц (pint) — соглашение «СИ внутри, пересчёт на границе интерфейса».
+- Не делаем DI-фреймворк и плагины через entry points — хватает реестров и `app.py`.
 - Не переходим на asyncio — опрос и измерения в потоках с блокировками транспорта.
 
 ## Ссылки
@@ -405,3 +439,4 @@ registry.register("rigol.dp832a", RigolDP832A, config=PowerSupplyOptions, sim=Si
 - Bluesky / ophyd, устройства из сигналов: https://nbviewer.org/github/bluesky/tutorials/blob/main/Ophyd/01%20-%20Group%20Signals%20into%20Devices.ipynb
 - NOMAD CAMELS: https://arxiv.org/abs/2402.07548
 - PyMeasure, GUI из Procedure: https://pymeasure.readthedocs.io/en/latest/tutorial/graphical.html
+- Qt Advanced Docking System: https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System
