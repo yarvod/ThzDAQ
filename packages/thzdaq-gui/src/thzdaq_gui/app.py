@@ -76,10 +76,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 _locks = []
 
 
-def instance_lock() -> Optional[QLockFile]:
+def instance_lock(path: Optional[Path] = None) -> Optional[QLockFile]:
     """A lock shared by builds and runs from sources; None when another holds it."""
-    path = Path(QStandardPaths.writableLocation(QStandardPaths.TempLocation))
-    lock = QLockFile(str(path / "thzdaq.lock"))
+    if path is None:
+        temp = QStandardPaths.writableLocation(QStandardPaths.TempLocation)
+        path = Path(temp) / "thzdaq.lock"
+    lock = QLockFile(str(path))
     lock.setStaleLockTime(0)  # held for hours; staleness is by the owner's PID
     if not lock.tryLock(100):
         return None

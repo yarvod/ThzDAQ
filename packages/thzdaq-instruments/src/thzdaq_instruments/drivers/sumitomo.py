@@ -113,7 +113,8 @@ class SumitomoF70(ScpiInstrument):
             raise InstrumentResponseError(f"{command} answered {fields!r}") from e
 
     def identify(self) -> str:
-        return f"Sumitomo F-70 {self.name}"
+        # A serial port opens without the compressor: ask it something
+        return f"Sumitomo F-70 {self.name}: {self.read_status().state}"
 
     def read_temperatures(self) -> List[float]:
         """Discharge, water out, water in, (spare), K"""
@@ -167,6 +168,7 @@ class SumitomoF70Rest(Instrument):
         return ConnectionSpec(HTTP, host=host, port=port, timeout=10.0)
 
     def identify(self) -> str:
+        self.read_temperatures()  # the service answers or the request fails
         return f"Sumitomo F-70 REST {self.name}"
 
     def _values(self, path: str, key: str) -> List[float]:

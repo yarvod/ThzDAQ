@@ -35,7 +35,7 @@ def default_prefix(kind: str, key: str, unit: str) -> str:
 
 
 class PrefixBox(QComboBox):
-    """"GHz — ×10⁹" choices of one unit; empty (hidden) for dBm, dB, deg."""
+    """Prefixes of one unit ("GHz — ×10⁹"); empty (hidden) for dBm, dB, deg."""
 
     def __init__(self, unit: str, prefix: str = "", parent=None):
         super().__init__(parent)

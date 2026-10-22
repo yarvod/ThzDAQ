@@ -46,6 +46,8 @@ class ArduinoGrid(Instrument):
         )
 
     def identify(self) -> str:
+        if not self.test():
+            raise InstrumentResponseError(f"{self.name}: no OK to the test command")
         return f"Arduino grid {self.name}"
 
     def test(self) -> bool:

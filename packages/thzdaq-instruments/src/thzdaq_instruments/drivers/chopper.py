@@ -89,6 +89,7 @@ class ModbusChopper(Instrument):
         return ConnectionSpec(MODBUS_TCP, host=host, port=port)
 
     def identify(self) -> str:
+        self.motion_status()  # the drive answers or the request fails
         return f"Modbus chopper {self.name}"
 
     def close(self) -> None:

@@ -238,11 +238,13 @@ def test_device_worker_reports_how_long_a_job_waits(app, wait):
     worker.stop()
 
 
-def test_second_instance_is_detected(app):
+def test_second_instance_is_detected(app, tmp_path):
     from thzdaq_gui.app import _locks, instance_lock
 
-    first = instance_lock() or (_locks[0] if _locks else None)
+    path = tmp_path / "thzdaq.lock"
+    first = instance_lock(path)
     assert first is not None
-    assert instance_lock() is None  # the lock is held
+    assert instance_lock(path) is None  # the lock is held
     first.unlock()
-    _locks.clear()
+    _locks.remove(first)
+    assert instance_lock(path) is not None

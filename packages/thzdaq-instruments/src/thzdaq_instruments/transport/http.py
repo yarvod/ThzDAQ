@@ -8,6 +8,10 @@ from thzdaq_instruments.errors import (
 )
 from thzdaq_instruments.transport.base import ConnectionSpec
 
+# A device that is off fails to connect in this time, whatever its read timeout
+# (the grid firmware answers only after the rotation, up to 30 s)
+CONNECT_TIMEOUT = 3.0
+
 
 class JsonClient(Protocol):
     def get(self, path: str) -> Dict[str, Any]:
@@ -41,7 +45,7 @@ class JsonHttpClient:
                 method,
                 url,
                 data=None if data is None else json.dumps(data),
-                timeout=self.timeout,
+                timeout=(min(self.timeout, CONNECT_TIMEOUT), self.timeout),
             )
         except self._requests.ConnectTimeout as e:
             # Windows reports a closed port as a connect timeout, not a refusal

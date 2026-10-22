@@ -69,6 +69,7 @@ class NiYigFilter(Instrument):
         return self.code_to_frequency(int(result))
 
     def identify(self) -> str:
+        self.client.get("/")  # the service answers or the request fails
         return f"NI YIG {self.device} {self.name}"
 
     def test(self) -> bool:

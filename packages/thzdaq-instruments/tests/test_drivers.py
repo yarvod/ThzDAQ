@@ -18,6 +18,7 @@ from thzdaq_instruments import default_registry
 from thzdaq_instruments.capabilities import PowerDetector, VoltageSource
 from thzdaq_instruments.drivers import (
     AgilentE8247C,
+    ArduinoGrid,
     Keithley2200,
     ModbusChopper,
     NiYigFilter,
@@ -25,6 +26,8 @@ from thzdaq_instruments.drivers import (
     RohdeSchwarzHMP2030,
     RohdeSchwarzNRX,
     ScontelSisBlock,
+    SumitomoF70,
+    SumitomoF70Rest,
 )
 from thzdaq_instruments.drivers import chopper as chopper_module
 from thzdaq_instruments.errors import (
@@ -472,3 +475,80 @@ class TestDefaultRegistry:
     def test_pool_refuses_non_message_connections(self):
         with pytest.raises(ConfigurationError):
             TransportPool().acquire(ModbusChopper.connection())
+
+
+def closed_port() -> int:
+    import socket
+
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+class TestIdentifyAsksTheDevice:
+    """Connect shows OK only after the device answered: identify() talks to it."""
+
+    @pytest.mark.parametrize(
+        "make_driver",
+        [
+            lambda spec: NiYigFilter(spec),
+            lambda spec: ArduinoGrid(spec),
+            lambda spec: SumitomoF70Rest(spec),
+        ],
+        ids=["yig", "grid", "f70_rest"],
+    )
+    def test_http_device_that_is_off(self, make_driver):
+        spec = ConnectionSpec(HTTP, host="127.0.0.1", port=closed_port(), timeout=2)
+        driver = make_driver(spec)  # nothing is sent when the driver is created
+        with pytest.raises(InstrumentConnectionError):
+            driver.identify()
+
+    def test_http_device_answers(self):
+        body = {"temperatures": [20, 20, 20, 20], "text": "OK"}
+        with json_server(body=body) as (port, requests):
+            spec = ConnectionSpec(HTTP, host="127.0.0.1", port=port, timeout=2)
+            for driver in (NiYigFilter(spec), ArduinoGrid(spec), SumitomoF70Rest(spec)):
+                assert driver.identify()
+                driver.close()
+        assert [(m, p) for m, p, _ in requests] == [
+            ("GET", "/"),
+            ("POST", "/test"),
+            ("GET", "/api/v1/temperatures/"),
+        ]
+
+    def test_long_read_timeout_does_not_delay_a_device_that_is_off(self, monkeypatch):
+        client = JsonHttpClient(ArduinoGrid.connection("127.0.0.1"))
+        seen = []
+
+        def request(*args, timeout, **kwargs):
+            seen.append(timeout)
+            raise RuntimeError("stop")
+
+        monkeypatch.setattr(client._session, "request", request)
+        with pytest.raises(RuntimeError):
+            client.get("/")
+        assert seen == [(3.0, 30.0)]
+
+    def test_chopper_reads_the_drive(self):
+        chopper, _ = make_chopper()
+        assert chopper.identify()
+
+        class Off(MotorRegisters):
+            def read(self, address, count=1):
+                raise InstrumentConnectionError("Modbus: no answer")
+
+        with pytest.raises(InstrumentConnectionError):
+            ModbusChopper(registers=Off()).identify()
+
+    def test_f70_on_a_silent_serial_port(self):
+        from emulators import F70Emulator
+
+        compressor, _ = make(SumitomoF70, F70Emulator())
+        assert "Sumitomo F-70" in compressor.identify()
+        from thzdaq_instruments.transport.fake import fake_transport
+
+        silent, _ = fake_transport()  # the port opened, nobody answers
+        with pytest.raises(InstrumentTimeoutError):
+            SumitomoF70(silent).identify()
