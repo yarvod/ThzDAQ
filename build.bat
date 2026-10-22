@@ -16,7 +16,7 @@ if exist "%app_dir%\stations" xcopy /E /I /Y "%app_dir%\stations" "%stations_bac
 
 uv sync --locked
 if errorlevel 1 exit /b %errorlevel%
-uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\logo2.png" --noconsole --windowed -y --add-data "assets;assets"
+uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\logo2.png" --noconsole --windowed -y --add-data "assets;assets" --collect-data thzdaq_gui --collect-data qtawesome
 if errorlevel 1 exit /b %errorlevel%
 
 rem Updater for in-app updates: standard library only, so a small one-file exe

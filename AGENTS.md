@@ -4,10 +4,10 @@
 
 ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/architecture.md` for the design.
 
-- `packages/thzdaq-instruments` (`thzdaq_instruments`): capability interfaces, transports (TCP, serial, Prologix, VISA, HTTP, Modbus) with a shared pool and per-link locks, instrument drivers in `drivers/`, simulators in `sim/`, driver registry. No Qt, no numpy.
-- `packages/thzdaq-core` (`thzdaq_core`): station profiles and roles (`station/`), procedures and the runner (`measurements/`), datasets (`data/`), pure analysis (`analysis/`), SIS tools (`sis/`), CLIs `thzdaq` and `thzdaq-station`. No Qt.
-- `packages/thzdaq-gui` (`thzdaq_gui`): PySide6 + pyqtgraph application; panels only display and drive core objects.
-- `stations/`: bench profiles (YAML). `main.py` is the GUI entry point. `assets/` holds the logos. `firmware/` keeps device firmware (Arduino grid rotators).
+- `packages/thzdaq-instruments` (`thzdaq_instruments`): capability interfaces, quantities (readable/settable values with units derived from capabilities), fixed channels and sub-device types of instruments, transports (TCP, serial, Prologix, VISA, HTTP, Modbus) with a shared pool and per-link locks, instrument drivers in `drivers/`, simulators in `sim/`, driver registry. No Qt, no numpy.
+- `packages/thzdaq-core` (`thzdaq_core`): station profiles with instruments and their configured devices, device kinds (`station/`), procedures with device slots and the runner (`measurements/`), measurement DTOs and the JSON store (`data/`), pure analysis (`analysis/`), SIS tools (`sis/`), CLIs `thzdaq` and `thzdaq-station`. No Qt.
+- `packages/thzdaq-gui` (`thzdaq_gui`): PySide6 + PySide6-QtAds + pyqtgraph application in the layout of the old app: docks (`docks/`: Setup, device docks, measurement docks, Data, Log), graph docks (`graphs.py`), perspectives, dark theme with orange accents and qtawesome icons (`theme.py`). Docks only display and drive core objects.
+- `stations/`: bench profiles (YAML, version 2: instruments with `devices`; ids name the kind of device, e.g. `power_supply_3`). `main.py` is the GUI entry point. `assets/` holds the logos. `firmware/` keeps device firmware (Arduino grid rotators).
 
 Dependencies point one way: gui → core → instruments. Tests check that core and instruments never import Qt.
 
@@ -15,7 +15,7 @@ Dependencies point one way: gui → core → instruments. Tests check that core 
 
 - `uv sync` creates or updates `.venv`; `uv lock` after changing any `pyproject.toml`.
 - `uv run python main.py --station stations/2sb.example.yaml --simulate` runs the GUI on simulators.
-- `uv run thzdaq run <procedure> --station <profile> [--simulate] [--role a=b] [--set name=value]` runs a measurement without the GUI; `uv run thzdaq list` / `describe <procedure>` show what exists.
+- `uv run thzdaq run <procedure> --station <profile> [--simulate] [--device slot=device] [--set name=value]` runs a measurement without the GUI; `uv run thzdaq list` / `describe <procedure>` show what exists.
 - `uv run thzdaq-station check <profile> --simulate` checks a bench profile.
 - `uv run pytest` runs all package tests (GUI tests run offscreen); `uv run pytest packages/thzdaq-core` for one package.
 - `sh build.sh` / `build.bat [name]` build the PyInstaller distribution into `dist/`.

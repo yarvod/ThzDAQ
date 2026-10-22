@@ -277,6 +277,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pyside6-qtads"
+version = "4.3.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyside6-essentials" },
+    { name = "shiboken6" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/40/6ee534ca0747aae07d75c3f9e24b9af122c45b31242068256f2053ac11d6/pyside6_qtads-4.3.1.4.tar.gz", hash = "sha256:0b2afa10c1578732e8045b33d192855a1bd260980154505790fc6ef43a29f2c4", size = 21553642, upload-time = "2025-02-12T23:03:49.549Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/c0/7a6e212ff85258598ce0be4e3edc427ec72a5b788e3e215fc2b6c4e584ba/PySide6_QtAds-4.3.1.4-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:67bf6759950c41e273a723e616b44ca65cc72157472245287521ea4c7ebba485", size = 612931, upload-time = "2025-02-12T23:03:39.941Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/fc/d34fa052e609d1b72e0c5d95d02d978ea7e2f42bf14ca9625809fd7671f0/PySide6_QtAds-4.3.1.4-cp39-abi3-macosx_11_0_x86_64.whl", hash = "sha256:17916ffae001bae94f0eefcd8f4b8ea20257414c891a0f185e3e566753363d1a", size = 641707, upload-time = "2025-02-12T23:03:41.824Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/a7/d63814d36504aee8a67847055c1e1930ff6f153a17992ec7be3a7252bd76/PySide6_QtAds-4.3.1.4-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:896bb43b9174d510b9f5029c58792bcfecdcd68900c28378906d4e04dcfe0053", size = 835546, upload-time = "2025-02-12T23:03:43.314Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/d4/3ace421546905695efdca4f72f08dc70c3a88507131aa7c8196657cdfe1d/PySide6_QtAds-4.3.1.4-cp39-abi3-manylinux_2_38_aarch64.whl", hash = "sha256:6001a995009911f539e74d6788d5693e6208a3cfef3f1def23eac0a82d685a12", size = 841115, upload-time = "2025-02-12T23:03:45.257Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/8b/83c5ff8d39e9e13712644e0465cf9929b96c906e6333c588c8fb14c4ac19/PySide6_QtAds-4.3.1.4-cp39-abi3-win_amd64.whl", hash = "sha256:bd7d82252265f6658bb22f3fe023ad58afefc63d68b5860f77a2288c27143a28", size = 476378, upload-time = "2025-02-12T23:03:46.417Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -328,6 +345,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/6a/b627b4e0c1dd03718543519ffb2f1deea4a1e6d42fbab8021936a4d22589/pyyaml-6.0.3-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:37503bfbfc9d2c40b344d06b2199cf0e96e97957ab1c1b546fd4f87e53e5d3e4", size = 794986, upload-time = "2025-09-25T21:32:07.367Z" },
     { url = "https://files.pythonhosted.org/packages/45/91/47a6e1c42d9ee337c4839208f30d9f09caa9f720ec7582917b264defc875/pyyaml-6.0.3-cp311-cp311-win32.whl", hash = "sha256:8098f252adfa6c80ab48096053f512f2321f0b998f98150cea9bd23d83e1467b", size = 142543, upload-time = "2025-09-25T21:32:08.95Z" },
     { url = "https://files.pythonhosted.org/packages/da/e3/ea007450a105ae919a72393cb06f122f288ef60bba2dc64b26e2646fa315/pyyaml-6.0.3-cp311-cp311-win_amd64.whl", hash = "sha256:9f3bfb4965eb874431221a3ff3fdcddc7e74e3b07799e0e84ca4a0f867d449bf", size = 158763, upload-time = "2025-09-25T21:32:09.96Z" },
+]
+
+[[package]]
+name = "qtawesome"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "qtpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/bc/475c8df94de4f358bbf7703747c13b16ae3c0c4cda50d5243b99cb45e2a8/qtawesome-1.4.2.tar.gz", hash = "sha256:b2bf9351beb335095006892796f072ffd9755a2d7e5113dc71918dcd9ba4ef4a", size = 2614207, upload-time = "2026-04-10T18:49:46.037Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/b1/da1d826ccc9258674b26dd0abcbbb1c55cab06e7fbf2697518b67edc79fc/qtawesome-1.4.2-py3-none-any.whl", hash = "sha256:dbf08524428fa2df73918ce362153254cd44f089380576d84bfaad8f40eece45", size = 2593557, upload-time = "2026-04-10T18:49:44.219Z" },
+]
+
+[[package]]
+name = "qtpy"
+version = "2.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/70/01/392eba83c8e47b946b929d7c46e0f04b35e9671f8bb6fc36b6f7945b4de8/qtpy-2.4.3.tar.gz", hash = "sha256:db744f7832e6d3da90568ba6ccbca3ee2b3b4a890c3d6fbbc63142f6e4cdf5bb", size = 66982, upload-time = "2025-02-11T15:09:25.759Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/76/37c0ccd5ab968a6a438f9c623aeecc84c202ab2fabc6a8fd927580c15b5a/QtPy-2.4.3-py3-none-any.whl", hash = "sha256:72095afe13673e017946cc258b8d5da43314197b741ed2890e563cf384b51aa1", size = 95045, upload-time = "2025-02-11T15:09:24.162Z" },
 ]
 
 [[package]]
@@ -429,6 +470,8 @@ dependencies = [
     { name = "numpy" },
     { name = "pyqtgraph" },
     { name = "pyside6" },
+    { name = "pyside6-qtads" },
+    { name = "qtawesome" },
     { name = "requests" },
     { name = "thzdaq-core" },
 ]
@@ -443,6 +486,8 @@ requires-dist = [
     { name = "numpy", specifier = "==1.26.4" },
     { name = "pyqtgraph", specifier = "==0.13.7" },
     { name = "pyside6", specifier = "==6.8.2.1" },
+    { name = "pyside6-qtads", specifier = "==4.3.1.4" },
+    { name = "qtawesome", specifier = ">=1.3" },
     { name = "requests", specifier = ">=2.31" },
     { name = "thzdaq-core", editable = "packages/thzdaq-core" },
 ]

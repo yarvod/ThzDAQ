@@ -1,0 +1,262 @@
+import json
+
+import pytest
+from PySide6.QtWidgets import QDialog, QMessageBox
+from thzdaq_core.data import COMPLETED, read_json
+from thzdaq_core.measurements.parameters import Sweep
+from thzdaq_core.measurements.registry import list_procedures
+from thzdaq_core.station import load_station
+from thzdaq_gui.docks.setup import DeviceDialog, InstrumentDialog
+from thzdaq_instruments.transport.base import PROLOGIX
+
+FAST_IV = {"voltage": Sweep(0, 5e-3, 6), "settle_time": 0.0, "first_point_delay": 0.0}
+
+
+class TestWindow:
+    def test_docks_like_the_old_app(self, window):
+        names = set(window.docks)
+        assert {"setup", "data", "log"} <= names
+        assert {f"measure:{cls.name}" for cls in list_procedures()} <= names
+        assert {"graph:I-V", "graph:P-V", "graph:P-IF", "graph:Tn upper"} <= names
+        # Instruments and configured devices get docks; fixed channels live inside
+        assert {"device:sis_bias_1", "device:sis_coil_2", "device:lo_1",
+                "device:power_supply_1", "device:power_meter_1"} <= names  # fmt: skip
+        assert not any(name.startswith("device:power_supply_1:") for name in names)
+        menus = [a.text() for a in window.menuBar().actions()]
+        assert menus == ["&File", "&Base", "&Devices", "&Measures", "&Graphs", "&Help"]
+        titles = [a.text() for a in window.menuDevices.actions()]
+        assert "SIS1" in titles and "IF switch supply" in titles
+
+    def test_device_docks_follow_the_setup(self, window, session, profile, monkeypatch):
+        setup = window.setupWidget
+        monkeypatch.setattr(DeviceDialog, "exec", lambda self: QDialog.Accepted)
+
+        def fill(dialog_self):
+            dialog_self.kind.setCurrentIndex(dialog_self.kind.findData("sis_bias"))
+            dialog_self.channel.setCurrentIndex(dialog_self.channel.findData("DEV1"))
+            dialog_self.title.setText("SIS b2d2")
+            return QDialog.Accepted
+
+        monkeypatch.setattr(DeviceDialog, "exec", fill)
+        setup.add_device("sis_block_1")
+        assert "device:sis_bias_3" in window.docks
+        saved = load_station(profile).instruments["sis_block_1"].devices["sis_bias_3"]
+        assert (saved.kind, saved.channel, saved.title) == ("sis_bias", "DEV1", "SIS b2d2")
+        assert "sis b2d2" in setup.cards["sis_block_1"].search_text
+
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+        setup.delete_device("sis_block_1", "sis_bias_3")
+        assert "device:sis_bias_3" not in window.docks
+        setup.delete_instrument("power_supply_2")
+        assert "device:power_supply_2" not in window.docks
+        assert "device:yig_power_1" not in window.docks
+        assert "power_supply_2" not in load_station(profile).instruments
+
+    def test_add_instrument_dialog(self, window, session, profile, monkeypatch):
+        def fill(dialog_self):
+            dialog_self.driver.setCurrentIndex(dialog_self.driver.findData("rs.nrx"))
+            dialog_self.title.setText("Second NRX")
+            dialog_self.connection.host.setText("10.0.0.7")
+            return QDialog.Accepted
+
+        monkeypatch.setattr(InstrumentDialog, "exec", fill)
+        window.setupWidget.add_instrument()
+        spec = load_station(profile).instruments["power_meter_2"]
+        assert spec.title == "Second NRX" and spec.connection.host == "10.0.0.7"
+        assert spec.connection.port == 5025  # from the recommended connection
+        assert "device:power_meter_2" in window.docks
+
+    def test_connection_editor_shows_fields_of_the_kind(self, app, session):
+        dialog = InstrumentDialog(session.station.config, "signal_generator_1")
+        editor = dialog.connection
+        assert editor.kind.currentData() == PROLOGIX
+        assert editor.gpib.value() == 19 and not editor.gpib.isHidden()
+        assert editor.serial_port.isHidden()
+        assert not dialog.driver.isEnabled()
+        assert dialog.instrument().connection.gpib == 19
+
+    def test_connect_reports_identity(self, window, wait):
+        window.setupWidget.connect_instrument("sis_block_1")
+        card = window.setupWidget.cards["sis_block_1"]
+        wait(lambda: card.status.text().startswith("OK"))
+        assert "SimSisBlock" in card.status.text()
+
+
+class TestDeviceDocks:
+    def test_quantity_panel_reads_and_sets(self, window, session, wait):
+        widget = window.docks["device:sis_bias_1"].widget()
+        panel = widget.panels[0]
+        assert [q.key for q in panel.quantities] == ["voltage_set", "voltage", "current", "short"]
+        voltage = next(q for q in panel.quantities if q.key == "voltage_set")
+        panel.write(voltage, 2.5e-3)
+        wait(lambda: panel.values["voltage_set"].text().startswith("2.5"))
+        assert panel.values["voltage_set"].text() == "2.5 mV"
+        short = next(q for q in panel.quantities if q.key == "short")
+        panel.write(short, True)
+        wait(lambda: panel.toggles["short"].isChecked())
+        assert session.station.instrument("sis_block_1").channel("DEV4").get_short()
+
+    def test_instrument_dock_has_its_channels(self, window):
+        widget = window.docks["device:power_supply_1"].widget()
+        assert [p.ref for p in widget.panels] == [
+            "power_supply_1", "power_supply_1:1", "power_supply_1:2", "power_supply_1:3",
+        ]  # fmt: skip
+
+    def test_monitor_plots_to_time_graphs(self, window, wait):
+        panel = window.docks["device:power_meter_1"].widget().panels[0]
+        panel.interval.setValue(0.1)
+        panel.plot.setChecked(True)
+        panel.monitor.setChecked(True)
+        graph = window.hub.graph("P-t")
+        wait(lambda: graph.items and len(next(iter(graph.points.values()))) >= 2)
+        panel.monitor.setChecked(False)
+        assert graph.curve_label(("monitor", "power_meter_1", "power")) == "R&S NRX"
+
+    def test_sis_bias_offsets_and_calibration(self, window, session, profile, wait, monkeypatch):
+        from thzdaq_gui.docks.devices import SisBiasGroup
+
+        widget = window.docks["device:sis_bias_2"].widget()
+
+        group = widget.findChildren(SisBiasGroup)[0]
+        group.offset_voltage.setValue(1e-4)
+        group.save_offsets()
+        assert load_station(profile).instruments["sis_block_1"].devices["sis_bias_2"].settings[
+            "offset_voltage"
+        ] == pytest.approx(1e-4)
+        # The dock was rebuilt for the new settings; the device uses them
+        wait(lambda: True)
+        assert session.station.device("sis_bias_2").offset_voltage == pytest.approx(1e-4)
+
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+        shown = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
+        group = window.docks["device:sis_bias_2"].widget().findChildren(SisBiasGroup)[0]
+        group.write_calibration()
+        wait(lambda: shown)
+        channel = session.station.instrument("sis_block_1").channel("DEV2")
+        assert channel.calibration["VoltageStep"] == pytest.approx(1e-5)
+
+    def test_iv_scan_in_the_device_dock(self, window, session, wait):
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_1"].widget()
+        box = widget.findChildren(ProcedureBox)[0]
+        assert box.fixed == {"bias": "sis_bias_1"} and box.devices_box.isHidden()
+        box.form.set_values(FAST_IV)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished)
+        assert finished[0].status == COMPLETED
+        assert len(window.hub.graph("I-V").items) == 1
+
+
+class TestMeasureAndData:
+    def test_measurement_dock_flow(self, window, session, wait, tmp_path):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(FAST_IV)
+        box.devices.combos["bias"].setCurrentIndex(
+            box.devices.combos["bias"].findData("sis_bias_2")
+        )
+        box.comment.setText("smoke test")
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.btnStart.click()
+        wait(lambda: finished and box.btnStart.isEnabled())
+        measurement = finished[0]
+        assert measurement.status == COMPLETED and measurement.comment == "smoke test"
+        assert measurement.devices["bias"].ref == "sis_bias_2"
+        graph = window.hub.graph("I-V")
+        (key,) = graph.items
+        assert graph.curve_label(key).startswith("#1 SIS2")
+        model = session.measurements
+        assert model.rowCount() == 1 and model.data(model.index(0, 5)) == COMPLETED
+        saved = read_json(measurement.metadata["path"])
+        assert saved.tables["iv"].data["voltage"][0] == 0.0
+        # Comments edited in the table go to the file at once
+        model.setData(model.index(0, 2), "edited")
+        assert read_json(measurement.metadata["path"]).comment == "edited"
+        # The next start remembers the devices and parameters
+        again = type(box)(session, window.hub, box.procedure_class)
+        assert again.devices.mapping()["bias"] == "sis_bias_2"
+        assert again.form.values()["voltage"] == FAST_IV["voltage"]
+
+    def test_data_dock_opens_plots_and_exports(self, window, session, wait, tmp_path, monkeypatch):
+        from thzdaq_core.data import Measurement, MeasurementStore
+
+        measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+        for v in (1e-3, 2e-3):
+            measurement.append("iv", {"voltage": v, "current": v / 20})
+        path = MeasurementStore(tmp_path / "other").save(measurement)
+        data = window.dataWidget
+        monkeypatch.setattr(
+            "thzdaq_gui.docks.data.QFileDialog.getOpenFileNames",
+            lambda *a, **k: ([str(path)], ""),
+        )
+        data.open_files()
+        assert session.measurements.rowCount() == 1
+        assert len(window.hub.graph("I-V").items) == 1
+        data.table.selectRow(0)
+        csv_path = tmp_path / "iv.csv"
+        monkeypatch.setattr(
+            "thzdaq_gui.docks.data.QFileDialog.getSaveFileName",
+            lambda *a, **k: (str(csv_path), ""),
+        )
+        data.export()
+        assert csv_path.read_text(encoding="utf-8").splitlines()[0].startswith('"Voltage, V"')
+
+    def test_monitor_dock_watches_ticked_devices(self, window, session, wait):
+        from PySide6.QtCore import Qt
+
+        box = window.docks["measure:monitor.time"].widget().box
+        for i in range(box.watch.count()):
+            item = box.watch.item(i)
+            if item.data(Qt.UserRole) in ("power_meter_1", "sis_bias_1"):
+                item.setCheckState(Qt.Checked)
+        box.form.editors["interval"].set(0.05)
+        box.form.editors["duration"].set(0.2)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished)
+        samples = finished[0].records("samples")
+        assert {s["device"] for s in samples} == {"R&S NRX", "SIS1"}
+        assert window.hub.graph("P-t").items
+
+
+class TestPerspectives:
+    def test_create_save_and_restore(self, session, tmp_path, monkeypatch):
+        from thzdaq_gui.main_window import MainWindow
+
+        settings = str(tmp_path / "layout.ini")
+        window = MainWindow(session, settings, restore_layout=False, check_updates=False)
+        window.show()
+        assert "Default" in window.dock_manager.perspectiveNames()
+        window.docks["graph:Tn-V"].toggleView(True)
+        monkeypatch.setattr(
+            "thzdaq_gui.main_window.QInputDialog.getText", lambda *a, **k: ("Noise", True)
+        )
+        window.create_perspective()
+        assert window.perspectives.currentText() == "Noise"
+        window.docks["graph:Tn-V"].toggleView(False)
+        window.open_perspective("Noise")
+        assert not window.docks["graph:Tn-V"].isClosed()
+        window.close()
+
+        again = MainWindow(session, settings, check_updates=False)
+        assert set(again.dock_manager.perspectiveNames()) >= {"Default", "Noise"}
+        assert not again.docks["graph:Tn-V"].isClosed()
+        again.close()
+
+    def test_settings_keep_the_station_path(self, window, session, tmp_path):
+        window.on_station_changed(session.station)
+        assert window.settings.value("station/path") == str(session.path)
+
+
+def test_measurement_json_is_plain(tmp_path):
+    from thzdaq_core.data import Measurement, MeasurementStore
+
+    measurement = Measurement("demo")
+    measurement.append("t", {"x": 1.0})
+    data = json.loads(MeasurementStore(tmp_path).save(measurement).read_text())
+    assert data["tables"]["t"]["data"] == {"x": [1.0]}

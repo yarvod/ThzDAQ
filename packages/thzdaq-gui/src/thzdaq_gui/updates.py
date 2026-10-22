@@ -37,7 +37,14 @@ def parse_version(tag: str) -> Tuple[int, int, int, int, str, int]:
         raise ValueError(f"not a version tag: {tag!r}")
     major, minor, patch, label, number = match.groups()
     final = 1 if label is None else 0
-    return int(major), int(minor), int(patch), final, (label or "").lower(), int(number or 0)
+    return (
+        int(major),
+        int(minor),
+        int(patch),
+        final,
+        (label or "").lower(),
+        int(number or 0),
+    )
 
 
 def is_newer(tag: str, current: str = __version__) -> bool:
@@ -107,7 +114,9 @@ def fetch_releases(
     except requests.RequestException as e:
         raise UpdateError(f"GitHub is not reachable: {e}") from e
     if response.status_code != 200:
-        raise UpdateError(f"GitHub answered {response.status_code}: {response.text[:300]}")
+        raise UpdateError(
+            f"GitHub answered {response.status_code}: {response.text[:300]}"
+        )
     suffix = platform_asset_suffix()
     releases = []
     for data in response.json():

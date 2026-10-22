@@ -276,11 +276,8 @@ class TestDialog:
         wait(lambda: results and errors)
         assert results == [42] and "division" in errors[0]
 
-    def test_help_menu(self, app, session, monkeypatch, wait):
-        from thzdaq_gui.main_window import MainWindow
-
+    def test_help_menu(self, window, monkeypatch, wait):
         monkeypatch.setattr(updates, "fetch_releases", lambda: [])
-        window = MainWindow(session, restore_layout=False)
         titles = [a.text() for a in window.menuBar().actions()]
         assert "&Help" in titles and window.windowTitle().startswith("ThzDAQ ")
         window.show_updates()

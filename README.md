@@ -25,23 +25,40 @@ uv run python main.py --station stations/lab.yaml
 uv run python main.py --station stations/2sb.example.yaml --simulate
 ```
 
+## Интерфейс
+Как в старом приложении — доки Qt Advanced Docking System, которые расставляются как удобно,
+и перспективы (сохранённые раскладки) в тулбаре:
+- **Base → Setup** — приборы стенда: добавить, изменить, удалить, подключиться; на приборе —
+  устройства (SIS bias и катушка на SIS-блоке, LO ×18 на генераторе, переключатель IF на канале
+  блока питания).
+- **Devices** — док на каждый прибор и устройство: значения, установка, мониторинг и вывод на
+  графики P-t/V-t/I-t, у SIS — смещения, калибровка, I-V/I-CL сканы и размагничивание.
+- **Measures** — док на каждое измерение: устройства, параметры, Start/Stop.
+- **Graphs** — окно на каждый вид кривой (I-V, P-V, Y-V, Tn-V, P-IF, ...), кривые из любых
+  измерений («Add curve»).
+- **Base → Data** — таблица измерений: комментарии, графики, JSON, CSV.
+
 ## Стенд
-Приборы и роли описываются в YAML-профиле (`stations/*.yaml`): `lab.yaml` перенесён из настроек
-старого приложения, `2sb.example.yaml` — пример стенда 2SB. Профиль редактируется в приложении
-(Station → Edit…) или в любом редакторе.
+Приборы и устройства описываются в YAML-профиле (`stations/*.yaml`), который редактирует док
+Setup: `lab.yaml` — продовый стенд из старого `settings.ini`, `2sb.example.yaml` — пример 2SB.
+Id называет тип прибора (`power_supply_3`), вендор и модель — в `driver` и `title`.
 
 ```bash
 uv run thzdaq-station show stations/lab.yaml
 uv run thzdaq-station check stations/lab.yaml --simulate
 ```
 
+## Данные
+Каждое измерение сохраняется по ходу в `data/<дата>/<id>_<измерение>.json`: параметры,
+использованные устройства и таблицы данных по колонкам с названиями и единицами
+(`{"voltage": [...], "current": [...]}`).
+
 ## Измерения без интерфейса
 ```bash
 uv run thzdaq list
 uv run thzdaq describe sis.iv_curve
-uv run thzdaq run sis.iv_curve --station stations/lab.yaml --role bias=sis1 --set voltage=0:7:351
+uv run thzdaq run sis.iv_curve --station stations/lab.yaml --device bias=sis_bias_1 --set voltage=0:7:351
 ```
-Данные сохраняются в `data/<дата>/` (JSON Lines) по ходу измерения.
 
 ## Тесты
 ```bash

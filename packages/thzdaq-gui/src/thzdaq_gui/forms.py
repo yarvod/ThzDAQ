@@ -1,11 +1,12 @@
-"""Forms built from procedure parameters and role requirements.
+"""Forms built from parameters (procedures, device settings) and device slots.
 
 Editors show display units (GHz, mV); values() returns SI values ready for
 Procedure(**values).
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Mapping, Optional, Type
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -147,20 +148,27 @@ def make_editor(parameter: Parameter) -> Editor:
 
 
 class ParameterForm(QWidget):
-    """Form of a procedure class; empty until set_procedure()."""
+    """Editors for a set of parameters (a procedure's or a device kind's settings)."""
+
+    changed = Signal()  # an editor was changed by the user
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout_ = QFormLayout(self)
         self.procedure_class: Optional[Type[Procedure]] = None
+        self.parameters: Dict[str, Parameter] = {}
         self.editors: Dict[str, Editor] = {}
 
     def set_procedure(self, procedure_class: Type[Procedure]) -> None:
+        self.procedure_class = procedure_class
+        self.set_parameters(procedure_class.parameters())
+
+    def set_parameters(self, parameters: Mapping[str, Parameter]) -> None:
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.editors.clear()
-        self.procedure_class = procedure_class
-        for name, parameter in procedure_class.parameters().items():
+        self.parameters = dict(parameters)
+        for name, parameter in self.parameters.items():
             editor = make_editor(parameter)
             if (
                 parameter.default is not None
@@ -173,16 +181,26 @@ class ParameterForm(QWidget):
             label.setToolTip(name)
             self.layout_.addRow(label, editor.widget)
             self.editors[name] = editor
+            self._watch(editor.widget)
+
+    def _watch(self, widget: QWidget) -> None:
+        for child in [widget, *widget.findChildren(QWidget)]:
+            if isinstance(child, QCheckBox):
+                child.toggled.connect(self.changed)
+            elif isinstance(child, QComboBox):
+                child.currentIndexChanged.connect(self.changed)
+            elif isinstance(child, (QSpinBox, QDoubleSpinBox, QLineEdit)):
+                child.editingFinished.connect(self.changed)
 
     def values(self) -> Dict[str, Any]:
         """SI values; raises ProcedureError listing every invalid field."""
         values, problems = {}, []
-        parameters = self.procedure_class.parameters()
         for name, editor in self.editors.items():
+            parameter = self.parameters[name]
             try:
-                values[name] = parameters[name].validate(editor.get())
+                values[name] = parameter.validate(editor.get())
             except ProcedureError as e:
-                problems.append(f"{parameters[name].label}: {e}")
+                problems.append(f"{parameter.label}: {e}")
         if problems:
             raise ProcedureError("; ".join(problems))
         return values
@@ -190,7 +208,10 @@ class ParameterForm(QWidget):
     def set_values(self, values: Mapping[str, Any]) -> None:
         for name, value in values.items():
             if name in self.editors:
-                self.editors[name].set(value)
+                try:
+                    self.editors[name].set(value)
+                except (TypeError, ValueError, AttributeError):
+                    pass
 
     def procedure(self) -> Procedure:
         procedure = self.procedure_class(**self.values())
@@ -198,46 +219,66 @@ class ParameterForm(QWidget):
         return procedure
 
 
-class RoleMappingForm(QWidget):
-    """Procedure role -> station role, defaulting to the same name."""
+def capability_text(capabilities) -> str:
+    caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
+    return " + ".join(c.__name__ for c in caps if c is not object) or "any device"
+
+
+class DeviceSlotsForm(QWidget):
+    """Which station device plays each procedure slot; only suitable devices are listed."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout_ = QFormLayout(self)
         self.combos: Dict[str, QComboBox] = {}
 
-    def set_roles(
-        self, required: Mapping[str, Any], station_roles: Iterable[str]
+    def set_slots(
+        self,
+        slots: Mapping[str, Any],
+        station,
+        titles: Callable[[str], str] = lambda slot: slot,
+        preferred: Optional[Mapping[str, str]] = None,
+        kinds: Optional[Mapping[str, str]] = None,
     ) -> None:
-        current = self.mapping()
+        current = {**(preferred or {}), **self.mapping()}
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.combos.clear()
-        station_roles = list(station_roles)
-        for role, capabilities in required.items():
+        # Devices chosen before are kept; free slots take the next unused device
+        taken = {current[slot] for slot in slots if current.get(slot)}
+        for slot, capabilities in slots.items():
             combo = QComboBox()
-            combo.addItems(station_roles)
-            wanted = current.get(role, role)
-            if wanted in station_roles:
-                combo.setCurrentText(wanted)
-            else:
-                combo.setCurrentIndex(-1)
             caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
-            combo.setToolTip(" + ".join(c.__name__ for c in caps))
-            self.layout_.addRow(role, combo)
-            self.combos[role] = combo
+            caps = tuple(c for c in caps if c is not object)
+            devices = station.find(caps) if station is not None else []
+            kind = (kinds or {}).get(slot)
+            if kind and any(info.kind == kind for info in devices):
+                # A SIS bias slot lists SIS biases, not every supply channel
+                devices = [info for info in devices if info.kind == kind]
+            for info in devices:
+                combo.addItem(info.title, info.ref)
+                combo.setItemData(combo.count() - 1, info.ref, Qt.ToolTipRole)
+            wanted = current.get(slot, slot)
+            index = combo.findData(wanted)
+            if index < 0:
+                # First suitable device not used by another slot yet
+                index = next(
+                    (i for i in range(combo.count()) if combo.itemData(i) not in taken),
+                    0 if combo.count() else -1,
+                )
+            combo.setCurrentIndex(index)
+            if combo.currentData():
+                taken.add(combo.currentData())
+            combo.setToolTip(capability_text(capabilities))
+            self.layout_.addRow(titles(slot), combo)
+            self.combos[slot] = combo
 
     def mapping(self) -> Dict[str, str]:
         return {
-            role: combo.currentText()
-            for role, combo in self.combos.items()
-            if combo.currentText()
+            slot: combo.currentData()
+            for slot, combo in self.combos.items()
+            if combo.currentData()
         }
 
     def unmapped(self) -> List[str]:
-        return [role for role, combo in self.combos.items() if not combo.currentText()]
-
-
-def summarize_capabilities(capabilities) -> Tuple[str, ...]:
-    caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
-    return tuple(c.__name__ for c in caps)
+        return [slot for slot, combo in self.combos.items() if not combo.currentData()]

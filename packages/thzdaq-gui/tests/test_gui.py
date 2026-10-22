@@ -1,23 +1,36 @@
 import os
 import threading
 
+import numpy as np
 import pytest
-from thzdaq_core.data import CANCELLED, COMPLETED, Dataset
+from thzdaq_core.data import CANCELLED, COMPLETED, Measurement
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.parameters import Sweep
 from thzdaq_core.measurements.procedures import (
     IFNoise,
     IVCurve,
+    PVCurve,
     SidebandRatio,
     SisReflection,
     TwoSbOptimization,
 )
-from thzdaq_gui.forms import ParameterForm, RoleMappingForm
-from thzdaq_gui.plots import LinePlot, MapPlot, PlotPanel
+from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
+from thzdaq_gui.graphs import (
+    AddCurveDialog,
+    Axis,
+    GraphHub,
+    GraphWidget,
+    MapGraphWidget,
+)
 from thzdaq_gui.workers import DeviceWorker, QtRunner
-from thzdaq_instruments.capabilities import Switchable
+from thzdaq_instruments.capabilities import (
+    PowerDetector,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 
 FAST_IV = {"voltage": Sweep(0, 5e-3, 6), "settle_time": 0.0, "first_point_delay": 0.0}
+BIAS = (VoltageSource, VoltageCurrentMeter)
 
 
 class TestForms:
@@ -34,7 +47,7 @@ class TestForms:
         assert start.value() == pytest.approx(4.0) and start.suffix() == " GHz"
         procedure = form.procedure()
         assert procedure.frequency == Sweep(4e9, 6e9, 5)
-        assert "spectrum" in procedure.roles()
+        assert "spectrum" in procedure.slots()
 
     def test_multi_choice_and_errors(self, app):
         form = ParameterForm()
@@ -45,16 +58,31 @@ class TestForms:
         with pytest.raises(ProcedureError, match="S-parameters"):
             form.values()
 
-    def test_role_mapping_defaults_to_same_name(self, app):
-        roles = RoleMappingForm()
-        roles.set_roles(
-            {"bias": Switchable, "detector": Switchable}, ["sis1", "detector"]
+    def test_changes_are_signalled(self, app):
+        form = ParameterForm()
+        form.set_procedure(PVCurve)
+        changed = []
+        form.changed.connect(lambda: changed.append(1))
+        form.editors["hot_cold"].widget.setChecked(True)
+        assert changed
+
+    def test_device_slots_offer_only_suitable_devices(self, session):
+        slots = DeviceSlotsForm()
+        slots.set_slots(
+            {"sis1": BIAS, "sis2": BIAS, "detector": PowerDetector},
+            session.station,
+            preferred={"sis2": "sis_bias_1"},
+            kinds={"sis1": "sis_bias", "sis2": "sis_bias"},
         )
-        assert roles.mapping() == {"detector": "detector"}
-        assert roles.unmapped() == ["bias"]
-        roles.combos["bias"].setCurrentText("sis1")
-        roles.set_roles({"bias": Switchable}, ["sis1", "detector"])  # keeps the choice
-        assert roles.mapping() == {"bias": "sis1"}
+        combo = slots.combos["sis1"]
+        assert [combo.itemData(i) for i in range(combo.count())] == [
+            "sis_bias_1", "sis_bias_2",
+        ]  # fmt: skip
+        # A preferred device wins, the other slot takes the next free one
+        assert slots.mapping() == {
+            "sis1": "sis_bias_2", "sis2": "sis_bias_1", "detector": "power_meter_1",
+        }  # fmt: skip
+        assert combo.itemText(0) == "SIS1" and slots.unmapped() == []
 
 
 class TestWorkers:
@@ -65,7 +93,6 @@ class TestWorkers:
         worker.submit(lambda: 1 / 0, None, errors.append)
         wait(lambda: results and errors)
         assert results == ["DeviceWorker"] and isinstance(errors[0], ZeroDivisionError)
-        assert threading.current_thread() is threading.main_thread()
         worker.stop()
 
     def test_unhandled_job_error_is_signalled(self, app, wait):
@@ -77,25 +104,28 @@ class TestWorkers:
         assert "ZeroDivisionError" in messages[0]
         worker.stop()
 
-    def test_qt_runner_streams_records(self, session, wait):
+    def test_qt_runner_streams_records_and_saves_json(self, session, wait):
         runner = QtRunner()
         records, finished = [], []
-        runner.record.connect(lambda stream, record: records.append(stream))
+        runner.record.connect(lambda table, record: records.append(table))
         runner.finished.connect(finished.append)
         runner.start(
-            session.station, session.store, IVCurve(**FAST_IV), {"bias": "sis1"}
+            session.station, session.store, IVCurve(**FAST_IV), {"bias": "sis_bias_1"}
         )
         wait(lambda: finished)
-        assert finished[0].status == COMPLETED and records == ["iv"] * 6
-        assert os.path.exists(finished[0].metadata["path"])
+        measurement = finished[0]
+        assert measurement.status == COMPLETED and records == ["iv"] * 6
+        assert measurement.metadata["path"].endswith(".json")
+        assert os.path.exists(measurement.metadata["path"])
+        assert measurement.devices["bias"].title == "SIS1"
 
-    def test_qt_runner_reports_missing_roles(self, session, wait):
+    def test_qt_runner_reports_a_missing_device(self, session, wait):
         runner = QtRunner()
         failures = []
         runner.failed.connect(failures.append)
         runner.start(session.station, None, IVCurve(**FAST_IV))
         wait(lambda: failures)
-        assert "'bias' is not configured" in failures[0]
+        assert "no device 'bias'" in failures[0]
 
     def test_qt_runner_cancel(self, session, wait):
         runner = QtRunner()
@@ -104,109 +134,92 @@ class TestWorkers:
         slow = IVCurve(
             voltage=Sweep(0, 5e-3, 1000), settle_time=0.05, first_point_delay=0
         )
-        runner.start(session.station, None, slow, {"bias": "sis1"})
+        runner.start(session.station, None, slow, {"bias": "sis_bias_1"})
         wait(lambda: runner.running)
         runner.cancel()
         wait(lambda: finished)
         assert finished[0].status == CANCELLED
 
 
-class TestPlots:
-    def test_line_plot_groups_curves(self, app):
-        panel = PlotPanel()
-        panel.set_specs(IFNoise.plots)
+def iv_measurement(number=1) -> Measurement:
+    measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+    measurement.metadata["number"] = number
+    for v in (1e-3, 2e-3, 3e-3):
+        measurement.append("iv", {"voltage": v, "current": v / 20})
+    return measurement
+
+
+@pytest.fixture
+def hub(app):
+    hub = GraphHub()
+    yield hub
+    hub.close()
+    app.processEvents()
+
+
+class TestGraphs:
+    def test_hub_has_a_graph_per_curve_kind(self, hub):
+        titles = hub.titles()
+        assert {"I-V", "P-V", "Y-V", "Tn-V", "P-IF", "P-t", "I-CL"} <= set(titles)
+        assert len(titles) == len(set(titles))
+        assert isinstance(hub.graph("Tn upper"), MapGraphWidget)
+        assert hub.graph("I-V").analysis is not None
+
+    def test_live_records_make_one_curve_per_run_and_group(self, hub):
+        run = Measurement("if.hot_cold", title="IF noise")
+        run.metadata["number"] = 7
         for load, power in (("cold", -32.0), ("hot", -30.0)):
             for f in (4e9, 5e9):
-                panel.add_record(
-                    "power", {"frequency": f, "load": load, "power": power}
-                )
-        panel.add_record(
+                record = {"frequency": f, "load": load, "power": power}
+                hub.feed(run, IFNoise.plots, "power", record)
+        hub.feed(
+            run,
+            IFNoise.plots,
             "noise",
-            {"frequency": 4e9, "y_factor": 2.0, "noise_temperature": float("nan")},
+            {"frequency": 4e9, "noise_temperature": float("nan")},
         )
-        power_plot = panel.plots[0]
-        assert isinstance(power_plot, LinePlot) and len(power_plot.curves) == 2
-        xs, ys = power_plot.curves[("hot",)].getData()
+        graph = hub.graph("P-IF")
+        assert len(graph.items) == 2
+        hot = next(k for k in graph.items if k[-1] == ("hot",))
+        xs, ys = graph.items[hot].getData()
         assert list(xs) == [4.0, 5.0] and list(ys) == [-30.0, -30.0]
-        assert panel.plots[2].curves == {}  # NaN Tn is not drawn
+        assert graph.curve_label(hot) == "#7 IF noise hot"
+        assert hub.graph("Tn-IF").items == {}  # NaN is not drawn
 
-    def test_map_plot_grid(self, app):
-        panel = PlotPanel()
-        panel.set_specs(TwoSbOptimization.plots)
+    def test_map_graph_grid(self, hub):
+        run = Measurement("two_sb.optimization")
         for v1, v2, tn in (
             (2.1e-3, 2.1e-3, 40.0),
             (2.1e-3, 2.2e-3, 50.0),
             (2.2e-3, 2.1e-3, 60.0),
         ):
-            panel.add_record(
-                "map", {"sis1_voltage_set": v1, "sis2_voltage_set": v2, "tn_upper": tn}
-            )
-        map_plot = panel.plots[0]
-        assert isinstance(map_plot, MapPlot)
-        xs, ys, data = map_plot.grid()
+            record = {"sis1_voltage_set": v1, "sis2_voltage_set": v2, "tn_upper": tn}
+            hub.feed(run, TwoSbOptimization.plots, "map", record)
+        xs, ys, data = hub.graph("Tn upper").grid()
         assert xs == pytest.approx([2.1, 2.2]) and data[0, 1] == 50.0
-        assert data[1, 1] != data[1, 1]  # not measured yet: NaN
+        assert np.isnan(data[1, 1])
 
-    def test_show_dataset(self, app):
-        dataset = Dataset("sis.iv_curve")
-        for v in (1e-3, 2e-3):
-            dataset.append("iv", {"voltage": v, "current": v / 20})
-        panel = PlotPanel()
-        panel.show_dataset(dataset, IVCurve.plots)
-        assert panel.count() == 1
-        assert len(panel.plots[0].curves[()].getData()[0]) == 2
+    def test_saved_measurement_and_manual_curves(self, hub):
+        measurement = iv_measurement()
+        assert hub.show_measurement(measurement, IVCurve.plots) == ["I-V"]
+        graph = hub.graph("I-V")
+        (key,) = graph.items
+        assert list(graph.items[key].getData()[0]) == pytest.approx([1, 2, 3])  # mV
+        custom = GraphWidget("Custom", Axis(), Axis())
+        hub.graphs["Custom"] = custom  # deleted with the hub
+        dialog = AddCurveDialog([measurement], custom)
+        dialog.x.setCurrentIndex(dialog.x.findData("voltage"))
+        dialog.y.setCurrentIndex(dialog.y.findData("current"))
+        dialog.accept_choice()
+        assert len(custom.items) == 1 and custom.x.unit == "V" and custom.y.unit == "A"
+        custom.items[next(iter(custom.items))].setVisible(False)
+        custom.remove_hidden()
+        assert custom.items == {}
 
-
-class TestMainWindow:
-    def test_full_flow(self, session, wait, tmp_path):
-        from thzdaq_gui.main_window import MainWindow
-
-        window = MainWindow(session, restore_layout=False)
-        window.show()
-        panel = window.measurePanel
-        panel.procedureCombo.setCurrentIndex(
-            panel.procedureCombo.findData("sis.iv_curve")
-        )
-        panel.form.set_values(FAST_IV)
-        panel.roles.combos["bias"].setCurrentText("sis1")
-        panel.comment.setText("smoke test")
-        panel.btnStart.click()
-        wait(lambda: not session.runner.running and panel.btnStart.isEnabled())
-
-        assert window.plots.count() == 1
-        assert len(window.plots.plots[0].curves[()].getData()[0]) == 6
-        assert window.dataPanel.table.rowCount() == 1
-        assert window.dataPanel.table.item(0, 2).text() == COMPLETED
-        assert window.dataPanel.table.item(0, 4).text() == "smoke test"
-
-        opened = []
-        window.dataPanel.dataset_opened.connect(opened.append)
-        window.dataPanel.open_row(0)
-        assert opened[0].procedure == "sis.iv_curve"
-
-        control = window.controlPanel
-        control.roleCombo.setCurrentText("lo")
-        control.btnOpen.click()
-        wait(lambda: control.control is not None)
-        titles = [section.title() for section in control.control.sections]
-        assert titles == ["Output", "Frequency", "Power"]
-        frequency = control.control.sections[1]
-        frequency.spin.setValue(223.0)
-        frequency.writers[1].click()  # Set
-        generator = session.station.instrument("lo_generator")
-        wait(lambda: abs(generator.get_frequency() - 223e9 / 18) < 1)
-
-        station_panel = window.stationPanel
-        station_panel.btnCheck.click()
-        wait(
-            lambda: all(
-                item.text(2) not in ("", "…")
-                for item in station_panel.role_items.values()
-            )
-        )
-        assert "SidebandSwitch" in station_panel.role_items["if_selector"].text(2)
-
-        screenshot = os.environ.get("THZDAQ_GUI_SCREENSHOT")
-        if screenshot:
-            window.grab().save(screenshot)
-        window.close()
+    def test_monitor_values(self, hub):
+        for t, p in ((0, -30.0), (1, -31.0)):
+            hub.monitor_value("power_meter_1", "NRX", "power", t, p)
+        hub.monitor_value("x", "X", "unknown", 0, 1.0)
+        graph = hub.graph("P-t")
+        assert list(graph.items) == [("monitor", "power_meter_1", "power")]
+        assert graph.curve_label(("monitor", "power_meter_1", "power")) == "NRX"

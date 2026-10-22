@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_gui.prefs import prefs
 from thzdaq_core.analysis.iv import (
     IVAnalysisConfig,
     IVAnalysisParameters,
@@ -28,8 +29,6 @@ from thzdaq_core.analysis.iv import (
     IVResistanceAnalysis,
     NumpyIVAnalyzerFactory,
 )
-
-SETTINGS = ("ThzDAQ", "thzdaq-gui")
 
 
 def format_result(result: IVResistanceAnalysis) -> str:
@@ -46,7 +45,7 @@ def format_result(result: IVResistanceAnalysis) -> str:
 
 
 def load_parameters() -> IVAnalysisParameters:
-    raw = QSettings(*SETTINGS).value("iv_analysis")
+    raw = prefs().value("iv_analysis")
     if not raw:
         return IVAnalysisParameters()
     try:
@@ -60,7 +59,7 @@ def load_parameters() -> IVAnalysisParameters:
 
 
 def save_parameters(parameters: IVAnalysisParameters) -> None:
-    QSettings(*SETTINGS).setValue("iv_analysis", json.dumps(asdict(parameters)))
+    prefs().setValue("iv_analysis", json.dumps(asdict(parameters)))
 
 
 class ParametersDialog(QDialog):
@@ -241,7 +240,7 @@ class IVAnalysisBar(QWidget):
         self.curve.blockSignals(True)
         self.curve.clear()
         for group in self.line_plot.points:
-            self.curve.addItem(self.line_plot.spec.label(group) or "curve", group)
+            self.curve.addItem(self.line_plot.curve_label(group), group)
         index = self.curve.findData(current)
         self.curve.setCurrentIndex(index if index >= 0 else self.curve.count() - 1)
         self.curve.blockSignals(False)

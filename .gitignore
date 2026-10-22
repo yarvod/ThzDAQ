@@ -11,3 +11,5 @@ dist
 *.ipynb
 .env
 /data/
+# Window layout and perspectives of a local run
+/settings.ini
