@@ -7,7 +7,6 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QSettings  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
@@ -18,15 +17,36 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 @pytest.fixture(scope="session")
 def app(tmp_path_factory):
-    # Personal preferences go to a temporary folder, never to the user's
-    QSettings.setPath(
-        QSettings.IniFormat, QSettings.UserScope, str(tmp_path_factory.mktemp("prefs"))
-    )
+    # Settings go to a temporary INI file, never to the registry
+    from thzdaq_gui import settings
+
+    settings.use_file(tmp_path_factory.mktemp("settings") / "settings.ini")
     application = QApplication.instance() or QApplication([])
     from thzdaq_gui import theme
 
     theme.apply(application)
     return application
+
+
+@pytest.fixture(autouse=True)
+def exit_answer(monkeypatch):
+    """Closing a window asks (layout, dump); tests answer Exit with the defaults.
+
+    A test sets exit_answer["result"] or the checkbox states to answer otherwise.
+    """
+    from PySide6.QtWidgets import QDialog
+
+    answer = {"result": QDialog.Accepted, "store": None, "dump": None}
+
+    def exec_(dialog):
+        if answer["store"] is not None:
+            dialog.storeState.setChecked(answer["store"])
+        if answer["dump"] is not None:
+            dialog.dumpData.setChecked(answer["dump"])
+        return answer["result"]
+
+    monkeypatch.setattr("thzdaq_gui.exit_dialog.ExitDialog.exec", exec_)
+    return answer
 
 
 @pytest.fixture

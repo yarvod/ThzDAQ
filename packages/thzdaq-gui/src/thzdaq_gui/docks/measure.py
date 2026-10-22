@@ -29,7 +29,7 @@ from thzdaq_core.measurements.procedure import Procedure
 
 from thzdaq_gui import theme
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
-from thzdaq_gui.prefs import prefs
+from thzdaq_gui.settings import settings
 
 
 class ProcedureBox(QWidget):
@@ -123,9 +123,8 @@ class ProcedureBox(QWidget):
 
     # Persistence of the last values
     def restore(self) -> None:
-        settings = prefs()
         self.saved_devices: Dict[str, str] = {}
-        raw = settings.value(self.settings_key)
+        raw = settings().value(self.settings_key)
         if not raw:
             return
         try:
@@ -138,7 +137,7 @@ class ProcedureBox(QWidget):
 
     def remember(self, procedure: Procedure) -> None:
         data = {"parameters": procedure.to_json(), "devices": self.devices.mapping()}
-        prefs().setValue(self.settings_key, json.dumps(data))
+        settings().setValue(self.settings_key, json.dumps(data))
         self.saved_devices = data["devices"]
 
     # Running
@@ -291,7 +290,7 @@ class MonitorBox(ProcedureBox):
         super().remember(procedure)
         self.saved_devices = {"watch": ",".join(self.checked())}
         data = {"parameters": procedure.to_json(), "devices": self.saved_devices}
-        prefs().setValue(self.settings_key, json.dumps(data))
+        settings().setValue(self.settings_key, json.dumps(data))
 
 
 class MonitorWidget(MeasureWidget):

@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_gui.prefs import prefs
+from thzdaq_gui.settings import settings
 from thzdaq_core.analysis.iv import (
     IVAnalysisConfig,
     IVAnalysisParameters,
@@ -45,7 +45,7 @@ def format_result(result: IVResistanceAnalysis) -> str:
 
 
 def load_parameters() -> IVAnalysisParameters:
-    raw = prefs().value("iv_analysis")
+    raw = settings().value("iv_analysis")
     if not raw:
         return IVAnalysisParameters()
     try:
@@ -59,7 +59,7 @@ def load_parameters() -> IVAnalysisParameters:
 
 
 def save_parameters(parameters: IVAnalysisParameters) -> None:
-    prefs().setValue("iv_analysis", json.dumps(asdict(parameters)))
+    settings().setValue("iv_analysis", json.dumps(asdict(parameters)))
 
 
 class ParametersDialog(QDialog):

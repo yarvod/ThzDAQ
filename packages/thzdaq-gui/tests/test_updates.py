@@ -174,7 +174,9 @@ class TestUpdater:
         "_internal/old_only.pyd": "stale",
         "_internal/base.zip": "old base",
         "stations/lab.yaml": "edited on the bench",
-        "data/2026-10-01/run.jsonl": "measurement",
+        "data/2026-10-01/run.json": "measurement",
+        "data/dumps/dump_2026-10-01_18-00-00.json": "dump",
+        "settings.ini": "portable settings",
     }
     NEW = {
         "ThzDAQ.exe": "new exe",
@@ -194,7 +196,9 @@ class TestUpdater:
             "_internal/base.zip": "new base",
             "stations/lab.yaml": "edited on the bench",
             "stations/2sb.example.yaml": "example",
-            "data/2026-10-01/run.jsonl": "measurement",
+            "data/2026-10-01/run.json": "measurement",
+            "data/dumps/dump_2026-10-01_18-00-00.json": "dump",
+            "settings.ini": "portable settings",
         }
         assert not (target / updater.BACKUP).exists()
 

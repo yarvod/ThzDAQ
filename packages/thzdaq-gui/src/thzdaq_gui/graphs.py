@@ -252,6 +252,21 @@ class MapGraphWidget(QWidget):
         self.image.setTransform(transform)
 
 
+def close_plots() -> None:
+    """Close every pyqtgraph view before the application quits.
+
+    pyqtgraph disconnects all known views on quit; views deleted with their
+    docks before that make it warn "Failed to disconnect ... destroyed()".
+    """
+    from pyqtgraph.Qt import isQObjectAlive
+
+    for view in list(pg.ViewBox.AllViews):
+        if isQObjectAlive(view):
+            view.close()
+    pg.ViewBox.AllViews.clear()
+    pg.ViewBox.NamedViews.clear()
+
+
 def graph_for_spec(spec: PlotSpec):
     if spec.kind == "map":
         return MapGraphWidget(spec)

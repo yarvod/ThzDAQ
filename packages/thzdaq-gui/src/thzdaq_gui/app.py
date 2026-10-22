@@ -4,15 +4,14 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
-from thzdaq_gui.main_window import MainWindow, settings_path
+from thzdaq_gui.main_window import MainWindow
 from thzdaq_gui.session import Session
-
-DEFAULT_PROFILE = Path("stations") / "lab.yaml"
+from thzdaq_gui.settings import data_dir, settings, stations_dir, use_file
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -21,8 +20,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("--station", help="station profile (YAML) to open")
     parser.add_argument("--simulate", action="store_true", help="use simulators")
-    parser.add_argument("--data", default="data", help="measurements folder")
-    parser.add_argument("--settings", help="settings.ini with layout and perspectives")
+    parser.add_argument(
+        "--data", help="measurements folder (default: data next to the program)"
+    )
+    parser.add_argument(
+        "--settings", help="keep settings in this INI file instead of the registry"
+    )
     parser.add_argument(
         "--quit-after", type=float, metavar="SECONDS", help=argparse.SUPPRESS
     )  # smoke test of a build
@@ -35,29 +38,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     app.setApplicationName("ThzDAQ")
     theme.apply(app)
     app.setWindowIcon(theme.icon("chip", theme.ACCENT))
-    settings_file = args.settings or str(settings_path())
-    session = Session(args.data)
+    if args.settings:
+        use_file(args.settings)
+    session = Session(args.data or str(data_dir()))
     # The station comes first: its devices get docks the saved layout restores
-    profile = args.station or QSettings(settings_file, QSettings.IniFormat).value(
-        "station/path"
-    )
-    if not profile and DEFAULT_PROFILE.exists():
-        profile = str(DEFAULT_PROFILE)
+    profile = args.station or settings().value("station/path")
+    if profile and not Path(profile).exists():
+        profile = None
+    default = stations_dir() / "lab.yaml"
+    if not profile and default.exists():
+        profile = str(default)
     problem = None
     if profile:
         try:
             session.load_station(profile, args.simulate)
         except (InstrumentError, OSError) as e:
             problem = str(e)
-    window = MainWindow(session, settings_file, check_updates=args.quit_after is None)
+    window = MainWindow(session, check_updates=args.quit_after is None)
     window.show()
     if problem:
         QMessageBox.critical(window, "Station profile", problem)
     if args.quit_after is not None:
+        window.confirm_exit = False
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
     return app.exec()
-
-
-def resource_dir() -> Path:
-    """Folder with bundled assets: the PyInstaller bundle or the working directory."""
-    return Path(getattr(sys, "_MEIPASS", Path.cwd()))

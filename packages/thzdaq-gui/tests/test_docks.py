@@ -284,3 +284,40 @@ def test_measurement_json_is_plain(tmp_path):
     measurement.append("t", {"x": 1.0})
     data = json.loads(MeasurementStore(tmp_path).save(measurement).read_text())
     assert data["tables"]["t"]["data"] == {"x": [1.0]}
+
+
+class TestExit:
+    def test_cancel_keeps_the_window(self, window, exit_answer):
+        from PySide6.QtWidgets import QDialog
+
+        exit_answer["result"] = QDialog.Rejected
+        assert not window.close()
+        assert window.isVisible()
+        exit_answer["result"] = QDialog.Accepted
+
+    def test_dump_and_state_as_answered(
+        self, window, session, wait, tmp_path, exit_answer
+    ):
+        import json
+
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(FAST_IV)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished)
+        exit_answer["store"], exit_answer["dump"] = False, True
+        assert window.close()
+        (dump,) = (tmp_path / "data" / "dumps").glob("dump_*.json")
+        data = json.loads(dump.read_text(encoding="utf-8"))
+        assert [m["procedure"] for m in data] == ["sis.iv_curve"]
+        assert data[0]["tables"]["iv"]["data"]["voltage"][0] == 0.0
+        assert window.settings.value("window/docks") is None  # layout not stored
+
+    def test_dialog_defaults(self, app):
+        from thzdaq_gui.exit_dialog import ExitDialog
+
+        idle = ExitDialog(running=0, measurements=0)
+        assert idle.storeState.isChecked() and not idle.dumpData.isEnabled()
+        busy = ExitDialog(running=2, measurements=3)
+        assert busy.dumpData.isChecked() and "3" in busy.dumpData.text()

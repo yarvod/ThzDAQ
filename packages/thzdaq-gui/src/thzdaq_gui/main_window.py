@@ -15,6 +15,7 @@ from PySide6.QtCore import QSettings, QSignalBlocker
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QInputDialog,
     QLabel,
     QMainWindow,
@@ -32,9 +33,12 @@ from thzdaq_gui.docks.devices import DeviceWidget
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
-from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget
+from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
+from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget, close_plots
 from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
 from thzdaq_gui.updates import can_self_update, latest_update
+from thzdaq_gui.settings import location
+from thzdaq_gui.settings import settings as app_settings
 from thzdaq_gui.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -73,15 +77,6 @@ def configure_docking() -> None:
         provider.registerCustomIcon(which, theme.icon(name))
 
 
-def settings_path() -> Path:
-    """settings.ini next to the executable (or in the working folder from sources)."""
-    import sys
-
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent / "settings.ini"
-    return Path.cwd() / "settings.ini"
-
-
 class MainWindow(QMainWindow):
     def __init__(
         self,
@@ -93,11 +88,16 @@ class MainWindow(QMainWindow):
     ):
         super().__init__(parent)
         self.session = session
-        self.settings = QSettings(
-            str(settings_file or settings_path()), QSettings.IniFormat
+        # The registry of this build (or of runs from sources), or an INI file
+        self.settings = (
+            QSettings(str(settings_file), QSettings.IniFormat)
+            if settings_file
+            else app_settings()
         )
         self.updateDialog = None
         self.perspective: Optional[str] = None
+        # Ask on exit (layout, dump); off for smoke runs that close on a timer
+        self.confirm_exit = True
         self.setWindowTitle(f"ThzDAQ {__version__}")
         self.setWindowIcon(theme.icon("chip", theme.ACCENT))
         self.resize(1500, 900)
@@ -179,14 +179,21 @@ class MainWindow(QMainWindow):
         updates.triggered.connect(self.show_updates)
         help_menu.addAction(updates)
         about = QAction(theme.icon("information-outline"), "About ThzDAQ", self)
-        about.triggered.connect(
-            lambda: QMessageBox.about(
-                self,
-                "About ThzDAQ",
-                f"ThzDAQ {__version__}<br>SIS mixer control and measurements",
-            )
-        )
+        about.triggered.connect(self.about)
         help_menu.addAction(about)
+
+    def about(self) -> None:
+        where = (
+            self.settings.fileName()
+            if self.settings.format() == QSettings.IniFormat
+            else location()
+        )
+        QMessageBox.about(
+            self,
+            "About ThzDAQ",
+            f"ThzDAQ {__version__}<br>SIS mixer control and measurements<br><br>"
+            f"Settings: {where}<br>Data: {Path(self.session.store.root).resolve()}",
+        )
 
     def build_toolbar(self) -> None:
         toolbar = self.addToolBar("Main")
@@ -568,19 +575,31 @@ class MainWindow(QMainWindow):
 
     # Closing
     def closeEvent(self, event) -> None:
-        if self.session.busy():
-            answer = QMessageBox.question(
-                self, "Measurement running", "Stop the measurements and quit?"
-            )
-            if answer != QMessageBox.Yes:
+        store_state, dump = True, False
+        if self.confirm_exit:
+            running = sum(runner.running for runner in self.session.runners)
+            dialog = ExitDialog(running, self.session.measurements.rowCount(), self)
+            if dialog.exec() != QDialog.Accepted:
                 event.ignore()
                 return
+            store_state = dialog.storeState.isChecked()
+            dump = dialog.dumpData.isChecked()
         for dock in self.docks.values():
             widget = dock.widget()
             if hasattr(widget, "stop"):
                 widget.stop()
-        self.save_state()
+        if store_state:
+            self.save_state()
         self.logWidget.detach()
         self.session.shutdown()
+        if dump and self.session.measurements.items:
+            try:
+                path = dump_measurements(
+                    self.session.measurements.items, self.session.store.root
+                )
+                logger.info(f"Measurements dumped to {path}")
+            except OSError as e:
+                QMessageBox.warning(self, "Dump", f"Could not dump measurements: {e}")
+        close_plots()
         self.dock_manager.deleteLater()
         event.accept()
