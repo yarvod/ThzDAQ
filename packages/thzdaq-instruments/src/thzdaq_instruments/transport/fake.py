@@ -48,6 +48,7 @@ class FakeLink(Link):
     def close(self) -> None:
         self._open = False
         self.close_count += 1
+        self._replies.clear()  # like a socket: unread bytes go with it
 
     def write_line(self, line: str) -> None:
         self.events.append(("w", line))

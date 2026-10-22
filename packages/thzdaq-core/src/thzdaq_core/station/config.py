@@ -1,10 +1,9 @@
 """Station (bench) profile: instruments and the devices they host.
 
 An instrument is a driver plus its connection. What a user operates is a
-device: the instrument itself (power meter), one of its fixed channels
-(supply output CH1) or a configured sub-device (SIS bias on DEV4 with its
-offsets and calibration, an LO behind a x18 multiplier, an IF switch on a
-supply channel). Configured devices live under their instrument.
+device: the instrument itself (a generator, a power meter), one of its fixed
+channels (supply output CH1) or a configured sub-device (SIS bias on DEV4 with
+its offsets and calibration). Configured devices live under their instrument.
 
 Devices are addressed by refs: "power_meter_1", "power_supply_3:1" for a
 fixed channel, or the id of a configured device ("sis_bias_1"); ids are
@@ -25,7 +24,7 @@ CHANNEL_SEPARATOR = ":"
 
 @dataclass
 class DeviceConfig:
-    kind: str  # sub-device type of the driver (sis_bias) or a device kind (sideband_selector)
+    kind: str  # sub-device type of the driver: sis_bias, sis_coil
     channel: Optional[Hashable] = None  # DEV4, supply channel 1; None = the instrument
     title: str = ""
     settings: Dict[str, Any] = field(default_factory=dict)  # offsets, multiplier, ...
@@ -41,6 +40,9 @@ class InstrumentConfig:
     sim_options: Dict[str, Any] = field(default_factory=dict)  # simulator kwargs
     title: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)  # kept, not passed to driver
+    # Configuration set from the dock (frequency multiplier, OEM head): the
+    # values last written to the instrument. Never written on connect.
+    settings: Dict[str, Any] = field(default_factory=dict)
     devices: Dict[str, DeviceConfig] = field(default_factory=dict)
 
 

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QLockFile, QStandardPaths, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 from thzdaq_instruments import InstrumentError
 
@@ -56,9 +56,32 @@ def main(argv: Optional[List[str]] = None) -> int:
             problem = str(e)
     window = MainWindow(session, check_updates=args.quit_after is None)
     window.show()
+    lock = instance_lock()
+    if lock is None and args.quit_after is None:
+        QMessageBox.warning(
+            window,
+            "ThzDAQ is already running",
+            "Another ThzDAQ (a build or a run from sources) is open. Instruments "
+            "with one connection (Prologix, R&S supplies) can serve only one of "
+            "them: close the other before working with the instruments.",
+        )
     if problem:
         QMessageBox.critical(window, "Station profile", problem)
     if args.quit_after is not None:
         window.confirm_exit = False
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
     return app.exec()
+
+
+_locks = []
+
+
+def instance_lock() -> Optional[QLockFile]:
+    """A lock shared by builds and runs from sources; None when another holds it."""
+    path = Path(QStandardPaths.writableLocation(QStandardPaths.TempLocation))
+    lock = QLockFile(str(path / "thzdaq.lock"))
+    lock.setStaleLockTime(0)  # held for hours; staleness is by the owner's PID
+    if not lock.tryLock(100):
+        return None
+    _locks.append(lock)  # held until the process ends
+    return lock

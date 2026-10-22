@@ -8,11 +8,8 @@ from thzdaq_instruments.drivers.lakeshore import (
     TemperatureInput,
 )
 from thzdaq_instruments.drivers.national_instruments import NiYigFilter, YigChannel
-from thzdaq_instruments.drivers.pfeiffer import (
-    PfeifferDevice,
-    PfeifferGauge,
-    PfeifferTurboPump,
-)
+
+# Pfeiffer (drivers/pfeiffer.py) is disabled: not used on the bench, to be rewritten
 from thzdaq_instruments.drivers.power_supply import ScpiPowerSupply, SupplyChannel
 from thzdaq_instruments.drivers.rigol import RigolDP832A
 from thzdaq_instruments.drivers.rohde_schwarz import (
@@ -39,7 +36,6 @@ from thzdaq_instruments.sim import (
     SimSisBlock,
     SimSpectrumAnalyzer,
     SimTemperatureController,
-    SimVacuumGauge,
     SimYigFilter,
 )
 
@@ -74,8 +70,6 @@ DRIVERS = {
         "Sumitomo F-70 compressor (REST)",
         SimCompressor,
     ),
-    "pfeiffer.tc110": (PfeifferTurboPump, "Pfeiffer TC 110 turbo pump drive", None),
-    "pfeiffer.gauge": (PfeifferGauge, "Pfeiffer active vacuum gauge", SimVacuumGauge),
     "arduino.grid": (ArduinoGrid, "Arduino wire grid rotator", SimRotator),
 }
 
@@ -91,9 +85,6 @@ __all__ = [
     "ArduinoGrid",
     "HeaterOutput",
     "LakeShore336",
-    "PfeifferDevice",
-    "PfeifferGauge",
-    "PfeifferTurboPump",
     "RohdeSchwarzFSEK30",
     "RohdeSchwarzZVA67",
     "StanfordSR830",

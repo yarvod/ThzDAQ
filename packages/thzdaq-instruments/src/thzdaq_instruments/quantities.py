@@ -31,6 +31,10 @@ class Quantity:
     field: Optional[str] = None
     minimum: Optional[float] = None
     maximum: Optional[float] = None
+    choices: Tuple[Any, ...] = ()  # allowed values of a "text" quantity
+    # Configuration of the instrument (a multiplier, an OEM head) rather than a
+    # setpoint: kept in the station profile, never written on connect
+    persistent: bool = False
 
     @property
     def readable(self) -> bool:
@@ -121,6 +125,49 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
 SHORT = Quantity(
     "short", "Short", kind="bool",
     get=lambda t: t.get_short(), set=lambda t, v: t.set_short(bool(v)),
+)  # fmt: skip
+
+
+OEM_STATES = ("OFF", "ON")
+
+# Calibration load (chopper): which load the receiver sees, and whether it spins
+CHOPPER_QUANTITIES = (
+    Quantity(
+        "load_state", "Load", kind="text", choices=("hot", "cold", "between"),
+        get=lambda t: t.load_state(),
+    ),
+    Quantity("running", "Rotating", kind="bool", get=lambda t: t.is_running()),
+)  # fmt: skip
+
+# Configuration of a generator: shown in its dock, kept in the station profile
+GENERATOR_QUANTITIES = (
+    Quantity(
+        "frequency_multiplier", "Frequency multiplier",
+        get=lambda t: t.get_frequency_multiplier(),
+        set=lambda t, v: t.set_frequency_multiplier(float(v)),
+        minimum=0.001, maximum=1000, persistent=True,
+    ),
+    Quantity(
+        "oem_state", "OEM head", kind="text", choices=OEM_STATES,
+        get=lambda t: t.get_oem_state(), set=lambda t, v: t.set_oem_state(str(v)),
+        persistent=True,
+    ),
+    Quantity(
+        "oem_start", "OEM start frequency", "Hz",
+        get=lambda t: t.get_oem_frequency_start(),
+        set=lambda t, v: t.set_oem_frequency_start(float(v)), persistent=True,
+    ),
+    Quantity(
+        "oem_stop", "OEM stop frequency", "Hz",
+        get=lambda t: t.get_oem_frequency_stop(),
+        set=lambda t, v: t.set_oem_frequency_stop(float(v)), persistent=True,
+    ),
+    Quantity(
+        "oem_multiplier", "OEM multiplier",
+        get=lambda t: t.get_oem_multiplier(),
+        set=lambda t, v: t.set_oem_multiplier(float(v)),
+        minimum=1, maximum=100, persistent=True,
+    ),
 )  # fmt: skip
 
 

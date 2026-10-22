@@ -14,8 +14,6 @@ from emulators import (
 from thzdaq_instruments.drivers import (
     ArduinoGrid,
     LakeShore336,
-    PfeifferGauge,
-    PfeifferTurboPump,
     RohdeSchwarzFSEK30,
     RohdeSchwarzZVA67,
     StanfordSR830,
@@ -23,7 +21,9 @@ from thzdaq_instruments.drivers import (
     SumitomoF70Rest,
 )
 from thzdaq_instruments.drivers.lakeshore import HeaterSetup, OutputMode
-from thzdaq_instruments.drivers.pfeiffer import (
+from thzdaq_instruments.drivers.pfeiffer import (  # disabled driver, tests skipped
+    PfeifferGauge,
+    PfeifferTurboPump,
     decode,
     encode,
     parse_telegram,
@@ -201,6 +201,7 @@ class TestSumitomo:
             SumitomoF70Rest(client=Broken()).read_temperatures()
 
 
+@pytest.mark.skip(reason="Pfeiffer driver is disabled until it is rewritten")
 class TestPfeiffer:
     @pytest.mark.parametrize(
         "data_type, raw, value",

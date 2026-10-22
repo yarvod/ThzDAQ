@@ -62,6 +62,7 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
 QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {ACCENT}; }}
 QComboBox QAbstractItemView {{ background: {PANEL}; selection-background-color: {ACCENT}; }}
+QDoubleSpinBox[pending="true"], QComboBox[pending="true"] {{ border: 1px solid {ACCENT}; }}
 QProgressBar {{
     border: 1px solid {BORDER}; border-radius: 3px; background: {BASE};
     text-align: center; min-height: 16px;

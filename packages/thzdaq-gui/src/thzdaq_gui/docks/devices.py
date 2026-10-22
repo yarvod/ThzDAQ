@@ -45,82 +45,105 @@ from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
 from thzdaq_gui.docks.measure import ProcedureBox
-from thzdaq_gui.graphs import SI_UNITS
+from thzdaq_gui.fields import (
+    PrefixBox,
+    QuantityField,
+    default_prefix,
+    format_number,
+)
+from thzdaq_gui.settings import settings
 
-PREFIXED = SI_UNITS
 
-
-def format_value(value, quantity: Quantity) -> str:
+def format_value(value, quantity: Quantity, factor: float = 1.0, symbol=None) -> str:
     if value is None:
         return "--"
     if quantity.kind == "bool":
         return "ON" if value else "OFF"
     if isinstance(value, (int, float)):
-        if quantity.unit in PREFIXED:
-            return pg.siFormat(float(value), precision=5, suffix=quantity.unit)
-        return f"{value:.5g} {quantity.unit}".strip()
+        return format_number(value, factor, quantity.unit if symbol is None else symbol)
     return str(value)
 
 
-def make_spin(quantity: Quantity) -> pg.SpinBox:
-    spin = pg.SpinBox(
-        value=0.0,
-        suffix=quantity.unit,
-        siPrefix=quantity.unit in PREFIXED,
-        dec=True,
-        decimals=6,
-        compactHeight=False,
-    )
-    if quantity.minimum is not None or quantity.maximum is not None:
-        spin.setOpts(bounds=(quantity.minimum, quantity.maximum))
-    spin.setMinimumWidth(110)
-    return spin
-
-
 class QuantityPanel(QWidget):
-    """Read and set the quantities of one device; optional polling and plotting."""
+    """Read and set quantities of one device; optional polling and plotting.
 
-    def __init__(self, session, hub, ref: str, title: str, parent=None):
+    Fields start from the profile (configuration: multiplier, OEM head) or
+    from the last values set (setpoints, in the registry); nothing is written
+    to the device until Set or Enter. A configuration that differs in the
+    device is marked after the first read.
+    """
+
+    def __init__(
+        self,
+        session,
+        hub,
+        ref: str,
+        title: str,
+        kind: str = "",
+        config: bool = False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.session = session
         self.hub = hub
         self.ref = ref
         self.title = title
-        self.quantities: List[Quantity] = session.station.quantities(ref)
+        self.config = config
+        self.quantities: List[Quantity] = [
+            q for q in session.station.quantities(ref) if q.persistent == config
+        ]
         self.values: Dict[str, QLabel] = {}
+        self.fields: Dict[str, QuantityField] = {}
+        self.displays: Dict[str, PrefixBox] = {}
         self.toggles: Dict[str, QPushButton] = {}
+        self.notes: Dict[str, QLabel] = {}
+        self.device_values: Dict[str, object] = {}
+        self.read_once = False
         self.pending = False
         self.started = time.monotonic()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         grid = QGridLayout()
         for row, quantity in enumerate(self.quantities):
-            name = QLabel(quantity.title)
-            grid.addWidget(name, row, 0)
+            grid.addWidget(QLabel(quantity.title), row, 0)
+            field = None
+            if quantity.settable and quantity.kind != "bool":
+                field = QuantityField(quantity, ref, kind)
+                field.apply_requested.connect(lambda q=quantity: self.apply(q))
+                self.fields[quantity.key] = field
             if quantity.readable:
                 value = QLabel("--")
                 value.setProperty("role", "value")
                 grid.addWidget(value, row, 1)
                 self.values[quantity.key] = value
+                if field is None and quantity.kind != "bool":
+                    display = PrefixBox(
+                        quantity.unit, default_prefix(kind, quantity.key, quantity.unit)
+                    )
+                    self.displays[quantity.key] = display
+                    grid.addWidget(display, row, 2)
             if quantity.settable and quantity.kind == "bool":
                 toggle = QPushButton("Off")
                 toggle.setCheckable(True)
                 toggle.clicked.connect(lambda on, q=quantity: self.write(q, on))
                 grid.addWidget(toggle, row, 2, 1, 2)
                 self.toggles[quantity.key] = toggle
-            elif quantity.settable:
-                spin = make_spin(quantity)
+            elif field is not None:
                 button = QPushButton(theme.icon("check"), "Set")
-                button.clicked.connect(
-                    lambda _=False, q=quantity, s=spin: self.write(q, s.value())
-                )
-                spin.editingFinished.connect(
-                    lambda q=quantity, s=spin: self.write(q, s.value())
-                )
-                grid.addWidget(spin, row, 2)
+                button.setToolTip("Write to the device (or press Enter in the field)")
+                button.clicked.connect(lambda _=False, q=quantity: self.apply(q))
+                grid.addWidget(field, row, 2)
                 grid.addWidget(button, row, 3)
+            if config and quantity.readable:
+                note = QLabel()
+                note.setStyleSheet(f"color: {theme.ACCENT}")
+                note.linkActivated.connect(lambda _, q=quantity: self.take(q))
+                note.hide()
+                grid.addWidget(note, row, 4)
+                self.notes[quantity.key] = note
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
+        self.prefill()
         controls = QHBoxLayout()
         self.btnRead = QPushButton(theme.icon("refresh"), "Read")
         self.btnRead.clicked.connect(self.read)
@@ -138,10 +161,13 @@ class QuantityPanel(QWidget):
         controls.addWidget(self.interval)
         controls.addWidget(self.plot)
         controls.addStretch()
-        readable = any(q.readable for q in self.quantities)
-        for widget in (self.btnRead, self.monitor, self.interval, self.plot):
-            widget.setVisible(readable)
+        # Parent first: setVisible() on a widget without a parent shows it as a window
         layout.addLayout(controls)
+        hidden = (self.monitor, self.interval, self.plot) if config else ()
+        if not any(q.readable for q in self.quantities):
+            hidden = (self.btnRead, self.monitor, self.interval, self.plot)
+        for widget in hidden:
+            widget.hide()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.read)
         self.monitor.toggled.connect(self.set_monitoring)
@@ -149,6 +175,38 @@ class QuantityPanel(QWidget):
             lambda v: self.timer.setInterval(int(v * 1000))
         )
 
+    # Where values are remembered
+    def instrument_spec(self):
+        station = self.session.station
+        return station.config.instruments.get(self.ref) if station else None
+
+    def remembered(self, key: str):
+        if self.config:
+            spec = self.instrument_spec()
+            return spec.settings.get(key) if spec is not None else None
+        return settings().value(f"setpoints/{self.ref}/{key}")
+
+    def remember(self, quantity: Quantity, value) -> None:
+        if not self.config:
+            settings().setValue(f"setpoints/{self.ref}/{quantity.key}", value)
+            return
+        spec = self.instrument_spec()
+        if spec is None or spec.settings.get(quantity.key) == value:
+            return
+        config = copy.deepcopy(self.session.station.config)
+        config.instruments[self.ref].settings[quantity.key] = value
+        self.session.update_config(config)
+
+    def prefill(self) -> None:
+        for key, field in self.fields.items():
+            value = self.remembered(key)
+            if value is not None:
+                try:
+                    field.set_value(float(value) if field.spin else value)
+                except (TypeError, ValueError):
+                    pass
+
+    # Reading
     def set_monitoring(self, on: bool) -> None:
         if on:
             self.started = time.monotonic()
@@ -172,16 +230,58 @@ class QuantityPanel(QWidget):
     def show_values(self, values) -> None:
         self.pending = False
         now = time.monotonic() - self.started
+        first = not self.read_once
+        self.read_once = True
         for quantity in self.quantities:
             value = values.get(quantity.key)
             if quantity.key in self.values:
-                self.values[quantity.key].setText(format_value(value, quantity))
+                box = self.fields.get(quantity.key)
+                box = box.prefix if box is not None else self.displays.get(quantity.key)
+                factor = box.factor() if box is not None else 1.0
+                symbol = box.symbol() if box is not None and box.count() else None
+                self.values[quantity.key].setText(
+                    format_value(value, quantity, factor, symbol)
+                )
             toggle = self.toggles.get(quantity.key)
             if toggle is not None and value is not None:
                 toggle.setChecked(bool(value))
                 toggle.setText("On" if value else "Off")
+            field = self.fields.get(quantity.key)
+            if first and field is not None and not field.pending:
+                if self.remembered(quantity.key) is None:
+                    field.set_value(value)
+            if self.config and value is not None:
+                self.compare(quantity, value)
             if self.plot.isChecked() and isinstance(value, (int, float)):
                 self.hub.monitor_value(self.ref, self.title, quantity.key, now, value)
+
+    def compare(self, quantity: Quantity, value) -> None:
+        """Mark a configuration that differs between the device and the profile."""
+        note = self.notes.get(quantity.key)
+        saved = self.remembered(quantity.key)
+        if note is None:
+            return
+        self.device_values[quantity.key] = value
+        same = saved is None or _same(saved, value)
+        note.setVisible(not same)
+        note.setText(
+            f'device: {value}  (profile: {saved})  <a href="take">Take from device</a>'
+        )
+        note.setToolTip(
+            "The device differs from the station profile. Set writes the field "
+            "value to the device; Take from device saves the device value in the profile."
+        )
+
+    def take(self, quantity: Quantity) -> None:
+        """Keep the device value: into the field and the profile, nothing is written."""
+        value = self.device_values.get(quantity.key)
+        if value is None:
+            return
+        field = self.fields.get(quantity.key)
+        if field is not None:
+            field.set_value(value)
+        self.notes[quantity.key].hide()
+        self.remember(quantity, value)
 
     def failed(self, error) -> None:
         self.pending = False
@@ -192,17 +292,36 @@ class QuantityPanel(QWidget):
             f"{self.title}: {error.__class__.__name__}: {error}"
         )
 
+    # Writing
+    def apply(self, quantity: Quantity) -> None:
+        field = self.fields.get(quantity.key)
+        if field is not None:
+            self.write(quantity, field.value())
+
     def write(self, quantity: Quantity, value) -> None:
         if self.session.station is None:
             return
+
+        def done(_):
+            field = self.fields.get(quantity.key)
+            if field is not None:
+                field.set_pending(False)
+            self.remember(quantity, value)
+            self.read()
+
         self.session.worker.submit(
-            lambda: quantity.write(self.device(), value),
-            lambda _: self.read(),
-            self.failed,
+            lambda: quantity.write(self.device(), value), done, self.failed
         )
 
     def stop(self) -> None:
         self.monitor.setChecked(False)
+
+
+def _same(a, b) -> bool:
+    try:
+        return abs(float(a) - float(b)) <= 1e-9 * max(1.0, abs(float(a)))
+    except (TypeError, ValueError):
+        return str(a).strip().upper() == str(b).strip().upper()
 
 
 class ActionsGroup(QGroupBox):
@@ -225,6 +344,65 @@ class ActionsGroup(QGroupBox):
         session.worker.submit(
             lambda: call(self.panel.device()),
             lambda value: self.result.setText("" if value is None else str(value)),
+            lambda error: self.result.setText(f"{error}"),
+        )
+
+
+class ChopperGroup(QGroupBox):
+    """Moves and continuous rotation, as the old chopper widget had."""
+
+    def __init__(self, panel: QuantityPanel, parent=None):
+        super().__init__("Chopper", parent)
+        self.panel = panel
+        layout = QVBoxLayout(self)
+        moves = QHBoxLayout()
+        for text, icon_name, call in (
+            ("Hot", "fire", lambda d: d.to_hot()),
+            ("Cold", "snowflake", lambda d: d.to_cold()),
+            ("Rotate 90°", "rotate-right", lambda d: d.rotate(90)),
+            ("Align to hot", "target", lambda d: d.to_hot()),
+        ):
+            button = QPushButton(theme.icon(icon_name), text)
+            button.clicked.connect(lambda _=False, c=call: self.run(c))
+            moves.addWidget(button)
+        layout.addLayout(moves)
+        rotation = QHBoxLayout()
+        rotation.addWidget(QLabel("Frequency"))
+        self.frequency = QDoubleSpinBox()
+        self.frequency.setRange(0.1, 20.0)
+        self.frequency.setDecimals(2)
+        self.frequency.setSingleStep(0.1)
+        self.frequency.setSuffix(" Hz")
+        saved = settings().value(f"setpoints/{panel.ref}/chopper_frequency")
+        self.frequency.setValue(float(saved) if saved is not None else 10.0)
+        self.btnStart = QPushButton(
+            theme.icon("rotate-3d-variant"), "Continuous rotation"
+        )
+        self.btnStart.clicked.connect(self.start)
+        self.btnStop = QPushButton(theme.icon("stop"), "Stop")
+        self.btnStop.clicked.connect(lambda: self.run(lambda d: d.stop()))
+        for widget in (self.frequency, self.btnStart, self.btnStop):
+            rotation.addWidget(widget)
+        layout.addLayout(rotation)
+        self.result = QLabel()
+        self.result.setProperty("role", "muted")
+        layout.addWidget(self.result)
+
+    def start(self) -> None:
+        frequency = self.frequency.value()
+        settings().setValue(f"setpoints/{self.panel.ref}/chopper_frequency", frequency)
+        self.run(lambda d: d.start_rotation(frequency))
+
+    def run(self, call) -> None:
+        self.result.setText("working...")
+
+        def done(_):
+            self.result.setText("")
+            self.panel.read()
+
+        self.panel.session.worker.submit(
+            lambda: call(self.panel.device()),
+            done,
             lambda error: self.result.setText(f"{error}"),
         )
 
@@ -476,6 +654,25 @@ def scan_group(session, hub, title: str, procedure: str, fixed) -> QGroupBox:
     return box
 
 
+# Capabilities whose dock has its own group even without quantities
+GROUP_CAPABILITIES = (LoadSwitch, Compressor, SpectrumAnalyzer, NetworkAnalyzer)
+GROUP_KINDS = ("sis_bias", "sis_coil")
+
+
+def has_content(station, info) -> bool:
+    """Whether the dock of a device would show anything."""
+    if station.quantities(info.ref) or info.kind in GROUP_KINDS:
+        return True
+    if any(c in info.capabilities for c in GROUP_CAPABILITIES):
+        return True
+    if info.kind == INSTRUMENT:
+        cls = station.driver_class(info.ref)
+        return any(
+            station.quantities(f"{info.ref}:{key}") for key in cls.fixed_channels()
+        )
+    return False
+
+
 class DeviceWidget(QScrollArea):
     """Dock content of an instrument (with its fixed channels) or a device."""
 
@@ -501,16 +698,23 @@ class DeviceWidget(QScrollArea):
         )
         subtitle.setProperty("role", "muted")
         layout.addWidget(subtitle)
-        main = QuantityPanel(session, hub, ref, info.title)
+        main = QuantityPanel(session, hub, ref, info.title, info.kind)
         if main.quantities:
             layout.addWidget(self._boxed("Values", main))
         self.panels.append(main)
         if info.kind == INSTRUMENT:
+            # Multiplier, OEM head: kept in the profile, compared with the device
+            config = QuantityPanel(
+                session, hub, ref, info.title, info.kind, config=True
+            )
+            if config.quantities:
+                layout.addWidget(self._boxed("Configuration", config))
+                self.panels.append(config)
             cls = station.driver_class(ref)
             for key in cls.fixed_channels():
                 channel_ref = f"{ref}:{key}"
                 panel = QuantityPanel(
-                    session, hub, channel_ref, channel_title(info.title, key)
+                    session, hub, channel_ref, channel_title(info.title, key), "channel"
                 )
                 self.panels.append(panel)
                 layout.addWidget(
@@ -531,7 +735,10 @@ class DeviceWidget(QScrollArea):
         info, session, hub = self.info, self.session, self.hub
         caps = info.capabilities
         groups = []
-        if LoadSwitch in caps:
+        driver = self.session.station.driver_class(info.instrument)
+        if LoadSwitch in caps and hasattr(driver, "start_rotation"):
+            groups.append(ChopperGroup(panel))
+        elif LoadSwitch in caps:
             groups.append(ActionsGroup("Calibration load", panel, (
                 ("Hot", "fire", lambda d: d.to_hot()),
                 ("Cold", "snowflake", lambda d: d.to_cold()),

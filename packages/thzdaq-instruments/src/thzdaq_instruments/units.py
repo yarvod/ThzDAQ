@@ -15,6 +15,38 @@ MA = 1e-3
 UA = 1e-6
 
 
+# SI prefixes the UI offers, one table for every field, form and plot label
+SI_PREFIXES = (
+    ("p", 1e-12, "×10⁻¹²"),
+    ("n", 1e-9, "×10⁻⁹"),
+    ("µ", 1e-6, "×10⁻⁶"),
+    ("m", 1e-3, "×10⁻³"),
+    ("", 1.0, "×10⁰"),
+    ("k", 1e3, "×10³"),
+    ("M", 1e6, "×10⁶"),
+    ("G", 1e9, "×10⁹"),
+)
+# Units that take a prefix; others (dBm, dB, deg) are shown as they are
+PREFIXED_UNITS = ("Hz", "V", "A", "W", "s", "Pa", "Ohm", "K")
+# Kelvin stops at milli: nobody wants kK or µK on a cryostat readout
+UNIT_PREFIXES = {"K": ("m", "")}
+
+
+def prefixes_for(unit: str):
+    """(prefix, factor, note) choices for a unit; empty when it takes none."""
+    if unit not in PREFIXED_UNITS:
+        return ()
+    allowed = UNIT_PREFIXES.get(unit)
+    return tuple(p for p in SI_PREFIXES if allowed is None or p[0] in allowed)
+
+
+def prefix_factor(prefix: str) -> float:
+    for name, factor, _ in SI_PREFIXES:
+        if name == prefix:
+            return factor
+    raise ValueError(f"Unknown SI prefix {prefix!r}")
+
+
 def dbm_to_watt(dbm: float) -> float:
     return 1e-3 * 10 ** (dbm / 10)
 

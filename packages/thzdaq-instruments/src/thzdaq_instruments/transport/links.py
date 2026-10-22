@@ -58,6 +58,14 @@ class SocketLink(Link):
             self._socket = None
             self._buffer = b""
 
+    def _abort(self) -> None:
+        sock = self._socket
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)  # wakes a blocked recv()
+            except OSError:
+                pass
+
     def _require_socket(self) -> socket.socket:
         if self._socket is None:
             raise InstrumentConnectionError(f"{self!r} is not open")
@@ -138,6 +146,14 @@ class SerialLink(Link):
             self._serial.close()
         finally:
             self._serial = None
+
+    def _abort(self) -> None:
+        port = self._serial
+        if port is not None:
+            try:
+                port.cancel_read()
+            except (AttributeError, OSError):
+                pass
 
     def _require_serial(self):
         if self._serial is None:

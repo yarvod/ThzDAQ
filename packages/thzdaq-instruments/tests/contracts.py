@@ -16,7 +16,6 @@ from emulators import (
     LakeShoreEmulator,
     MotorRegisters,
     NrxEmulator,
-    PfeifferBus,
     RigolEmulator,
     SisEmulator,
     Sr830Emulator,
@@ -47,8 +46,6 @@ from thzdaq_instruments.drivers import (
     LakeShore336,
     ModbusChopper,
     NiYigFilter,
-    PfeifferGauge,
-    PfeifferTurboPump,
     RigolDP832A,
     RohdeSchwarzFSEK30,
     RohdeSchwarzHMP2030,
@@ -74,8 +71,6 @@ from thzdaq_instruments.sim import (
     SimVacuumGauge,
     SimYigFilter,
 )
-from thzdaq_instruments.transport.base import MessageTransport
-from thzdaq_instruments.transport.fake import FakeLink
 
 
 def driver(cls, emulator):
@@ -136,27 +131,6 @@ class FakeF70Service(FakeJsonClient):
 
 def f70_rest():
     return SumitomoF70Rest(client=FakeF70Service())
-
-
-def pfeiffer_bus():
-    link = FakeLink(
-        PfeifferBus(
-            {
-                1: {309: "000820", 349: "TC 110", 340: "150016", 10: "000000"},
-                2: {740: "250017", 349: "TPR280"},
-            }
-        )
-    )
-    link.open()
-    return MessageTransport(link)
-
-
-def tc110():
-    return PfeifferTurboPump(pfeiffer_bus(), address=1)
-
-
-def gauge():
-    return PfeifferGauge(pfeiffer_bus(), address=2)
 
 
 def grid():
@@ -304,8 +278,6 @@ CONTRACTS = {
             "sr830": sr830,
             "f70": f70,
             "f70 rest": f70_rest,
-            "tc110": tc110,
-            "gauge": gauge,
             "grid": grid,
         },
     ),
@@ -386,7 +358,7 @@ CONTRACTS = {
     ),
     VacuumGauge: (
         check_vacuum_gauge,
-        {"sim gauge": SimVacuumGauge, "gauge": gauge, "tc110": tc110},
+        {"sim gauge": SimVacuumGauge},
     ),
     Rotator: (check_rotator, {"sim rotator": SimRotator, "grid": grid}),
     Compressor: (

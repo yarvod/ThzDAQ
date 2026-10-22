@@ -1,34 +1,25 @@
 """Kinds of configured devices and how a device object is built.
 
-Two families:
-- sub-devices a driver declares (SubdeviceType: SIS bias, SIS coil): the part
-  comes from the instrument accessor; settings become attributes of the part;
-- adapters over the instrument or a fixed channel (frequency multiplier,
-  sideband selector, switch): settings become adapter arguments.
+A configured device is a sub-device a driver declares (SubdeviceType: SIS
+bias, SIS coil): the part comes from the instrument accessor and the
+settings become attributes of the part (SIS offsets). Each kind declares its
+settings as parameters with units, so the Setup form and validation come for
+free.
 
-Every kind declares its settings as parameters with units, so the Setup
-form and validation come for free.
+Instruments that are one device (a generator, a power meter) or have fixed
+channels (supply outputs) have no kinds; how a measurement uses a channel
+(an IF switch, YIG power) is chosen in the measurement.
 """
 
-from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, Optional, Tuple, Type
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Tuple, Type
 
-from thzdaq_instruments.capabilities import (
-    FrequencySource,
-    Switchable,
-    capabilities_of,
-)
+from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.instrument import Instrument
 
 from thzdaq_core.errors import ProcedureError, StationError
-from thzdaq_core.parameters import BoolParameter, FloatParameter, Parameter
-from thzdaq_core.station.ports import (
-    DEVICE_PROTOCOLS,
-    AttributePort,
-    ScaledFrequencySource,
-    SidebandSelector,
-    SwitchPort,
-)
+from thzdaq_core.parameters import FloatParameter, Parameter
+from thzdaq_core.station.ports import AttributePort
 
 # Instrument ids name the kind of device: power_supply_3, not rigol_dp832a_1
 INSTRUMENT_TYPES = {
@@ -56,8 +47,6 @@ INSTRUMENT_TYPES = {
     "sumitomo.f70": "compressor",
     "sumitomo.f70_rest": "compressor",
     "sim.compressor": "compressor",
-    "pfeiffer.tc110": "turbo_pump",
-    "pfeiffer.gauge": "vacuum_gauge",
     "sim.vacuum_gauge": "vacuum_gauge",
     "arduino.grid": "grid",
     "sim.rotator": "grid",
@@ -78,10 +67,7 @@ class DeviceKind:
     key: str
     title: str
     settings: Tuple[Parameter, ...] = ()
-    # Adapter kinds: factory(part, **settings) and what the part must offer
-    adapter: Optional[Callable[..., Any]] = None
-    requires: Tuple[Type, ...] = ()
-    # Sub-device kinds: instrument accessor and the keys it accepts
+    # Instrument accessor of the part and the keys it accepts
     accessor: Optional[str] = None
     keys: Tuple[Any, ...] = ()
     part_class: Optional[type] = None
@@ -106,8 +92,6 @@ class DeviceKind:
 
     def build(self, part: Any, settings: Dict[str, Any]) -> Any:
         values = self.clean(settings)
-        if self.adapter is not None:
-            return self.adapter(part, **values)
         return AttributePort(part, values) if values else part
 
 
@@ -122,38 +106,6 @@ SUBDEVICE_SETTINGS: Dict[str, Tuple[Parameter, ...]] = {
         )),
     ),
 }  # fmt: skip
-
-ADAPTER_KINDS: Dict[str, DeviceKind] = {
-    "frequency_multiplier": DeviceKind(
-        "frequency_multiplier",
-        "Frequency multiplier",
-        settings=(
-            _named(
-                "multiplier", FloatParameter("Multiplier", default=1.0, minimum=1e-9)
-            ),
-        ),
-        adapter=ScaledFrequencySource,
-        requires=(FrequencySource,),
-    ),
-    "sideband_selector": DeviceKind(
-        "sideband_selector",
-        "IF sideband switch",
-        settings=(
-            _named(
-                "upper_when_on", BoolParameter("Upper sideband when on", default=True)
-            ),
-        ),
-        adapter=SidebandSelector,
-        requires=(Switchable,),
-    ),
-    "switch": DeviceKind(
-        "switch",
-        "Switch",
-        settings=(_named("inverted", BoolParameter("Inverted", default=False)),),
-        adapter=SwitchPort,
-        requires=(Switchable,),
-    ),
-}
 
 
 def subdevice_kinds(driver_cls: Type[Instrument]) -> Dict[str, DeviceKind]:
@@ -173,30 +125,13 @@ def subdevice_kinds(driver_cls: Type[Instrument]) -> Dict[str, DeviceKind]:
 
 def kinds_for(driver_cls: Type[Instrument]) -> Dict[str, DeviceKind]:
     """Device kinds a user can add to an instrument of this driver."""
-    kinds = subdevice_kinds(driver_cls)
-    own = set(capabilities_of(driver_cls))
-    channel = (
-        set(capabilities_of(driver_cls.channel_class))
-        if driver_cls.fixed_channels()
-        else set()
-    )
-    for key, kind in ADAPTER_KINDS.items():
-        on_instrument = set(kind.requires) <= own
-        on_channel = set(kind.requires) <= channel
-        if on_instrument or on_channel:
-            # On a supply the switch sits on a channel; on a generator on the instrument
-            kinds[key] = replace(
-                kind,
-                needs_channel=not on_instrument,
-                keys=driver_cls.fixed_channels() if on_channel else (),
-            )
-    return kinds
+    return subdevice_kinds(driver_cls)
+
+
+# Kinds of profile version 2 before they were dropped: what a measurement chooses now
+DROPPED_KINDS = ("frequency_multiplier", "sideband_selector", "switch")
 
 
 def kind_capabilities(kind: DeviceKind, target_cls: Optional[type]) -> Tuple[type, ...]:
     """Capabilities of a device of this kind, known without opening anything."""
-    found = list(capabilities_of(kind.part_class or target_cls))
-    if kind.adapter is not None:
-        found += [c for c in capabilities_of(kind.adapter) if c not in found]
-        found += [p for p in DEVICE_PROTOCOLS if issubclass(kind.adapter, p)]
-    return tuple(found)
+    return tuple(capabilities_of(kind.part_class or target_cls))

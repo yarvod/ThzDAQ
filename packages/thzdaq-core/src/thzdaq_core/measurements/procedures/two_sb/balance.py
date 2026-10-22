@@ -1,6 +1,11 @@
 from itertools import product
 
-from thzdaq_instruments.capabilities import PowerDetector, PowerLevel, TunableFilter
+from thzdaq_instruments.capabilities import (
+    PowerDetector,
+    PowerLevel,
+    Switchable,
+    TunableFilter,
+)
 from thzdaq_instruments.units import GHZ, MV, UA
 
 from thzdaq_core.analysis.two_sb import SIDE_BANDS
@@ -19,7 +24,6 @@ from thzdaq_core.measurements.procedures.two_sb.common import (
     if_sweep,
 )
 from thzdaq_core.measurements.registry import register_procedure
-from thzdaq_core.station.ports import SidebandSwitch
 
 
 @register_procedure
@@ -57,7 +61,7 @@ class IfBalance(TwoSbProcedure):
     def slots(self):
         return {
             **self.base_slots(),
-            "if_selector": SidebandSwitch,
+            "if_selector": Switchable,
             "detector": PowerDetector,
             "if_filter": TunableFilter,
         }

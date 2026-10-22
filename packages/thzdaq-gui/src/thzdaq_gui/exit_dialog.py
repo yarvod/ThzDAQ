@@ -27,10 +27,14 @@ class ExitDialog(QDialog):
         question.setProperty("role", "title")
         layout.addWidget(question)
         if running:
-            warning = QLabel(f"{running} measurement(s) are running and will be stopped.")
+            warning = QLabel(
+                f"{running} measurement(s) are running and will be stopped."
+            )
             warning.setStyleSheet(f"color: {theme.ACCENT}")
             layout.addWidget(warning)
-        self.storeState = QCheckBox("Store the window layout and the current perspective")
+        self.storeState = QCheckBox(
+            "Store the window layout and the current perspective"
+        )
         self.storeState.setChecked(True)
         self.dumpData = QCheckBox(
             f"Dump all measurements of this session into one file ({measurements})"

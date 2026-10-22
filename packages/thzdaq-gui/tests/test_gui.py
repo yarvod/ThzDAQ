@@ -223,3 +223,26 @@ class TestGraphs:
         graph = hub.graph("P-t")
         assert list(graph.items) == [("monitor", "power_meter_1", "power")]
         assert graph.curve_label(("monitor", "power_meter_1", "power")) == "NRX"
+
+
+def test_device_worker_reports_how_long_a_job_waits(app, wait):
+    import time as _time
+
+    worker = DeviceWorker()
+    assert worker.busy_for() == 0
+    done = []
+    worker.submit(lambda: _time.sleep(0.3), done.append)
+    wait(lambda: worker.busy_for() > 0.1)
+    wait(lambda: done)
+    assert worker.busy_for() == 0
+    worker.stop()
+
+
+def test_second_instance_is_detected(app):
+    from thzdaq_gui.app import _locks, instance_lock
+
+    first = instance_lock() or (_locks[0] if _locks else None)
+    assert first is not None
+    assert instance_lock() is None  # the lock is held
+    first.unlock()
+    _locks.clear()

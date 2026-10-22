@@ -7,6 +7,7 @@ the emitting thread differs from the receivers' thread.
 import logging
 import queue
 import threading
+import time
 from typing import Any, Callable, Dict, Mapping, Optional
 
 from PySide6.QtCore import QObject, Signal
@@ -28,6 +29,7 @@ class DeviceWorker(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._queue: "queue.Queue" = queue.Queue()
+        self._job_started: Optional[float] = None
         self._done.connect(self._deliver)
         self._thread = threading.Thread(
             target=self._loop, name="DeviceWorker", daemon=True
@@ -46,12 +48,18 @@ class DeviceWorker(QObject):
     def pending(self) -> int:
         return self._queue.qsize()
 
+    def busy_for(self) -> float:
+        """Seconds the current job has been running (0 when idle)."""
+        started = self._job_started
+        return 0.0 if started is None else time.monotonic() - started
+
     def _loop(self):
         while True:
             item = self._queue.get()
             if item is None:
                 return
             job, on_result, on_error = item
+            self._job_started = time.monotonic()
             try:
                 result = job()
             except Exception as e:
@@ -59,6 +67,8 @@ class DeviceWorker(QObject):
                 self._done.emit(on_error, None, e)
             else:
                 self._done.emit(on_result, result, None)
+            finally:
+                self._job_started = None
             # Callbacks hold widgets: their last reference must die in the GUI
             # thread (after delivery), never here, or Qt deletes a widget from
             # this thread and crashes
@@ -141,14 +151,15 @@ class QtRunner(QObject):
         self._thread.start()
 
     def _run(self, procedure: Procedure, devices: Dict[str, str], comment: str):
+        # Whatever happens in the thread, the dock learns that it is over
         try:
             measurement = self._runner.run(procedure, comment=comment, devices=devices)
-        except Exception as e:
+        except BaseException as e:
             self.failed.emit(f"{e.__class__.__name__}: {e}")
+        else:
+            self.finished.emit(measurement)
+        finally:
             self.running_changed.emit(False)
-            return
-        self.finished.emit(measurement)
-        self.running_changed.emit(False)
 
     def cancel(self) -> None:
         if self._runner is not None:

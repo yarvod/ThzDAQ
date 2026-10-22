@@ -18,7 +18,14 @@ class TestQuantities:
         assert keys(SimPowerSupply().channel(1)) == [
             "output", "voltage_set", "current_set", "voltage", "current",
         ]  # fmt: skip
-        assert keys(SimSignalGenerator()) == ["output", "frequency", "power_level"]
+        assert keys(SimSignalGenerator()) == [
+            "output", "frequency", "power_level", "frequency_multiplier",
+            "oem_state", "oem_start", "oem_stop", "oem_multiplier",
+        ]  # fmt: skip
+        persistent = [
+            q.key for q in quantities_of(SimSignalGenerator()) if q.persistent
+        ]
+        assert persistent[0] == "frequency_multiplier" and "frequency" not in persistent
         assert keys(SimPowerMeter()) == ["power"]
 
     def test_driver_quantities(self):
@@ -64,3 +71,12 @@ class TestQuantities:
         assert SimPowerSupply.fixed_channels() == (1, 2, 3)
         block = SimSisBlock()
         assert block.part("ctrl", "DEV1") is block.ctrl("DEV1")
+
+
+def test_generator_multiplier_like_the_instrument():
+    generator = SimSignalGenerator(max_frequency=50e9, frequency_multiplier=18)
+    generator.set_frequency(223e9)  # 12.4 GHz out of the generator
+    assert generator.get_frequency() == 223e9
+    generator.set_frequency_multiplier(1)
+    with pytest.raises(Exception):
+        generator.set_frequency(223e9)

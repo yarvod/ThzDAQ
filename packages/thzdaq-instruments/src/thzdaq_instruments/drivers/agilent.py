@@ -2,6 +2,7 @@ from typing import Literal
 
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
+from thzdaq_instruments.quantities import GENERATOR_QUANTITIES
 from thzdaq_instruments.transport.base import PROLOGIX, ConnectionSpec
 
 OemState = Literal["ON", "OFF", "NONE", "REAR", "FRONT"]
@@ -14,6 +15,7 @@ class AgilentE8247C(ScpiInstrument):
     multiplier or an OEM head set on the instrument they include it.
     """
 
+    quantities = GENERATOR_QUANTITIES
     ATTENUATOR_STEPS = (0, 10, 20, 30, 40, 50, 60, 70, 80, 90)  # dB
     MAX_AMPLITUDE = 25.0  # dBm
 
@@ -93,8 +95,20 @@ class AgilentE8247C(ScpiInstrument):
         return self.query(":SYST:OEMH:SEL?")
 
     def set_oem_frequency_range(self, start: float, stop: float) -> None:
-        self.write(f":SYST:OEMH:FREQ:STAR {start}")
-        self.write(f":SYST:OEMH:FREQ:STOP {stop}")
+        self.set_oem_frequency_start(start)
+        self.set_oem_frequency_stop(stop)
+
+    def set_oem_frequency_start(self, frequency: float) -> None:
+        self.write(f":SYST:OEMH:FREQ:STAR {frequency}")
+
+    def get_oem_frequency_start(self) -> float:
+        return self.query_float(":SYST:OEMH:FREQ:STAR?")
+
+    def set_oem_frequency_stop(self, frequency: float) -> None:
+        self.write(f":SYST:OEMH:FREQ:STOP {frequency}")
+
+    def get_oem_frequency_stop(self) -> float:
+        return self.query_float(":SYST:OEMH:FREQ:STOP?")
 
     def set_oem_multiplier(self, value: float) -> None:
         self.write(f":SYST:OEMH:FREQ:MULT {value}")

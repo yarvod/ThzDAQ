@@ -19,13 +19,43 @@ class TestWindow:
         assert {f"measure:{cls.name}" for cls in list_procedures()} <= names
         assert {"graph:I-V", "graph:P-V", "graph:P-IF", "graph:Tn upper"} <= names
         # Instruments and configured devices get docks; fixed channels live inside
-        assert {"device:sis_bias_1", "device:sis_coil_2", "device:lo_1",
+        assert {"device:sis_bias_1", "device:sis_coil_2", "device:signal_generator_1",
                 "device:power_supply_1", "device:power_meter_1"} <= names  # fmt: skip
         assert not any(name.startswith("device:power_supply_1:") for name in names)
         menus = [a.text() for a in window.menuBar().actions()]
         assert menus == ["&File", "&Base", "&Devices", "&Measures", "&Graphs", "&Help"]
         titles = [a.text() for a in window.menuDevices.actions()]
         assert "SIS1" in titles and "IF switch supply" in titles
+
+    def test_menus_show_checks_and_bring_docks_forward(self, window):
+        action = window.menu_actions["graph:Tn-V"]
+        assert action.isCheckable() and action.icon().isNull()
+        assert not action.isChecked()
+        action.trigger()
+        dock = window.docks["graph:Tn-V"]
+        assert not dock.isClosed() and action.isChecked()
+        # Behind another tab: the menu brings it forward instead of closing it
+        other = window.docks["graph:I-V"]
+        window.dock_manager.addDockWidgetTabToArea(dock, other.dockAreaWidget())
+        other.setAsCurrentTab()
+        assert not dock.isCurrentTab()
+        action.trigger()
+        assert dock.isCurrentTab() and action.isChecked()
+        action.trigger()
+        assert dock.isClosed() and not action.isChecked()
+
+    def test_area_close_button_closes_one_tab(self, window):
+        import PySide6QtAds as QtAds
+
+        assert QtAds.CDockManager.testConfigFlag(
+            QtAds.CDockManager.DockAreaCloseButtonClosesTab
+        )
+
+    def test_no_dock_for_an_instrument_without_controls(self, window):
+        assert "device:sis_block_1" not in window.docks
+        assert (
+            "device:sis_bias_1" in window.docks and "device:chopper_1" in window.docks
+        )
 
     def test_device_docks_follow_the_setup(self, window, session, profile, monkeypatch):
         setup = window.setupWidget
@@ -79,6 +109,12 @@ class TestWindow:
         assert not dialog.driver.isEnabled()
         assert dialog.instrument().connection.gpib == 19
 
+    def test_driver_list_has_no_simulators_or_pfeiffer(self, app, session):
+        dialog = InstrumentDialog(session.station.config)
+        keys = [dialog.driver.itemData(i) for i in range(dialog.driver.count())]
+        assert "rigol.dp832a" in keys and "scontel.sis_block" in keys
+        assert not [k for k in keys if k.startswith(("sim.", "pfeiffer."))]
+
     def test_connect_reports_identity(self, window, wait):
         window.setupWidget.connect_instrument("sis_block_1")
         card = window.setupWidget.cards["sis_block_1"]
@@ -100,10 +136,93 @@ class TestDeviceDocks:
         panel.write(voltage, 2.5e-3)
         wait(lambda: panel.values["voltage_set"].text().startswith("2.5"))
         assert panel.values["voltage_set"].text() == "2.5 mV"
+        # The setpoint is remembered for the next start, not written on it
+        from thzdaq_gui.settings import settings
+
+        assert float(settings().value("setpoints/sis_bias_1/voltage_set")) == 2.5e-3
         short = next(q for q in panel.quantities if q.key == "short")
         panel.write(short, True)
         wait(lambda: panel.toggles["short"].isChecked())
         assert session.station.instrument("sis_block_1").channel("DEV4").get_short()
+
+    def test_generator_configuration_from_the_profile(
+        self, window, session, profile, wait
+    ):
+        dock = window.docks["device:signal_generator_1"]
+        widget = dock.widget()
+        config = next(p for p in widget.panels if p.config)
+        main = widget.panels[0]
+        assert [q.key for q in config.quantities][:2] == [
+            "frequency_multiplier",
+            "oem_state",
+        ]
+        assert "frequency" in [q.key for q in main.quantities]
+        # Filled from the profile, nothing written yet
+        field = config.fields["frequency_multiplier"]
+        assert field.value() == 18 and not field.pending
+        generator = session.station.instrument("signal_generator_1")
+        generator.set_frequency_multiplier(9)  # changed on the front panel
+        config.read()
+        wait(lambda: not config.notes["frequency_multiplier"].isHidden())
+        assert "device: 9" in config.notes["frequency_multiplier"].text()
+        assert generator.get_frequency_multiplier() == 9  # connecting wrote nothing
+        # Set writes the device and the profile; the dock is not rebuilt
+        config.apply(
+            next(q for q in config.quantities if q.key == "frequency_multiplier")
+        )
+        wait(lambda: generator.get_frequency_multiplier() == 18)
+        wait(lambda: config.notes["frequency_multiplier"].isHidden())
+        assert dock.widget() is widget
+        field.set_value(12, pending=True)
+        config.apply(
+            next(q for q in config.quantities if q.key == "frequency_multiplier")
+        )
+        wait(lambda: load_station(profile).instruments["signal_generator_1"].settings
+             == {"frequency_multiplier": 12})  # fmt: skip
+        assert dock.widget() is widget and not field.pending
+        # Take from device keeps the front-panel value: profile only, no write
+        generator.set_frequency_multiplier(6)
+        config.read()
+        wait(lambda: not config.notes["frequency_multiplier"].isHidden())
+        config.notes["frequency_multiplier"].linkActivated.emit("take")
+        wait(lambda: load_station(profile).instruments["signal_generator_1"].settings
+             == {"frequency_multiplier": 6})  # fmt: skip
+        assert field.value() == 6 and not field.pending
+        assert config.notes["frequency_multiplier"].isHidden()
+
+    def test_fields_take_values_in_the_chosen_prefix(self, window, session, wait):
+        main = window.docks["device:signal_generator_1"].widget().panels[0]
+        field = main.fields["frequency"]
+        assert field.prefix.prefix() == "G" and "×10⁹" in field.prefix.currentText()
+        field.spin.setValue(223.5)
+        assert field.pending and field.value() == 223.5e9
+        field.prefix.setCurrentIndex(field.prefix.findData("M"))
+        assert field.spin.value() == 223500.0 and field.value() == 223.5e9
+        field.apply_requested.emit()  # Enter
+        generator = session.station.instrument("signal_generator_1")
+        wait(lambda: generator.get_frequency() == 223.5e9)
+        wait(lambda: not field.pending)
+        sis = window.docks["device:sis_bias_1"].widget().panels[0]
+        assert sis.fields["voltage_set"].prefix.prefix() == "m"
+        assert sis.displays["current"].prefix() == "µ"
+
+    def test_chopper_dock(self, window, session, wait):
+        from thzdaq_gui.docks.devices import ChopperGroup
+
+        widget = window.docks["device:chopper_1"].widget()
+        main = widget.panels[0]
+        assert [q.key for q in main.quantities] == ["load_state", "running"]
+        group = widget.findChildren(ChopperGroup)[0]
+        chopper = session.station.instrument("chopper_1")
+        group.run(lambda d: d.to_hot())
+        wait(lambda: main.values["load_state"].text() == "hot")
+        group.frequency.setValue(5.5)
+        group.start()
+        wait(lambda: chopper.running and main.toggles == {} and
+             main.values["running"].text() == "ON")  # fmt: skip
+        assert chopper.frequency == 5.5
+        group.btnStop.click()
+        wait(lambda: not chopper.running)
 
     def test_instrument_dock_has_its_channels(self, window):
         widget = window.docks["device:power_supply_1"].widget()
@@ -321,3 +440,99 @@ class TestExit:
         assert idle.storeState.isChecked() and not idle.dumpData.isEnabled()
         busy = ExitDialog(running=2, measurements=3)
         assert busy.dumpData.isChecked() and "3" in busy.dumpData.text()
+
+
+def test_no_stray_windows_flash(app, session, tmp_path):
+    """Widgets shown before they have a parent pop up as small windows."""
+    import copy
+
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QWidget
+    from thzdaq_core.station import DeviceConfig
+    from thzdaq_gui.main_window import MainWindow
+
+    shown = []
+
+    class Spy(QObject):
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.Show and isinstance(obj, QWidget):
+                if obj.isWindow():
+                    shown.append(type(obj).__name__)
+            return False
+
+    spy = Spy()
+    app.installEventFilter(spy)
+    try:
+        window = MainWindow(
+            session, str(tmp_path / "s.ini"), restore_layout=False, check_updates=False
+        )
+        window.show()
+        config = copy.deepcopy(session.station.config)
+        config.instruments["sis_block_1"].devices["sis_bias_3"] = DeviceConfig(
+            "sis_bias", channel="DEV1"
+        )
+        session.update_config(config)
+        app.processEvents()
+    finally:
+        app.removeEventFilter(spy)
+    assert shown == ["MainWindow"]
+    window.close()
+
+
+class TestHangs:
+    def test_watchdog_returns_the_dock_to_idle(self, window):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.on_running(True)  # the dock thinks it runs, the thread is gone
+        assert not box.btnStart.isEnabled()
+        box.check_thread()
+        assert box.btnStart.isEnabled() and box.state.text() == "Idle"
+
+    def test_stop_without_answer_offers_abort(self, window, session, monkeypatch):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        aborted = []
+        monkeypatch.setattr(
+            session.station, "abort", lambda refs: aborted.append(list(refs))
+        )
+        box.on_running(True)
+        box.stop()
+        assert box.state.text() == "Stopping..." and box.btnAbort.isHidden()
+        box.offer_abort()  # STUCK_AFTER_MS later, still running
+        assert not box.btnAbort.isHidden() and "Abort" in box.state.text()
+        box.abort()
+        assert aborted and "sis_bias" in aborted[0][0]
+        box.on_running(False)
+        assert box.btnAbort.isHidden()
+
+    def test_start_while_running_warns(self, window, monkeypatch):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+        monkeypatch.setattr(type(box.runner), "running", property(lambda self: True))
+        box.start()
+        assert warnings and "still running" in warnings[0]
+
+    def test_connections_group(self, app, wait):
+        from thzdaq_core.station import InstrumentConfig, Station, StationConfig
+        from thzdaq_gui.docks.setup import ConnectionsGroup
+        from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
+        from thzdaq_instruments.transport.fake import FakeLink
+
+        pool = TransportPool(lambda spec: FakeLink({":OUTP? CH1": "ON"}))
+        config = StationConfig(
+            "bench",
+            {"rigol": InstrumentConfig(
+                "rigol.dp832a", ConnectionSpec(SOCKET, host="h", port=5555), title="Rigol"
+            )},
+        )  # fmt: skip
+        station = Station(config, pool=pool)
+        group = ConnectionsGroup(station)
+        (state,) = group.rows.values()
+        assert state.text() == "not connected"
+        station["rigol:1"].get_output()
+        group.refresh()
+        assert state.text() == "connected"
+        group.reset(next(iter(group.rows)))
+        wait(lambda: state.text() == "connected")
+        station.close()

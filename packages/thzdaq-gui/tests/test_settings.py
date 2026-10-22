@@ -32,4 +32,6 @@ def test_an_ini_file_replaces_the_registry(tmp_path, monkeypatch):
     values.sync()
     assert values.format() == QSettings.IniFormat
     assert settings.location() == str(tmp_path / "portable.ini")
-    assert "[station]\npath=stations/lab.yaml" in (tmp_path / "portable.ini").read_text()
+    assert (
+        "[station]\npath=stations/lab.yaml" in (tmp_path / "portable.ini").read_text()
+    )

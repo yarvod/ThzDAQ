@@ -8,7 +8,6 @@ from thzdaq_instruments import InstrumentError
 from thzdaq_instruments.capabilities import ALL_CAPABILITIES, Identifiable
 
 from thzdaq_core.station.legacy import import_legacy_settings
-from thzdaq_core.station.ports import DEVICE_PROTOCOLS
 from thzdaq_core.station.station import Station
 from thzdaq_core.station.storage import dump_station, load_station, save_station
 
@@ -16,7 +15,7 @@ from thzdaq_core.station.storage import dump_station, load_station, save_station
 def capability_names(device) -> List[str]:
     return [
         c.__name__
-        for c in ALL_CAPABILITIES + DEVICE_PROTOCOLS
+        for c in ALL_CAPABILITIES
         if c is not Identifiable and isinstance(device, c)
     ]
 
@@ -43,6 +42,9 @@ def cmd_show(args) -> int:
         where = spec.connection.link_key if spec.connection else "-"
         sim = " [sim]" if spec.simulate else ""
         print(f"{instrument_id:30} {spec.driver:18} {where}{sim}  {spec.title}")
+        if spec.settings:
+            values = ", ".join(f"{k}={v}" for k, v in spec.settings.items())
+            print(f"  {'settings':28} {values}")
         for info in station.devices():
             if info.instrument != instrument_id or info.kind == "instrument":
                 continue

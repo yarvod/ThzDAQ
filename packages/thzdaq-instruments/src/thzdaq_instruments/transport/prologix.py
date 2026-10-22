@@ -23,6 +23,12 @@ class PrologixController:
             self.link.write_line("++savecfg 0")
             self._configured = True
 
+    def invalidate(self) -> None:
+        """After a reconnect: set the controller up and select the address again."""
+        with self.link.lock:
+            self._configured = False
+            self._address = None
+
     def select(self, address: int) -> None:
         with self.link.lock:
             self.setup()
@@ -44,6 +50,9 @@ class PrologixTransport(Transport):
         super().__init__(link, **kwargs)
         self.controller = controller
         self.address = address
+
+    def _after_reset(self) -> None:
+        self.controller.invalidate()
 
     def _write(self, command: str) -> None:
         self.controller.select(self.address)

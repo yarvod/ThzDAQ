@@ -28,6 +28,9 @@ class Procedure:
         "sis1": "sis_bias",
         "sis2": "sis_bias",
         "coil": "sis_coil",
+        # A switch slot takes a supply channel, not any device with an output
+        "if_selector": "channel",
+        "yig_power": "channel",
     }
     plots: ClassVar[Tuple[PlotSpec, ...]] = ()
     # Record tables: titles, and columns whose title/unit differ from KNOWN_COLUMNS

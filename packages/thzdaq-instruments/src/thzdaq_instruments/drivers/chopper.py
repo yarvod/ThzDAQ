@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentError
 from thzdaq_instruments.instrument import Instrument
+from thzdaq_instruments.quantities import CHOPPER_QUANTITIES
 from thzdaq_instruments.transport.base import MODBUS_TCP, ConnectionSpec
 from thzdaq_instruments.transport.modbus import (
     PymodbusRegisters,
@@ -55,6 +56,8 @@ class ModbusChopper(Instrument):
 
     Both sensors on = hot load in the beam, both off = cold load.
     """
+
+    quantities = CHOPPER_QUANTITIES
 
     def __init__(
         self,
@@ -108,6 +111,11 @@ class ModbusChopper(Instrument):
 
     def is_running(self) -> bool:
         return bool(self.motion_status() & 0b100)
+
+    def load_state(self) -> str:
+        """hot, cold, or between when the blade is half way."""
+        sensors = self.read_sensors()
+        return "hot" if sensors == HOT else "cold" if sensors == COLD else "between"
 
     def read_sensors(self) -> Sensors:
         """(left DI2, right DI3), True - sensor sees the hot load."""

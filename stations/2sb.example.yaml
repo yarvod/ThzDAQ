@@ -2,8 +2,9 @@
 # Check without hardware:  uv run thzdaq-station check stations/2sb.example.yaml --simulate
 #
 # Instrument ids name the kind of device; vendor and model are in driver and title.
-# Devices under an instrument are the parts you operate: SIS bias and coil on a
-# SIS block, an LO behind a multiplier, an IF switch on a supply channel.
+# Devices under an instrument are its parts you configure: SIS bias and coil on a
+# SIS block. Generators and supply channels are used as they are; the IF switch
+# and the YIG power channel are chosen in the 2SB measurements.
 version: 2
 name: 2sb
 description: Sideband separating SIS mixer bench
@@ -29,11 +30,9 @@ instruments:
     driver: agilent.e8247c
     title: LO generator
     connection: {kind: prologix, host: 169.254.156.103, gpib: 19}
-    devices:
-      lo_1:
-        kind: frequency_multiplier
-        title: LO x18
-        settings: {multiplier: 18}
+    # Set on the generator (:FREQ:MULT): frequencies are at the mixer, after x18
+    settings: {frequency_multiplier: 18}
+    sim_options: {max_frequency: 50.0e9}
   signal_generator_2:
     driver: agilent.e8247c
     title: Test tone generator
@@ -44,18 +43,10 @@ instruments:
     driver: rigol.dp832a
     title: IF switch supply
     connection: {kind: socket, host: 169.254.0.14, port: 5555}
-    devices:
-      if_switch_1:
-        kind: sideband_selector
-        channel: 2
-        title: IF sideband switch
-        settings: {upper_when_on: true}
   power_supply_2:
     driver: rs.hmp2030
     title: YIG supply
     connection: {kind: socket, host: 169.254.0.30, port: 5025}
-    devices:
-      yig_power_1: {kind: switch, channel: 2, title: YIG power}
   power_meter_1:
     driver: rs.nrx
     title: R&S NRX

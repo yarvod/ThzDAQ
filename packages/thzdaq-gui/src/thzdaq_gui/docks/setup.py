@@ -197,8 +197,10 @@ class InstrumentDialog(QDialog):
         self.registry = default_registry()
         form = QFormLayout()
         self.driver = QComboBox()
-        for info in sorted(self.registry.all(), key=lambda i: (i.simulated, i.title)):
-            self.driver.addItem(info.title, info.key)
+        # Real drivers only: simulation is the checkbox below (or --simulate)
+        for info in sorted(self.registry.all(), key=lambda i: i.title):
+            if not info.simulated:
+                self.driver.addItem(info.title, info.key)
         self.title = QLineEdit()
         self.title.setPlaceholderText("shown in menus and docks")
         self.ident = QLabel()
@@ -468,6 +470,80 @@ class InstrumentCard(QGroupBox):
         self.status.setStyleSheet(f"color: {color}")
 
 
+class ConnectionsGroup(QGroupBox):
+    """Shared connections (a Prologix, a single-client socket) with their state.
+
+    Reset breaks a command that hangs on the connection and reconnects; the
+    instruments on it go on with the next command.
+    """
+
+    def __init__(self, station, parent=None):
+        super().__init__("Connections", parent)
+        self.station = station
+        self.rows: Dict[tuple, QLabel] = {}
+        self.jobs = []
+        layout = QVBoxLayout(self)
+        header = QHBoxLayout()
+        note = QLabel("Shared by the instruments listed; Reset if one hangs")
+        note.setProperty("role", "muted")
+        refresh = QToolButton()
+        refresh.setIcon(theme.icon("refresh"))
+        refresh.setToolTip("Refresh the state")
+        refresh.clicked.connect(self.refresh)
+        header.addWidget(note, 1)
+        header.addWidget(refresh)
+        layout.addLayout(header)
+        for connection in station.connections():
+            row = QHBoxLayout()
+            label = QLabel(
+                f"<b>{connection.label}</b><br><span style='color:{theme.MUTED}'>"
+                f"{', '.join(connection.instruments)}</span>"
+            )
+            label.setWordWrap(True)
+            state = QLabel()
+            reset = compact_button("restart", "Reset")
+            reset.clicked.connect(lambda _=False, k=connection.key: self.reset(k))
+            row.addWidget(label, 1)
+            row.addWidget(state)
+            row.addWidget(reset)
+            layout.addLayout(row)
+            self.rows[connection.key] = state
+        self.refresh()
+
+    def refresh(self) -> None:
+        for connection in self.station.connections():
+            state = self.rows.get(connection.key)
+            if state is None:
+                continue
+            if connection.broken:
+                text, color = "error, reconnects", "#e57373"
+            elif connection.open:
+                text, color = "connected", "#81c784"
+            else:
+                text, color = "not connected", theme.MUTED
+            state.setText(text)
+            state.setStyleSheet(f"color: {color}")
+
+    def reset(self, key: tuple) -> None:
+        from thzdaq_gui.update_dialog import Background
+
+        self.rows[key].setText("resetting...")
+        station = self.station
+
+        def job(_task):
+            # Abort first: a command blocked on the link holds its lock
+            station.transport_pool.abort(key)
+            return station.reset_connection(key)
+
+        task = Background(job, self)
+        task.done.connect(lambda _: self.refresh())
+        task.failed.connect(
+            lambda message: self.rows[key].setText(f"failed: {message}")
+        )
+        self.jobs.append(task)
+        task.start()
+
+
 class SetupWidget(QWidget):
     """Profile, saved instruments and their devices."""
 
@@ -525,6 +601,10 @@ class SetupWidget(QWidget):
         container = QWidget()
         column = QVBoxLayout(container)
         self.cards = {}
+        self.connections = None
+        if station is not None and station.connections():
+            self.connections = ConnectionsGroup(station)
+            column.addWidget(self.connections)
         if station is not None:
             for instrument_id in station.config.instruments:
                 card = InstrumentCard(station, instrument_id)
@@ -642,6 +722,8 @@ class SetupWidget(QWidget):
             return identify() if callable(identify) else "opened"
 
         def done(identity):
+            if self.connections is not None:
+                self.connections.refresh()
             self.statuses[instrument_id] = (f"OK: {identity}", True)
             if instrument_id in self.cards:
                 self.cards[instrument_id].set_status(f"OK: {identity}", True)

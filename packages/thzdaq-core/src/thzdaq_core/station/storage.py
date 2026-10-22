@@ -1,5 +1,6 @@
 """Station profiles as plain dicts and YAML files (version 2; version 1 is migrated)."""
 
+import logging
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -11,8 +12,10 @@ from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.errors import StationError
 from thzdaq_core.station.config import DeviceConfig, InstrumentConfig, StationConfig
+from thzdaq_core.station.kinds import DROPPED_KINDS
 
 FORMAT_VERSION = 2
+logger = logging.getLogger(__name__)
 PathLike = Union[str, Path]
 
 
@@ -99,6 +102,7 @@ def station_to_dict(config: StationConfig) -> Dict[str, Any]:
             "simulate": spec.simulate,
             "sim_options": spec.sim_options,
             "metadata": spec.metadata,
+            "settings": spec.settings,
             "devices": {
                 device_id: device_to_dict(device)
                 for device_id, device in spec.devices.items()
@@ -125,7 +129,7 @@ def _known_keys(section: str, data: Dict[str, Any], allowed: List[str]):
 
 INSTRUMENT_KEYS = [
     "driver", "title", "connection", "options", "simulate", "sim_options",
-    "metadata", "devices",
+    "metadata", "settings", "devices",
 ]  # fmt: skip
 DEVICE_KEYS = ["kind", "channel", "title", "settings", "metadata"]
 
@@ -151,6 +155,7 @@ def station_from_dict(data: Dict[str, Any]) -> StationConfig:
         data = migrate_v1(data)
     elif version != FORMAT_VERSION:
         raise StationError(f"Unsupported station profile version {version}")
+    data = drop_old_kinds(data)
     _known_keys("station", data, ["version", "name", "description", "instruments"])
     instruments = {}
     for instrument_id, item in (data.get("instruments") or {}).items():
@@ -166,6 +171,7 @@ def station_from_dict(data: Dict[str, Any]) -> StationConfig:
             sim_options=dict(item.get("sim_options") or {}),
             title=item.get("title", ""),
             metadata=dict(item.get("metadata") or {}),
+            settings=dict(item.get("settings") or {}),
             devices={
                 device_id: device_from_dict(device_id, device)
                 for device_id, device in (item.get("devices") or {}).items()
@@ -183,6 +189,41 @@ V1_ADAPTERS = {
     "sideband_selector": "sideband_selector",
     "switch": "switch",
 }
+
+
+def drop_old_kinds(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Devices of kinds that were dropped: a measurement chooses them now.
+
+    An LO multiplier device becomes the generator's frequency_multiplier
+    setting; IF switch and switch devices go (their channel is picked in the
+    measurement).
+    """
+    instruments = {}
+    for instrument_id, item in (data.get("instruments") or {}).items():
+        item = dict(item)
+        devices = {}
+        for device_id, device in (item.get("devices") or {}).items():
+            kind = (device or {}).get("kind")
+            if kind not in DROPPED_KINDS:
+                devices[device_id] = device
+                continue
+            if kind == "frequency_multiplier":
+                multiplier = (device.get("settings") or {}).get("multiplier")
+                if multiplier is not None:
+                    item.setdefault("settings", {})["frequency_multiplier"] = multiplier
+                logger.warning(
+                    f"{instrument_id}: multiplier device {device_id!r} became the "
+                    f"generator setting frequency_multiplier={multiplier}"
+                )
+            else:
+                logger.warning(
+                    f"{instrument_id}: device {device_id!r} ({kind}) is no longer "
+                    "a device; choose the channel in the measurement"
+                )
+        if "devices" in item:
+            item["devices"] = devices
+        instruments[instrument_id] = item
+    return {**data, "instruments": instruments}
 
 
 def migrate_v1(data: Dict[str, Any]) -> Dict[str, Any]:

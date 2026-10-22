@@ -19,7 +19,6 @@ from thzdaq_core.measurements.procedures import (
     TwoSbOptimization,
     YFactorVoltage,
 )
-from thzdaq_core.station import ScaledFrequencySource, SidebandSelector
 from thzdaq_instruments.sim import (
     SimChopper,
     SimNetworkAnalyzer,
@@ -45,9 +44,10 @@ class Bench:
 
     def __init__(self):
         self.chopper = SimChopper()
+        # IF switch: a supply channel, output on = upper sideband (the default)
         self.switch = SimPowerSupply().channel(2)
-        self.selector = SidebandSelector(self.switch, upper_when_on=True)
-        self.lo = ScaledFrequencySource(SimSignalGenerator(max_frequency=50e9), 18)
+        # LO generator with its x18 multiplier set: frequencies at the mixer
+        self.lo = SimSignalGenerator(max_frequency=50e9, frequency_multiplier=18)
         self.tone = SimSignalGenerator(max_frequency=400e9)
         self.lo.set_frequency(LO)
         block = SimSisBlock()
@@ -57,7 +57,7 @@ class Bench:
             "bias": block.channel("DEV4"),
             "lo": self.lo,
             "test_tone": self.tone,
-            "if_selector": self.selector,
+            "if_selector": self.switch,
             "detector": SimPowerMeter(model=self.power),
             "if_filter": SimYigFilter().channel("yig_1"),
             "load": self.chopper,
@@ -68,7 +68,7 @@ class Bench:
         }
 
     def power(self) -> float:
-        channel = self.selector.selected()
+        channel = "upper" if self.switch.get_output() else "lower"
         if self.tone.get_output():
             tone_side = (
                 "upper"
@@ -298,3 +298,17 @@ def test_all_registered_procedures_have_valid_defaults():
         assert procedure.estimate_steps() > 0
         for spec in procedure.plots:
             assert spec.table and spec.x and spec.y
+
+
+def test_if_switch_polarity_is_a_parameter():
+    """With upper_when_on=False the same channel off routes the upper sideband."""
+    bench = Bench()
+    procedure = TwoSbNoise(
+        frequency=(4e9, 5e9, 2), channels="upper", upper_when_on=False, set_lo=False,
+        **FAST_NOISE,
+    )  # fmt: skip
+    seen = []
+    original = bench.switch.set_output
+    bench.switch.set_output = lambda value: (seen.append(value), original(value))
+    run(procedure, bench)
+    assert seen and seen[0] is False

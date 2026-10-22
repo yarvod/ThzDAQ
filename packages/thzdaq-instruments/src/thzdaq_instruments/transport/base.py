@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -5,7 +6,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import Callable, Iterator, Optional
 
-from thzdaq_instruments.errors import ConfigurationError, InstrumentConnectionError
+from thzdaq_instruments.errors import (
+    ConfigurationError,
+    InstrumentConnectionError,
+    InstrumentTimeoutError,
+)
+
+logger = logging.getLogger(__name__)
 
 SOCKET = "socket"
 SERIAL = "serial"
@@ -90,6 +97,26 @@ class Link(ABC):
     def __init__(self):
         # Reentrant: a transport holds it for a whole query or transaction
         self.lock = threading.RLock()
+        # Set after a timeout or a lost connection: the next use reconnects, so a
+        # late answer is never read as the answer to the next command
+        self.broken = False
+
+    def reset(self) -> None:
+        """Reconnect: close, open, drop whatever was buffered."""
+        self.close()
+        self.open()
+        self.broken = False
+
+    def abort(self) -> None:
+        """Break a read blocked in another thread; the next use reconnects.
+
+        Does not take the lock on purpose: the blocked thread holds it.
+        """
+        self.broken = True
+        self._abort()
+
+    def _abort(self) -> None:
+        pass
 
     @property
     @abstractmethod
@@ -139,19 +166,38 @@ class Transport(ABC):
         if self._closed:
             raise InstrumentConnectionError("Transport is closed")
 
+    def _prepare(self) -> None:
+        self._check_open()
+        if self.link.broken:
+            logger.warning(f"{self.link!r}: reconnecting after an error")
+            self.link.reset()
+            self._after_reset()
+
+    def _after_reset(self) -> None:
+        """Re-establish what the link state held (Prologix setup, address)."""
+
+    @contextmanager
+    def _guarded(self):
+        try:
+            yield
+        except (InstrumentTimeoutError, InstrumentConnectionError):
+            if not self._closed:  # this transport closed: the shared link is fine
+                self.link.broken = True
+            raise
+
     def write(self, command: str) -> None:
-        with self.link.lock:
-            self._check_open()
+        with self.link.lock, self._guarded():
+            self._prepare()
             self._write(command)
 
     def read(self) -> str:
-        with self.link.lock:
-            self._check_open()
+        with self.link.lock, self._guarded():
+            self._prepare()
             return self._read()
 
     def query(self, command: str) -> str:
-        with self.link.lock:
-            self._check_open()
+        with self.link.lock, self._guarded():
+            self._prepare()
             self._write(command)
             if self.read_delay:
                 time.sleep(self.read_delay)
@@ -160,8 +206,8 @@ class Transport(ABC):
     @contextmanager
     def transaction(self) -> Iterator["Transport"]:
         """Keep the link for several commands that must not be interleaved."""
-        with self.link.lock:
-            self._check_open()
+        with self.link.lock, self._guarded():
+            self._prepare()
             yield self
 
     def close(self) -> None:

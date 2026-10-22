@@ -7,9 +7,9 @@ from thzdaq_instruments import default_registry
 from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.instrument import Instrument
-from thzdaq_instruments.quantities import Quantity, quantities_for
+from thzdaq_instruments.quantities import Quantity, quantities_for, quantities_of
 from thzdaq_instruments.registry import DriverRegistry
-from thzdaq_instruments.transport.pool import TransportPool
+from thzdaq_instruments.transport.pool import TransportPool, default_pool
 
 from thzdaq_core.data.measurement import DeviceUse
 from thzdaq_core.errors import StationError
@@ -49,6 +49,26 @@ class DeviceInfo:
 
     def provides(self, capabilities: Capabilities) -> bool:
         return all(c in self.capabilities for c in _as_tuple(capabilities))
+
+
+@dataclass(frozen=True)
+class ConnectionInfo:
+    """A physical connection several instruments may share (a Prologix, a socket)."""
+
+    key: tuple
+    label: str
+    instruments: Tuple[str, ...]  # titles
+    open: bool
+    broken: bool
+
+
+KIND_LABELS = {
+    "socket": "Socket",
+    "prologix": "Prologix",
+    "prologix_usb": "Prologix USB",
+    "serial": "Serial",
+    "visa": "VISA",
+}
 
 
 class Station:
@@ -123,8 +143,17 @@ class Station:
                 simulate=simulate,
                 **(spec.sim_options if simulate else spec.options),
             )
+            if simulate or self.registry.get(spec.driver).simulated:
+                self._apply_settings(instrument, spec.settings)
             self._instruments[instrument_id] = instrument
             return instrument
+
+    @staticmethod
+    def _apply_settings(instrument: Instrument, settings: Dict[str, Any]) -> None:
+        """A simulator starts configured as the profile says (a real one is not touched)."""
+        for quantity in quantities_of(instrument):
+            if quantity.persistent and quantity.settable and quantity.key in settings:
+                quantity.write(instrument, settings[quantity.key])
 
     def is_open(self, instrument_id: str) -> bool:
         return instrument_id in self._instruments
@@ -149,6 +178,60 @@ class Station:
     @property
     def opened(self) -> Tuple[str, ...]:
         return tuple(self._instruments)
+
+    # Connections
+    @property
+    def transport_pool(self) -> TransportPool:
+        return self.pool or default_pool
+
+    def connections(self) -> List[ConnectionInfo]:
+        """Shared connections of the profile and their state (open, broken)."""
+        status = {link.key: link for link in self.transport_pool.links()}
+        users: Dict[tuple, List[str]] = {}
+        labels: Dict[tuple, str] = {}
+        for instrument_id, spec in self.config.instruments.items():
+            connection = spec.connection
+            if connection is None or not connection.is_message_based:
+                continue
+            if self.simulated(instrument_id):
+                continue
+            key = connection.link_key
+            users.setdefault(key, []).append(spec.title or instrument_id)
+            where = connection.host or connection.serial_port or connection.resource
+            port = f":{connection.port}" if connection.host and connection.port else ""
+            labels[
+                key
+            ] = f"{KIND_LABELS.get(connection.kind, connection.kind)} {where}{port}"
+        return [
+            ConnectionInfo(
+                key, labels[key], tuple(names),
+                key in status and status[key].open,
+                key in status and status[key].broken,
+            )
+            for key, names in users.items()
+        ]  # fmt: skip
+
+    def reset_connection(self, key: tuple) -> bool:
+        return self.transport_pool.reset(key)
+
+    def abort(self, refs) -> None:
+        """Break commands blocked on the connections of these devices.
+
+        Shared connections are aborted (the next command reconnects); drivers
+        with their own connection (HTTP, Modbus) are closed and reopen on use.
+        """
+        instruments = set()
+        for ref in refs:
+            try:
+                instruments.add(self.info(ref).instrument)
+            except StationError:
+                continue
+        for instrument_id in instruments:
+            connection = self._spec(instrument_id).connection
+            if connection is not None and connection.is_message_based:
+                self.transport_pool.abort(connection.link_key)
+            elif instrument_id in self._instruments:
+                self.close_instrument(instrument_id)
 
     # Devices
     def _owner(self, ref: str) -> Optional[str]:

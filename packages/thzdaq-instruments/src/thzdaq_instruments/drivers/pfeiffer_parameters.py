@@ -1,4 +1,6 @@
-"""Pfeiffer Vacuum protocol parameters: number, name, data type, access, description.
+"""DISABLED: not imported or registered; kept for the rewrite of the Pfeiffer driver.
+
+Pfeiffer Vacuum protocol parameters: number, name, data type, access, description.
 
 Generated from the legacy settings.PFEIFFER_PARAMETERS; 340 is u_expo_new (was 7).
 """

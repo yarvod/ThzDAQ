@@ -6,12 +6,8 @@ from thzdaq_core.errors import StationError
 from thzdaq_core.station import (
     DeviceConfig,
     InstrumentConfig,
-    ScaledFrequencySource,
-    SidebandSelector,
-    SidebandSwitch,
     Station,
     StationConfig,
-    SwitchPort,
     dump_station,
     kinds_for,
     load_station,
@@ -47,10 +43,10 @@ LAB = Path(__file__).parents[3] / "stations" / "lab.yaml"
 TWO_SB_DEVICES = {
     "sis1": "sis_bias_1",
     "sis2": "sis_bias_2",
-    "lo": "lo_1",
+    "lo": "signal_generator_1",
     "test_tone": "signal_generator_2",
-    "if_selector": "if_switch_1",
-    "yig_power": "yig_power_1",
+    "if_selector": "power_supply_1:2",
+    "yig_power": "power_supply_2:2",
     "detector": "power_meter_1",
     "if_filter": "yig_filter_1:yig_1",
     "load": "chopper_1",
@@ -61,7 +57,7 @@ TWO_SB_REQUIREMENTS = {
     "sis2": (VoltageSource, VoltageCurrentMeter),
     "lo": (FrequencySource, Switchable, PowerLevel),
     "test_tone": (FrequencySource, Switchable),
-    "if_selector": SidebandSwitch,
+    "if_selector": Switchable,
     "yig_power": Switchable,
     "detector": PowerDetector,
     "if_filter": TunableFilter,
@@ -84,33 +80,6 @@ def sim_station(**devices) -> StationConfig:
     return StationConfig(name="bench", instruments=instruments)
 
 
-class TestPorts:
-    def test_switch_port_inverts(self):
-        channel = SimPowerSupply().channel(1)
-        port = SwitchPort(channel, inverted=True)
-        port.set_output(True)
-        assert channel.get_output() is False and port.get_output() is True
-
-    def test_scaled_frequency_keeps_other_abilities(self):
-        generator = SimSignalGenerator()
-        lo = ScaledFrequencySource(generator, multiplier=18)
-        lo.set_frequency(223e9)
-        assert generator.get_frequency() == pytest.approx(223e9 / 18)
-        assert lo.get_frequency() == pytest.approx(223e9)
-        lo.set_output(True)  # delegated to the generator
-        assert generator.get_output() and isinstance(lo, Switchable)
-
-    def test_sideband_selector(self):
-        channel = SimPowerSupply().channel(2)
-        selector = SidebandSelector(channel, upper_when_on=False)
-        selector.select("upper")
-        assert channel.get_output() is False and selector.selected() == "upper"
-        selector.select("lower")
-        assert channel.get_output() is True
-        with pytest.raises(StationError):
-            selector.select("middle")
-
-
 class TestKinds:
     def test_kinds_per_driver(self):
         sis = kinds_for(SimSisBlock)
@@ -119,19 +88,16 @@ class TestKinds:
         assert [p.name for p in sis["sis_bias"].settings] == [
             "offset_voltage", "offset_current",
         ]  # fmt: skip
-        supply = kinds_for(SimPowerSupply)
-        assert set(supply) == {"sideband_selector", "switch"}
-        assert supply["switch"].needs_channel and supply["switch"].keys == (1, 2, 3)
-        generator = kinds_for(SimSignalGenerator)
-        assert not generator["frequency_multiplier"].needs_channel
+        # A generator is one device, supply channels are used as they are
+        assert kinds_for(SimPowerSupply) == {} and kinds_for(SimSignalGenerator) == {}
 
     def test_settings_are_validated(self):
-        kind = kinds_for(SimSignalGenerator)["frequency_multiplier"]
-        assert kind.clean({}) == {"multiplier": 1.0}
+        kind = kinds_for(SimSisBlock)["sis_bias"]
+        assert kind.clean({}) == {"offset_voltage": 0.0, "offset_current": 0.0}
         with pytest.raises(StationError, match="unknown settings"):
-            kind.clean({"factor": 2})
-        with pytest.raises(StationError, match="multiplier"):
-            kind.clean({"multiplier": "much"})
+            kind.clean({"offset": 2})
+        with pytest.raises(StationError, match="offset_voltage"):
+            kind.clean({"offset_voltage": "much"})
 
 
 class TestStation:
@@ -139,17 +105,16 @@ class TestStation:
         config = sim_station(
             sis_bias_1={"on": "sis", "kind": "sis_bias", "channel": "DEV4", "title": "b1d4"},
             sis_coil_1={"on": "sis", "kind": "sis_coil", "channel": "DEV3"},
-            if_switch_1={"on": "supply", "kind": "sideband_selector", "channel": 2},
         )  # fmt: skip
         station = Station(config)
         refs = {info.ref: info for info in station.devices()}
         assert list(refs) == [
-            "supply", "supply:1", "supply:2", "supply:3", "if_switch_1",
+            "supply", "supply:1", "supply:2", "supply:3",
             "generator", "sis", "sis_bias_1", "sis_coil_1",
         ]  # fmt: skip
         assert refs["sis_bias_1"].title == "b1d4" and refs["supply:2"].kind == "channel"
         assert refs["sis_coil_1"].provides(CurrentSource)
-        assert refs["if_switch_1"].provides(SidebandSwitch)
+        assert refs["supply:2"].provides(Switchable)
         assert [i.ref for i in station.find(PowerLevel)] == ["generator"]
         assert station.opened == ()
 
@@ -157,18 +122,14 @@ class TestStation:
         config = sim_station(
             sis_bias_1={"on": "sis", "kind": "sis_bias", "channel": "DEV4"},
             sis_bias_2={"on": "sis", "kind": "sis_bias", "channel": "DEV2"},
-            lo_1={
-                "on": "generator",
-                "kind": "frequency_multiplier",
-                "settings": {"multiplier": 18},
-            },
         )
+        config.instruments["generator"].settings = {"frequency_multiplier": 18}
         with Station(config) as station:
             assert station["sis_bias_1"] is station.device("sis_bias_1")
             assert station["sis_bias_1"].instrument is station["sis_bias_2"].instrument
             assert station.opened == ("sis",)
-            station["lo_1"].set_frequency(18e9)
-            assert station.instrument("generator").get_frequency() == pytest.approx(1e9)
+            # A simulator starts configured as the profile says
+            assert station["generator"].get_frequency_multiplier() == 18
             assert station["supply:3"] is station.instrument("supply").channel(3)
         assert station.opened == ()
 
@@ -206,17 +167,15 @@ class TestStation:
                 station.device("supply:9")
 
     def test_require_reports_all_problems(self):
-        config = sim_station(
-            if_switch_1={"on": "supply", "kind": "sideband_selector", "channel": 2}
-        )
+        config = sim_station()
         with Station(config) as station:
             found = station.require(
-                {"if_selector": "if_switch_1"}, {"if_selector": SidebandSwitch}
+                {"if_selector": "supply:2"}, {"if_selector": Switchable}
             )
             assert set(found) == {"if_selector"}
             with pytest.raises(StationError) as error:
                 station.require(
-                    {"if_selector": "if_switch_1", "detector": "generator"},
+                    {"if_selector": "supply:2", "detector": "generator"},
                     {
                         "if_selector": Switchable,
                         "detector": PowerDetector,
@@ -228,7 +187,7 @@ class TestStation:
             assert "no device chosen for 'load'" in message
 
     def test_validation(self):
-        config = sim_station(sis={"on": "generator", "kind": "frequency_multiplier"})
+        config = sim_station(sis={"on": "sis", "kind": "sis_bias", "channel": "DEV1"})
         with pytest.raises(StationError, match="used twice"):
             config.validate()
         with pytest.raises(StationError):
@@ -257,18 +216,54 @@ class TestStation:
         rigol = InstrumentConfig(
             "rigol.dp832a", ConnectionSpec(SOCKET, host="h", port=5555)
         )
-        rigol.devices["if_switch_1"] = DeviceConfig("sideband_selector", channel=2)
         station = Station(StationConfig("bench", {"rigol": rigol}), pool=pool)
-        assert station["if_switch_1"].selected() == "upper"
+        assert station["rigol:2"].get_output() is True
         assert station.snapshot()["identities"] == {
             "rigol": "RIGOL TECHNOLOGIES,DP832A"
         }
-        use = station.device_use("if_switch_1")
+        use = station.device_use("rigol:2")
         assert (use.driver, use.kind, use.instrument) == (
-            "rigol.dp832a", "sideband_selector", "rigol",
+            "rigol.dp832a", "channel", "rigol",
         )  # fmt: skip
         station.close()
         assert pool.open_links == 0
+
+    def test_connections_reset_and_abort(self):
+        pool = TransportPool(
+            lambda spec: FakeLink({"*IDN?": "RIGOL", ":OUTP? CH1": "OFF"})
+        )
+        gpib = dict(host="10.0.0.3", port=1234)
+        config = StationConfig(
+            "bench",
+            instruments={
+                "rigol": InstrumentConfig(
+                    "rigol.dp832a", ConnectionSpec(SOCKET, host="h", port=5555),
+                    title="Rigol",
+                ),
+                "gen_1": InstrumentConfig(
+                    "agilent.e8247c", ConnectionSpec("prologix", gpib=19, **gpib),
+                    title="LO",
+                ),
+                "gen_2": InstrumentConfig(
+                    "agilent.e8247c", ConnectionSpec("prologix", gpib=18, **gpib),
+                    title="Tone",
+                ),
+                "chopper": InstrumentConfig("sim.chopper"),
+            },
+        )  # fmt: skip
+        with Station(config, pool=pool) as station:
+            connections = {c.label: c for c in station.connections()}
+            assert set(connections) == {"Socket h:5555", "Prologix 10.0.0.3:1234"}
+            assert connections["Prologix 10.0.0.3:1234"].instruments == ("LO", "Tone")
+            assert not connections["Socket h:5555"].open
+            station["rigol:1"].get_output()
+            rigol = next(c for c in station.connections() if c.label == "Socket h:5555")
+            assert rigol.open and not rigol.broken
+            station.abort(["rigol:1", "chopper"])
+            assert next(c for c in station.connections() if c.key == rigol.key).broken
+            assert station["rigol:1"].get_output() is False  # reconnected
+            assert station.reset_connection(rigol.key)
+            assert "chopper" not in station.opened  # own connection: closed
 
     def test_simulate_uses_sim_options(self):
         config = StationConfig(
@@ -311,10 +306,10 @@ class TestStorage:
     def test_example_profile_runs_simulated_2sb_bench(self):
         with Station.load(EXAMPLE, simulate=True) as station:
             found = station.require(TWO_SB_DEVICES, TWO_SB_REQUIREMENTS)
-            found["lo"].set_frequency(223e9)
-            generator = station.instrument("signal_generator_1")
-            assert generator.get_frequency() == pytest.approx(223e9 / 18)
-            found["if_selector"].select("lower")
+            found["lo"].set_frequency(223e9)  # at the mixer: the generator multiplies
+            assert found["lo"].get_frequency_multiplier() == 18
+            assert found["lo"].get_frequency() == pytest.approx(223e9)
+            found["if_selector"].set_output(False)
             found["load"].to_hot()
             assert isinstance(found["detector"].read_power(), float)
             assert found["sis1"].offset_voltage == pytest.approx(3.3e-5)
@@ -337,11 +332,13 @@ class TestStorage:
 
     def test_short_files_and_channel_zero(self):
         gen = InstrumentConfig("sim.signal_generator")
-        gen.devices["lo_1"] = DeviceConfig("frequency_multiplier", channel=0)
+        gen.devices["coil_1"] = DeviceConfig("sis_coil", channel=0)
+        gen.settings = {"frequency_multiplier": 18}
         data = station_to_dict(StationConfig("bench", {"gen": gen}))
         assert data["instruments"]["gen"] == {
             "driver": "sim.signal_generator",
-            "devices": {"lo_1": {"kind": "frequency_multiplier", "channel": 0}},
+            "settings": {"frequency_multiplier": 18},
+            "devices": {"coil_1": {"kind": "sis_coil", "channel": 0}},
         }
         assert data["version"] == 2
 
@@ -377,8 +374,31 @@ class TestStorage:
         assert devices["sis1"].settings == {"offset_voltage": 1e-5}
         assert devices["sis1"].metadata == {"calibration_coefficients": {"a": 1}}
         assert devices["sis1_ctrl"].kind == "sis_coil"
-        assert config.instruments["gen"].devices["lo"].settings == {"multiplier": 18}
+        assert config.instruments["gen"].devices == {}
+        assert config.instruments["gen"].settings == {"frequency_multiplier": 18}
         assert config.instruments["nrx"].devices == {}
+
+    def test_dropped_kinds_of_version_2(self, caplog):
+        config = station_from_dict(
+            {
+                "instruments": {
+                    "gen": {
+                        "driver": "agilent.e8247c",
+                        "devices": {"lo_1": {"kind": "frequency_multiplier",
+                                             "settings": {"multiplier": 18}}},
+                    },
+                    "supply": {
+                        "driver": "rigol.dp832a",
+                        "devices": {"if_1": {"kind": "sideband_selector", "channel": 2},
+                                    "yig_1": {"kind": "switch", "channel": 1}},
+                    },
+                }
+            }
+        )  # fmt: skip
+        assert config.instruments["gen"].settings == {"frequency_multiplier": 18}
+        assert config.instruments["gen"].devices == {}
+        assert config.instruments["supply"].devices == {}
+        assert "choose the channel in the measurement" in caplog.text
 
     @pytest.mark.parametrize(
         "data, message",

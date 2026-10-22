@@ -87,14 +87,17 @@ class TestCli:
     def test_show(self, capsys):
         assert main(["show", str(EXAMPLE)]) == 0
         out = capsys.readouterr().out
-        assert "signal_generator_1" in out and "frequency_multiplier" in out
-        assert "LO x18" in out and "Identifiable" not in out
+        assert "signal_generator_1" in out and "frequency_multiplier=18" in out
+        assert "sis_bias_1" in out and "Identifiable" not in out
 
     def test_check_simulated(self, capsys):
-        args = ["check", str(EXAMPLE), "--simulate", "--devices", "lo_1", "chopper_1"]
+        args = [
+            "check", str(EXAMPLE), "--simulate", "--devices", "signal_generator_1",
+            "chopper_1",
+        ]  # fmt: skip
         assert main(args) == 0
         out = capsys.readouterr().out
-        assert "ok   lo_1: Switchable, FrequencySource, PowerLevel" in out
+        assert "ok   signal_generator_1: Switchable, FrequencySource, PowerLevel" in out
         assert "ok   chopper_1: LoadSwitch" in out
 
     def test_check_reports_failures(self, tmp_path, capsys):

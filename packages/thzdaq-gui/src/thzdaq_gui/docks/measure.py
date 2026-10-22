@@ -8,7 +8,7 @@ device docks with the device fixed (I-V of this SIS bias).
 import json
 from typing import Dict, Mapping, Optional, Type
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -30,6 +30,9 @@ from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_gui import theme
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
 from thzdaq_gui.settings import settings
+
+# A start or a stop that takes this long is treated as a hung device
+STUCK_AFTER_MS = 5000
 
 
 class ProcedureBox(QWidget):
@@ -72,10 +75,20 @@ class ProcedureBox(QWidget):
         self.btnStart.clicked.connect(self.start)
         self.btnStop = QPushButton(theme.icon("stop"), "Stop")
         self.btnStop.setEnabled(False)
-        self.btnStop.clicked.connect(self.runner.cancel)
+        self.btnStop.clicked.connect(self.stop)
+        self.btnAbort = QPushButton(theme.icon("lan-disconnect"), "Abort")
+        self.btnAbort.setToolTip(
+            "The measurement waits for a device that does not answer: break the "
+            "connections of its devices (they reconnect on the next command)"
+        )
+        self.btnAbort.clicked.connect(self.abort)
         row.addWidget(self.btnStart)
         row.addWidget(self.btnStop)
+        row.addWidget(self.btnAbort)
         layout.addLayout(row)
+        self.state = QLabel("Idle")
+        self.state.setProperty("role", "muted")
+        layout.addWidget(self.state)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
@@ -92,6 +105,12 @@ class ProcedureBox(QWidget):
         self.runner.failed.connect(self.on_failed)
         self.runner.finished.connect(self.on_finished)
         self.runner.running_changed.connect(self.on_running)
+        self.btnAbort.hide()
+        self.ui_running = False
+        # The thread may end without telling (it should not); the dock checks
+        self.watchdog = QTimer(self)
+        self.watchdog.setInterval(1000)
+        self.watchdog.timeout.connect(self.check_thread)
         session.station_changed.connect(self.refresh_devices)
         session.config_changed.connect(self.refresh_devices)
         self.form.changed.connect(self.refresh_devices)
@@ -142,6 +161,13 @@ class ProcedureBox(QWidget):
 
     # Running
     def start(self) -> None:
+        if self.runner.running:
+            QMessageBox.warning(
+                self,
+                "Measurement",
+                "It is still running: Stop it, or Abort if it hangs",
+            )
+            return
         if self.session.station is None:
             QMessageBox.warning(self, "Measurement", "Open a station profile first")
             return
@@ -157,6 +183,8 @@ class ProcedureBox(QWidget):
             return
         self.remember(procedure)
         self.log.clear()
+        self.state.setText("Connecting to devices...")
+        QTimer.singleShot(STUCK_AFTER_MS, self.offer_abort)
         self.progress.setRange(0, procedure.estimate_steps() or 0)
         self.progress.setValue(0)
         self.runner.start(
@@ -167,8 +195,33 @@ class ProcedureBox(QWidget):
             self.comment.text(),
         )
 
+    def stop(self) -> None:
+        self.runner.cancel()
+        self.state.setText("Stopping...")
+        QTimer.singleShot(STUCK_AFTER_MS, self.offer_abort)
+
+    def offer_abort(self) -> None:
+        """Still waiting after a while: a device probably hangs."""
+        if self.ui_running and self.state.text() != "Running":
+            self.state.setText(
+                f"{self.state.text()} no answer, Abort breaks the connections"
+            )
+            self.btnAbort.show()
+
+    def abort(self) -> None:
+        self.runner.cancel()
+        if self.session.station is not None:
+            self.session.station.abort(self.mapping().values())
+        self.log.appendPlainText("aborted: connections of the devices were broken")
+
+    def check_thread(self) -> None:
+        if self.ui_running and not self.runner.running:
+            self.log.appendPlainText("the measurement thread has ended")
+            self.on_running(False)
+
     def on_started(self, measurement) -> None:
         self.measurement = measurement
+        self.state.setText("Running")
         self.log.appendPlainText(f"started {measurement.id}")
         for spec in self.procedure_class.plots:
             self.hub.raise_graph(spec.title)
@@ -200,6 +253,13 @@ class ProcedureBox(QWidget):
             self.progress.setValue(1)
 
     def on_running(self, running: bool) -> None:
+        self.ui_running = running
+        if running:
+            self.watchdog.start()
+        else:
+            self.watchdog.stop()
+            self.btnAbort.hide()
+            self.state.setText("Idle")
         self.btnStart.setEnabled(not running)
         self.btnStop.setEnabled(running)
         self.parameters_box.setEnabled(not running)

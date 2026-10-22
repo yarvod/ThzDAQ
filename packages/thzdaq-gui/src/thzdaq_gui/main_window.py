@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import PySide6QtAds as QtAds
-from PySide6.QtCore import QSettings, QSignalBlocker
+from PySide6.QtCore import QSettings, QSignalBlocker, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
@@ -29,7 +29,7 @@ from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
 from thzdaq_gui.docks.data import DataWidget
-from thzdaq_gui.docks.devices import DeviceWidget
+from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PERSPECTIVE = "Default"
 AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
+DEVICE_HANG_S = 5.0
 STATE_VERSION = 3
 
 PROCEDURE_ICONS = {
@@ -64,6 +65,8 @@ def configure_docking() -> None:
     manager.setConfigFlag(manager.DockAreaHasTabsMenuButton, True)
     manager.setConfigFlag(manager.FloatingContainerHasWidgetIcon, True)
     manager.setConfigFlag(manager.AllTabsHaveCloseButton, True)
+    # The close button of a tab group closes its current tab, not the whole group
+    manager.setConfigFlag(manager.DockAreaCloseButtonClosesTab, True)
     manager.setAutoHideConfigFlags(QtAds.CDockManager.DefaultAutoHideConfig)
     provider = manager.iconProvider()
     for which, name in (
@@ -105,6 +108,8 @@ class MainWindow(QMainWindow):
         self.dock_manager = QtAds.CDockManager(self)
         self.dock_manager.setStyleSheet(theme.dock_style_sheet())
         self.docks: Dict[str, QtAds.CDockWidget] = {}
+        self.menu_actions: Dict[str, QAction] = {}
+        self.dock_signatures: Dict[str, tuple] = {}
         self.hub = GraphHub(self)
         self.hub.add_curve_request = self.add_curve
         self.hub.graph_created.connect(self.add_graph_dock)
@@ -115,6 +120,10 @@ class MainWindow(QMainWindow):
         self.stationLabel = QLabel()
         self.statusBar().addPermanentWidget(self.stationLabel)
         session.worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
+        # Manual control runs in one thread: tell when a device keeps it waiting
+        self.hangWatch = QTimer(self)
+        self.hangWatch.timeout.connect(self.check_device_worker)
+        self.hangWatch.start(2000)
 
         self.add_base_docks()
         for cls in list_procedures():
@@ -233,18 +242,37 @@ class MainWindow(QMainWindow):
         if icon is not None:
             dock.setIcon(icon)
         dock.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, False)
-        action = dock.toggleViewAction()
-        action.setText(title)
-        if icon is not None:
-            action.setIcon(icon)
+        dock.toggleViewAction().setText(title)
+        # Menus show a check mark: a checkable action with an icon draws no check
+        action = QAction(title, self)
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked, n=name: self.menu_toggled(n, checked))
+        dock.viewToggled.connect(action.setChecked)
         menu.addAction(action)
+        self.menu_actions[name] = action
         if auto_hide is not None:
             container = self.dock_manager.addAutoHideDockWidget(auto_hide, dock)
             container.setSize(AUTO_HIDE_SIZES.get(name, 420))
         else:
             self.dock_manager.addDockWidgetTab(area or QtAds.CenterDockWidgetArea, dock)
         self.docks[name] = dock
+        action.setChecked(not dock.isClosed())
         return dock
+
+    def menu_toggled(self, name: str, checked: bool) -> None:
+        """Open a closed dock; a dock hidden behind another tab is brought to front."""
+        dock = self.docks.get(name)
+        if dock is None:
+            return
+        if dock.isClosed():
+            dock.toggleView(True)
+            dock.setAsCurrentTab()
+        elif not dock.isCurrentTab():
+            dock.setAsCurrentTab()
+            dock.raise_()
+        else:
+            dock.toggleView(False)
+        self.menu_actions[name].setChecked(not dock.isClosed())
 
     def remove_dock(self, name: str) -> None:
         dock = self.docks.pop(name, None)
@@ -259,7 +287,8 @@ class MainWindow(QMainWindow):
             self.menuGraphs,
             self.menuBase,
         ):
-            menu.removeAction(dock.toggleViewAction())
+            menu.removeAction(self.menu_actions.get(name))
+        self.menu_actions.pop(name, None)
         self.dock_manager.removeDockWidget(dock)
         dock.deleteLater()
 
@@ -326,8 +355,31 @@ class MainWindow(QMainWindow):
         station = self.session.station
         if station is None:
             return []
-        # Fixed channels live inside their instrument's dock
-        return [info for info in station.devices() if info.kind != "channel"]
+        # Fixed channels live inside their instrument's dock; an instrument with
+        # nothing to show (a SIS block: its parts are devices) gets no dock
+        return [
+            info
+            for info in station.devices()
+            if info.kind != "channel" and has_content(station, info)
+        ]
+
+    def dock_signature(self, info) -> tuple:
+        """What a device dock is built from; it is rebuilt only when this changes.
+
+        Instrument settings (multiplier, OEM head) are left out: the dock writes
+        them itself and must survive saving them.
+        """
+        station = self.session.station
+        spec = station.config.instruments[info.instrument]
+        found = station.config.find_device(info.ref)
+        device = found[1] if found else None
+        return (
+            info,
+            spec.driver,
+            spec.title,
+            spec.simulate or self.session.simulate,
+            repr(device),
+        )
 
     def sync_device_docks(self, *_) -> None:
         wanted = {f"device:{info.ref}": info for info in self.device_refs()}
@@ -335,14 +387,19 @@ class MainWindow(QMainWindow):
             n for n in self.docks if n.startswith("device:") and n not in wanted
         ]:
             self.remove_dock(name)
+            self.dock_signatures.pop(name, None)
         for name, info in wanted.items():
+            signature = self.dock_signature(info)
+            dock = self.docks.get(name)
+            if dock is not None and self.dock_signatures.get(name) == signature:
+                continue
             try:
                 widget = DeviceWidget(self.session, self.hub, info.ref)
             except (InstrumentError, KeyError) as e:
                 logger.error(f"Device dock {info.ref}: {e}")
                 continue
+            self.dock_signatures[name] = signature
             icon = theme.device_icon(info.kind, info.instrument)
-            dock = self.docks.get(name)
             if dock is None:
                 dock = self.add_dock(
                     name,
@@ -361,7 +418,17 @@ class MainWindow(QMainWindow):
                 dock.setWidget(widget)
                 dock.setWindowTitle(info.title)
                 dock.toggleViewAction().setText(info.title)
+                self.menu_actions[name].setText(info.title)
                 old.deleteLater()
+
+    def check_device_worker(self) -> None:
+        waiting = self.session.worker.busy_for()
+        if waiting > DEVICE_HANG_S:
+            self.statusBar().showMessage(
+                f"A device has not answered for {waiting:.0f} s; manual control waits. "
+                "Reset its connection in Setup → Connections.",
+                2500,
+            )
 
     # Station
     def show_station(self) -> None:
@@ -375,6 +442,7 @@ class MainWindow(QMainWindow):
             self.simulateAction.setChecked(self.session.simulate)
 
     def on_station_changed(self, station) -> None:
+        self.dock_signatures.clear()  # another Station: every dock is rebuilt
         self.sync_device_docks()
         self.show_station()
         if self.session.path is not None:

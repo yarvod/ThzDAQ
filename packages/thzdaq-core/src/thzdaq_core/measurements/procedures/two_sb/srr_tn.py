@@ -1,3 +1,4 @@
+from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_core.analysis.two_sb import (
@@ -24,7 +25,6 @@ from thzdaq_core.measurements.procedures.two_sb.common import (
     voltage_parameter,
 )
 from thzdaq_core.measurements.registry import register_procedure
-from thzdaq_core.station.ports import SidebandSwitch
 
 NOISE_PLOTS = (
     PlotSpec(
@@ -77,7 +77,7 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, TwoSbProcedure):
             **self.base_slots(),
             **self.lo_slots(),
             "test_tone": SOURCE,
-            "if_selector": SidebandSwitch,
+            "if_selector": Switchable,
             **self.detector_slots(),
         }
         if self.measure_y_factor:

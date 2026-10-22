@@ -1,4 +1,6 @@
-"""Pfeiffer Vacuum telegram protocol (TC 110 drive, HiCube, gauges) over RS-485.
+"""DISABLED: not imported or registered; kept for the rewrite of the Pfeiffer driver.
+
+Pfeiffer Vacuum telegram protocol (TC 110 drive, HiCube, gauges) over RS-485.
 
 Telegram: AAA AC PPP LL DATA CCC CR — address, action (00 read, 10 write/answer),
 parameter, data length, data, checksum = sum of the preceding bytes mod 256.

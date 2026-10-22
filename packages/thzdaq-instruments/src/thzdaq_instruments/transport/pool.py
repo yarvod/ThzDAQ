@@ -1,7 +1,7 @@
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.transport.base import (
@@ -44,6 +44,16 @@ def default_link_factory(spec: ConnectionSpec) -> Link:
         write_termination=spec.write_termination,
         read_termination=spec.read_termination,
     )
+
+
+@dataclass(frozen=True)
+class LinkStatus:
+    key: tuple
+    name: str
+    prologix: bool
+    users: int
+    open: bool
+    broken: bool
 
 
 @dataclass
@@ -119,6 +129,40 @@ class TransportPool:
             logger.info(f"[TransportPool] closed {entry.link!r}")
 
         return release
+
+    def links(self) -> List[LinkStatus]:
+        """Shared connections and their state, for the Setup dock."""
+        with self._lock:
+            entries = list(self._entries.items())
+        return [
+            LinkStatus(
+                key, repr(e.link), e.prologix, e.refs, e.link.is_open, e.link.broken
+            )
+            for key, e in entries
+        ]
+
+    def reset(self, key: tuple) -> bool:
+        """Reconnect a link now (waits for a command in progress to finish)."""
+        with self._lock:
+            entry = self._entries.get(key)
+        if entry is None:
+            return False
+        with entry.link.lock:
+            entry.link.reset()
+            if entry.controller is not None:
+                entry.controller.invalidate()
+        logger.info(f"[TransportPool] reset {entry.link!r}")
+        return True
+
+    def abort(self, key: tuple) -> bool:
+        """Break a command blocked on this link; the next one reconnects."""
+        with self._lock:
+            entry = self._entries.get(key)
+        if entry is None:
+            return False
+        entry.link.abort()
+        logger.warning(f"[TransportPool] aborted {entry.link!r}")
+        return True
 
     def references(self, spec: ConnectionSpec) -> int:
         with self._lock:

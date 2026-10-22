@@ -1,10 +1,12 @@
 """Shared pieces of the sideband separating (2SB) mixer procedures.
 
-Roles on the bench:
+Device slots:
     sis1, sis2   bias of the two SIS mixers (VoltageSource + VoltageCurrentMeter)
-    lo           LO at the mixer frequency (FrequencySource + Switchable), e.g. x18 port
+    lo           LO generator (FrequencySource + Switchable); a multiplier after it is
+                 set on the generator itself, so frequencies are at the mixer
     test_tone    RF test tone at the mixer frequency (FrequencySource + Switchable)
-    if_selector  SidebandSwitch routing the upper or lower IF channel to the detector
+    if_selector  a supply channel switching the IF of the upper or lower sideband to
+                 the detector (Switchable); which output state is "upper" is a parameter
     detector     PowerDetector after the IF filter
     if_filter    TunableFilter (YIG) in front of the detector
     load         LoadSwitch (chopper) for hot/cold
@@ -39,7 +41,6 @@ from thzdaq_core.measurements.procedures.common import (
     restore_bias_on_exit,
     set_bias,
 )
-from thzdaq_core.station.ports import SidebandSwitch
 
 SOURCE = (FrequencySource, Switchable)
 SIDE_BAND_CHOICES = ("both", "upper", "lower")
@@ -66,6 +67,11 @@ class TwoSbProcedure(Procedure):
         help="Correct the bias by readback (slow: ~1 s per iteration)",
     )  # fmt: skip
     switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
+    upper_when_on = BoolParameter(
+        "IF switch: upper sideband when on",
+        default=True,
+        help="Output state of the IF switch channel that routes the upper sideband",
+    )
     control_yig_power = BoolParameter(
         "Control YIG power",
         default=False,
@@ -105,9 +111,10 @@ class TwoSbProcedure(Procedure):
         ctx.on_exit(lambda: tone.set_output(False))
         tone.set_output(True)
 
-    @staticmethod
-    def select_channel(ctx, side_band: str, delay: float) -> None:
-        ctx["if_selector"].select(side_band)
+    def select_channel(self, ctx, side_band: str, delay: float) -> None:
+        if side_band not in ("upper", "lower"):
+            raise ValueError(f"Unknown sideband {side_band!r}")
+        ctx["if_selector"].set_output((side_band == "upper") == self.upper_when_on)
         ctx.sleep(delay)
 
 
@@ -145,7 +152,7 @@ class HotColdMixin:
     @staticmethod
     def hot_cold_slots():
         return {
-            "if_selector": SidebandSwitch,
+            "if_selector": Switchable,
             "detector": PowerDetector,
             "if_filter": TunableFilter,
             "load": LoadSwitch,
@@ -163,7 +170,7 @@ class HotColdMixin:
         ctx.on_exit(load.to_cold)
         for side_band in side_bands:
             ctx.check_cancel()
-            TwoSbProcedure.select_channel(ctx, side_band, switch_delay)
+            self.select_channel(ctx, side_band, switch_delay)
             powers = {}
             for state in ("cold", "hot"):
                 getattr(load, f"to_{state}")()
