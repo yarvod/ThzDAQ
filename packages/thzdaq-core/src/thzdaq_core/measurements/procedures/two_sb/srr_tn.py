@@ -72,17 +72,17 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, TwoSbProcedure):
     point_delay = FloatParameter("Point delay", default=0.05, minimum=0, unit="s")
     measure_y_factor = BoolParameter("Y-factor afterwards", default=True)
 
-    def roles(self):
-        roles = {
-            **self.base_roles(),
-            **self.lo_roles(),
+    def slots(self):
+        slots = {
+            **self.base_slots(),
+            **self.lo_slots(),
             "test_tone": SOURCE,
             "if_selector": SidebandSwitch,
-            **self.detector_roles(),
+            **self.detector_slots(),
         }
         if self.measure_y_factor:
-            roles.update(self.hot_cold_roles())
-        return roles
+            slots.update(self.hot_cold_slots())
+        return slots
 
     def check(self):
         return self.hot_cold_problems() if self.measure_y_factor else []
@@ -167,14 +167,14 @@ class TwoSbNoise(LoMixin, HotColdMixin, TwoSbProcedure):
     frequency = if_sweep()
     channels = ChoiceParameter("IF channels", SIDE_BAND_CHOICES, default="both")
     tone_off = BoolParameter(
-        "Switch the test tone off", default=False, help="Uses the 'test_tone' role"
+        "Switch the test tone off", default=False, help="Uses the 'test_tone' device"
     )
 
-    def roles(self):
-        roles = {**self.base_roles(), **self.lo_roles(), **self.hot_cold_roles()}
+    def slots(self):
+        slots = {**self.base_slots(), **self.lo_slots(), **self.hot_cold_slots()}
         if self.tone_off:
-            roles["test_tone"] = SOURCE
-        return roles
+            slots["test_tone"] = SOURCE
+        return slots
 
     def check(self):
         return self.hot_cold_problems()

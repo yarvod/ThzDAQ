@@ -4,7 +4,7 @@ import pytest
 from thzdaq_core.analysis.noise import match_hot_cold, noise_temperature
 from thzdaq_core.analysis.shot_noise import dynamic_resistance, linear_fit
 from thzdaq_core.analysis.two_sb import sideband_rejection
-from thzdaq_core.data import COMPLETED
+from thzdaq_core.data import COMPLETED, DeviceUse
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements import MeasurementRunner, get_procedure
 from thzdaq_core.measurements.procedures import (
@@ -99,16 +99,19 @@ class Bench:
         ...
 
     # StationLike
-    def require(self, requirements):
-        return {role: self.ports[role] for role in requirements}
+    def require(self, devices, requirements):
+        return {slot: self.ports[slot] for slot in requirements}
+
+    def device_use(self, ref):
+        return DeviceUse(ref)
 
     def snapshot(self):
         return {"station": {"name": "sim 2sb bench"}}
 
 
-def run(procedure, bench=None, **roles):
+def run(procedure, bench=None, **devices):
     bench = bench or Bench()
-    dataset = MeasurementRunner(bench).run(procedure, roles=roles)
+    dataset = MeasurementRunner(bench).run(procedure, devices=devices)
     assert dataset.status == COMPLETED, dataset.error
     return dataset, bench
 
@@ -132,11 +135,11 @@ class TestSisProcedures:
         assert y[0]["noise_temperature"] == pytest.approx(noise_temperature(-30, -32))
         assert bench.ports["grid"].get_angle() == 0  # restored
         assert bench.chopper.position == "cold"
-        assert set(procedure.roles()) == {"bias", "detector", "load", "grid"}
+        assert set(procedure.slots()) == {"bias", "detector", "load", "grid"}
 
     def test_y_factor_voltage_needs_the_load(self):
-        assert "load" in YFactorVoltage().roles()
-        assert "load" not in PVCurve().roles()
+        assert "load" in YFactorVoltage().slots()
+        assert "load" not in PVCurve().slots()
 
     def test_reflection_records_traces(self):
         procedure = SisReflection(
@@ -204,7 +207,7 @@ class TestTwoSb:
         assert len(dataset.records("pump")) == 6
         assert bench.lo.get_output() is False and bench.lo.get_power() == -80
         assert bench.tone.get_output() is False  # switched off on exit
-        assert set(procedure.roles()) == {"sis1", "sis2", "test_tone", "lo", "detector"}
+        assert set(procedure.slots()) == {"sis1", "sis2", "test_tone", "lo", "detector"}
 
     def test_pump_balance_checks_paired_sweeps(self):
         with pytest.raises(ProcedureError, match="same number"):
@@ -226,12 +229,12 @@ class TestTwoSb:
         assert bench.tone.get_output() is False and bench.chopper.position == "cold"
         assert bench.ports["yig_power"].get_output() is True
         assert bench.ports["sis1"].get_voltage() == 0.0  # bias restored
-        roles = procedure.roles()
+        roles = procedure.slots()
         assert ("spectrum" in roles) == (detector == "spectrum")
 
     def test_srr_without_y_factor_needs_no_load(self):
         procedure = SidebandRatio(measure_y_factor=False, set_lo=False)
-        assert {"load", "lo"}.isdisjoint(procedure.roles())
+        assert {"load", "lo"}.isdisjoint(procedure.slots())
 
     def test_tn_both_channels(self):
         procedure = TwoSbNoise(frequency=(4e9, 5e9, 2), tone_off=True, **FAST_NOISE)
@@ -291,7 +294,7 @@ def test_all_registered_procedures_have_valid_defaults():
     ]:  # fmt: skip
         procedure = get_procedure(name)()
         procedure.validate()
-        assert procedure.roles()
+        assert procedure.slots()
         assert procedure.estimate_steps() > 0
         for spec in procedure.plots:
-            assert spec.stream and spec.x and spec.y
+            assert spec.table and spec.x and spec.y

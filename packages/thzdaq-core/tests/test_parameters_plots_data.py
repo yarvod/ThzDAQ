@@ -2,8 +2,16 @@ import json
 import math
 
 import pytest
-from thzdaq_core.data import INTERRUPTED, Dataset, DataStore, read_dataset
-from thzdaq_core.data.store import DatasetWriter, dumps, loads
+from thzdaq_core.data import (
+    INTERRUPTED,
+    Column,
+    Measurement,
+    MeasurementStore,
+    Table,
+    export_csv,
+    read_json,
+)
+from thzdaq_core.data.store import dumps, loads
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements import (
     BoolParameter,
@@ -146,31 +154,59 @@ class TestDataStore:
         assert decoded["inf"] == math.inf and decoded["x"] == [1, 2]
 
     def test_store_roundtrip(self, tmp_path):
-        store = DataStore(tmp_path)
-        dataset = Dataset("sis.iv_curve", title="I-V", parameters={"a": 1})
-        dataset.append("iv", {"voltage": 1e-3, "current": 2e-6})
-        dataset.results["rn"] = 20.0
-        dataset.finish("completed")
-        path = store.save(dataset)
-        assert path.parent.name == dataset.started[:10] and "sis_iv_curve" in path.name
-        loaded = read_dataset(path)
-        assert loaded.to_dict() == dataset.to_dict()
-        assert [d.id for d in store] == [dataset.id]
+        store = MeasurementStore(tmp_path)
+        measurement = Measurement("sis.iv_curve", title="I-V", parameters={"a": 1})
+        measurement.append("iv", {"voltage": 1e-3, "current": 2e-6})
+        measurement.results["rn"] = 20.0
+        measurement.finish("completed")
+        path = store.save(measurement)
+        assert path.parent.name == measurement.started[:10]
+        assert "sis_iv_curve" in path.name and path.suffix == ".json"
+        loaded = read_json(path)
+        assert loaded.to_dict() == measurement.to_dict()
+        assert [m.id for m in store] == [measurement.id]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["tables"]["iv"]["data"] == {"voltage": [1e-3], "current": [2e-6]}
+        assert data["tables"]["iv"]["columns"][0] == {
+            "key": "voltage", "title": "Voltage", "unit": "V",
+        }  # fmt: skip
 
-    def test_crash_leaves_readable_interrupted_dataset(self, tmp_path):
-        dataset = Dataset("demo")
-        writer = DatasetWriter(tmp_path / "run.jsonl")
-        writer.write_header(dataset)
-        writer.write_record("iv", {"voltage": 1.0})
-        writer.close()
-        with open(tmp_path / "run.jsonl", "a", encoding="utf-8") as file:
-            file.write('{"type": "record", "stream": "iv", "da')  # torn line
-        loaded = read_dataset(tmp_path / "run.jsonl")
-        assert loaded.status == INTERRUPTED and loaded.records("iv") == [
-            {"voltage": 1.0}
-        ]
+    def test_running_file_reads_back_interrupted(self, tmp_path):
+        measurement = Measurement("demo")
+        measurement.append("iv", {"voltage": 1.0})
+        path = MeasurementStore(tmp_path).save(measurement)
+        loaded = read_json(path)
+        assert loaded.status == INTERRUPTED
+        assert loaded.records("iv") == [{"voltage": 1.0}]
+        assert not list(tmp_path.rglob("*.tmp"))
 
-    def test_writer_never_overwrites(self, tmp_path):
-        DatasetWriter(tmp_path / "run.jsonl").close()
-        with pytest.raises(FileExistsError):
-            DatasetWriter(tmp_path / "run.jsonl")
+    def test_csv_export_with_units(self, tmp_path):
+        measurement = Measurement("demo")
+        measurement.append("iv", {"voltage": 1.0, "current": 2.0})
+        export_csv(measurement, "iv", tmp_path / "iv.csv")
+        lines = (tmp_path / "iv.csv").read_text(encoding="utf-8").splitlines()
+        assert lines == ['"Voltage, V","Current, A"', "1.0,2.0"]
+
+
+class TestTable:
+    def test_new_keys_pad_earlier_rows(self):
+        table = Table("t")
+        table.append({"a": 1})
+        table.append({"a": 2, "b": 3})
+        table.append({"b": 4})
+        assert table.data == {"a": [1, 2, None], "b": [None, 3, 4]}
+        assert list(table.rows())[1] == {"a": 2, "b": 3} and len(table) == 3
+
+    def test_columns_from_known_keys_and_overrides(self):
+        table = Table("t")
+        table.append(
+            {"frequency": 1e9, "odd_value": 1, "angle": 5},
+            overrides={"angle": Column("angle", "Grid angle", "deg")},
+        )
+        titles = {c.key: (c.title, c.unit) for c in table.columns}
+        assert titles == {
+            "frequency": ("Frequency", "Hz"),
+            "odd_value": ("Odd value", ""),
+            "angle": ("Grid angle", "deg"),
+        }
+        assert Table.from_dict("t", table.to_dict()) == table

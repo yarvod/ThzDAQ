@@ -9,7 +9,7 @@ GroupKey = Tuple[Any, ...]
 
 @dataclass(frozen=True)
 class PlotSpec:
-    """A plot of records of one stream.
+    """A plot of records of one table.
 
     Values in records are SI; x_scale / y_scale convert them for display
     (value / scale), e.g. x_scale=1e9 shows Hz as GHz. Records with different
@@ -18,7 +18,7 @@ class PlotSpec:
 
     key: str
     title: str
-    stream: str
+    table: str
     x: str
     y: str
     x_label: str = ""

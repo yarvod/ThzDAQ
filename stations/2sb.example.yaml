@@ -1,81 +1,75 @@
-# 2SB mixer bench. Copy to stations/<name>.yaml and adjust addresses.
-# Check without hardware:  uv run --package thzdaq-core thzdaq-station check stations/2sb.example.yaml --simulate
-version: 1
+# 2SB mixer bench. Copy to stations/<name>.yaml and adjust addresses, or edit it in Setup.
+# Check without hardware:  uv run thzdaq-station check stations/2sb.example.yaml --simulate
+#
+# Instrument ids name the kind of device; vendor and model are in driver and title.
+# Devices under an instrument are the parts you operate: SIS bias and coil on a
+# SIS block, an LO behind a multiplier, an IF switch on a supply channel.
+version: 2
 name: 2sb
 description: Sideband separating SIS mixer bench
 instruments:
-  sis_block:
+  sis_block_1:
     driver: scontel.sis_block
-    connection: {kind: socket, host: 169.254.190.83, port: 9876, read_delay: 0.05, read_termination: null}
     title: Scontel SIS block
-  lo_generator:
+    connection: {kind: socket, host: 169.254.190.83, port: 9876, read_delay: 0.05, read_termination: null}
+    devices:
+      sis_bias_1:
+        kind: sis_bias
+        channel: DEV4
+        title: SIS1
+        settings: {offset_voltage: 3.3e-05, offset_current: 0.0}
+      sis_coil_1: {kind: sis_coil, channel: DEV3, title: SIS1 coil}
+      sis_bias_2:
+        kind: sis_bias
+        channel: DEV2
+        title: SIS2
+        settings: {offset_voltage: 0.0002, offset_current: -5.0e-07}
+      sis_coil_2: {kind: sis_coil, channel: DEV1, title: SIS2 coil}
+  signal_generator_1:
     driver: agilent.e8247c
+    title: LO generator
     connection: {kind: prologix, host: 169.254.156.103, gpib: 19}
-  test_tone_generator:
+    devices:
+      lo_1:
+        kind: frequency_multiplier
+        title: LO x18
+        settings: {multiplier: 18}
+  signal_generator_2:
     driver: agilent.e8247c
+    title: Test tone generator
     connection: {kind: prologix, host: 169.254.156.103, gpib: 18}
     # The generator multiplies internally (OEM head), so it takes mixer frequencies
     sim_options: {max_frequency: 500.0e9}
-  if_switch_supply:
+  power_supply_1:
     driver: rigol.dp832a
+    title: IF switch supply
     connection: {kind: socket, host: 169.254.0.14, port: 5555}
-  yig_supply:
+    devices:
+      if_switch_1:
+        kind: sideband_selector
+        channel: 2
+        title: IF sideband switch
+        settings: {upper_when_on: true}
+  power_supply_2:
     driver: rs.hmp2030
+    title: YIG supply
     connection: {kind: socket, host: 169.254.0.30, port: 5025}
-  power_meter:
+    devices:
+      yig_power_1: {kind: switch, channel: 2, title: YIG power}
+  power_meter_1:
     driver: rs.nrx
+    title: R&S NRX
     connection: {kind: socket, host: 169.254.2.20, port: 5025}
     options: {aperture_time: 0.05, averaging: false}
-  yig:
+  yig_filter_1:
     driver: ni.yig
+    title: NI YIG
     connection: {kind: http, host: 169.254.0.86, timeout: 5.0}
-  chopper:
+  chopper_1:
     driver: chopper.modbus
+    title: Chopper
     connection: {kind: modbus_tcp, host: 169.254.54.24, port: 1111}
-  spectrum:
+  spectrum_analyzer_1:
     driver: rs.fsek30
+    title: R&S FSEK 30
     connection: {kind: prologix, host: 169.254.156.103, gpib: 20, read_delay: 0.01}
-roles:
-  sis1:
-    instrument: sis_block
-    channel: DEV4
-    attributes: {offset_voltage: 3.3e-05, offset_current: 0.0}
-  sis2:
-    instrument: sis_block
-    channel: DEV2
-    attributes: {offset_voltage: 0.0002, offset_current: -5.0e-07}
-  sis1_ctrl:
-    instrument: sis_block
-    channel: DEV3
-    accessor: ctrl
-    description: magnet coil of SIS1
-  sis2_ctrl:
-    instrument: sis_block
-    channel: DEV1
-    accessor: ctrl
-    description: magnet coil of SIS2
-  lo:
-    instrument: lo_generator
-    adapter: scaled_frequency
-    options: {multiplier: 18}
-    description: LO frequency at the mixer, generator x18
-  test_tone:
-    instrument: test_tone_generator
-  if_selector:
-    instrument: if_switch_supply
-    channel: 2
-    adapter: sideband_selector
-    options: {upper_when_on: true}
-  yig_power:
-    instrument: yig_supply
-    channel: 2
-    adapter: switch
-  detector:
-    instrument: power_meter
-  if_filter:
-    instrument: yig
-    channel: yig_1
-  load:
-    instrument: chopper
-  spectrum:
-    instrument: spectrum

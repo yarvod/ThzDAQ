@@ -1,5 +1,6 @@
 from typing import Any, ClassVar, Dict, List, Mapping, Optional, Tuple, Type, Union
 
+from thzdaq_core.data.measurement import Column
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.parameters import Parameter
 from thzdaq_core.measurements.plots import PlotSpec
@@ -8,9 +9,9 @@ Capabilities = Union[Type, Tuple[Type, ...]]
 
 
 class Procedure:
-    """A measurement: declared parameters and roles plus run(ctx).
+    """A measurement: declared parameters and device slots plus run(ctx).
 
-    run() talks only to ctx: ports by role, records, progress, cancellation.
+    run() talks only to ctx: devices by slot, records, progress, cancellation.
     It never touches Qt, files or drivers, so it runs the same from the GUI,
     the CLI, a notebook or a test with simulators.
     """
@@ -18,8 +19,20 @@ class Procedure:
     name: ClassVar[str] = ""  # registry key, e.g. "sis.iv_curve"
     title: ClassVar[str] = ""
     description: ClassVar[str] = ""
+    # Device slots and the capabilities each needs, e.g. {"bias": VoltageSource}
     requires: ClassVar[Mapping[str, Capabilities]] = {}
+    slot_titles: ClassVar[Mapping[str, str]] = {}
+    # Preferred device kind per slot: lists show those first and only, when present
+    slot_kinds: ClassVar[Mapping[str, str]] = {
+        "bias": "sis_bias",
+        "sis1": "sis_bias",
+        "sis2": "sis_bias",
+        "coil": "sis_coil",
+    }
     plots: ClassVar[Tuple[PlotSpec, ...]] = ()
+    # Record tables: titles, and columns whose title/unit differ from KNOWN_COLUMNS
+    table_titles: ClassVar[Mapping[str, str]] = {}
+    columns: ClassVar[Mapping[str, Column]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -74,9 +87,13 @@ class Procedure:
             for key, parameter in self.parameters().items()
         }
 
-    def roles(self) -> Dict[str, Capabilities]:
-        """Roles this run needs; override when they depend on parameters."""
+    def slots(self) -> Dict[str, Capabilities]:
+        """Device slots this run needs; override when they depend on parameters."""
         return dict(self.requires)
+
+    @classmethod
+    def slot_title(cls, slot: str) -> str:
+        return cls.slot_titles.get(slot) or slot.replace("_", " ").capitalize()
 
     def check(self) -> List[str]:
         """Cross-parameter problems; override in procedures."""

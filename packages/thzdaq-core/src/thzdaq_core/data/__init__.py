@@ -1,21 +1,35 @@
-from thzdaq_core.data.dataset import (
+from thzdaq_core.data.measurement import (
     CANCELLED,
     COMPLETED,
     FAILED,
     INTERRUPTED,
+    KNOWN_COLUMNS,
     RUNNING,
-    Dataset,
+    Column,
+    DeviceUse,
+    Measurement,
+    Table,
 )
-from thzdaq_core.data.store import DatasetWriter, DataStore, read_dataset
+from thzdaq_core.data.store import (
+    MeasurementStore,
+    export_csv,
+    read_json,
+    write_json,
+)
 
 __all__ = [
     "CANCELLED",
     "COMPLETED",
     "FAILED",
     "INTERRUPTED",
+    "KNOWN_COLUMNS",
     "RUNNING",
-    "DataStore",
-    "Dataset",
-    "DatasetWriter",
-    "read_dataset",
+    "Column",
+    "DeviceUse",
+    "Measurement",
+    "MeasurementStore",
+    "Table",
+    "export_csv",
+    "read_json",
+    "write_json",
 ]

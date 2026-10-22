@@ -1,4 +1,4 @@
-"""Readings of any roles over time (P-t, T-t, SIS bias monitor, vacuum, compressor)."""
+"""Readings of any devices over time (P-t, T-t, SIS bias monitor, vacuum, compressor)."""
 
 import time
 from datetime import datetime
@@ -61,7 +61,7 @@ def read_port(port) -> Dict[str, float]:
 def _time_plot(key, title, y, y_label, y_scale=1.0) -> PlotSpec:
     return PlotSpec(
         key, title, "samples", "time", y,
-        x_label="Time, s", y_label=y_label, y_scale=y_scale, group_by=("role",),
+        x_label="Time, s", y_label=y_label, y_scale=y_scale, group_by=("device",),
     )  # fmt: skip
 
 
@@ -71,7 +71,7 @@ class Monitor(Procedure):
     title = "Monitor over time"
     description = (
         "Read power, temperature, bias, pressure or compressor values of the "
-        "chosen roles at a fixed interval until stopped or the duration ends."
+        "chosen devices at a fixed interval until stopped or the duration ends."
     )
     plots = (
         _time_plot("power", "P-t", "power", "Power, dBm"),
@@ -82,32 +82,33 @@ class Monitor(Procedure):
         _time_plot("pressure", "p-t", "pressure", "Pressure, Pa"),
     )
 
-    watch = StringListParameter("Roles", default=("detector",))
+    watch = StringListParameter("Devices", default=("detector",))
     interval = FloatParameter("Interval", default=1.0, minimum=0.01, unit="s")
     duration = FloatParameter(
         "Duration", default=0.0, minimum=0, unit="s", help="0: until stopped"
     )
 
-    def roles(self):
-        return {role: object for role in self.watch}
+    def slots(self):
+        return {ref: object for ref in self.watch}
 
     def estimate_steps(self):
         return int(self.duration / self.interval) + 1 if self.duration else None
 
     def run(self, ctx) -> None:
-        ports = {role: ctx[role] for role in self.watch}
+        devices = {ref: ctx[ref] for ref in self.watch}
+        titles = {ref: use.title or ref for ref, use in ctx.measurement.devices.items()}
         started = time.monotonic()
         while True:
             ctx.check_cancel()
             elapsed = time.monotonic() - started
             stamp = datetime.now().isoformat(timespec="milliseconds")
-            for role, port in ports.items():
+            for ref, device in devices.items():
                 ctx.record(
                     "samples",
                     time=elapsed,
                     wall_time=stamp,
-                    role=role,
-                    **read_port(port),
+                    device=titles.get(ref, ref),
+                    **read_port(device),
                 )
             ctx.progress()
             if self.duration and elapsed + self.interval > self.duration:

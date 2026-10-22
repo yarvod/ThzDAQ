@@ -17,7 +17,7 @@ class IVCurve(Procedure):
         PlotSpec(
             key="iv",
             title="I-V",
-            stream="iv",
+            table="iv",
             x="voltage",
             y="current",
             x_label="Voltage, mV",

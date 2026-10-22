@@ -1,5 +1,5 @@
 import pytest
-from thzdaq_core.data import COMPLETED
+from thzdaq_core.data import COMPLETED, DeviceUse
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements import MeasurementRunner, StringListParameter
 from thzdaq_core.measurements.procedures import Demagnetize, Monitor
@@ -84,7 +84,10 @@ class TestDemagnetization:
         coil = SimSisBlock().ctrl("DEV3")
 
         class Bench:
-            def require(self, requirements):
+            def device_use(self, ref):
+                return DeviceUse(ref)
+
+            def require(self, devices, requirements):
                 return {"coil": coil}
 
             def snapshot(self):
@@ -115,8 +118,11 @@ class TestMonitor:
         }
 
         class Bench:
-            def require(self, requirements):
-                return {role: ports[role] for role in requirements}
+            def device_use(self, ref):
+                return DeviceUse(ref)
+
+            def require(self, devices, requirements):
+                return {slot: ports[slot] for slot in requirements}
 
             def snapshot(self):
                 return {}
@@ -125,7 +131,7 @@ class TestMonitor:
         dataset = MeasurementRunner(Bench()).run(procedure)
         samples = dataset.records("samples")
         assert dataset.status == COMPLETED
-        assert {s["role"] for s in samples} == {"detector", "cryostat"}
+        assert {s["device"] for s in samples} == {"detector", "cryostat"}
         assert 4 <= len(samples) // 2 <= 7
         temperatures = Monitor.plots[1].curves(samples)
         assert list(temperatures) == [("cryostat",)]

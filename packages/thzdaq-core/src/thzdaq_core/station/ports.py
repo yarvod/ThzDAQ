@@ -1,11 +1,11 @@
-"""Port adapters: what a role exposes on top of an instrument part.
+"""Port adapters: what a configured device exposes on top of an instrument part.
 
 Adapters delegate every attribute they don't override to the wrapped part, so
 an LO behind ScaledFrequencySource still offers set_output() and set_power().
-New adapters are added with register_adapter() without touching the station.
+Device kinds using them are declared in thzdaq_core.station.kinds.
 """
 
-from typing import Any, Callable, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, Protocol, runtime_checkable
 
 from thzdaq_instruments.capabilities import FrequencySource, Switchable
 
@@ -37,6 +37,48 @@ class PortAdapter:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.target!r})"
+
+
+class AttributePort(PortAdapter):
+    """A configured device over a shared part, with its own attributes.
+
+    Two SIS configs on one DEV (different mixers, offsets) share the channel
+    object; the attributes are applied before every call through this device.
+    """
+
+    def __init__(self, target: Any, attributes: Dict[str, Any]):
+        super().__init__(target)
+        for name in attributes:
+            if not hasattr(target, name):
+                raise StationError(f"{target!r} has no attribute {name!r}")
+        self.attributes = dict(attributes)
+        self.apply()
+
+    def apply(self) -> None:
+        for name, value in self.attributes.items():
+            setattr(self.target, name, value)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ("target", "attributes"):
+            raise AttributeError(name)
+        if name in self.__dict__.get("attributes", {}):
+            return self.attributes[name]
+        value = getattr(self.target, name)
+        if not callable(value):
+            return value
+
+        def call(*args, **kwargs):
+            self.apply()
+            return value(*args, **kwargs)
+
+        return call
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self.__dict__.get("attributes", {}):
+            self.attributes[name] = value
+            setattr(self.target, name, value)
+        else:
+            super().__setattr__(name, value)
 
 
 class SwitchPort(PortAdapter):
@@ -86,35 +128,5 @@ class SidebandSelector(PortAdapter):
         return "upper" if on == self.upper_when_on else "lower"
 
 
-# Role level abstractions defined here, on top of the instrument capabilities
-ROLE_PROTOCOLS = (SidebandSwitch,)
-
-AdapterFactory = Callable[..., Any]
-ADAPTERS: Dict[str, AdapterFactory] = {
-    "switch": SwitchPort,
-    "scaled_frequency": ScaledFrequencySource,
-    "sideband_selector": SidebandSelector,
-}
-
-
-def register_adapter(name: str, factory: AdapterFactory, replace: bool = False) -> None:
-    if name in ADAPTERS and not replace:
-        raise StationError(f"Port adapter {name!r} is already registered")
-    ADAPTERS[name] = factory
-
-
-def build_adapter(name: Optional[str], part: Any, options: Dict[str, Any]) -> Any:
-    if name is None:
-        if options:
-            raise StationError("Adapter options given without an adapter")
-        return part
-    try:
-        factory = ADAPTERS[name]
-    except KeyError:
-        raise StationError(
-            f"Unknown port adapter {name!r}, available: {sorted(ADAPTERS)}"
-        ) from None
-    try:
-        return factory(part, **options)
-    except TypeError as e:
-        raise StationError(f"Adapter {name!r}: {e}") from e
+# Device level abstractions defined here, on top of the instrument capabilities
+DEVICE_PROTOCOLS = (SidebandSwitch,)

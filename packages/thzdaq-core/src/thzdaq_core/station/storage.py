@@ -1,4 +1,4 @@
-"""Station profiles as plain dicts and YAML files."""
+"""Station profiles as plain dicts and YAML files (version 2; version 1 is migrated)."""
 
 import re
 from dataclasses import fields
@@ -10,9 +10,9 @@ from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.errors import StationError
-from thzdaq_core.station.config import InstrumentConfig, RoleConfig, StationConfig
+from thzdaq_core.station.config import DeviceConfig, InstrumentConfig, StationConfig
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 PathLike = Union[str, Path]
 
 
@@ -74,75 +74,87 @@ def _drop_empty(data: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in data.items() if not _is_empty(v)}
 
 
+def device_to_dict(spec: DeviceConfig) -> Dict[str, Any]:
+    return _drop_empty(
+        {
+            "kind": spec.kind,
+            "channel": spec.channel,
+            "title": spec.title,
+            "settings": spec.settings,
+            "metadata": spec.metadata,
+        }
+    )
+
+
 def station_to_dict(config: StationConfig) -> Dict[str, Any]:
     instruments = {}
     for instrument_id, spec in config.instruments.items():
         item = {
             "driver": spec.driver,
+            "title": spec.title,
             "connection": connection_to_dict(spec.connection)
             if spec.connection
             else None,
             "options": spec.options,
             "simulate": spec.simulate,
             "sim_options": spec.sim_options,
-            "title": spec.title,
             "metadata": spec.metadata,
+            "devices": {
+                device_id: device_to_dict(device)
+                for device_id, device in spec.devices.items()
+            },
         }
         instruments[instrument_id] = _drop_empty(item)
-    roles = {}
-    for role, spec in config.roles.items():
-        item = {
-            "instrument": spec.instrument,
-            "channel": spec.channel,
-            "accessor": spec.accessor if spec.accessor != "channel" else None,
-            "adapter": spec.adapter,
-            "options": spec.options,
-            "attributes": spec.attributes,
-            "description": spec.description,
-            "metadata": spec.metadata,
-        }
-        roles[role] = _drop_empty(item)
     return _drop_empty(
         {
             "version": FORMAT_VERSION,
             "name": config.name,
             "description": config.description,
             "instruments": instruments,
-            "roles": roles,
         }
     )
 
 
 def _known_keys(section: str, data: Dict[str, Any], allowed: List[str]):
+    if not isinstance(data, dict):
+        raise StationError(f"{section}: expected a mapping")
     unknown = set(data) - set(allowed)
     if unknown:
         raise StationError(f"{section}: unknown keys {sorted(unknown)}")
+
+
+INSTRUMENT_KEYS = [
+    "driver", "title", "connection", "options", "simulate", "sim_options",
+    "metadata", "devices",
+]  # fmt: skip
+DEVICE_KEYS = ["kind", "channel", "title", "settings", "metadata"]
+
+
+def device_from_dict(device_id: str, item: Dict[str, Any]) -> DeviceConfig:
+    _known_keys(f"device {device_id}", item, DEVICE_KEYS)
+    if not item.get("kind"):
+        raise StationError(f"device {device_id}: kind is required")
+    return DeviceConfig(
+        kind=item["kind"],
+        channel=item.get("channel"),
+        title=item.get("title", ""),
+        settings=dict(item.get("settings") or {}),
+        metadata=dict(item.get("metadata") or {}),
+    )
 
 
 def station_from_dict(data: Dict[str, Any]) -> StationConfig:
     if not isinstance(data, dict):
         raise StationError("Station profile must be a mapping")
     version = data.get("version", FORMAT_VERSION)
-    if version != FORMAT_VERSION:
+    if version == 1:
+        data = migrate_v1(data)
+    elif version != FORMAT_VERSION:
         raise StationError(f"Unsupported station profile version {version}")
-    _known_keys(
-        "station", data, ["version", "name", "description", "instruments", "roles"]
-    )
+    _known_keys("station", data, ["version", "name", "description", "instruments"])
     instruments = {}
     for instrument_id, item in (data.get("instruments") or {}).items():
-        _known_keys(
-            f"instrument {instrument_id}",
-            item,
-            [
-                "driver",
-                "connection",
-                "options",
-                "simulate",
-                "sim_options",
-                "title",
-                "metadata",
-            ],
-        )
+        _known_keys(f"instrument {instrument_id}", item, INSTRUMENT_KEYS)
         if "driver" not in item:
             raise StationError(f"instrument {instrument_id}: driver is required")
         connection = item.get("connection")
@@ -154,41 +166,59 @@ def station_from_dict(data: Dict[str, Any]) -> StationConfig:
             sim_options=dict(item.get("sim_options") or {}),
             title=item.get("title", ""),
             metadata=dict(item.get("metadata") or {}),
-        )
-    roles = {}
-    for role, item in (data.get("roles") or {}).items():
-        _known_keys(
-            f"role {role}",
-            item,
-            [
-                "instrument",
-                "channel",
-                "accessor",
-                "adapter",
-                "options",
-                "attributes",
-                "description",
-                "metadata",
-            ],
-        )
-        if "instrument" not in item:
-            raise StationError(f"role {role}: instrument is required")
-        roles[role] = RoleConfig(
-            instrument=item["instrument"],
-            channel=item.get("channel"),
-            accessor=item.get("accessor", "channel"),
-            adapter=item.get("adapter"),
-            options=dict(item.get("options") or {}),
-            attributes=dict(item.get("attributes") or {}),
-            description=item.get("description", ""),
-            metadata=dict(item.get("metadata") or {}),
+            devices={
+                device_id: device_from_dict(device_id, device)
+                for device_id, device in (item.get("devices") or {}).items()
+            },
         )
     return StationConfig(
         name=data.get("name", "station"),
         instruments=instruments,
-        roles=roles,
         description=data.get("description", ""),
     ).validate()
+
+
+V1_ADAPTERS = {
+    "scaled_frequency": "frequency_multiplier",
+    "sideband_selector": "sideband_selector",
+    "switch": "switch",
+}
+
+
+def migrate_v1(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Version 1 had roles next to instruments; they become devices.
+
+    Roles that only named an instrument or a channel need no device: it is
+    selected directly now.
+    """
+    instruments = {k: dict(v) for k, v in (data.get("instruments") or {}).items()}
+    for role, item in (data.get("roles") or {}).items():
+        target = instruments.get(item.get("instrument"))
+        if target is None:
+            raise StationError(f"role {role}: unknown instrument")
+        adapter = item.get("adapter")
+        if adapter in V1_ADAPTERS:
+            kind, settings = V1_ADAPTERS[adapter], item.get("options") or {}
+        elif item.get("accessor") == "ctrl":
+            kind, settings = "sis_coil", {}
+        elif str(target.get("driver", "")).endswith("sis_block"):
+            kind, settings = "sis_bias", item.get("attributes") or {}
+        else:
+            continue
+        device = {
+            "kind": kind,
+            "channel": item.get("channel"),
+            "title": item.get("description") or role,
+            "settings": dict(settings),
+            "metadata": item.get("metadata") or {},
+        }
+        target.setdefault("devices", {})[role] = device
+    return {
+        "version": FORMAT_VERSION,
+        "name": data.get("name", "station"),
+        "description": data.get("description", ""),
+        "instruments": instruments,
+    }
 
 
 def load_station(path: PathLike) -> StationConfig:

@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 from thzdaq_core.analysis.noise import noise_temperature
 from thzdaq_core.cli import main
-from thzdaq_core.data import CANCELLED, COMPLETED, FAILED, DataStore, read_dataset
+from thzdaq_core.data import (
+    CANCELLED,
+    COMPLETED,
+    FAILED,
+    DeviceUse,
+    MeasurementStore,
+    read_json,
+)
 from thzdaq_core.errors import ProcedureError, StationError
 from thzdaq_core.measurements import (
     FloatParameter,
@@ -17,7 +24,7 @@ from thzdaq_core.measurements import (
     list_procedures,
 )
 from thzdaq_core.measurements.procedures import IFNoise, IVCurve
-from thzdaq_core.station import InstrumentConfig, RoleConfig, Station, StationConfig
+from thzdaq_core.station import DeviceConfig, InstrumentConfig, Station, StationConfig
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.sim import SimChopper, SimPowerMeter, SimYigFilter
 
@@ -27,8 +34,12 @@ EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 def sis_station() -> Station:
     config = StationConfig(
         "bench",
-        instruments={"sis": InstrumentConfig("sim.sis_block")},
-        roles={"sis1": RoleConfig("sis", channel="DEV4")},
+        instruments={
+            "sis": InstrumentConfig(
+                "sim.sis_block",
+                devices={"sis_bias_1": DeviceConfig("sis_bias", channel="DEV4")},
+            )
+        },
     )
     return Station(config)
 
@@ -66,8 +77,11 @@ class CoupledStation:
             "load": self.chopper,
         }
 
-    def require(self, requirements):
-        return {role: self.ports[role] for role in requirements}
+    def require(self, devices, requirements):
+        return {slot: self.ports[slot] for slot in requirements}
+
+    def device_use(self, ref):
+        return DeviceUse(ref)
 
     def snapshot(self):
         return {"station": {"name": "coupled"}}
@@ -76,12 +90,12 @@ class CoupledStation:
 class TestRunner:
     def test_iv_curve_records_restores_and_saves(self, tmp_path):
         station = sis_station()
-        bias = station["sis1"]
+        bias = station["sis_bias_1"]
         bias.set_voltage(1e-3)
         recorder = Recorder()
-        runner = MeasurementRunner(station, DataStore(tmp_path), [recorder])
+        runner = MeasurementRunner(station, MeasurementStore(tmp_path), [recorder])
         procedure = IVCurve(voltage=(0, 5e-3, 11), settle_time=0, first_point_delay=0)
-        dataset = runner.run(procedure, roles={"bias": "sis1"})
+        dataset = runner.run(procedure, devices={"bias": "sis_bias_1"})
 
         assert dataset.status == COMPLETED
         assert len(dataset.records("iv")) == 11
@@ -90,9 +104,10 @@ class TestRunner:
             recorder.events[0] == "started"
             and recorder.events[-1] == "finished:completed"
         )
-        assert dataset.metadata["roles"] == {"bias": "sis1"}
+        assert dataset.devices["bias"].ref == "sis_bias_1"
+        assert dataset.devices["bias"].kind == "sis_bias"
         assert dataset.station["identities"] == {"sis": "THZDAQ,SimSisBlock,0,1.0"}
-        saved = read_dataset(dataset.metadata["path"])
+        saved = read_json(dataset.metadata["path"])
         assert saved.status == COMPLETED and saved.records("iv") == dataset.records(
             "iv"
         )
@@ -101,13 +116,13 @@ class TestRunner:
     def test_cancel_runs_cleanup_and_marks_dataset(self, tmp_path):
         station = sis_station()
         recorder = Recorder(cancel_at=3)
-        runner = MeasurementRunner(station, DataStore(tmp_path), [recorder])
+        runner = MeasurementRunner(station, MeasurementStore(tmp_path), [recorder])
         recorder.runner = runner
         procedure = IVCurve(voltage=(0, 5e-3, 50), settle_time=0, first_point_delay=0)
-        dataset = runner.run(procedure, roles={"bias": "sis1"})
+        dataset = runner.run(procedure, devices={"bias": "sis_bias_1"})
         assert dataset.status == CANCELLED and len(dataset.records("iv")) == 3
-        assert station["sis1"].get_voltage() == 0.0
-        assert read_dataset(dataset.metadata["path"]).status == CANCELLED
+        assert station["sis_bias_1"].get_voltage() == 0.0
+        assert read_json(dataset.metadata["path"]).status == CANCELLED
 
     def test_failure_is_recorded_and_cleanup_still_runs(self, tmp_path):
         cleaned = []
@@ -123,28 +138,30 @@ class TestRunner:
                 raise RuntimeError("detector exploded")
 
         class AnyStation(CoupledStation):
-            def require(self, requirements):
+            def require(self, devices, requirements):
                 return {"bias": SimChopper()}
 
         class BadObserver(RunObserver):
             def on_record(self, stream, record):
                 raise ValueError("plot crashed")
 
-        runner = MeasurementRunner(AnyStation(), DataStore(tmp_path), [BadObserver()])
+        runner = MeasurementRunner(
+            AnyStation(), MeasurementStore(tmp_path), [BadObserver()]
+        )
         dataset = runner.run(Broken())
         assert dataset.status == FAILED and "detector exploded" in dataset.error
         assert cleaned == ["first"]
         assert dataset.metadata["cleanup_errors"] == ["cleanup: division by zero"]
-        saved = read_dataset(dataset.metadata["path"])
+        saved = read_json(dataset.metadata["path"])
         assert saved.status == FAILED and "traceback" in saved.metadata
 
-    def test_missing_role_fails_before_any_file(self, tmp_path):
-        runner = MeasurementRunner(sis_station(), DataStore(tmp_path))
-        with pytest.raises(StationError, match="'bias' is not configured"):
+    def test_missing_device_fails_before_any_file(self, tmp_path):
+        runner = MeasurementRunner(sis_station(), MeasurementStore(tmp_path))
+        with pytest.raises(StationError, match="no device 'bias'"):
             runner.run(IVCurve())
-        with pytest.raises(ProcedureError, match="no roles"):
-            runner.run(IVCurve(), roles={"detector": "sis1"})
-        assert list(tmp_path.rglob("*.jsonl")) == []
+        with pytest.raises(ProcedureError, match="no slots"):
+            runner.run(IVCurve(), devices={"detector": "sis_bias_1"})
+        assert list(tmp_path.rglob("*.json")) == []
 
     def test_if_noise_on_coupled_simulators(self):
         runner = MeasurementRunner(CoupledStation())
@@ -213,8 +230,8 @@ class TestCli:
                 "--station",
                 str(EXAMPLE),
                 "--simulate",
-                "--role",
-                "bias=sis2",
+                "--device",
+                "bias=sis_bias_2",
                 "--set",
                 "voltage=0:6:13",
                 "--set",
@@ -228,7 +245,7 @@ class TestCli:
         )
         out = capsys.readouterr().out
         assert code == 0 and "completed sis.iv_curve [iv: 13]" in out
-        path = next(tmp_path.rglob("*.jsonl"))
+        path = next(tmp_path.rglob("*.json"))
         assert main(["show", str(path)]) == 0
         assert "voltage" in capsys.readouterr().out
 

@@ -4,20 +4,20 @@ import argparse
 import sys
 from typing import List, Optional
 
-from thzdaq_instruments import InstrumentError, default_registry
+from thzdaq_instruments import InstrumentError
 from thzdaq_instruments.capabilities import ALL_CAPABILITIES, Identifiable
 
 from thzdaq_core.station.legacy import import_legacy_settings
-from thzdaq_core.station.ports import ROLE_PROTOCOLS
+from thzdaq_core.station.ports import DEVICE_PROTOCOLS
 from thzdaq_core.station.station import Station
 from thzdaq_core.station.storage import dump_station, load_station, save_station
 
 
-def capability_names(port) -> List[str]:
+def capability_names(device) -> List[str]:
     return [
         c.__name__
-        for c in ALL_CAPABILITIES + ROLE_PROTOCOLS
-        if c is not Identifiable and isinstance(port, c)
+        for c in ALL_CAPABILITIES + DEVICE_PROTOCOLS
+        if c is not Identifiable and isinstance(device, c)
     ]
 
 
@@ -37,42 +37,32 @@ def cmd_import(args) -> int:
 
 def cmd_show(args) -> int:
     config = load_station(args.profile)
-    registry = default_registry()
+    station = Station(config, simulate=True)
     print(f"{config.name}: {config.description}".rstrip(": "))
-    print("instruments:")
     for instrument_id, spec in config.instruments.items():
-        info = registry.get(spec.driver)
         where = spec.connection.link_key if spec.connection else "-"
         sim = " [sim]" if spec.simulate else ""
-        print(f"  {instrument_id:34} {spec.driver:18} {where}{sim}")
-        caps = [
-            c.__name__
-            for c in info.capabilities + info.channel_capabilities
-            if c is not Identifiable
-        ]
-        print(f"  {'':34} {', '.join(caps)}")
-    print("roles:")
-    for role, spec in config.roles.items():
-        part = spec.instrument
-        if spec.channel is not None:
-            part += f".{spec.accessor}({spec.channel!r})"
-        adapter = f" -> {spec.adapter}{spec.options or ''}" if spec.adapter else ""
-        print(f"  {role:34} {part}{adapter}")
+        print(f"{instrument_id:30} {spec.driver:18} {where}{sim}  {spec.title}")
+        for info in station.devices():
+            if info.instrument != instrument_id or info.kind == "instrument":
+                continue
+            caps = [c.__name__ for c in info.capabilities if c is not Identifiable]
+            print(f"  {info.ref:28} {info.kind:18} {info.title}: {', '.join(caps)}")
     return 0
 
 
 def cmd_check(args) -> int:
     failures = 0
     with Station.load(args.profile, simulate=args.simulate) as station:
-        roles = args.roles or list(station.config.roles)
-        for role in roles:
+        refs = args.devices or [info.ref for info in station.devices()]
+        for ref in refs:
             try:
-                port = station.role(role)
+                device = station.device(ref)
             except InstrumentError as e:
                 failures += 1
-                print(f"FAIL {role}: {e}")
+                print(f"FAIL {ref}: {e}")
                 continue
-            print(f"ok   {role}: {', '.join(capability_names(port)) or '-'}")
+            print(f"ok   {ref}: {', '.join(capability_names(device)) or '-'}")
         for instrument_id, identity in station.snapshot()["identities"].items():
             print(f"     {instrument_id}: {identity}")
     return 1 if failures else 0
@@ -91,14 +81,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     imp.add_argument("--no-defaults", action="store_true", help="skip NRX/YIG/chopper")
     imp.set_defaults(func=cmd_import)
 
-    show = commands.add_parser("show", help="print instruments and roles")
+    show = commands.add_parser("show", help="print instruments and devices")
     show.add_argument("profile")
     show.set_defaults(func=cmd_show)
 
-    check = commands.add_parser("check", help="open roles and report capabilities")
+    check = commands.add_parser("check", help="open devices and report capabilities")
     check.add_argument("profile")
     check.add_argument("--simulate", action="store_true")
-    check.add_argument("--roles", nargs="*")
+    check.add_argument("--devices", nargs="*", help="device refs, default: all")
     check.set_defaults(func=cmd_check)
 
     args = parser.parse_args(argv)

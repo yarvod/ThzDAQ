@@ -33,7 +33,7 @@ LEGACY = {
 
 
 class TestLegacyImport:
-    def test_instruments_roles_and_notes(self):
+    def test_instruments_devices_and_notes(self):
         config, notes = station_from_legacy(LEGACY, name="lab")
         assert set(config.instruments) == {
             "signal_generator_1",
@@ -53,26 +53,26 @@ class TestLegacyImport:
         assert any("Mystery Box" in note for note in notes)
         assert any("Prologix ethernet" in note for note in notes)
 
-    def test_sis_configs_become_roles_on_one_block(self):
+    def test_sis_configs_become_devices_on_one_block(self):
         config, _ = station_from_legacy(LEGACY)
-        sis1, sis2 = config.roles["sis1"], config.roles["sis2"]
-        assert sis1.instrument == sis2.instrument == "sis_block_1"
-        assert (sis1.channel, sis2.channel) == ("DEV4", "DEV2")
-        assert sis2.attributes == {
-            "offset_voltage": -0.000187,
-            "offset_current": -1.3e-06,
-        }
-        assert sis1.metadata["calibration_coefficients"] == {"VoltageStep": 1e-05}
-        assert config.roles["sis2_ctrl"].accessor == "ctrl"
+        devices = config.instruments["sis_block_1"].devices
+        assert list(devices) == ["sis_bias_1", "sis_coil_1", "sis_bias_2", "sis_coil_2"]
+        one, two = devices["sis_bias_1"], devices["sis_bias_2"]
+        assert (one.kind, one.channel, two.channel) == ("sis_bias", "DEV4", "DEV2")
+        assert two.title == "Scontel SIS Block 2"
+        assert two.settings == {"offset_voltage": -0.000187, "offset_current": -1.3e-06}
+        assert one.metadata["calibration_coefficients"] == {"VoltageStep": 1e-05}
+        coil = devices["sis_coil_2"]
+        assert (coil.kind, coil.channel) == ("sis_coil", "DEV1")
         block = config.instruments["sis_block_1"].connection
         assert block.read_termination is None and block.read_delay == 0.05
 
     def test_imported_station_runs_simulated(self):
         config, _ = station_from_legacy(LEGACY)
         with Station(config, simulate=True) as station:
-            station["sis2"].set_voltage(2.5e-3)
-            station["sis2_ctrl"].set_current(1e-3)
-            assert station["sis2"].offset_voltage == -0.000187
+            station["sis_bias_2"].set_voltage(2.5e-3)
+            station["sis_coil_2"].set_current(1e-3)
+            assert station["sis_bias_2"].offset_voltage == -0.000187
 
     def test_without_state_defaults(self):
         config, _ = station_from_legacy(LEGACY, include_state_defaults=False)
@@ -87,20 +87,21 @@ class TestCli:
     def test_show(self, capsys):
         assert main(["show", str(EXAMPLE)]) == 0
         out = capsys.readouterr().out
-        assert "lo_generator" in out and "lo_generator -> scaled_frequency" in out
-        assert "Identifiable" not in out
+        assert "signal_generator_1" in out and "frequency_multiplier" in out
+        assert "LO x18" in out and "Identifiable" not in out
 
     def test_check_simulated(self, capsys):
-        assert main(["check", str(EXAMPLE), "--simulate", "--roles", "lo", "load"]) == 0
+        args = ["check", str(EXAMPLE), "--simulate", "--devices", "lo_1", "chopper_1"]
+        assert main(args) == 0
         out = capsys.readouterr().out
-        assert "ok   lo: Switchable, FrequencySource, PowerLevel" in out
-        assert "ok   load: LoadSwitch" in out
+        assert "ok   lo_1: Switchable, FrequencySource, PowerLevel" in out
+        assert "ok   chopper_1: LoadSwitch" in out
 
     def test_check_reports_failures(self, tmp_path, capsys):
         profile = tmp_path / "bad.yaml"
         profile.write_text(
-            "name: bad\ninstruments:\n  gen: {driver: sim.signal_generator}\n"
-            "roles:\n  lo: {instrument: gen, channel: 1}\n",
+            "name: bad\ninstruments:\n  gen:\n    driver: sim.signal_generator\n"
+            "    devices: {lo: {kind: sis_coil, channel: 1}}\n",
             encoding="utf-8",
         )
         assert main(["check", str(profile), "--simulate"]) == 1
@@ -122,7 +123,8 @@ class TestCli:
         output = tmp_path / "lab.yaml"
         assert main(["import-legacy", str(settings_path), "-o", str(output)]) == 0
         config = load_station(output)
-        assert config.roles["sis2"].attributes["offset_voltage"] == -0.000187
+        bias = config.instruments["sis_block_1"].devices["sis_bias_2"]
+        assert bias.settings["offset_voltage"] == -0.000187
         assert config.instruments["signal_generator_2"].connection.gpib == 18
 
     def test_console_script_entry(self):

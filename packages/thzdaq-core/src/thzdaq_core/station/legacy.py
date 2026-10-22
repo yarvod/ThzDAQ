@@ -1,7 +1,8 @@
 """Import device configs of the legacy app (settings.ini, [Configs]) into a station profile.
 
-Legacy entries are per "device widget": two SIS bias devices on one Scontel
-block were two configs. Here they become one instrument with two roles.
+Legacy entries are per "device widget": every SIS config (bias DEV, coil DEV,
+offsets, calibration) on one Scontel block was its own entry. Here a block is
+one instrument and each config becomes a bias and a coil device on it.
 """
 
 import re
@@ -21,7 +22,8 @@ from thzdaq_instruments.transport.base import (
 )
 
 from thzdaq_core.errors import StationError
-from thzdaq_core.station.config import InstrumentConfig, RoleConfig, StationConfig
+from thzdaq_core.station.kinds import instrument_type
+from thzdaq_core.station.config import DeviceConfig, InstrumentConfig, StationConfig
 
 LEGACY_DRIVERS = {
     "Keithley Power Supply": "keithley.2200",
@@ -34,19 +36,6 @@ LEGACY_DRIVERS = {
     "Rohde Schwarz Power Supply": "rs.hmp2030",
     "Scontel SIS Block": "scontel.sis_block",
     "GRID": "arduino.grid",
-}
-# Ids name the kind of device (power_supply_2); vendor and model live in driver and title
-DEVICE_TYPES = {
-    "keithley.2200": "power_supply",
-    "rigol.dp832a": "power_supply",
-    "rs.hmp2030": "power_supply",
-    "agilent.e8247c": "signal_generator",
-    "sumitomo.f70_rest": "compressor",
-    "lakeshore.336": "temperature_controller",
-    "rs.zva67": "vna",
-    "rs.fsek30": "spectrum_analyzer",
-    "scontel.sis_block": "sis_block",
-    "arduino.grid": "grid",
 }
 # Connection adapters, not instruments: their address is already in each device config
 LEGACY_ADAPTER_SECTIONS = {"Prologix ethernet"}
@@ -70,6 +59,11 @@ def next_id(device_type: str, taken: Mapping[str, Any]) -> str:
     while f"{device_type}_{number}" in taken:
         number += 1
     return f"{device_type}_{number}"
+
+
+def _offset(value: Any) -> float:
+    # The legacy UI stored offsets as summed floats (-0.00020000000000000004)
+    return round(float(value or 0), 12) + 0.0
 
 
 def legacy_connection(entry: Mapping[str, Any], driver: str) -> ConnectionSpec:
@@ -136,7 +130,6 @@ def station_from_legacy(
 ) -> Tuple[StationConfig, List[str]]:
     """Returns the profile and notes about skipped or merged entries."""
     instruments: "OrderedDict[str, InstrumentConfig]" = OrderedDict()
-    roles: "OrderedDict[str, RoleConfig]" = OrderedDict()
     notes: List[str] = []
     sis_blocks: Dict[tuple, str] = {}
     sis_count = 0
@@ -159,35 +152,36 @@ def station_from_legacy(
                     instrument_id = next_id("sis_block", instruments)
                     sis_blocks[key] = instrument_id
                     instruments[instrument_id] = InstrumentConfig(
-                        driver=driver, connection=connection, title="Scontel SIS block"
+                        driver=driver,
+                        connection=connection,
+                        title=f"Scontel SIS block {len(sis_blocks)}",
                     )
                 else:
                     notes.append(f"{title!r} merged into {instrument_id}")
+                # One legacy SIS config = a bias and a coil device on the block
                 sis_count += 1
-                roles[f"sis{sis_count}"] = RoleConfig(
-                    instrument=instrument_id,
+                devices = instruments[instrument_id].devices
+                devices[f"sis_bias_{sis_count}"] = DeviceConfig(
+                    kind="sis_bias",
                     channel=entry.get("bias_dev", "DEV4"),
-                    attributes={
-                        "offset_voltage": float(entry.get("offset_voltage") or 0),
-                        "offset_current": float(entry.get("offset_current") or 0),
+                    title=title,
+                    settings={
+                        "offset_voltage": _offset(entry.get("offset_voltage")),
+                        "offset_current": _offset(entry.get("offset_current")),
                     },
-                    description=f"bias of {title}",
                     metadata=(
                         {"calibration_coefficients": entry["calibration_coefficients"]}
                         if entry.get("calibration_coefficients")
                         else {}
                     ),
                 )
-                roles[f"sis{sis_count}_ctrl"] = RoleConfig(
-                    instrument=instrument_id,
+                devices[f"sis_coil_{sis_count}"] = DeviceConfig(
+                    kind="sis_coil",
                     channel=entry.get("ctrl_dev", "DEV3"),
-                    accessor="ctrl",
-                    description=f"coil of {title}",
+                    title=f"{title} coil",
                 )
                 continue
-            instrument_id = next_id(
-                DEVICE_TYPES.get(driver, slug(section)), instruments
-            )
+            instrument_id = next_id(instrument_type(driver), instruments)
             instruments[instrument_id] = InstrumentConfig(
                 driver=driver, connection=connection, title=title
             )
@@ -201,7 +195,6 @@ def station_from_legacy(
     config = StationConfig(
         name=name,
         instruments=dict(instruments),
-        roles=dict(roles),
         description="Imported from the legacy settings.ini",
     ).validate()
     return config, notes

@@ -7,7 +7,7 @@ from thzdaq_core.measurements.procedures.monitor import Monitor
 from thzdaq_core.measurements.procedures.pv_curve import PVCurve, YFactorVoltage
 from thzdaq_core.measurements.procedures.reflection import SisReflection
 from thzdaq_core.measurements.procedures.shot_noise import ShotNoise
-from thzdaq_core.measurements.procedures.sis_tools import Demagnetize
+from thzdaq_core.measurements.procedures.sis_tools import CLCurve, Demagnetize
 from thzdaq_core.measurements.procedures.two_sb import (
     IfBalance,
     PumpBalance,
@@ -17,6 +17,7 @@ from thzdaq_core.measurements.procedures.two_sb import (
 )
 
 __all__ = [
+    "CLCurve",
     "Demagnetize",
     "GridCurrentAngle",
     "IFNoise",

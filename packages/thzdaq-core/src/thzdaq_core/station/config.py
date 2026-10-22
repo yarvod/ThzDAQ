@@ -1,19 +1,35 @@
-"""Station (bench) profile: instruments and the roles measurements use.
+"""Station (bench) profile: instruments and the devices they host.
 
-An instrument is a driver plus its connection. A role names the part of an
-instrument a measurement needs ("lo", "if_selector", "sis1"), optionally
-wrapped by a port adapter (frequency multiplier, inverted switch, ...).
+An instrument is a driver plus its connection. What a user operates is a
+device: the instrument itself (power meter), one of its fixed channels
+(supply output CH1) or a configured sub-device (SIS bias on DEV4 with its
+offsets and calibration, an LO behind a x18 multiplier, an IF switch on a
+supply channel). Configured devices live under their instrument.
+
+Devices are addressed by refs: "power_meter_1", "power_supply_3:1" for a
+fixed channel, or the id of a configured device ("sis_bias_1"); ids are
+unique within the station.
 """
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Hashable, List, Optional
+from typing import Any, Dict, Hashable, Iterator, List, Optional, Tuple
 
 from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.errors import StationError
 
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+CHANNEL_SEPARATOR = ":"
+
+
+@dataclass
+class DeviceConfig:
+    kind: str  # sub-device type of the driver (sis_bias) or a device kind (sideband_selector)
+    channel: Optional[Hashable] = None  # DEV4, supply channel 1; None = the instrument
+    title: str = ""
+    settings: Dict[str, Any] = field(default_factory=dict)  # offsets, multiplier, ...
+    metadata: Dict[str, Any] = field(default_factory=dict)  # calibration, notes
 
 
 @dataclass
@@ -25,40 +41,46 @@ class InstrumentConfig:
     sim_options: Dict[str, Any] = field(default_factory=dict)  # simulator kwargs
     title: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)  # kept, not passed to driver
+    devices: Dict[str, DeviceConfig] = field(default_factory=dict)
 
 
-@dataclass
-class RoleConfig:
-    instrument: str  # instrument id in the station
-    channel: Optional[Hashable] = None
-    # Instrument method returning the part for `channel`: channel, ctrl, heater, ...
-    accessor: str = "channel"
-    adapter: Optional[str] = None  # port adapter name, see thzdaq_core.station.ports
-    options: Dict[str, Any] = field(default_factory=dict)  # adapter kwargs
-    attributes: Dict[str, Any] = field(default_factory=dict)  # set on the part
-    description: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+def channel_ref(instrument_id: str, key: Hashable) -> str:
+    return f"{instrument_id}{CHANNEL_SEPARATOR}{key}"
 
 
 @dataclass
 class StationConfig:
     name: str
     instruments: Dict[str, InstrumentConfig] = field(default_factory=dict)
-    roles: Dict[str, RoleConfig] = field(default_factory=dict)
     description: str = ""
+
+    def devices(self) -> Iterator[Tuple[str, str, DeviceConfig]]:
+        """(device id, instrument id, config) of every configured device."""
+        for instrument_id, instrument in self.instruments.items():
+            for device_id, device in instrument.devices.items():
+                yield device_id, instrument_id, device
+
+    def find_device(self, device_id: str) -> Optional[Tuple[str, DeviceConfig]]:
+        for found_id, instrument_id, device in self.devices():
+            if found_id == device_id:
+                return instrument_id, device
+        return None
 
     def problems(self) -> List[str]:
         problems = []
+        seen: Dict[str, str] = {}
         for instrument_id in self.instruments:
             if not IDENTIFIER.match(instrument_id):
                 problems.append(f"instrument id {instrument_id!r} is not an identifier")
-        for role, spec in self.roles.items():
-            if not IDENTIFIER.match(role):
-                problems.append(f"role {role!r} is not an identifier")
-            if spec.instrument not in self.instruments:
-                problems.append(
-                    f"role {role!r} uses unknown instrument {spec.instrument!r}"
-                )
+            seen[instrument_id] = "instrument"
+        for device_id, instrument_id, device in self.devices():
+            if not IDENTIFIER.match(device_id):
+                problems.append(f"device id {device_id!r} is not an identifier")
+            if device_id in seen:
+                problems.append(f"id {device_id!r} is used twice")
+            seen[device_id] = instrument_id
+            if not device.kind:
+                problems.append(f"device {device_id!r} has no kind")
         return problems
 
     def validate(self) -> "StationConfig":
@@ -66,3 +88,11 @@ class StationConfig:
         if problems:
             raise StationError(f"Station {self.name!r}: " + "; ".join(problems))
         return self
+
+    def next_id(self, prefix: str) -> str:
+        """Free id like power_supply_3 or sis_bias_2."""
+        taken = set(self.instruments) | {d for d, _, _ in self.devices()}
+        number = 1
+        while f"{prefix}_{number}" in taken:
+            number += 1
+        return f"{prefix}_{number}"

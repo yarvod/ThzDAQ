@@ -67,14 +67,16 @@ class TwoSbProcedure(Procedure):
     )  # fmt: skip
     switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
     control_yig_power = BoolParameter(
-        "Control YIG power", default=False, help="Switch on the 'yig_power' role first"
+        "Control YIG power",
+        default=False,
+        help="Switch on the 'yig_power' device first",
     )
 
-    def base_roles(self) -> Dict[str, object]:
-        roles = {"sis1": BIAS, "sis2": BIAS}
+    def base_slots(self) -> Dict[str, object]:
+        slots = {"sis1": BIAS, "sis2": BIAS}
         if self.control_yig_power:
-            roles["yig_power"] = Switchable
-        return roles
+            slots["yig_power"] = Switchable
+        return slots
 
     # Helpers for run()
     def start(self, ctx) -> None:
@@ -122,7 +124,7 @@ class LoMixin:
     )
     set_lo = BoolParameter("Set LO", default=True)
 
-    def lo_roles(self):
+    def lo_slots(self):
         return {"lo": SOURCE} if self.set_lo else {}
 
     def prepare_lo(self, ctx) -> None:
@@ -141,7 +143,7 @@ class HotColdMixin:
     point_delay = FloatParameter("Point delay", default=0.01, minimum=0, unit="s")
 
     @staticmethod
-    def hot_cold_roles():
+    def hot_cold_slots():
         return {
             "if_selector": SidebandSwitch,
             "detector": PowerDetector,
@@ -229,7 +231,7 @@ class SpectrumMixin:
         help="Wait after moving the analyzer; doubled x20 on the first point of a chunk",
     )  # fmt: skip
 
-    def detector_roles(self):
+    def detector_slots(self):
         if self.detector == "spectrum":
             return {"spectrum": SpectrumAnalyzer}
         return {"detector": PowerDetector, "if_filter": TunableFilter}

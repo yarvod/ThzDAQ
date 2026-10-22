@@ -84,7 +84,7 @@ class SisReflection(Procedure):
                 ctx.sleep(self.averaging_time)
                 for sample in range(self.samples):
                     trace = vna.read_trace()
-                    if "frequency" not in ctx.dataset.results:
+                    if "frequency" not in ctx.measurement.results:
                         ctx.result("frequency", list(trace.frequency))
                     ctx.record(
                         "trace",

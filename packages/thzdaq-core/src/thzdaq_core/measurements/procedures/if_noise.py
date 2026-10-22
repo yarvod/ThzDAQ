@@ -27,7 +27,7 @@ class IFNoise(Procedure):
         PlotSpec(
             key="power",
             title="P-IF",
-            stream="power",
+            table="power",
             x="frequency",
             y="power",
             x_label="IF, GHz",
@@ -38,7 +38,7 @@ class IFNoise(Procedure):
         PlotSpec(
             key="y_factor",
             title="Y-IF",
-            stream="noise",
+            table="noise",
             x="frequency",
             y="y_factor",
             x_label="IF, GHz",
@@ -48,7 +48,7 @@ class IFNoise(Procedure):
         PlotSpec(
             key="tn",
             title="Tn-IF",
-            stream="noise",
+            table="noise",
             x="frequency",
             y="noise_temperature",
             x_label="IF, GHz",

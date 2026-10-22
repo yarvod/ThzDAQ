@@ -54,9 +54,9 @@ class IfBalance(TwoSbProcedure):
     frequency = if_sweep()
     point_delay = FloatParameter("Point delay", default=0.05, minimum=0, unit="s")
 
-    def roles(self):
+    def slots(self):
         return {
-            **self.base_roles(),
+            **self.base_slots(),
             "if_selector": SidebandSwitch,
             "detector": PowerDetector,
             "if_filter": TunableFilter,
@@ -154,13 +154,13 @@ class PumpBalance(TwoSbProcedure):
     def other(self) -> str:
         return "test_tone" if self.source == "lo" else "lo"
 
-    def roles(self):
-        roles = {**self.base_roles(), self.source: SOURCE + (PowerLevel,)}
+    def slots(self):
+        slots = {**self.base_slots(), self.source: SOURCE + (PowerLevel,)}
         if self.silence_other:
-            roles[self.other] = SOURCE + (PowerLevel,)
+            slots[self.other] = SOURCE + (PowerLevel,)
         if self.measure_power:
-            roles["detector"] = PowerDetector
-        return roles
+            slots["detector"] = PowerDetector
+        return slots
 
     def check(self):
         if self.sis1_voltage.points != self.sis2_voltage.points:

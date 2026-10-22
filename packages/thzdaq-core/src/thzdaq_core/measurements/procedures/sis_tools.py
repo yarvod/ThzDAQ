@@ -1,7 +1,7 @@
-from thzdaq_instruments.capabilities import CurrentSource
-from thzdaq_instruments.units import MA
+from thzdaq_instruments.capabilities import CurrentSource, VoltageCurrentMeter
+from thzdaq_instruments.units import MA, UA
 
-from thzdaq_core.measurements.parameters import FloatParameter
+from thzdaq_core.measurements.parameters import FloatParameter, SweepParameter
 from thzdaq_core.measurements.plots import PlotSpec
 from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_core.measurements.registry import register_procedure
@@ -65,4 +65,51 @@ class Demagnetize(Procedure):
             coil.set_current(current)
             ctx.record("coil", step=index, current=current)
             ctx.sleep(self.step_delay)
+            ctx.progress()
+
+
+@register_procedure
+class CLCurve(Procedure):
+    name = "sis.cl_curve"
+    title = "SIS I-CL curve"
+    description = (
+        "Sweep the magnet coil current and read the bias current: finds the "
+        "coil current that suppresses the Josephson current."
+    )
+    requires = {"coil": CurrentSource, "bias": VoltageCurrentMeter}
+    plots = (
+        PlotSpec(
+            "cl", "I-CL", "cl", "coil_current", "current",
+            x_label="Coil current, mA", y_label="Current, μA",
+            x_scale=MA, y_scale=UA,
+        ),
+    )  # fmt: skip
+
+    coil_current = SweepParameter(
+        "Coil current",
+        default=(0.0, 30e-3, 61),
+        unit="A",
+        display_unit="mA",
+        display_scale=MA,
+    )
+    step_delay = FloatParameter("Step delay", default=0.1, minimum=0, unit="s")
+
+    def estimate_steps(self) -> int:
+        return self.coil_current.points
+
+    def run(self, ctx) -> None:
+        coil, bias = ctx["coil"], ctx["bias"]
+        initial = coil.get_current()
+        ctx.on_exit(lambda: coil.set_current(initial))
+        for current in self.coil_current.values():
+            ctx.check_cancel()
+            coil.set_current(current)
+            ctx.sleep(self.step_delay)
+            reading = bias.measure()
+            ctx.record(
+                "cl",
+                coil_current=current,
+                voltage=reading.voltage,
+                current=reading.current,
+            )
             ctx.progress()

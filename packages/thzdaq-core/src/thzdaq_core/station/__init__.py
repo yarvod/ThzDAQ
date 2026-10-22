@@ -1,14 +1,19 @@
-from thzdaq_core.station.config import InstrumentConfig, RoleConfig, StationConfig
+from thzdaq_core.station.config import (
+    DeviceConfig,
+    InstrumentConfig,
+    StationConfig,
+    channel_ref,
+)
+from thzdaq_core.station.kinds import ADAPTER_KINDS, DeviceKind, kinds_for
 from thzdaq_core.station.ports import (
-    ADAPTERS,
+    AttributePort,
     PortAdapter,
     ScaledFrequencySource,
     SidebandSelector,
     SidebandSwitch,
     SwitchPort,
-    register_adapter,
 )
-from thzdaq_core.station.station import Station
+from thzdaq_core.station.station import DeviceInfo, Station
 from thzdaq_core.station.storage import (
     dump_station,
     load_station,
@@ -18,19 +23,23 @@ from thzdaq_core.station.storage import (
 )
 
 __all__ = [
-    "ADAPTERS",
+    "ADAPTER_KINDS",
+    "AttributePort",
+    "DeviceConfig",
+    "DeviceInfo",
+    "DeviceKind",
     "InstrumentConfig",
     "PortAdapter",
-    "RoleConfig",
     "ScaledFrequencySource",
     "SidebandSelector",
     "SidebandSwitch",
     "Station",
     "StationConfig",
     "SwitchPort",
+    "channel_ref",
     "dump_station",
+    "kinds_for",
     "load_station",
-    "register_adapter",
     "save_station",
     "station_from_dict",
     "station_to_dict",

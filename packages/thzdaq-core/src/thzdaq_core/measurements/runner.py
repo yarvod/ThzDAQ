@@ -1,10 +1,17 @@
 import logging
 import threading
+import time
 import traceback
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
 
-from thzdaq_core.data.dataset import CANCELLED, COMPLETED, FAILED, Dataset
-from thzdaq_core.data.store import DatasetWriter, DataStore
+from thzdaq_core.data.measurement import (
+    CANCELLED,
+    COMPLETED,
+    FAILED,
+    DeviceUse,
+    Measurement,
+)
+from thzdaq_core.data.store import MeasurementStore
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.procedure import Capabilities, Procedure
 
@@ -18,7 +25,12 @@ class Cancelled(Exception):
 class StationLike(Protocol):
     """What the runner needs from a bench (Station implements it)."""
 
-    def require(self, requirements: Mapping[str, Capabilities]) -> Dict[str, Any]:
+    def require(
+        self, devices: Mapping[str, str], requirements: Mapping[str, Capabilities]
+    ) -> Dict[str, Any]:
+        ...
+
+    def device_use(self, ref: str) -> DeviceUse:
         ...
 
     def snapshot(self) -> Dict[str, Any]:
@@ -28,10 +40,10 @@ class StationLike(Protocol):
 class RunObserver:
     """Hooks for UIs and loggers; every method is optional."""
 
-    def on_started(self, dataset: Dataset) -> None:
+    def on_started(self, measurement: Measurement) -> None:
         ...
 
-    def on_record(self, stream: str, record: Dict[str, Any]) -> None:
+    def on_record(self, table: str, record: Dict[str, Any]) -> None:
         ...
 
     def on_progress(self, done: int, total: Optional[int]) -> None:
@@ -40,7 +52,7 @@ class RunObserver:
     def on_log(self, message: str) -> None:
         ...
 
-    def on_finished(self, dataset: Dataset) -> None:
+    def on_finished(self, measurement: Measurement) -> None:
         ...
 
 
@@ -49,36 +61,41 @@ class Context:
 
     def __init__(
         self,
-        ports: Mapping[str, Any],
-        dataset: Dataset,
+        devices: Mapping[str, Any],
+        measurement: Measurement,
         emit: Callable[..., None],
         cancel_event: threading.Event,
-        writer: Optional[DatasetWriter] = None,
+        procedure: Optional[Procedure] = None,
+        autosave: Optional[Callable[[], None]] = None,
         total: Optional[int] = None,
     ):
-        self.ports = ports
-        self.dataset = dataset
+        self.devices = devices
+        self.measurement = measurement
+        self.procedure = procedure
         self._emit = emit
         self._cancel = cancel_event
-        self._writer = writer
+        self._autosave = autosave
         self._cleanups: List[Callable[[], None]] = []
         self.done = 0
         self.total = total
 
-    def __getitem__(self, role: str) -> Any:
-        return self.ports[role]
+    def __getitem__(self, slot: str) -> Any:
+        return self.devices[slot]
 
-    def record(self, stream: str, **values: Any) -> Dict[str, Any]:
+    def record(self, table: str, **values: Any) -> Dict[str, Any]:
         record = dict(values)
-        self.dataset.append(stream, record)
-        if self._writer is not None:
-            self._writer.write_record(stream, record)
-        self._emit("on_record", stream, record)
+        if table not in self.measurement.tables and self.procedure is not None:
+            self.measurement.table(table, self.procedure.table_titles.get(table, ""))
+        overrides = self.procedure.columns if self.procedure is not None else None
+        self.measurement.append(table, record, overrides)
+        if self._autosave is not None:
+            self._autosave()
+        self._emit("on_record", table, record)
         return record
 
     def result(self, key: str, value: Any) -> None:
         """Final values of the run (fit results, summary)."""
-        self.dataset.results[key] = value
+        self.measurement.results[key] = value
 
     def progress(self, done: Optional[int] = None, total: Optional[int] = None) -> None:
         if total is not None:
@@ -101,7 +118,7 @@ class Context:
         self.check_cancel()
 
     def log(self, message: str) -> None:
-        logger.info(f"[{self.dataset.procedure}] {message}")
+        logger.info(f"[{self.measurement.procedure}] {message}")
         self._emit("on_log", message)
 
     def on_exit(self, callback: Callable[[], None]) -> None:
@@ -114,14 +131,14 @@ class Context:
             try:
                 callback()
             except Exception as e:
-                logger.exception(f"[{self.dataset.procedure}] cleanup failed")
+                logger.exception(f"[{self.measurement.procedure}] cleanup failed")
                 errors.append(f"cleanup: {e}")
         self._cleanups.clear()
         return errors
 
 
 class MeasurementRunner:
-    """Runs procedures against a station: ports, dataset, file, cleanup, status.
+    """Runs procedures against a station: devices, measurement, file, cleanup, status.
 
     run() blocks; call it from a worker thread and cancel() from another.
     """
@@ -129,15 +146,17 @@ class MeasurementRunner:
     def __init__(
         self,
         station: StationLike,
-        store: Optional[DataStore] = None,
+        store: Optional[MeasurementStore] = None,
         observers: Sequence[RunObserver] = (),
+        autosave_interval: float = 5.0,
     ):
         self.station = station
         self.store = store
         self.observers: List[RunObserver] = list(observers)
+        self.autosave_interval = autosave_interval
         self._cancel = threading.Event()
         self._lock = threading.Lock()
-        self.current: Optional[Dataset] = None
+        self.current: Optional[Measurement] = None
 
     def _emit(self, method: str, *args: Any) -> None:
         for observer in self.observers:
@@ -158,66 +177,73 @@ class MeasurementRunner:
         self,
         procedure: Procedure,
         comment: str = "",
-        roles: Optional[Mapping[str, str]] = None,
-    ) -> Dataset:
-        """roles maps procedure roles to station roles, e.g. {"bias": "sis1"}."""
+        devices: Optional[Mapping[str, str]] = None,
+    ) -> Measurement:
+        """devices maps procedure slots to station devices, e.g. {"bias": "sis_bias_1"}.
+
+        A slot without a device uses the station device of the same name.
+        """
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Another measurement is running on this runner")
         try:
-            return self._run(procedure, comment, dict(roles or {}))
+            return self._run(procedure, comment, dict(devices or {}))
         finally:
             self._lock.release()
 
     def _run(
-        self, procedure: Procedure, comment: str, roles: Dict[str, str]
-    ) -> Dataset:
+        self, procedure: Procedure, comment: str, devices: Dict[str, str]
+    ) -> Measurement:
         procedure.validate()
-        required = procedure.roles()
-        unknown = set(roles) - set(procedure.requires) - set(required)
+        required = procedure.slots()
+        unknown = set(devices) - set(procedure.requires) - set(required)
         if unknown:
-            raise ProcedureError(f"{procedure.name} has no roles {sorted(unknown)}")
-        # Fails before any file exists when the bench lacks a role
-        station_ports = self.station.require(
-            {roles.get(role, role): caps for role, caps in required.items()}
-        )
-        ports = {role: station_ports[roles.get(role, role)] for role in required}
+            raise ProcedureError(f"{procedure.name} has no slots {sorted(unknown)}")
+        refs = {slot: devices.get(slot) or slot for slot in required}
+        # Fails before any file exists when a device is missing or unsuitable
+        found = self.station.require(refs, required)
         self._cancel.clear()
-        dataset = Dataset(
+        measurement = Measurement(
             procedure=procedure.name,
             title=procedure.title,
             parameters=procedure.to_json(),
-            station=self.station.snapshot(),
             comment=comment,
-            metadata={"roles": {role: roles.get(role, role) for role in required}},
+            devices={slot: self.station.device_use(ref) for slot, ref in refs.items()},
+            station=self.station.snapshot(),
         )
-        writer = self.store.writer(dataset) if self.store is not None else None
-        self.current = dataset
+        self.current = measurement
+        saved = [0.0]
+
+        def save(force: bool = False) -> None:
+            if self.store is None:
+                return
+            if force or time.monotonic() - saved[0] >= self.autosave_interval:
+                try:
+                    self.store.save(measurement)
+                except OSError:
+                    logger.exception(f"[{procedure.name}] autosave failed")
+                saved[0] = time.monotonic()
+
         ctx = Context(
-            ports, dataset, self._emit, self._cancel, writer, procedure.estimate_steps()
-        )
+            found, measurement, self._emit, self._cancel, procedure, save,
+            procedure.estimate_steps(),
+        )  # fmt: skip
         status, error = COMPLETED, None
         try:
-            if writer is not None:
-                writer.write_header(dataset)
-            self._emit("on_started", dataset)
+            save(force=True)
+            self._emit("on_started", measurement)
             procedure.run(ctx)
         except Cancelled:
             status = CANCELLED
         except Exception as e:
             logger.exception(f"[{procedure.name}] failed")
             status, error = FAILED, f"{e.__class__.__name__}: {e}"
-            dataset.metadata["traceback"] = traceback.format_exc()
+            measurement.metadata["traceback"] = traceback.format_exc()
         finally:
             cleanup_errors = ctx._run_cleanups()
             if cleanup_errors:
-                dataset.metadata["cleanup_errors"] = cleanup_errors
-            dataset.finish(status, error)
-            if writer is not None:
-                try:
-                    writer.write_footer(dataset)
-                finally:
-                    writer.close()
-                dataset.metadata["path"] = str(writer.path)
+                measurement.metadata["cleanup_errors"] = cleanup_errors
+            measurement.finish(status, error)
+            save(force=True)
             self.current = None
-            self._emit("on_finished", dataset)
-        return dataset
+            self._emit("on_finished", measurement)
+        return measurement

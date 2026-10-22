@@ -65,11 +65,11 @@ class TwoSbOptimization(LoMixin, HotColdMixin, TwoSbProcedure):
     )
     tone_delay = FloatParameter("Test tone delay", default=0.5, minimum=0, unit="s")
 
-    def roles(self):
+    def slots(self):
         return {
-            **self.base_roles(),
-            **self.lo_roles(),
-            **self.hot_cold_roles(),
+            **self.base_slots(),
+            **self.lo_slots(),
+            **self.hot_cold_slots(),
             "test_tone": SOURCE,
         }
 

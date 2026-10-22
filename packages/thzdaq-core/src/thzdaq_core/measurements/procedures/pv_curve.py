@@ -76,13 +76,13 @@ class PVCurve(Procedure):
         help="Wait |Δangle| / speed after each rotation",
     )  # fmt: skip
 
-    def roles(self):
-        roles = dict(self.requires)
+    def slots(self):
+        slots = dict(self.requires)
         if self.hot_cold:
-            roles["load"] = LoadSwitch
+            slots["load"] = LoadSwitch
         if self.use_grid:
-            roles["grid"] = Rotator
-        return roles
+            slots["grid"] = Rotator
+        return slots
 
     def check(self):
         if self.hot_cold and self.t_hot <= self.t_cold:

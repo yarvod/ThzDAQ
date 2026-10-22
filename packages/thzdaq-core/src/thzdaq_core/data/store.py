@@ -1,24 +1,20 @@
-"""Datasets on disk as JSON Lines, written while the measurement runs.
+"""Measurements on disk: one JSON file each, <root>/<YYYY-MM-DD>/<id>_<procedure>.json
 
-    {"type": "header", ...metadata}
-    {"type": "record", "stream": "power", "data": {...}}
-    ...
-    {"type": "footer", "status": "completed", ...}
-
-A crash leaves a valid file without a footer; it reads back as "interrupted".
+The runner saves at the start, every few seconds while records come and at
+the end. Writes go to a temporary file first, so a crash leaves the previous
+complete version; a file still marked running reads back as interrupted.
 """
 
+import csv
 import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Iterator, List, Optional, Union
 
-from thzdaq_core.data.dataset import INTERRUPTED, Dataset
+from thzdaq_core.data.measurement import INTERRUPTED, RUNNING, Measurement
 
 PathLike = Union[str, Path]
-FORMAT = "thzdaq-dataset"
-FORMAT_VERSION = 1
 
 
 def _encode(value: Any) -> Any:
@@ -48,109 +44,75 @@ def _decode(value: Any) -> Any:
     return value
 
 
-def dumps(value: Any) -> str:
-    return json.dumps(_encode(value), ensure_ascii=False, allow_nan=False)
+def dumps(value: Any, indent: Optional[int] = None) -> str:
+    return json.dumps(
+        _encode(value), ensure_ascii=False, allow_nan=False, indent=indent
+    )
 
 
 def loads(text: str) -> Any:
     return _decode(json.loads(text))
 
 
-class DatasetWriter:
-    def __init__(self, path: PathLike, fsync: bool = False):
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.fsync = fsync
-        self._file = open(self.path, "x", encoding="utf-8")
-
-    def _write(self, line: Dict[str, Any]) -> None:
-        self._file.write(dumps(line) + "\n")
-        self._file.flush()
-        if self.fsync:
-            os.fsync(self._file.fileno())
-
-    def write_header(self, dataset: Dataset) -> None:
-        self._write(
-            {
-                "type": "header",
-                "format": FORMAT,
-                "version": FORMAT_VERSION,
-                **dataset.header(),
-            }
-        )
-
-    def write_record(self, stream: str, record: Dict[str, Any]) -> None:
-        self._write({"type": "record", "stream": stream, "data": record})
-
-    def write_footer(self, dataset: Dataset) -> None:
-        self._write({"type": "footer", **dataset.footer()})
-
-    def close(self) -> None:
-        if not self._file.closed:
-            self._file.close()
+def write_json(measurement: Measurement, path: PathLike) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(dumps(measurement.to_dict(), indent=1), encoding="utf-8")
+    os.replace(temporary, path)
+    return path
 
 
-def read_dataset(path: PathLike) -> Dataset:
-    header: Optional[Dict[str, Any]] = None
-    footer: Optional[Dict[str, Any]] = None
-    streams: Dict[str, List[Dict[str, Any]]] = {}
-    with open(path, encoding="utf-8") as file:
-        for number, line in enumerate(file, 1):
-            if not line.strip():
-                continue
-            try:
-                item = loads(line)
-            except json.JSONDecodeError:
-                # Torn last line after a crash; earlier lines are intact
-                break
-            kind = item.pop("type", None)
-            if kind == "header":
-                item.pop("format", None)
-                item.pop("version", None)
-                header = item
-            elif kind == "record":
-                streams.setdefault(item["stream"], []).append(item["data"])
-            elif kind == "footer":
-                footer = item
-    if header is None:
-        raise ValueError(f"{path}: no dataset header")
-    dataset = Dataset.from_dict({**header, **(footer or {}), "streams": streams})
-    if footer is None:
-        dataset.status = INTERRUPTED
-    return dataset
+def read_json(path: PathLike) -> Measurement:
+    try:
+        data = loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"{path}: {e}") from e
+    measurement = Measurement.from_dict(data)
+    if measurement.status == RUNNING:
+        measurement.status = INTERRUPTED
+    measurement.metadata["path"] = str(path)
+    return measurement
 
 
-class DataStore:
-    """Folder of datasets: <root>/<YYYY-MM-DD>/<id>_<procedure>.jsonl"""
+def export_csv(measurement: Measurement, table: str, path: PathLike) -> Path:
+    """One table as CSV; the header row carries titles with units."""
+    data = measurement.tables[table]
+    path = Path(path)
+    with open(path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow([c.label for c in data.columns])
+        keys = [c.key for c in data.columns]
+        for row in data.rows():
+            writer.writerow([row.get(key) for key in keys])
+    return path
 
-    def __init__(self, root: PathLike, fsync: bool = False):
+
+class MeasurementStore:
+    """Folder of measurement JSON files."""
+
+    def __init__(self, root: PathLike):
         self.root = Path(root)
-        self.fsync = fsync
 
-    def path_for(self, dataset: Dataset) -> Path:
-        day = dataset.started[:10]
-        procedure = dataset.procedure.replace(".", "_")
-        return self.root / day / f"{dataset.id}_{procedure}.jsonl"
+    def path_for(self, measurement: Measurement) -> Path:
+        day = measurement.started[:10]
+        procedure = measurement.procedure.replace(".", "_")
+        return self.root / day / f"{measurement.id}_{procedure}.json"
 
-    def writer(self, dataset: Dataset) -> DatasetWriter:
-        return DatasetWriter(self.path_for(dataset), fsync=self.fsync)
+    def save(self, measurement: Measurement, path: Optional[PathLike] = None) -> Path:
+        path = write_json(measurement, path or self.path_for(measurement))
+        measurement.metadata["path"] = str(path)
+        return path
+
+    def load(self, path: PathLike) -> Measurement:
+        return read_json(path)
 
     def paths(self) -> List[Path]:
-        return sorted(self.root.glob("*/*.jsonl"))
+        return sorted(self.root.glob("*/*.json"))
 
-    def __iter__(self) -> Iterator[Dataset]:
+    def __iter__(self) -> Iterator[Measurement]:
         for path in self.paths():
-            yield read_dataset(path)
-
-    def save(self, dataset: Dataset) -> Path:
-        """Write a whole finished dataset at once (e.g. imported or edited)."""
-        writer = self.writer(dataset)
-        try:
-            writer.write_header(dataset)
-            for stream, records in dataset.streams.items():
-                for record in records:
-                    writer.write_record(stream, record)
-            writer.write_footer(dataset)
-        finally:
-            writer.close()
-        return writer.path
+            try:
+                yield read_json(path)
+            except ValueError:
+                continue
