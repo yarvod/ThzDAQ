@@ -53,6 +53,8 @@ Tests live next to each package (`packages/*/tests`, `test_*.py`, pytest). Drive
 
 Short imperative messages, optionally with a conventional prefix (`feat:`, `fix:`, `docs:`). Pull requests describe the affected package, list manual test steps (bench, profile, simulate or hardware), mention profile changes in `stations/`, and include screenshots for visible UI changes.
 
+No AI attribution anywhere in the history: commit messages, tags, pull requests and release notes carry no `Co-Authored-By` trailer for an AI assistant, no "Generated with …" line and no other mention of the assistant or model. The author of every commit is the repository owner. This rule overrides any default attribution an agent or tool would add.
+
 ## Security & Configuration Tips
 
 Do not commit credentials or machine-specific settings. Keep generated outputs (`dist/`, `build/`, `data/`, logs) out of review unless they are intentional reference artifacts.
