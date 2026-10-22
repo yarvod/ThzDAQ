@@ -114,7 +114,9 @@ class QuantityPanel(QWidget):
                 button.clicked.connect(
                     lambda _=False, q=quantity, s=spin: self.write(q, s.value())
                 )
-                spin.editingFinished.connect(lambda q=quantity, s=spin: self.write(q, s.value()))
+                spin.editingFinished.connect(
+                    lambda q=quantity, s=spin: self.write(q, s.value())
+                )
                 grid.addWidget(spin, row, 2)
                 grid.addWidget(button, row, 3)
         grid.setColumnStretch(1, 1)
@@ -128,7 +130,9 @@ class QuantityPanel(QWidget):
         self.interval.setValue(1.0)
         self.interval.setSuffix(" s")
         self.plot = QCheckBox("Plot")
-        self.plot.setToolTip("Send the monitored values to the P-t, V-t, I-t ... graphs")
+        self.plot.setToolTip(
+            "Send the monitored values to the P-t, V-t, I-t ... graphs"
+        )
         controls.addWidget(self.btnRead)
         controls.addWidget(self.monitor)
         controls.addWidget(self.interval)
@@ -292,7 +296,9 @@ class TraceGroup(QGroupBox):
         read = QPushButton(theme.icon("chart-line"), "Read trace")
         read.clicked.connect(self.read)
         self.continuous = QCheckBox("Continuous")
-        self.continuous.toggled.connect(lambda on: self.timer.start(500) if on else self.timer.stop())
+        self.continuous.toggled.connect(
+            lambda on: self.timer.start(500) if on else self.timer.stop()
+        )
         row.addWidget(apply_button)
         row.addWidget(read)
         row.addWidget(self.continuous)
@@ -387,10 +393,16 @@ class SisBiasGroup(QGroupBox):
         layout = QFormLayout(self)
         settings = self.spec().settings
         self.offset_voltage = pg.SpinBox(
-            value=settings.get("offset_voltage", 0.0), suffix="V", siPrefix=True, dec=True
+            value=settings.get("offset_voltage", 0.0),
+            suffix="V",
+            siPrefix=True,
+            dec=True,
         )
         self.offset_current = pg.SpinBox(
-            value=settings.get("offset_current", 0.0), suffix="A", siPrefix=True, dec=True
+            value=settings.get("offset_current", 0.0),
+            suffix="A",
+            siPrefix=True,
+            dec=True,
         )
         save = QPushButton(theme.icon("content-save-outline"), "Save offsets")
         save.clicked.connect(self.save_offsets)
@@ -424,7 +436,9 @@ class SisBiasGroup(QGroupBox):
 
     def calibration(self) -> dict:
         spec = self.spec()
-        return calibration_for(spec.channel, spec.metadata.get("calibration_coefficients"))
+        return calibration_for(
+            spec.channel, spec.metadata.get("calibration_coefficients")
+        )
 
     def edit_calibration(self) -> None:
         dialog = CalibrationDialog(self.calibration(), self)
@@ -446,7 +460,9 @@ class SisBiasGroup(QGroupBox):
         values = evaluate_sis_calibration(self.calibration())
         self.panel.session.worker.submit(
             lambda: self.panel.device().write_calibration(values),
-            lambda answer: QMessageBox.information(self, "Calibration", f"Block answered: {answer}"),
+            lambda answer: QMessageBox.information(
+                self, "Calibration", f"Block answered: {answer}"
+            ),
             lambda error: QMessageBox.critical(self, "Calibration", str(error)),
         )
 
@@ -454,7 +470,9 @@ class SisBiasGroup(QGroupBox):
 def scan_group(session, hub, title: str, procedure: str, fixed) -> QGroupBox:
     box = QGroupBox(title)
     layout = QVBoxLayout(box)
-    layout.addWidget(ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True))
+    layout.addWidget(
+        ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
+    )
     return box
 
 
@@ -478,7 +496,8 @@ class DeviceWidget(QScrollArea):
         layout.addWidget(title)
         spec = station.config.instruments[info.instrument]
         subtitle = QLabel(
-            f"{spec.driver} · {info.ref}" + ("" if info.kind == INSTRUMENT else f" · {info.kind}")
+            f"{spec.driver} · {info.ref}"
+            + ("" if info.kind == INSTRUMENT else f" · {info.kind}")
         )
         subtitle.setProperty("role", "muted")
         layout.addWidget(subtitle)
@@ -490,9 +509,13 @@ class DeviceWidget(QScrollArea):
             cls = station.driver_class(ref)
             for key in cls.fixed_channels():
                 channel_ref = f"{ref}:{key}"
-                panel = QuantityPanel(session, hub, channel_ref, channel_title(info.title, key))
+                panel = QuantityPanel(
+                    session, hub, channel_ref, channel_title(info.title, key)
+                )
                 self.panels.append(panel)
-                layout.addWidget(self._boxed(channel_title("", key).strip() or str(key), panel))
+                layout.addWidget(
+                    self._boxed(channel_title("", key).strip() or str(key), panel)
+                )
         for group in self.extra_groups(main):
             layout.addWidget(group)
         layout.addStretch()
@@ -521,11 +544,23 @@ class DeviceWidget(QScrollArea):
             groups.append(TraceGroup(panel, vna=True))
         if info.kind == "sis_bias":
             groups.append(SisBiasGroup(panel, info.ref))
-            groups.append(scan_group(session, hub, "I-V scan", "sis.iv_curve", {"bias": info.ref}))
-        if info.kind == "sis_coil":
-            groups.append(scan_group(session, hub, "I-CL scan", "sis.cl_curve", {"coil": info.ref}))
             groups.append(
-                scan_group(session, hub, "Demagnetization", "sis.demagnetize", {"coil": info.ref})
+                scan_group(session, hub, "I-V scan", "sis.iv_curve", {"bias": info.ref})
+            )
+        if info.kind == "sis_coil":
+            groups.append(
+                scan_group(
+                    session, hub, "I-CL scan", "sis.cl_curve", {"coil": info.ref}
+                )
+            )
+            groups.append(
+                scan_group(
+                    session,
+                    hub,
+                    "Demagnetization",
+                    "sis.demagnetize",
+                    {"coil": info.ref},
+                )
             )
         return groups
 
@@ -536,4 +571,3 @@ class DeviceWidget(QScrollArea):
 
 def device_widget(session, hub, ref: str) -> Optional[DeviceWidget]:
     return DeviceWidget(session, hub, ref)
-

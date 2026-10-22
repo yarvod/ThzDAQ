@@ -64,7 +64,7 @@ ads--CTitleBarButton {
 }
 
 #detachGroupButton {
-	qproperty-iconSize: 16px;	
+	qproperty-iconSize: 16px;
 }
 
 
@@ -159,8 +159,8 @@ QScrollArea#dockWidgetScrollArea {
  * Styling of auto hide functionality
  *
  *****************************************************************************/
- 
- 
+
+
 /*****************************************************************************
  * CAutoHideTab
  *****************************************************************************/
@@ -303,7 +303,7 @@ ads--CAutoHideDockContainer ads--CDockAreaTitleBar {
 
 
 /*
- * This is required because the ads--CDockAreaWidget[focused="true"] will 
+ * This is required because the ads--CDockAreaWidget[focused="true"] will
  * overwrite the ads--CAutoHideDockContainer ads--CDockAreaTitleBar rule
  */
 ads--CAutoHideDockContainer ads--CDockAreaWidget[focused="true"] ads--CDockAreaTitleBar {
@@ -333,7 +333,7 @@ ads--CAutoHideDockContainer #dockAreaAutoHideButton {
 
 
 ads--CAutoHideDockContainer #dockAreaMinimizeButton {
-	qproperty-iconSize: 16px;	
+	qproperty-iconSize: 16px;
 }
 
 

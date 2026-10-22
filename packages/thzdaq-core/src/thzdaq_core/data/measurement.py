@@ -125,7 +125,9 @@ class Table:
         return next((c for c in self.columns if c.key == key), None)
 
     def append(
-        self, record: Mapping[str, Any], overrides: Optional[Mapping[str, Column]] = None
+        self,
+        record: Mapping[str, Any],
+        overrides: Optional[Mapping[str, Column]] = None,
     ) -> None:
         size = len(self)
         for key in record:
@@ -259,7 +261,8 @@ class Measurement:
             comment=data.get("comment", ""),
             parameters=dict(data.get("parameters") or {}),
             devices={
-                k: DeviceUse.from_dict(v) for k, v in (data.get("devices") or {}).items()
+                k: DeviceUse.from_dict(v)
+                for k, v in (data.get("devices") or {}).items()
             },
             tables={
                 k: Table.from_dict(k, v) for k, v in (data.get("tables") or {}).items()

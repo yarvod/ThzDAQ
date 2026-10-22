@@ -32,7 +32,6 @@ from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
 from thzdaq_gui.prefs import prefs
 
 
-
 class ProcedureBox(QWidget):
     """Parameters, devices, Start/Stop and progress of one procedure."""
 
@@ -251,14 +250,18 @@ class MonitorBox(ProcedureBox):
         if not hasattr(self, "watch"):
             return
         station = self.session.station
-        checked = set(self.checked()) or set(self.saved_devices.get("watch", "").split(","))
+        checked = set(self.checked()) or set(
+            self.saved_devices.get("watch", "").split(",")
+        )
         self.watch.clear()
         if station is None:
             return
         for info in station.devices():
             if not station.quantities(info.ref):
                 continue
-            item = QListWidgetItem(theme.device_icon(info.kind, info.instrument), info.title)
+            item = QListWidgetItem(
+                theme.device_icon(info.kind, info.instrument), info.title
+            )
             item.setData(Qt.UserRole, info.ref)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if info.ref in checked else Qt.Unchecked)
@@ -303,4 +306,3 @@ SPECIAL = {"monitor.time": MonitorWidget}
 def measure_widget(session, hub, procedure_class) -> MeasureWidget:
     cls = SPECIAL.get(procedure_class.name, MeasureWidget)
     return cls(session, hub, procedure_class)
-

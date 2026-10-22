@@ -128,6 +128,9 @@ def apply(app: QApplication) -> None:
     app.setPalette(palette())
     app.setStyleSheet(STYLE)
     pg.setConfigOptions(antialias=True, background=PLOT_BACKGROUND, foreground=TEXT)
+    from thzdaq_gui import wheel
+
+    wheel.install(app)
 
 
 def dock_style_sheet() -> str:

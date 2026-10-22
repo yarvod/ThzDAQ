@@ -32,15 +32,23 @@ from thzdaq_gui import theme
 class DetailsDialog(QDialog):
     def __init__(self, measurement, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"{measurement.title or measurement.procedure} {measurement.id}")
+        self.setWindowTitle(
+            f"{measurement.title or measurement.procedure} {measurement.id}"
+        )
         self.resize(640, 560)
         data = measurement.to_dict()
         # The data itself is in the tables; show their sizes, not every value
         data["tables"] = {
-            name: {"title": t.title, "rows": len(t), "columns": [c.label for c in t.columns]}
+            name: {
+                "title": t.title,
+                "rows": len(t),
+                "columns": [c.label for c in t.columns],
+            }
             for name, t in measurement.tables.items()
         }
-        text = QPlainTextEdit(json.dumps(json.loads(dumps(data)), indent=2, ensure_ascii=False))
+        text = QPlainTextEdit(
+            json.dumps(json.loads(dumps(data)), indent=2, ensure_ascii=False)
+        )
         text.setReadOnly(True)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -82,7 +90,9 @@ class DataWidget(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setStretchLastSection(True)
-        self.table.doubleClicked.connect(lambda index: index.column() != 2 and self.plot_selected())
+        self.table.doubleClicked.connect(
+            lambda index: index.column() != 2 and self.plot_selected()
+        )
         layout.addWidget(self.table)
 
     def selected(self):
@@ -91,7 +101,10 @@ class DataWidget(QWidget):
 
     def open_files(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Open measurements", str(self.session.store.root), "Measurements (*.json)"
+            self,
+            "Open measurements",
+            str(self.session.store.root),
+            "Measurements (*.json)",
         )
         for path in paths:
             try:
@@ -108,7 +121,9 @@ class DataWidget(QWidget):
     def save_as(self) -> None:
         for measurement in self.selected():
             name = f"{measurement.id}_{measurement.procedure.replace('.', '_')}.json"
-            path, _ = QFileDialog.getSaveFileName(self, "Save measurement", name, "JSON (*.json)")
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Save measurement", name, "JSON (*.json)"
+            )
             if path:
                 self.model.save(measurement, path)
 
@@ -119,11 +134,15 @@ class DataWidget(QWidget):
                 continue
             table = tables[0]
             if len(tables) > 1:
-                table, ok = QInputDialog.getItem(self, "Export CSV", "Table", tables, 0, False)
+                table, ok = QInputDialog.getItem(
+                    self, "Export CSV", "Table", tables, 0, False
+                )
                 if not ok:
                     continue
             name = f"{measurement.id}_{table}.csv"
-            path, _ = QFileDialog.getSaveFileName(self, "Export CSV", name, "CSV (*.csv)")
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Export CSV", name, "CSV (*.csv)"
+            )
             if path:
                 export_csv(measurement, table, path)
 
@@ -137,7 +156,9 @@ class DataWidget(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(root.resolve())))
 
     def remove(self) -> None:
-        rows = sorted({i.row() for i in self.table.selectionModel().selectedRows()}, reverse=True)
+        rows = sorted(
+            {i.row() for i in self.table.selectionModel().selectedRows()}, reverse=True
+        )
         for row in rows:
             if self.model.measurement(row).status != "running":
                 self.model.remove(row)

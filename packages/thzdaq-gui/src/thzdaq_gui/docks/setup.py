@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 from thzdaq_core.errors import ProcedureError, StationError
 from thzdaq_core.station.config import DeviceConfig, InstrumentConfig, StationConfig
-from thzdaq_core.station.kinds import instrument_type, kinds_for
+from thzdaq_core.station.kinds import instrument_type
 from thzdaq_instruments import ConfigurationError, InstrumentError, default_registry
 from thzdaq_instruments.transport.base import (
     HTTP,
@@ -224,7 +224,9 @@ class InstrumentDialog(QDialog):
         self.driver.currentIndexChanged.connect(self.driver_changed)
         if spec is not None:
             self.driver.setCurrentIndex(max(0, self.driver.findData(spec.driver)))
-            self.driver.setEnabled(False)  # devices depend on it; delete and add instead
+            self.driver.setEnabled(
+                False
+            )  # devices depend on it; delete and add instead
             self.title.setText(spec.title)
             self.simulate.setChecked(spec.simulate)
             self.connection.set_spec(spec.connection)
@@ -390,9 +392,15 @@ class InstrumentCard(QGroupBox):
         self.setTitle(spec.title or instrument_id)
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        info = default_registry().get(spec.driver) if spec.driver in default_registry() else None
+        info = (
+            default_registry().get(spec.driver)
+            if spec.driver in default_registry()
+            else None
+        )
         driver = QLabel(info.title if info else spec.driver)
-        where = QLabel(connection_text(spec.connection) + ("  [sim]" if spec.simulate else ""))
+        where = QLabel(
+            connection_text(spec.connection) + ("  [sim]" if spec.simulate else "")
+        )
         where.setWordWrap(True)
         ident = QLabel(instrument_id)
         ident.setProperty("role", "muted")
@@ -420,7 +428,9 @@ class InstrumentCard(QGroupBox):
         if kinds:
             add = compact_button("plus", "Add device")
             add.setToolTip(", ".join(k.title for k in kinds.values()))
-            add.clicked.connect(lambda: self.add_device_requested.emit(self.instrument_id))
+            add.clicked.connect(
+                lambda: self.add_device_requested.emit(self.instrument_id)
+            )
             buttons.addWidget(add)
         buttons.addStretch()
         layout.addLayout(buttons)
@@ -429,8 +439,10 @@ class InstrumentCard(QGroupBox):
             icon = QLabel()
             icon.setPixmap(theme.device_icon(device.kind).pixmap(16, 16))
             channel = f" {device.channel}" if device.channel is not None else ""
-            label = QLabel(f"{device.title or device_id}  <span style='color:{theme.MUTED}'>"
-                           f"{device.kind}{channel} · {device_id}</span>")
+            label = QLabel(
+                f"{device.title or device_id}  <span style='color:{theme.MUTED}'>"
+                f"{device.kind}{channel} · {device_id}</span>"
+            )
             label.setWordWrap(True)
             row.addWidget(icon)
             row.addWidget(label, 1)
@@ -644,7 +656,11 @@ class SetupWidget(QWidget):
 
 def ask_profile_path(parent, save: bool) -> Optional[str]:
     if save:
-        path, _ = QFileDialog.getSaveFileName(parent, "New station profile", "stations", "YAML (*.yaml)")
+        path, _ = QFileDialog.getSaveFileName(
+            parent, "New station profile", "stations", "YAML (*.yaml)"
+        )
     else:
-        path, _ = QFileDialog.getOpenFileName(parent, "Open station profile", "stations", "YAML (*.yaml *.yml)")
+        path, _ = QFileDialog.getOpenFileName(
+            parent, "Open station profile", "stations", "YAML (*.yaml *.yml)"
+        )
     return path or None

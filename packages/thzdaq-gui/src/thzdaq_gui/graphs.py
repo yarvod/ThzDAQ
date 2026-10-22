@@ -55,7 +55,11 @@ def curve_name(measurement: Measurement, group: Tuple) -> str:
     number = measurement.metadata.get("number", "")
     head = f"#{number} " if number != "" else ""
     devices = [use.title for use in measurement.devices.values() if use.title]
-    who = devices[0] if len(devices) == 1 else (measurement.title or measurement.procedure)
+    who = (
+        devices[0]
+        if len(devices) == 1
+        else (measurement.title or measurement.procedure)
+    )
     rest = " ".join(str(v) for v in group if v not in (None, ""))
     return f"{head}{who} {rest}".strip()
 
@@ -73,12 +77,18 @@ class GraphWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         bar = QHBoxLayout()
-        self.btnAdd = self._tool("plus", "Add a curve from a measurement", self.add_dialog)
+        self.btnAdd = self._tool(
+            "plus", "Add a curve from a measurement", self.add_dialog
+        )
         self.btnHidden = self._tool(
             "eye-off-outline", "Remove hidden curves", self.remove_hidden
         )
-        self.btnClear = self._tool("delete-sweep-outline", "Remove all curves", self.clear)
-        self.btnRange = self._tool("fit-to-screen-outline", "Auto range", self.auto_range)
+        self.btnClear = self._tool(
+            "delete-sweep-outline", "Remove all curves", self.clear
+        )
+        self.btnRange = self._tool(
+            "fit-to-screen-outline", "Auto range", self.auto_range
+        )
         for button in (self.btnAdd, self.btnHidden, self.btnClear, self.btnRange):
             bar.addWidget(button)
         bar.addStretch()
@@ -362,7 +372,9 @@ class GraphHub(QObject):
 class AddCurveDialog(QDialog):
     """Pick a measurement, its table and the columns for x and y."""
 
-    def __init__(self, measurements: List[Measurement], graph: GraphWidget, parent=None):
+    def __init__(
+        self, measurements: List[Measurement], graph: GraphWidget, parent=None
+    ):
         super().__init__(parent)
         self.setWindowTitle(f"Add curve to {graph.title}")
         self.measurements = [m for m in measurements if m.tables]
@@ -370,7 +382,9 @@ class AddCurveDialog(QDialog):
         form = QFormLayout()
         self.measurement = QComboBox()
         for m in self.measurements:
-            self.measurement.addItem(f"{m.id}  {m.title or m.procedure}  {m.comment}", m)
+            self.measurement.addItem(
+                f"{m.id}  {m.title or m.procedure}  {m.comment}", m
+            )
         self.table = QComboBox()
         self.x = QComboBox()
         self.y = QComboBox()
@@ -419,7 +433,11 @@ class AddCurveDialog(QDialog):
         if m is None or name is None:
             self.reject()
             return
-        x, y, group = self.x.currentData(), self.y.currentData(), self.group.currentData()
+        x, y, group = (
+            self.x.currentData(),
+            self.y.currentData(),
+            self.group.currentData(),
+        )
         table = m.tables[name]
         if not self.graph.items and not self.graph.x.label:
             self.graph.x = Axis.from_column(table.get_column(x))
@@ -429,4 +447,3 @@ class AddCurveDialog(QDialog):
         if not self.graph.add_columns(m, name, x, y, (group,) if group else ()):
             QMessageBox.information(self, "Add curve", "No points to plot")
         self.accept()
-

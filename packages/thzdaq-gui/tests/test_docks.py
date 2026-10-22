@@ -41,7 +41,11 @@ class TestWindow:
         setup.add_device("sis_block_1")
         assert "device:sis_bias_3" in window.docks
         saved = load_station(profile).instruments["sis_block_1"].devices["sis_bias_3"]
-        assert (saved.kind, saved.channel, saved.title) == ("sis_bias", "DEV1", "SIS b2d2")
+        assert (saved.kind, saved.channel, saved.title) == (
+            "sis_bias",
+            "DEV1",
+            "SIS b2d2",
+        )
         assert "sis b2d2" in setup.cards["sis_block_1"].search_text
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
@@ -86,7 +90,12 @@ class TestDeviceDocks:
     def test_quantity_panel_reads_and_sets(self, window, session, wait):
         widget = window.docks["device:sis_bias_1"].widget()
         panel = widget.panels[0]
-        assert [q.key for q in panel.quantities] == ["voltage_set", "voltage", "current", "short"]
+        assert [q.key for q in panel.quantities] == [
+            "voltage_set",
+            "voltage",
+            "current",
+            "short",
+        ]
         voltage = next(q for q in panel.quantities if q.key == "voltage_set")
         panel.write(voltage, 2.5e-3)
         wait(lambda: panel.values["voltage_set"].text().startswith("2.5"))
@@ -112,7 +121,9 @@ class TestDeviceDocks:
         panel.monitor.setChecked(False)
         assert graph.curve_label(("monitor", "power_meter_1", "power")) == "R&S NRX"
 
-    def test_sis_bias_offsets_and_calibration(self, window, session, profile, wait, monkeypatch):
+    def test_sis_bias_offsets_and_calibration(
+        self, window, session, profile, wait, monkeypatch
+    ):
         from thzdaq_gui.docks.devices import SisBiasGroup
 
         widget = window.docks["device:sis_bias_2"].widget()
@@ -120,16 +131,20 @@ class TestDeviceDocks:
         group = widget.findChildren(SisBiasGroup)[0]
         group.offset_voltage.setValue(1e-4)
         group.save_offsets()
-        assert load_station(profile).instruments["sis_block_1"].devices["sis_bias_2"].settings[
-            "offset_voltage"
-        ] == pytest.approx(1e-4)
+        assert load_station(profile).instruments["sis_block_1"].devices[
+            "sis_bias_2"
+        ].settings["offset_voltage"] == pytest.approx(1e-4)
         # The dock was rebuilt for the new settings; the device uses them
         wait(lambda: True)
-        assert session.station.device("sis_bias_2").offset_voltage == pytest.approx(1e-4)
+        assert session.station.device("sis_bias_2").offset_voltage == pytest.approx(
+            1e-4
+        )
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
         shown = []
-        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
+        monkeypatch.setattr(
+            QMessageBox, "information", lambda *a, **k: shown.append(a[2])
+        )
         group = window.docks["device:sis_bias_2"].widget().findChildren(SisBiasGroup)[0]
         group.write_calibration()
         wait(lambda: shown)
@@ -181,7 +196,9 @@ class TestMeasureAndData:
         assert again.devices.mapping()["bias"] == "sis_bias_2"
         assert again.form.values()["voltage"] == FAST_IV["voltage"]
 
-    def test_data_dock_opens_plots_and_exports(self, window, session, wait, tmp_path, monkeypatch):
+    def test_data_dock_opens_plots_and_exports(
+        self, window, session, wait, tmp_path, monkeypatch
+    ):
         from thzdaq_core.data import Measurement, MeasurementStore
 
         measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
@@ -203,7 +220,11 @@ class TestMeasureAndData:
             lambda *a, **k: (str(csv_path), ""),
         )
         data.export()
-        assert csv_path.read_text(encoding="utf-8").splitlines()[0].startswith('"Voltage, V"')
+        assert (
+            csv_path.read_text(encoding="utf-8")
+            .splitlines()[0]
+            .startswith('"Voltage, V"')
+        )
 
     def test_monitor_dock_watches_ticked_devices(self, window, session, wait):
         from PySide6.QtCore import Qt
@@ -229,12 +250,15 @@ class TestPerspectives:
         from thzdaq_gui.main_window import MainWindow
 
         settings = str(tmp_path / "layout.ini")
-        window = MainWindow(session, settings, restore_layout=False, check_updates=False)
+        window = MainWindow(
+            session, settings, restore_layout=False, check_updates=False
+        )
         window.show()
         assert "Default" in window.dock_manager.perspectiveNames()
         window.docks["graph:Tn-V"].toggleView(True)
         monkeypatch.setattr(
-            "thzdaq_gui.main_window.QInputDialog.getText", lambda *a, **k: ("Noise", True)
+            "thzdaq_gui.main_window.QInputDialog.getText",
+            lambda *a, **k: ("Noise", True),
         )
         window.create_perspective()
         assert window.perspectives.currentText() == "Noise"
