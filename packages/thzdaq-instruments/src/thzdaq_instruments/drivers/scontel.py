@@ -8,7 +8,8 @@ from thzdaq_instruments.errors import (
     InstrumentError,
     InstrumentResponseError,
 )
-from thzdaq_instruments.instrument import Channel, ScpiInstrument
+from thzdaq_instruments.instrument import Channel, ScpiInstrument, SubdeviceType
+from thzdaq_instruments.quantities import SHORT
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 
@@ -25,6 +26,7 @@ class SisBiasChannel(Channel):
     """
 
     instrument: "ScontelSisBlock"
+    quantities = (SHORT,)
 
     def __init__(self, instrument: "ScontelSisBlock", key: str):
         super().__init__(instrument, key)
@@ -118,6 +120,7 @@ class SisCtrlChannel(Channel):
     """Magnetic field coil current of one device: CurrentSource."""
 
     instrument: "ScontelSisBlock"
+    quantities = (SHORT,)
 
     def set_current(self, current: float) -> None:
         self.instrument.command(f"CTRL:{self.key}:CURR {current}")
@@ -145,6 +148,10 @@ class ScontelSisBlock(ScpiInstrument):
 
     channel_class = SisBiasChannel
     channel_keys = DEVICES
+    subdevices = {
+        "sis_bias": SubdeviceType("SIS bias", "channel", DEVICES, SisBiasChannel),
+        "sis_coil": SubdeviceType("SIS coil", "ctrl", DEVICES, SisCtrlChannel),
+    }
 
     def __init__(
         self,

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, Hashable, Optional, Tuple, Type
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
@@ -19,11 +20,38 @@ class Channel:
         return f"{self.__class__.__name__}({self.name!r})"
 
 
+@dataclass(frozen=True)
+class SubdeviceType:
+    """A functional device the instrument hosts, added by the user.
+
+    Unlike fixed channels (supply outputs), sub-devices are configured: which
+    DEV of a SIS block is a bias and which a coil depends on the bench.
+    """
+
+    title: str
+    accessor: str = "channel"  # instrument method returning the part for a key
+    keys: Tuple[Hashable, ...] = ()
+    part_class: Optional[type] = None  # what the accessor returns, for capabilities
+
+
 class Instrument:
-    """Base of every driver and simulator: name, channels, lifecycle."""
+    """Base of every driver and simulator: name, channels, lifecycle.
+
+    channel_keys are physical channels fixed by the model (supply outputs);
+    subdevices are the kinds of functional devices a user adds (SIS bias,
+    coil, heater output).
+    """
 
     channel_class: ClassVar[Optional[Type[Channel]]] = None
     channel_keys: ClassVar[Tuple[Hashable, ...]] = ()
+    subdevices: ClassVar[Dict[str, SubdeviceType]] = {}
+
+    @classmethod
+    def fixed_channels(cls) -> Tuple[Hashable, ...]:
+        # Channels reinterpreted as sub-devices (SIS DEVs) are not shown on their own
+        if any(kind.accessor == "channel" for kind in cls.subdevices.values()):
+            return ()
+        return tuple(cls.channel_keys)
 
     def __init__(self, *, name: Optional[str] = None):
         self.name = name or self.__class__.__name__
@@ -46,6 +74,13 @@ class Instrument:
     @property
     def channels(self) -> Tuple[Channel, ...]:
         return tuple(self.channel(key) for key in self.channel_keys)
+
+    def part(self, accessor: str, key: Hashable) -> Any:
+        """The part a channel or sub-device refers to: channel(key), ctrl(key), ..."""
+        method = getattr(self, accessor, None)
+        if not callable(method):
+            raise ConfigurationError(f"{self.name} has no {accessor!r} parts")
+        return method(key)
 
     def close(self) -> None:
         pass

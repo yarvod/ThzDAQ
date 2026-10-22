@@ -2,18 +2,23 @@ import math
 from typing import Optional
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
-from thzdaq_instruments.instrument import Channel, Instrument
+from thzdaq_instruments.instrument import Channel, Instrument, SubdeviceType
+from thzdaq_instruments.quantities import SHORT
 from thzdaq_instruments.readings import ChannelReading
+
+DEVICES = ("DEV1", "DEV2", "DEV3", "DEV4")
 
 
 class SimSisBiasChannel(Channel):
     """SIS junction biased by voltage: smooth current step at the gap."""
 
     instrument: "SimSisBlock"
+    quantities = (SHORT,)
 
     def __init__(self, instrument: "SimSisBlock", key: str):
         super().__init__(instrument, key)
         self._voltage = 0.0
+        self._short = False
         # Same knobs as the real driver; an ideal simulated circuit has no offset
         self.offset_voltage = 0.0
         self.offset_current = 0.0
@@ -42,15 +47,30 @@ class SimSisBiasChannel(Channel):
         self.calibration = dict(coefficients)
         return "OK"
 
+    def get_short(self) -> bool:
+        return self._short
+
+    def set_short(self, value: bool) -> None:
+        self._short = bool(value)
+
     def set_voltage_precise(self, voltage: float, **kwargs) -> float:
         self.set_voltage(voltage)
         return self._voltage
 
 
 class SimSisCtrlChannel(Channel):
+    quantities = (SHORT,)
+
     def __init__(self, instrument: "SimSisBlock", key: str):
         super().__init__(instrument, key)
         self._current = 0.0
+        self._short = False
+
+    def get_short(self) -> bool:
+        return self._short
+
+    def set_short(self, value: bool) -> None:
+        self._short = bool(value)
 
     def set_current(self, current: float) -> None:
         self._current = current
@@ -61,7 +81,11 @@ class SimSisCtrlChannel(Channel):
 
 class SimSisBlock(Instrument):
     channel_class = SimSisBiasChannel
-    channel_keys = ("DEV1", "DEV2", "DEV3", "DEV4")
+    channel_keys = DEVICES
+    subdevices = {
+        "sis_bias": SubdeviceType("SIS bias", "channel", DEVICES, SimSisBiasChannel),
+        "sis_coil": SubdeviceType("SIS coil", "ctrl", DEVICES, SimSisCtrlChannel),
+    }
 
     def __init__(
         self,
