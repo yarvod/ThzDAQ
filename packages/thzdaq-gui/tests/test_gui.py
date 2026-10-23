@@ -272,3 +272,30 @@ def test_app_icon_has_a_drawing_for_every_size(app):
     # Pixel art: the small sizes are drawn, not scaled down from a big picture
     pixmap = icon.pixmap(16, 16).toImage()
     assert pixmap.width() == 16 and pixmap.pixelColor(8, 0).alpha() == 255
+
+
+class TestDockBody:
+    def test_built_on_first_open_and_kept_while_closed(self, app):
+        from PySide6.QtWidgets import QLabel
+        from thzdaq_gui.docks.body import DockBody
+
+        made = []
+
+        def factory():
+            made.append(QLabel("content"))
+            return made[-1]
+
+        body = DockBody(factory)
+        assert not body.built and made == []
+        body.set_open(True)
+        assert body.attached and made[0].parent() is body
+        body.set_open(False)
+        content = made[0]
+        assert content.parent() is None and not content.isVisible()
+        assert body.text() == "content"  # reaches the content while detached
+        body.set_open(True)
+        assert len(made) == 1 and body.attached
+        body.replace(factory)
+        assert len(made) == 2 and body.attached and body.content() is made[1]
+        body.dispose()
+        assert not body.built

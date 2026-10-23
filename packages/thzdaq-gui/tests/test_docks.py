@@ -424,6 +424,48 @@ class TestPerspectives:
         assert not again.docks["graph:Tn-V"].isClosed()
         again.close()
 
+    def test_switching_keeps_widths_and_holds_only_open_contents(self, window, app):
+        from PySide6.QtCore import QCoreApplication, QEvent
+        from PySide6.QtWidgets import QSplitter
+        from thzdaq_gui.docks.body import DockBody
+
+        def settle():
+            for _ in range(5):
+                app.processEvents()
+                QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+        def widths():
+            return sorted(
+                str(s.sizes())
+                for s in window.dock_manager.findChildren(QSplitter)
+                if s.isVisible()
+            )
+
+        window.resize(1500, 900)
+        settle()
+        for splitter in window.dock_manager.findChildren(QSplitter):
+            if splitter.isVisible() and splitter.count() == 2:
+                total = sum(splitter.sizes())
+                splitter.setSizes([total // 4, total - total // 4])
+        settle()
+        window.dock_manager.addPerspective("Narrow")
+        narrow = widths()
+        window.docks["device:power_meter_1"].toggleView(True)
+        window.docks["measure:monitor.time"].toggleView(True)
+        settle()
+        window.dock_manager.addPerspective("Wide")
+        wide = widths()
+        for name, expected in (("Narrow", narrow), ("Wide", wide), ("Narrow", narrow)):
+            window.open_perspective(name)
+            settle()
+            assert widths() == expected, name
+        # Closed device and measurement docks carry no content (fast switching)
+        for name, dock in window.docks.items():
+            body = dock.widget()
+            if isinstance(body, DockBody):
+                assert body.attached == (not dock.isClosed()), name
+        assert not window.docks["device:power_meter_1"].widget().attached
+
     def test_settings_keep_the_station_path(self, window, session, tmp_path):
         window.on_station_changed(session.station)
         assert window.settings.value("station/path") == str(session.path)
@@ -505,6 +547,14 @@ def test_no_stray_windows_flash(app, session, tmp_path):
             "sis_bias", channel="DEV1"
         )
         session.update_config(config)
+        app.processEvents()
+        # Dock contents detached and attached again (closing, perspectives)
+        dock = window.docks["device:power_meter_1"]
+        dock.toggleView(True)
+        dock.toggleView(False)
+        window.dock_manager.addPerspective("P")
+        dock.toggleView(True)
+        window.open_perspective("P")
         app.processEvents()
     finally:
         app.removeEventFilter(spy)

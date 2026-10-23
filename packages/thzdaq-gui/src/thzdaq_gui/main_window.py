@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import PySide6QtAds as QtAds
-from PySide6.QtCore import QSettings, QSignalBlocker, QTimer
+from PySide6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QInputDialog,
@@ -22,12 +23,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QWidget,
 )
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.registry import get_procedure, list_procedures
 from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
+from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.docks.log import LogWidget
@@ -110,6 +113,8 @@ class MainWindow(QMainWindow):
         self.docks: Dict[str, QtAds.CDockWidget] = {}
         self.menu_actions: Dict[str, QAction] = {}
         self.dock_signatures: Dict[str, tuple] = {}
+        # Docks are added open and then arranged: build contents only after that
+        self._building = True
         self.hub = GraphHub(self)
         self.hub.add_curve_request = self.add_curve
         self.hub.graph_created.connect(self.add_graph_dock)
@@ -139,6 +144,8 @@ class MainWindow(QMainWindow):
         restored = restore_layout and self.restore_state()
         if not restored:
             self.apply_default_layout()
+        self._building = False
+        self.sync_bodies()
         self.refresh_perspectives()
         if check_updates and can_self_update():
             self.updateCheck = Background(fetch_job, self)
@@ -250,6 +257,10 @@ class MainWindow(QMainWindow):
         dock.viewToggled.connect(action.setChecked)
         menu.addAction(action)
         self.menu_actions[name] = action
+        if isinstance(widget, DockBody):
+            dock.viewToggled.connect(
+                lambda on, body=widget: self._building or body.set_open(on)
+            )
         if auto_hide is not None:
             container = self.dock_manager.addAutoHideDockWidget(auto_hide, dock)
             container.setSize(AUTO_HIDE_SIZES.get(name, 420))
@@ -257,7 +268,16 @@ class MainWindow(QMainWindow):
             self.dock_manager.addDockWidgetTab(area or QtAds.CenterDockWidgetArea, dock)
         self.docks[name] = dock
         action.setChecked(not dock.isClosed())
+        if isinstance(widget, DockBody) and not self._building:
+            widget.set_open(not dock.isClosed())
         return dock
+
+    def sync_bodies(self) -> None:
+        """Content only in open docks (after a layout or perspective is restored)."""
+        for dock in self.docks.values():
+            body = dock.widget()
+            if isinstance(body, DockBody):
+                body.set_open(not dock.isClosed())
 
     def menu_toggled(self, name: str, checked: bool) -> None:
         """Open a closed dock; a dock hidden behind another tab is brought to front."""
@@ -279,7 +299,9 @@ class MainWindow(QMainWindow):
         if dock is None:
             return
         widget = dock.widget()
-        if hasattr(widget, "stop"):
+        if isinstance(widget, DockBody):
+            widget.dispose()
+        elif hasattr(widget, "stop"):
             widget.stop()
         for menu in (
             self.menuDevices,
@@ -322,9 +344,10 @@ class MainWindow(QMainWindow):
     def add_measure_dock(self, cls) -> None:
         group = cls.name.split(".")[0]
         icon = theme.icon(PROCEDURE_ICONS.get(group, "play-circle-outline"))
-        widget = measure_widget(self.session, self.hub, cls)
+        # Built when the dock is first opened (DockBody)
+        body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
         self.add_dock(
-            f"measure:{cls.name}", cls.title or cls.name, widget, self.menuMeasures,
+            f"measure:{cls.name}", cls.title or cls.name, body, self.menuMeasures,
             icon, QtAds.RightDockWidgetArea,
         )  # fmt: skip
 
@@ -393,18 +416,14 @@ class MainWindow(QMainWindow):
             dock = self.docks.get(name)
             if dock is not None and self.dock_signatures.get(name) == signature:
                 continue
-            try:
-                widget = DeviceWidget(self.session, self.hub, info.ref)
-            except (InstrumentError, KeyError) as e:
-                logger.error(f"Device dock {info.ref}: {e}")
-                continue
+            factory = lambda ref=info.ref: self.device_widget(ref)  # noqa: E731
             self.dock_signatures[name] = signature
             icon = theme.device_icon(info.kind, info.instrument)
             if dock is None:
                 dock = self.add_dock(
                     name,
                     info.title,
-                    widget,
+                    DockBody(factory),
                     self.menuDevices,
                     icon,
                     QtAds.BottomDockWidgetArea,
@@ -412,14 +431,19 @@ class MainWindow(QMainWindow):
                 if not getattr(self, "_restoring", False):
                     dock.toggleView(False)
             else:
-                old = dock.widget()
-                if hasattr(old, "stop"):
-                    old.stop()
-                dock.setWidget(widget)
+                dock.widget().replace(factory)
                 dock.setWindowTitle(info.title)
                 dock.toggleViewAction().setText(info.title)
                 self.menu_actions[name].setText(info.title)
-                old.deleteLater()
+
+    def device_widget(self, ref: str) -> QWidget:
+        try:
+            return DeviceWidget(self.session, self.hub, ref)
+        except (InstrumentError, KeyError) as e:
+            logger.error(f"Device dock {ref}: {e}")
+            label = QLabel(f"{ref}: {e}")
+            label.setWordWrap(True)
+            return label
 
     def check_device_worker(self) -> None:
         waiting = self.session.worker.busy_for()
@@ -508,7 +532,15 @@ class MainWindow(QMainWindow):
     def open_perspective(self, name: str) -> None:
         if not name:
             return
-        self.dock_manager.openPerspective(name)
+        # One repaint for the new layout instead of every step of the rebuild
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.setUpdatesEnabled(False)
+        try:
+            self.dock_manager.openPerspective(name)
+            self.sync_bodies()
+        finally:
+            self.setUpdatesEnabled(True)
+            QApplication.restoreOverrideCursor()
         self.perspective = name
 
     def create_perspective(self) -> None:
@@ -612,6 +644,7 @@ class MainWindow(QMainWindow):
                 return False
             return bool(self.dock_manager.restoreState(state, STATE_VERSION))
         finally:
+            self.sync_bodies()
             self._restoring = False
 
     def save_state(self) -> None:
