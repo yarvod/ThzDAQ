@@ -1,67 +1,73 @@
-"""Readings of any devices over time (P-t, T-t, SIS bias monitor, vacuum, compressor)."""
+"""Readings of any devices over time (P-t, T-t, SIS bias, vacuum, compressor).
+
+What is read is chosen per device: "power_meter_1" reads its measured values
+(power, temperature, voltage and current, ...), "sis_bias_1/voltage" one of
+them. Every value is a row of the samples table (time, device, quantity,
+value) and goes to the graph of its unit: dBm to P-t, K to T-t, V to V-t, ...
+"""
 
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from thzdaq_instruments.capabilities import (
-    Compressor,
-    CurrentSource,
-    PowerDetector,
-    Thermometer,
-    VacuumGauge,
-    VoltageCurrentMeter,
-)
-from thzdaq_instruments.units import MA, MV, UA
+from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
+from thzdaq_instruments.units import GHZ, MA, MV, UA
 
+from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.parameters import FloatParameter, StringListParameter
 from thzdaq_core.measurements.plots import PlotSpec
 from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_core.measurements.registry import register_procedure
 
-Reader = Callable[[Any], Dict[str, float]]
+KEY_SEPARATOR = "/"
 
 
-def _measure(port) -> Dict[str, float]:
-    reading = port.measure()
-    return {"voltage": reading.voltage, "current": reading.current}
+def monitor_quantities(quantities: Iterable[Quantity]) -> List[Quantity]:
+    """Quantities worth watching: numeric readings, not configuration."""
+    return [
+        q
+        for q in quantities
+        if q.readable and q.kind in ("float", "int") and not q.persistent
+    ]
 
 
-def _compressor(port) -> Dict[str, float]:
-    values = {f"temperature_{i}": t for i, t in enumerate(port.read_temperatures(), 1)}
-    values.update({f"pressure_{i}": p for i, p in enumerate(port.read_pressures(), 1)})
-    return values
+def default_quantities(quantities: Iterable[Quantity]) -> List[Quantity]:
+    """Read when a device is watched without a choice: measured values with a
+    unit, or the readable setpoints when nothing is measured (a SIS coil
+    current). A value without a unit (the NRX reading in its display unit) can
+    be chosen by hand."""
+    candidates = [q for q in monitor_quantities(quantities) if q.unit]
+    return [q for q in candidates if not q.settable] or candidates
 
 
-# Capability -> what to read; first matching readers are combined
-READERS: List[Tuple[type, Reader]] = [
-    (PowerDetector, lambda port: {"power": port.read_power()}),
-    (Thermometer, lambda port: {"temperature": port.read_temperature()}),
-    (VoltageCurrentMeter, _measure),
-    (VacuumGauge, lambda port: {"pressure": port.read_pressure()}),
-    (Compressor, _compressor),
-]
+def plot_for(quantity: Quantity) -> str:
+    """The time graph of a quantity, by its unit."""
+    if quantity.unit == "A" and quantity.key == "current_set":
+        return "Coil-t"
+    return UNIT_PLOTS.get(quantity.unit, "Value-t")
 
 
-def readers_for(port) -> List[Reader]:
-    found = [reader for capability, reader in READERS if isinstance(port, capability)]
-    if not found and isinstance(port, CurrentSource):
-        # e.g. a SIS coil: no meter, but the current readback is useful
-        found.append(lambda p: {"coil_current": p.get_current()})
-    return found
+UNIT_PLOTS = {
+    "dBm": "P-t",
+    "K": "T-t",
+    "V": "V-t",
+    "A": "I-t",
+    "Pa": "p-t",
+    "Hz": "f-t",
+}
 
 
-def read_port(port) -> Dict[str, float]:
-    values: Dict[str, float] = {}
-    for reader in readers_for(port):
-        values.update(reader(port))
-    return values
+def split_entry(entry: str) -> Tuple[str, Optional[str]]:
+    """ "sis_bias_1/voltage" -> ("sis_bias_1", "voltage"); "power_meter_1" -> (ref, None)."""
+    ref, _, key = entry.partition(KEY_SEPARATOR)
+    return ref, key or None
 
 
-def _time_plot(key, title, y, y_label, y_scale=1.0) -> PlotSpec:
+def _time_plot(title, y_label, y_scale=1.0) -> PlotSpec:
     return PlotSpec(
-        key, title, "samples", "time", y,
-        x_label="Time, s", y_label=y_label, y_scale=y_scale, group_by=("device",),
+        title, title, "samples", "time", "value", x_label="Time, s",
+        y_label=y_label, y_scale=y_scale, group_by=("device", "quantity"),
+        where=(("plot", title),),
     )  # fmt: skip
 
 
@@ -70,48 +76,93 @@ class Monitor(Procedure):
     name = "monitor.time"
     title = "Monitor over time"
     description = (
-        "Read power, temperature, bias, pressure or compressor values of the "
-        "chosen devices at a fixed interval until stopped or the duration ends."
+        "Read the chosen values of devices (power, temperature, bias, pressure, "
+        "compressor) at a fixed interval until stopped or the duration ends."
     )
     plots = (
-        _time_plot("power", "P-t", "power", "Power, dBm"),
-        _time_plot("temperature", "T-t", "temperature", "Temperature, K"),
-        _time_plot("voltage", "V-t", "voltage", "Voltage, mV", MV),
-        _time_plot("current", "I-t", "current", "Current, μA", UA),
-        _time_plot("coil", "Coil-t", "coil_current", "Coil current, mA", MA),
-        _time_plot("pressure", "p-t", "pressure", "Pressure, Pa"),
+        _time_plot("P-t", "Power, dBm"),
+        _time_plot("T-t", "Temperature, K"),
+        _time_plot("V-t", "Voltage, mV", MV),
+        _time_plot("I-t", "Current, μA", UA),
+        _time_plot("Coil-t", "Coil current, mA", MA),
+        _time_plot("p-t", "Pressure, Pa"),
+        _time_plot("f-t", "Frequency, GHz", GHZ),
+        _time_plot("Value-t", "Value"),
     )
 
-    watch = StringListParameter("Devices", default=("detector",))
+    watch = StringListParameter(
+        "Devices",
+        default=("detector",),
+        help="Device refs, or ref/quantity to read one value of a device",
+    )
     interval = FloatParameter("Interval", default=1.0, minimum=0.01, unit="s")
     duration = FloatParameter(
         "Duration", default=0.0, minimum=0, unit="s", help="0: until stopped"
     )
+    window = FloatParameter(
+        "Plot window",
+        default=600.0,
+        minimum=0,
+        unit="s",
+        help="Graphs show the last part of the curves, so a long monitor stays "
+        "fast; the data keeps every sample. 0: show everything",
+    )
+
+    def refs(self) -> List[str]:
+        refs: List[str] = []
+        for entry in self.watch:
+            ref, _ = split_entry(entry)
+            if ref not in refs:
+                refs.append(ref)
+        return refs
 
     def slots(self):
-        return {ref: object for ref in self.watch}
+        return {ref: object for ref in self.refs()}
 
     def estimate_steps(self):
         return int(self.duration / self.interval) + 1 if self.duration else None
 
+    def plot_window(self):
+        return self.window or None
+
+    def chosen(self, ref: str, device: Any) -> List[Quantity]:
+        available = monitor_quantities(quantities_of(device))
+        keys = [key for r, key in map(split_entry, self.watch) if r == ref and key]
+        if not keys:
+            return default_quantities(available)
+        by_key = {q.key: q for q in available}
+        unknown = [key for key in keys if key not in by_key]
+        if unknown:
+            raise ProcedureError(f"{ref} has no readable {', '.join(unknown)}")
+        return [by_key[key] for key in keys]
+
     def run(self, ctx) -> None:
-        devices = {ref: ctx[ref] for ref in self.watch}
+        devices = {ref: ctx[ref] for ref in self.refs()}
         titles = {ref: use.title or ref for ref, use in ctx.measurement.devices.items()}
+        chosen: Dict[str, Sequence[Quantity]] = {
+            ref: self.chosen(ref, device) for ref, device in devices.items()
+        }
         started = time.monotonic()
         while True:
             ctx.check_cancel()
             elapsed = time.monotonic() - started
             stamp = datetime.now().isoformat(timespec="milliseconds")
             for ref, device in devices.items():
-                ctx.record(
-                    "samples",
-                    time=elapsed,
-                    wall_time=stamp,
-                    device=titles.get(ref, ref),
-                    **read_port(device),
-                )
+                values = read_values(device, chosen[ref])
+                for quantity in chosen[ref]:
+                    ctx.record(
+                        "samples",
+                        time=elapsed,
+                        wall_time=stamp,
+                        device=titles.get(ref, ref),
+                        quantity=quantity.title,
+                        key=quantity.key,
+                        value=values.get(quantity.key),
+                        unit=quantity.unit,
+                        plot=plot_for(quantity),
+                    )
             ctx.progress()
             if self.duration and elapsed + self.interval > self.duration:
                 return
-            next_tick = started + (ctx.done) * self.interval
+            next_tick = started + ctx.done * self.interval
             ctx.sleep(max(0.0, next_tick - time.monotonic()))

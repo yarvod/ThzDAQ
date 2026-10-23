@@ -11,7 +11,7 @@ measure()): they share a ``source`` and read_values() calls it once.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 from thzdaq_instruments import capabilities as caps
 
@@ -28,7 +28,7 @@ class Quantity:
     set: Optional[Callable[[Any, Any], Any]] = None
     # Shared call for several quantities, e.g. "measure" -> ChannelReading
     source: Optional[Callable[[Any], Any]] = None
-    field: Optional[str] = None
+    field: Union[str, int, None] = None  # attribute of the source result, or index
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     choices: Tuple[Any, ...] = ()  # allowed values of a "text" quantity
@@ -50,7 +50,7 @@ class Quantity:
 
     def read(self, target: Any) -> Any:
         if self.source is not None:
-            return getattr(self.source(target), self.field)
+            return pick(self.source(target), self.field)
         if self.get is None:
             raise AttributeError(f"{self.key} is write-only")
         return self.get(target)
@@ -61,8 +61,23 @@ class Quantity:
         return self.set(target, value)
 
 
+def pick(result: Any, field: Union[str, int, None]) -> Any:
+    """A field of a shared call: an attribute, or an item of a list (None if absent)."""
+    if isinstance(field, int):
+        return result[field] if field < len(result) else None
+    return getattr(result, field)
+
+
 def _measure(target):
     return target.measure()
+
+
+def _temperatures(target):
+    return target.read_temperatures()
+
+
+def _pressures(target):
+    return target.read_pressures()
 
 
 CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
@@ -112,6 +127,13 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
     caps.VacuumGauge: (
         Quantity("pressure", "Pressure", "Pa", get=lambda t: t.read_pressure()),
     ),
+    # F-70: discharge, water out, water in (the fourth sensor is spare); return pressure
+    caps.Compressor: (
+        Quantity("temperature_1", "Discharge temperature", "K", source=_temperatures, field=0),
+        Quantity("temperature_2", "Water out temperature", "K", source=_temperatures, field=1),
+        Quantity("temperature_3", "Water in temperature", "K", source=_temperatures, field=2),
+        Quantity("pressure_1", "Return pressure", "Pa", source=_pressures, field=0),
+    ),
     caps.Rotator: (
         Quantity(
             "angle", "Angle", "deg",
@@ -137,6 +159,46 @@ CHOPPER_QUANTITIES = (
         get=lambda t: t.load_state(),
     ),
     Quantity("running", "Rotating", kind="bool", get=lambda t: t.is_running()),
+)  # fmt: skip
+
+POWER_UNITS = ("DBM", "W", "DBUV")
+
+# Configuration of a power meter (R&S NRX): kept in the station profile.
+# read_power() is dBm whatever the display unit; the reading is in that unit.
+POWER_METER_QUANTITIES = (
+    Quantity(
+        "reading", "Reading (display unit)", get=lambda t: t.fetch(),
+    ),
+    Quantity(
+        "power_unit", "Display unit", kind="text", choices=POWER_UNITS,
+        get=lambda t: t.get_units(), set=lambda t, v: t.set_units(str(v)),
+        persistent=True,
+    ),
+    Quantity(
+        "averaging", "Averaging filter", kind="bool",
+        get=lambda t: t.get_averaging(), set=lambda t, v: t.set_averaging(bool(v)),
+        persistent=True,
+    ),
+    Quantity(
+        "filter_time", "Filter time", "s",
+        get=lambda t: t.get_filter_time(),
+        set=lambda t, v: t.set_filter_time(float(v)), minimum=0, persistent=True,
+    ),
+    Quantity(
+        "aperture_time", "Aperture time", "s",
+        get=lambda t: t.get_aperture_time(),
+        set=lambda t, v: t.set_aperture_time(float(v)), minimum=0, persistent=True,
+    ),
+    Quantity(
+        "limit_lower", "Lower limit (display unit)",
+        get=lambda t: t.get_lower_limit(),
+        set=lambda t, v: t.set_lower_limit(float(v)), persistent=True,
+    ),
+    Quantity(
+        "limit_upper", "Upper limit (display unit)",
+        get=lambda t: t.get_upper_limit(),
+        set=lambda t, v: t.set_upper_limit(float(v)), persistent=True,
+    ),
 )  # fmt: skip
 
 # Configuration of a generator: shown in its dock, kept in the station profile
@@ -209,7 +271,7 @@ def read_values(
             key = id(quantity.source)
             if key not in sources:
                 sources[key] = quantity.source(target)
-            values[quantity.key] = getattr(sources[key], quantity.field)
+            values[quantity.key] = pick(sources[key], quantity.field)
         else:
             values[quantity.key] = quantity.get(target)
     return values

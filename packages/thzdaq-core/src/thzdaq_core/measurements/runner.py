@@ -1,5 +1,6 @@
 import logging
 import threading
+import itertools
 import time
 import traceback
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
@@ -16,6 +17,8 @@ from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.procedure import Capabilities, Procedure
 
 logger = logging.getLogger(__name__)
+# Numbers of measurements that are not saved (no store)
+_LOCAL_IDS = itertools.count(1)
 
 
 class Cancelled(Exception):
@@ -210,6 +213,7 @@ class MeasurementRunner:
             devices={slot: self.station.device_use(ref) for slot, ref in refs.items()},
             station=self.station.snapshot(),
         )
+        measurement.id = self.store.next_id() if self.store else next(_LOCAL_IDS)
         self.current = measurement
         saved = [0.0]
 

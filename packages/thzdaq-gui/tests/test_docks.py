@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_core.data import COMPLETED, read_json
 from thzdaq_core.measurements.parameters import Sweep
@@ -233,12 +234,16 @@ class TestDeviceDocks:
     def test_monitor_plots_to_time_graphs(self, window, wait):
         panel = window.docks["device:power_meter_1"].widget().panels[0]
         panel.interval.setValue(0.1)
+        raised = []
+        window.hub.raise_requested.connect(lambda w: raised.append(w.title))
         panel.plot.setChecked(True)
         panel.monitor.setChecked(True)
         graph = window.hub.graph("P-t")
         wait(lambda: graph.items and len(next(iter(graph.points.values()))) >= 2)
         panel.monitor.setChecked(False)
-        assert graph.curve_label(("monitor", "power_meter_1", "power")) == "R&S NRX"
+        key = ("monitor", "power_meter_1", "power")
+        assert graph.curve_label(key) == "R&S NRX Power"
+        assert raised == ["P-t"]  # once, not on every reading
 
     def test_sis_bias_offsets_and_calibration(
         self, window, session, profile, wait, monkeypatch
@@ -248,8 +253,12 @@ class TestDeviceDocks:
         widget = window.docks["device:sis_bias_2"].widget()
 
         group = widget.findChildren(SisBiasGroup)[0]
-        group.offset_voltage.setValue(1e-4)
-        group.save_offsets()
+        field = group.offset_voltage
+        assert field.prefix.symbol() == "µV"  # same field as the rest of the dock
+        field.set_value(1e-4, pending=True)
+        assert field.spin.value() == pytest.approx(100.0)
+        field.apply_requested.emit()  # Enter saves
+        assert not field.pending
         assert load_station(profile).instruments["sis_block_1"].devices[
             "sis_bias_2"
         ].settings["offset_voltage"] == pytest.approx(1e-4)
@@ -345,23 +354,47 @@ class TestMeasureAndData:
             .startswith('"Voltage, V"')
         )
 
-    def test_monitor_dock_watches_ticked_devices(self, window, session, wait):
-        from PySide6.QtCore import Qt
-
+    def test_monitor_dock_watches_ticked_values(self, window, session, wait):
         box = window.docks["measure:monitor.time"].widget().box
-        for i in range(box.watch.count()):
-            item = box.watch.item(i)
-            if item.data(Qt.UserRole) in ("power_meter_1", "sis_bias_1"):
-                item.setCheckState(Qt.Checked)
+        box.set_device("power_meter_1", True)
+        box.set_device("sis_bias_1", True)
+        assert sorted(box.entries()) == [
+            "power_meter_1/power",
+            "sis_bias_1/current",
+            "sis_bias_1/voltage",
+        ]
+        # Expand the SIS bias and keep only the voltage
+        bias = next(
+            i for i in box.device_items() if i.data(0, Qt.UserRole) == "sis_bias_1"
+        )
+        current = next(
+            bias.child(i)
+            for i in range(bias.childCount())
+            if bias.child(i).data(0, Qt.UserRole) == "current"
+        )
+        current.setCheckState(0, Qt.Unchecked)
         box.form.editors["interval"].set(0.05)
         box.form.editors["duration"].set(0.2)
+        box.form.editors["window"].set(60)
+        raised = []
+        window.hub.raise_requested.connect(lambda w: raised.append(w.title))
         finished = []
         box.runner.finished.connect(finished.append)
         box.start()
         wait(lambda: finished)
         samples = finished[0].records("samples")
-        assert {s["device"] for s in samples} == {"R&S NRX", "SIS1"}
-        assert window.hub.graph("P-t").items
+        assert {(s["device"], s["key"]) for s in samples} == {
+            ("R&S NRX", "power"),
+            ("SIS1", "voltage"),
+        }
+        assert window.hub.graph("P-t").items and window.hub.graph("V-t").items
+        assert not window.hub.graph("p-t").items
+        assert raised == ["P-t"]  # one graph to the front: the first with data
+        assert box.window == 60
+        assert isinstance(finished[0].id, int)
+        # The choice is remembered
+        box.refresh_devices()
+        assert sorted(box.entries()) == ["power_meter_1/power", "sis_bias_1/voltage"]
 
 
 class TestPerspectives:

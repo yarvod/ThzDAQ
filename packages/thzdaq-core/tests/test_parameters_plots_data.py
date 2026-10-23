@@ -171,6 +171,47 @@ class TestDataStore:
             "key": "voltage", "title": "Voltage", "unit": "V",
         }  # fmt: skip
 
+    def test_ids_are_numbers_that_keep_growing(self, tmp_path):
+        store = MeasurementStore(tmp_path)
+        first = Measurement("sis.iv_curve", id=store.next_id())
+        assert first.id == 1
+        assert store.save(first).name == "000001_sis_iv_curve.json"
+        assert store.next_id() == 2
+        # Another program run on the same folder continues after the largest
+        old = Measurement("demo", id="20261023-022400-ab12")  # older text id
+        store.save(old)
+        store.save(Measurement("demo", id=41))
+        assert MeasurementStore(tmp_path).next_id() == 42
+        assert store.next_id() == 42
+        assert {m.id for m in store} == {1, 41, "20261023-022400-ab12"}
+        loaded = read_json(store.path_for(first))
+        assert len(loaded.started) == len("2026-10-23T03:08:22.123")  # ms
+
+    def test_runner_numbers_measurements(self, tmp_path):
+        from thzdaq_core.data import DeviceUse
+        from thzdaq_core.measurements import MeasurementRunner
+
+        class Nothing(Procedure):
+            name = "test.nothing"
+
+            def run(self, ctx):
+                ctx.record("t", x=1.0)
+
+        class Bench:
+            def device_use(self, ref):
+                return DeviceUse(ref)
+
+            def require(self, devices, requirements):
+                return {}
+
+            def snapshot(self):
+                return {}
+
+        store = MeasurementStore(tmp_path)
+        runner = MeasurementRunner(Bench(), store=store)
+        ids = [runner.run(Nothing()).id for _ in range(2)]
+        assert ids == [1, 2]
+
     def test_running_file_reads_back_interrupted(self, tmp_path):
         measurement = Measurement("demo")
         measurement.append("iv", {"voltage": 1.0})

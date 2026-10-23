@@ -188,6 +188,31 @@ class TestNrx:
         _, link = make(RohdeSchwarzNRX, NrxEmulator())
         assert link.written == []
 
+    def test_settings_are_configuration_quantities(self):
+        from thzdaq_instruments.quantities import quantities_of, read_values
+        from thzdaq_instruments.sim import SimPowerMeter
+
+        emulator = NrxEmulator(power_dbm=-20.0)
+        meter, _ = make(RohdeSchwarzNRX, emulator)
+        quantities = {q.key: q for q in quantities_of(meter)}
+        config = [k for k, q in quantities.items() if q.persistent]
+        assert config == [
+            "power_unit", "averaging", "filter_time", "aperture_time",
+            "limit_lower", "limit_upper",
+        ]  # fmt: skip
+        for key, value in (
+            ("power_unit", "W"), ("averaging", True), ("filter_time", 0.2),
+            ("aperture_time", 0.1), ("limit_lower", -50.0), ("limit_upper", 10.0),
+        ):  # fmt: skip
+            quantities[key].write(meter, value)
+            assert quantities[key].read(meter) == value
+        values = read_values(meter)
+        assert values["power"] == pytest.approx(-20.0, abs=1e-3)
+        assert values["reading"] == pytest.approx(1e-5, rel=1e-3)  # W
+        assert emulator.errors == []
+        # The simulator has the same settings, so the dock is the same
+        assert [q.key for q in quantities_of(SimPowerMeter())] == list(quantities)
+
 
 class TestSisBlock:
     def test_offsets_are_applied(self):

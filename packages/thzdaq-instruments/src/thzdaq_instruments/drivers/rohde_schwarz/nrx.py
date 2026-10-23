@@ -2,6 +2,7 @@ from typing import Literal, Optional
 
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
+from thzdaq_instruments.quantities import POWER_METER_QUANTITIES
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 from thzdaq_instruments.units import watt_to_dbm
 
@@ -15,6 +16,8 @@ class RohdeSchwarzNRX(ScpiInstrument):
 
     read_power() always returns dBm whatever display unit is selected.
     """
+
+    quantities = POWER_METER_QUANTITIES
 
     def __init__(
         self,
@@ -45,15 +48,38 @@ class RohdeSchwarzNRX(ScpiInstrument):
     def set_averaging(self, value: bool) -> None:
         self.write(f"CALC:CHAN:AVER:STAT {1 if value else 0}")
 
+    def get_averaging(self) -> bool:
+        return self.query_bool("CALC:CHAN:AVER:STAT?")
+
     def set_aperture_time(self, seconds: float) -> None:
         self.write(f"CALC:APER {seconds}")
+
+    def get_aperture_time(self) -> float:
+        return self.query_float("CALC:APER?")
 
     def set_filter_time(self, seconds: float) -> None:
         self.write(f"CALC:CHAN:AVER:COUN:AUTO:MTIM {seconds}")
 
+    def get_filter_time(self) -> float:
+        return self.query_float("CALC:CHAN:AVER:COUN:AUTO:MTIM?")
+
+    def set_lower_limit(self, value: float) -> None:
+        """In the display unit."""
+        self.write(f"CALC1:LIM1:LOW:DATA {value}")
+
+    def get_lower_limit(self) -> float:
+        return self.query_float("CALC1:LIM1:LOW:DATA?")
+
+    def set_upper_limit(self, value: float) -> None:
+        """In the display unit."""
+        self.write(f"CALC1:LIM1:UPP:DATA {value}")
+
+    def get_upper_limit(self) -> float:
+        return self.query_float("CALC1:LIM1:UPP:DATA?")
+
     def set_limits(self, lower: float, upper: float) -> None:
-        self.write(f"CALC1:LIM1:LOW:DATA {lower}")
-        self.write(f"CALC1:LIM1:UPP:DATA {upper}")
+        self.set_lower_limit(lower)
+        self.set_upper_limit(upper)
 
     def set_units(self, unit: PowerUnit) -> None:
         if unit not in ("DBM", "W", "DBUV"):

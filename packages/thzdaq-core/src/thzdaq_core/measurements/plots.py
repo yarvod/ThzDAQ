@@ -32,6 +32,11 @@ class PlotSpec:
     z_scale: float = 1.0
     # Optional analysis a viewer may offer on this plot, e.g. "iv" (Rn, Rj, gap)
     analysis: Optional[str] = None
+    # Only records with these values: (("plot", "P-t"),) in a monitor table
+    where: Tuple[Tuple[str, Any], ...] = ()
+
+    def accepts(self, record: Mapping[str, Any]) -> bool:
+        return all(record.get(key) == value for key, value in self.where)
 
     def group_key(self, record: Mapping[str, Any]) -> GroupKey:
         return tuple(record.get(key) for key in self.group_by)
@@ -41,6 +46,8 @@ class PlotSpec:
 
     def point(self, record: Mapping[str, Any]) -> Optional[Tuple[float, ...]]:
         """Display coordinates of a record, None when a value is missing."""
+        if not self.accepts(record):
+            return None
         keys = (self.x, self.y) + ((self.z,) if self.kind == "map" else ())
         scales = (self.x_scale, self.y_scale) + (
             (self.z_scale,) if self.kind == "map" else ()

@@ -39,7 +39,6 @@ class MeasurementsModel(QAbstractTableModel):
         super().__init__(parent)
         self.store = store
         self.items: List[Measurement] = []
-        self.counter = 0  # run numbers in curve names: #1, #2, ...
 
     # Qt model
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -99,8 +98,6 @@ class MeasurementsModel(QAbstractTableModel):
     def add(self, measurement: Measurement) -> None:
         if any(item is measurement for item in self.items):
             return
-        self.counter += 1
-        measurement.metadata.setdefault("number", self.counter)
         self.beginInsertRows(QModelIndex(), 0, 0)
         self.items.insert(0, measurement)
         self.endInsertRows()

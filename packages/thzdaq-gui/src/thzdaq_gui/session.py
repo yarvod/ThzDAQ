@@ -33,6 +33,7 @@ class Session(QObject):
         self.station: Optional[Station] = None
         self.path: Optional[Path] = None
         self.simulate = False
+        self.lively = True  # simulators drift and get noisy (tests turn it off)
 
     def runner(self) -> QtRunner:
         """A runner for one dock; stopped on shutdown."""
@@ -46,7 +47,7 @@ class Session(QObject):
         return any(runner.running for runner in self.runners)
 
     def load_station(self, path, simulate: bool = False) -> Station:
-        station = Station(load_station(path), simulate=simulate)
+        station = Station(load_station(path), simulate=simulate, lively=self.lively)
         self._close_station()
         self.station, self.path, self.simulate = station, Path(path), simulate
         logger.info(f"Station {station.name} loaded from {path} (simulate={simulate})")

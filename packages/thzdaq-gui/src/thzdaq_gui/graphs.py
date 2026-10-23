@@ -6,6 +6,7 @@ measurement in the Data dock can be added by hand as well (Add curve), with
 titles and units taken from the measurement's column descriptions.
 """
 
+import bisect
 import math
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 from thzdaq_core.data.measurement import Column, Measurement
 from thzdaq_core.measurements.plots import PlotSpec
+from thzdaq_core.measurements.procedures.monitor import plot_for
 from thzdaq_core.measurements.registry import list_procedures
 
 from thzdaq_gui import theme
@@ -51,17 +53,22 @@ class Axis:
         return cls(column.label)
 
 
+def _names_devices(measurement: Measurement) -> bool:
+    samples = measurement.tables.get("samples")
+    return samples is not None and samples.get_column("device") is not None
+
+
 def curve_name(measurement: Measurement, group: Tuple) -> str:
-    number = measurement.metadata.get("number", "")
-    head = f"#{number} " if number != "" else ""
+    head = f"#{measurement.id}" if measurement.id else ""
     devices = [use.title for use in measurement.devices.values() if use.title]
-    who = (
-        devices[0]
-        if len(devices) == 1
-        else (measurement.title or measurement.procedure)
-    )
     rest = " ".join(str(v) for v in group if v not in (None, ""))
-    return f"{head}{who} {rest}".strip()
+    if len(devices) == 1:
+        who = devices[0]
+    elif rest and _names_devices(measurement):
+        who = ""  # the group names the device (a monitor of several)
+    else:
+        who = measurement.title or measurement.procedure
+    return " ".join(part for part in (head.strip(), who, rest) if part)
 
 
 class GraphWidget(QWidget):
@@ -128,17 +135,29 @@ class GraphWidget(QWidget):
     def curve_label(self, key) -> str:
         return self.names.get(key, "curve")
 
-    def append(self, key, name: str, x: float, y: float) -> None:
-        """Add a point (stored units) to curve `key`, creating it if new."""
+    def append(
+        self, key, name: str, x: float, y: float, window: Optional[float] = None
+    ) -> bool:
+        """Add a point (stored units) to curve `key`, creating it if new.
+
+        window keeps only the points within that span of x before the newest
+        one (a long monitor); the measurement itself keeps everything.
+        """
         if x is None or y is None:
-            return
+            return False
         try:
             point = (float(x) / self.x.scale, float(y) / self.y.scale)
         except (TypeError, ValueError):
-            return
+            return False
         if not all(math.isfinite(v) for v in point):
-            return
-        self.points.setdefault(key, []).append(point)
+            return False
+        points = self.points.setdefault(key, [])
+        points.append(point)
+        if window:
+            start = bisect.bisect_left(
+                points, point[0] - window / self.x.scale, key=lambda p: p[0]
+            )
+            del points[:start]
         item = self.items.get(key)
         if item is None:
             color = theme.COLORS[len(self.items) % len(theme.COLORS)]
@@ -151,9 +170,16 @@ class GraphWidget(QWidget):
             self.curves_changed.emit()
         xs, ys = zip(*self.points[key])
         item.setData(np.asarray(xs), np.asarray(ys))
+        return True
 
     def add_columns(
-        self, measurement: Measurement, table: str, x: str, y: str, group_by=()
+        self,
+        measurement: Measurement,
+        table: str,
+        x: str,
+        y: str,
+        group_by=(),
+        where=(),
     ) -> int:
         """Whole columns of a measurement table; returns the number of curves."""
         data = measurement.tables.get(table)
@@ -161,6 +187,8 @@ class GraphWidget(QWidget):
             return 0
         keys = set()
         for row in data.rows():
+            if any(row.get(k) != v for k, v in where):
+                continue
             group = tuple(row.get(g) for g in group_by)
             key = (measurement.id, table, x, y, group)
             keys.add(key)
@@ -278,17 +306,6 @@ def graph_for_spec(spec: PlotSpec):
     )
 
 
-# Device monitor values go to the same graphs as the monitor procedure
-MONITOR_GRAPHS = {
-    "power": "P-t",
-    "temperature": "T-t",
-    "voltage": "V-t",
-    "current": "I-t",
-    "current_set": "Coil-t",
-    "pressure": "p-t",
-}
-
-
 class GraphHub(QObject):
     """Owns the graph widgets by title and routes records to them.
 
@@ -343,21 +360,32 @@ class GraphHub(QObject):
             raise ValueError(f"Graph {title!r} exists")
         return self.graph(title)
 
-    def feed(self, measurement: Measurement, specs, table: str, record) -> None:
-        """A live record of a running measurement."""
+    def feed(
+        self,
+        measurement: Measurement,
+        specs,
+        table: str,
+        record,
+        window: Optional[float] = None,
+    ) -> List[str]:
+        """A live record of a running measurement; returns the graphs it reached."""
+        reached = []
         for spec in specs:
-            if spec.table != table:
+            if spec.table != table or not spec.accepts(record):
                 continue
             widget = self.graph(spec.title)
             if isinstance(widget, MapGraphWidget):
                 widget.add_record(record)
-            else:
-                group = spec.group_key(record)
-                key = (measurement.id, spec.table, spec.x, spec.y, group)
-                widget.append(
-                    key, curve_name(measurement, group), record.get(spec.x),
-                    record.get(spec.y),
-                )  # fmt: skip
+                reached.append(spec.title)
+                continue
+            group = spec.group_key(record)
+            key = (measurement.id, spec.table, spec.x, spec.y, group)
+            if widget.append(
+                key, curve_name(measurement, group), record.get(spec.x),
+                record.get(spec.y), window,
+            ):  # fmt: skip
+                reached.append(spec.title)
+        return reached
 
     def show_measurement(self, measurement: Measurement, specs) -> List[str]:
         """Plot a whole (saved) measurement in its graphs; returns their titles."""
@@ -372,16 +400,28 @@ class GraphHub(QObject):
                     widget.add_record(record)
             else:
                 widget.add_columns(
-                    measurement, spec.table, spec.x, spec.y, spec.group_by
-                )
+                    measurement, spec.table, spec.x, spec.y, spec.group_by,
+                    spec.where,
+                )  # fmt: skip
             shown.append(spec.title)
         return shown
 
-    def monitor_value(self, device: str, title: str, key: str, t: float, value) -> None:
-        graph_title = MONITOR_GRAPHS.get(key)
-        if graph_title is None:
-            return
-        self.graph(graph_title).append(("monitor", device, key), title, t, value)
+    def monitor_value(
+        self,
+        device: str,
+        title: str,
+        quantity,
+        t: float,
+        value,
+        window: Optional[float] = None,
+    ) -> Optional[str]:
+        """A value read in a device dock; returns its graph if it was plotted."""
+        graph_title = plot_for(quantity)
+        widget = self.graph(graph_title)
+        name = f"{title} {quantity.title}"
+        if widget.append(("monitor", device, quantity.key), name, t, value, window):
+            return graph_title
+        return None
 
 
 class AddCurveDialog(QDialog):

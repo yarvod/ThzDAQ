@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_core.measurements.procedures.monitor import default_quantities
 from thzdaq_core.measurements.registry import get_procedure
 from thzdaq_core.sis import calibration_for, evaluate_sis_calibration
 from thzdaq_core.station.station import INSTRUMENT, channel_title
@@ -153,19 +154,33 @@ class QuantityPanel(QWidget):
         self.interval.setValue(1.0)
         self.interval.setSuffix(" s")
         self.plot = QCheckBox("Plot")
-        self.plot.setToolTip(
-            "Send the monitored values to the P-t, V-t, I-t ... graphs"
+        self.plot.setToolTip("Send the measured values to the P-t, V-t, I-t ... graphs")
+        self.plot.toggled.connect(self.plot_toggled)
+        self.window = QDoubleSpinBox()
+        self.window.setRange(0, 1e6)
+        self.window.setDecimals(0)
+        self.window.setValue(600)
+        self.window.setSuffix(" s")
+        self.window.setSpecialValueText("all")
+        self.window.setToolTip(
+            "The graphs show this last part of the curve, so a long monitor "
+            "stays fast; 0 shows everything"
         )
+        self.plotted = default_quantities(self.quantities)
+        self.raised = False
         controls.addWidget(self.btnRead)
         controls.addWidget(self.monitor)
         controls.addWidget(self.interval)
         controls.addWidget(self.plot)
+        controls.addWidget(self.window)
         controls.addStretch()
         # Parent first: setVisible() on a widget without a parent shows it as a window
         layout.addLayout(controls)
-        hidden = (self.monitor, self.interval, self.plot) if config else ()
+        hidden = (self.monitor, self.interval, self.plot, self.window) if config else ()
+        if not self.plotted:
+            hidden += (self.plot, self.window)
         if not any(q.readable for q in self.quantities):
-            hidden = (self.btnRead, self.monitor, self.interval, self.plot)
+            hidden = (self.btnRead, self.monitor, self.interval, self.plot, self.window)
         for widget in hidden:
             widget.hide()
         self.timer = QTimer(self)
@@ -252,8 +267,22 @@ class QuantityPanel(QWidget):
                     field.set_value(value)
             if self.config and value is not None:
                 self.compare(quantity, value)
-            if self.plot.isChecked() and isinstance(value, (int, float)):
-                self.hub.monitor_value(self.ref, self.title, quantity.key, now, value)
+        if self.plot.isChecked():
+            self.plot_values(values, now)
+
+    def plot_toggled(self, on: bool) -> None:
+        self.raised = not on
+
+    def plot_values(self, values, now: float) -> None:
+        window = self.window.value() or None
+        for quantity in self.plotted:
+            graph = self.hub.monitor_value(
+                self.ref, self.title, quantity, now, values.get(quantity.key), window
+            )
+            if graph is not None and not self.raised:
+                # The graph of the first value comes to the front, once
+                self.raised = True
+                self.hub.raise_graph(graph)
 
     def compare(self, quantity: Quantity, value) -> None:
         """Mark a configuration that differs between the device and the profile."""
@@ -349,20 +378,23 @@ class ActionsGroup(QGroupBox):
 
 
 class ChopperGroup(QGroupBox):
-    """Moves and continuous rotation, as the old chopper widget had."""
+    """Hot / Cold and continuous rotation.
+
+    Hot and Cold turn the blade by the sensors until the load is in place
+    (aligned to the detent), so no separate rotate or align is needed.
+    """
 
     def __init__(self, panel: QuantityPanel, parent=None):
         super().__init__("Chopper", parent)
         self.panel = panel
         layout = QVBoxLayout(self)
         moves = QHBoxLayout()
-        for text, icon_name, call in (
-            ("Hot", "fire", lambda d: d.to_hot()),
-            ("Cold", "snowflake", lambda d: d.to_cold()),
-            ("Rotate 90°", "rotate-right", lambda d: d.rotate(90)),
-            ("Align to hot", "target", lambda d: d.to_hot()),
-        ):
+        for text, icon_name, call, tip in (
+            ("Hot", "fire", lambda d: d.to_hot(), "Turn to the hot load (by the sensors)"),
+            ("Cold", "snowflake", lambda d: d.to_cold(), "Turn to the cold load (by the sensors)"),
+        ):  # fmt: skip
             button = QPushButton(theme.icon(icon_name), text)
+            button.setToolTip(tip)
             button.clicked.connect(lambda _=False, c=call: self.run(c))
             moves.addWidget(button)
         layout.addLayout(moves)
@@ -561,6 +593,14 @@ class CalibrationDialog(QDialog):
         self.accept()
 
 
+OFFSET_VOLTAGE = Quantity(
+    "offset_voltage", "Offset voltage", "V", set=lambda t, v: None
+)
+OFFSET_CURRENT = Quantity(
+    "offset_current", "Offset current", "A", set=lambda t, v: None
+)
+
+
 class SisBiasGroup(QGroupBox):
     """Offsets and calibration of a SIS bias device, kept in the station profile."""
 
@@ -570,19 +610,14 @@ class SisBiasGroup(QGroupBox):
         self.device_id = device_id
         layout = QFormLayout(self)
         settings = self.spec().settings
-        self.offset_voltage = pg.SpinBox(
-            value=settings.get("offset_voltage", 0.0),
-            suffix="V",
-            siPrefix=True,
-            dec=True,
-        )
-        self.offset_current = pg.SpinBox(
-            value=settings.get("offset_current", 0.0),
-            suffix="A",
-            siPrefix=True,
-            dec=True,
-        )
+        # Same fields as the rest of the dock: number + prefix (µV, µA)
+        self.offset_voltage = QuantityField(OFFSET_VOLTAGE, device_id, "sis_bias")
+        self.offset_current = QuantityField(OFFSET_CURRENT, device_id, "sis_bias")
+        for field in (self.offset_voltage, self.offset_current):
+            field.set_value(settings.get(field.quantity.key, 0.0))
+            field.apply_requested.connect(self.save_offsets)
         save = QPushButton(theme.icon("content-save-outline"), "Save offsets")
+        save.setToolTip("Keep the offsets in the station profile (or Enter in a field)")
         save.clicked.connect(self.save_offsets)
         layout.addRow("Offset voltage", self.offset_voltage)
         layout.addRow("Offset current", self.offset_current)
@@ -611,6 +646,8 @@ class SisBiasGroup(QGroupBox):
             spec.settings["offset_current"] = float(self.offset_current.value())
 
         self._update(change)
+        for field in (self.offset_voltage, self.offset_current):
+            field.set_pending(False)
 
     def calibration(self) -> dict:
         spec = self.spec()

@@ -5,6 +5,7 @@ from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseErro
 from thzdaq_instruments.instrument import Channel, Instrument, SubdeviceType
 from thzdaq_instruments.quantities import SHORT
 from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments.sim.lively import Wobble, still
 
 DEVICES = ("DEV1", "DEV2", "DEV3", "DEV4")
 
@@ -35,10 +36,11 @@ class SimSisBiasChannel(Channel):
         return self._voltage
 
     def read_voltage(self) -> float:
-        return self._voltage
+        return self._voltage + self.instrument.voltage_noise()
 
     def read_current(self) -> float:
-        return self.instrument.iv_current(self._voltage)
+        current = self.instrument.iv_current(self._voltage)
+        return current * (1 + self.instrument.current_noise())
 
     def measure(self) -> ChannelReading:
         return ChannelReading(self.read_voltage(), self.read_current())
@@ -104,6 +106,12 @@ class SimSisBlock(Instrument):
         self.gap_width = gap_width
         self.max_voltage = max_voltage
         self._ctrl = {}
+        self.voltage_noise = still
+        self.current_noise = still
+
+    def liven(self) -> None:
+        self.voltage_noise = Wobble(0.2e-6, 0.1e-6)  # V
+        self.current_noise = Wobble(3e-3, 1e-3)  # relative
 
     def identify(self) -> str:
         return "THZDAQ,SimSisBlock,0,1.0"

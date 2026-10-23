@@ -118,5 +118,9 @@ class Procedure:
         """Total steps for progress, None if unknown."""
         return None
 
+    def plot_window(self) -> Optional[float]:
+        """Seconds of x the live graphs keep (a long monitor), None: everything."""
+        return None
+
     def run(self, ctx) -> None:
         raise NotImplementedError

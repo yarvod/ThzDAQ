@@ -6,7 +6,7 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
 
     {
       "format": "thzdaq-measurement", "version": 1,
-      "id": "...", "procedure": "sis.iv_curve", "title": "I-V curve",
+      "id": 42, "procedure": "sis.iv_curve", "title": "I-V curve",
       "status": "completed", "started": "...", "finished": "...",
       "comment": "", "parameters": {...},
       "devices": {"bias": {"ref": "sis_bias_1", "title": "SIS b1d4", ...}},
@@ -17,10 +17,9 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
     }
 """
 
-import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Mapping, Optional
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
 
 FORMAT = "thzdaq-measurement"
 FORMAT_VERSION = 1
@@ -37,8 +36,9 @@ def now() -> str:
     return datetime.now().isoformat(timespec="milliseconds")
 
 
-def new_id() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
+# Numbers given by the store (1, 2, 3, ... per data folder); 0 until numbered.
+# Files of older versions keep their text ids ("20261023-022400-ab12").
+MeasurementId = Union[int, str]
 
 
 @dataclass(frozen=True)
@@ -183,7 +183,7 @@ class DeviceUse:
 class Measurement:
     procedure: str
     title: str = ""
-    id: str = field(default_factory=new_id)
+    id: MeasurementId = 0
     status: str = RUNNING
     started: str = field(default_factory=now)
     finished: Optional[str] = None
@@ -253,7 +253,7 @@ class Measurement:
         return cls(
             procedure=data["procedure"],
             title=data.get("title", ""),
-            id=data.get("id") or new_id(),
+            id=data.get("id") or 0,
             status=data.get("status", COMPLETED),
             started=data.get("started") or now(),
             finished=data.get("finished"),

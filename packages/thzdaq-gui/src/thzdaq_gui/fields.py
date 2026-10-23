@@ -27,6 +27,10 @@ def default_prefix(kind: str, key: str, unit: str) -> str:
     """Prefix a field starts with: GHz for generators, mV / µA for a SIS bias, ..."""
     if unit == "Hz":
         return "G"
+    if unit == "s":
+        return "m"  # aperture and filter times
+    if key.startswith("offset_"):
+        return "µ"  # SIS offsets: tens of µV, a few µA
     if kind == "sis_bias":
         return "m" if unit == "V" else "µ" if unit == "A" else ""
     if kind == "sis_coil" and unit == "A":

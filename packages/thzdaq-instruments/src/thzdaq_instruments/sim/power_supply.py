@@ -3,6 +3,7 @@ from typing import Dict, Optional
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Channel, Instrument
 from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments.sim.lively import Wobble, still
 
 
 class SimSupplyChannel(Channel):
@@ -46,10 +47,12 @@ class SimSupplyChannel(Channel):
     def measure(self) -> ChannelReading:
         if not self._output:
             return ChannelReading(0.0, 0.0)
-        current = self._voltage / self.load_resistance
+        # The load warms up and cools down a little
+        load = self.load_resistance * (1 + self.instrument.wobble())
+        current = self._voltage / load
         if current <= self._current:
             return ChannelReading(self._voltage, current)
-        return ChannelReading(self._current * self.load_resistance, self._current)
+        return ChannelReading(self._current * load, self._current)
 
 
 class SimPowerSupply(Instrument):
@@ -68,6 +71,10 @@ class SimPowerSupply(Instrument):
         self.max_voltage = max_voltage
         self.max_current = max_current
         self.load_resistances = load_resistances or {}
+        self.wobble = still
+
+    def liven(self) -> None:
+        self.wobble = Wobble(2e-3, 2e-4)  # relative
 
     def identify(self) -> str:
         return "THZDAQ,SimPowerSupply,0,1.0"

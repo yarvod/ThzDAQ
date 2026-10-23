@@ -26,7 +26,7 @@ class TestQuantities:
             q.key for q in quantities_of(SimSignalGenerator()) if q.persistent
         ]
         assert persistent[0] == "frequency_multiplier" and "frequency" not in persistent
-        assert keys(SimPowerMeter()) == ["power"]
+        assert keys(SimPowerMeter())[:2] == ["power", "reading"]  # + NRX settings
 
     def test_driver_quantities(self):
         block = SimSisBlock()

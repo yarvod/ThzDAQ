@@ -3,7 +3,12 @@ from thzdaq_core.data import COMPLETED, DeviceUse
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements import MeasurementRunner, StringListParameter
 from thzdaq_core.measurements.procedures import Demagnetize, Monitor
-from thzdaq_core.measurements.procedures.monitor import read_port, readers_for
+from thzdaq_core.measurements.procedures.monitor import (
+    default_quantities,
+    monitor_quantities,
+    plot_for,
+)
+from thzdaq_instruments.quantities import quantities_of
 from thzdaq_core.sis import (
     CALIBRATION_FIELDS,
     calibration_for,
@@ -15,7 +20,9 @@ from thzdaq_core.sis import (
 )
 from thzdaq_instruments.sim import (
     SimChopper,
+    SimCompressor,
     SimPowerMeter,
+    SimPowerSupply,
     SimSisBlock,
     SimTemperatureController,
 )
@@ -103,20 +110,30 @@ class TestDemagnetization:
 
 
 class TestMonitor:
-    def test_readers_by_capability(self):
-        sis = SimSisBlock().channel("DEV4")
-        sis.set_voltage(3e-3)
-        assert set(read_port(sis)) == {"voltage", "current"}
-        assert read_port(SimPowerMeter(power=-12.0)) == {"power": -12.0}
-        assert read_port(SimSisBlock().ctrl("DEV3")) == {"coil_current": 0.0}
-        assert readers_for(SimChopper()) == []
+    def test_what_is_read_by_default(self):
+        def keys(port):
+            return [q.key for q in default_quantities(quantities_of(port))]
 
-    def test_monitor_for_a_duration(self):
-        ports = {
-            "detector": SimPowerMeter(power=-20.0),
-            "cryostat": SimTemperatureController().channel("A"),
+        assert keys(SimSisBlock().channel("DEV4")) == ["voltage", "current"]
+        assert keys(SimPowerMeter()) == ["power"]
+        assert keys(SimSisBlock().ctrl("DEV3")) == ["current_set"]  # no meter
+        assert keys(SimChopper()) == []
+        supply = [
+            q.key
+            for q in monitor_quantities(quantities_of(SimPowerSupply().channel(1)))
+        ]
+        assert {"voltage_set", "current_set", "voltage", "current"} <= set(supply)
+
+    def test_graph_by_unit(self):
+        plots = {
+            q.key: plot_for(q)
+            for port in (SimPowerMeter(), SimSisBlock().ctrl("DEV3"), SimCompressor())
+            for q in monitor_quantities(quantities_of(port))
         }
+        assert plots["power"] == "P-t" and plots["current_set"] == "Coil-t"
+        assert plots["temperature_1"] == "T-t" and plots["pressure_1"] == "p-t"
 
+    def run_monitor(self, ports, **parameters):
         class Bench:
             def device_use(self, ref):
                 return DeviceUse(ref)
@@ -127,14 +144,43 @@ class TestMonitor:
             def snapshot(self):
                 return {}
 
-        procedure = Monitor(watch=("detector", "cryostat"), interval=0.02, duration=0.1)
-        dataset = MeasurementRunner(Bench()).run(procedure)
+        return MeasurementRunner(Bench()).run(Monitor(**parameters))
+
+    def test_monitor_for_a_duration(self):
+        ports = {
+            "detector": SimPowerMeter(power=-20.0),
+            "cryostat": SimTemperatureController().channel("A"),
+        }
+        dataset = self.run_monitor(
+            ports, watch=("detector", "cryostat"), interval=0.02, duration=0.1
+        )
         samples = dataset.records("samples")
         assert dataset.status == COMPLETED
         assert {s["device"] for s in samples} == {"detector", "cryostat"}
         assert 4 <= len(samples) // 2 <= 7
         temperatures = Monitor.plots[1].curves(samples)
-        assert list(temperatures) == [("cryostat",)]
+        assert list(temperatures) == [("cryostat", "Temperature")]
+        assert {p[1] for p in temperatures[("cryostat", "Temperature")]} == {4.2}
+        assert not Monitor.plots[0].curves(
+            [s for s in samples if s["device"] == "cryostat"]
+        )
+
+    def test_one_quantity_of_a_device(self):
+        sis = SimSisBlock().channel("DEV4")
+        sis.set_voltage(2e-3)
+        dataset = self.run_monitor(
+            {"sis": sis}, watch=("sis/voltage",), interval=0.02, duration=0.05
+        )
+        samples = dataset.records("samples")
+        assert {s["key"] for s in samples} == {"voltage"}
+        assert samples[0]["value"] == pytest.approx(2e-3)
+        assert samples[0]["plot"] == "V-t"
+        failed = self.run_monitor({"sis": sis}, watch=("sis/power",), duration=0.05)
+        assert failed.status == "failed" and "power" in failed.error
+
+    def test_plot_window(self):
+        assert Monitor(window=120).plot_window() == 120
+        assert Monitor(window=0).plot_window() is None
 
     def test_string_list_parameter(self):
         parameter = StringListParameter("Roles")

@@ -142,8 +142,7 @@ class TestWorkers:
 
 
 def iv_measurement(number=1) -> Measurement:
-    measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
-    measurement.metadata["number"] = number
+    measurement = Measurement("sis.iv_curve", title="SIS I-V curve", id=number)
     for v in (1e-3, 2e-3, 3e-3):
         measurement.append("iv", {"voltage": v, "current": v / 20})
     return measurement
@@ -166,8 +165,7 @@ class TestGraphs:
         assert hub.graph("I-V").analysis is not None
 
     def test_live_records_make_one_curve_per_run_and_group(self, hub):
-        run = Measurement("if.hot_cold", title="IF noise")
-        run.metadata["number"] = 7
+        run = Measurement("if.hot_cold", title="IF noise", id=7)
         for load, power in (("cold", -32.0), ("hot", -30.0)):
             for f in (4e9, 5e9):
                 record = {"frequency": f, "load": load, "power": power}
@@ -217,12 +215,27 @@ class TestGraphs:
         assert custom.items == {}
 
     def test_monitor_values(self, hub):
+        from thzdaq_instruments.quantities import Quantity
+
+        power = Quantity("power", "Power", "dBm", get=lambda t: 0)
+        angle = Quantity("angle", "Angle", "deg", get=lambda t: 0)
         for t, p in ((0, -30.0), (1, -31.0)):
-            hub.monitor_value("power_meter_1", "NRX", "power", t, p)
-        hub.monitor_value("x", "X", "unknown", 0, 1.0)
+            assert hub.monitor_value("power_meter_1", "NRX", power, t, p) == "P-t"
+        assert hub.monitor_value("x", "X", angle, 0, 1.0) == "Value-t"
+        assert hub.monitor_value("x", "X", angle, 1, None) is None
         graph = hub.graph("P-t")
         assert list(graph.items) == [("monitor", "power_meter_1", "power")]
-        assert graph.curve_label(("monitor", "power_meter_1", "power")) == "NRX"
+        key = ("monitor", "power_meter_1", "power")
+        assert graph.curve_label(key) == "NRX Power"
+
+    def test_plot_window_keeps_the_last_part(self, hub):
+        graph = hub.graph("P-t")
+        for t in range(100):
+            graph.append("c", "c", t, -30.0, window=10)
+        assert [x for x, _ in graph.points["c"]] == list(range(89, 100))
+        for t in range(100, 103):
+            graph.append("c", "c", t, -30.0)
+        assert len(graph.points["c"]) == 14  # no window: nothing dropped
 
 
 def test_device_worker_reports_how_long_a_job_waits(app, wait):

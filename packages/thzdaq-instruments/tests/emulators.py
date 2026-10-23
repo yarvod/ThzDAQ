@@ -166,6 +166,22 @@ class NrxEmulator(ScpiEmulator):
             r"CALC:CHAN:AVER:STAT ([01])",
             lambda v: setattr(self, "averaging", v == "1"),
         )
+        self.filter_time = 0.05
+        self.limits = {"LOW": -60.0, "UPP": 30.0}
+        self.route(r"CALC:APER\?", lambda: f"{self.aperture or 0.02}")
+        self.route(r"CALC:CHAN:AVER:STAT\?", lambda: "1" if self.averaging else "0")
+        self.route(
+            r"CALC:CHAN:AVER:COUN:AUTO:MTIM (\S+)",
+            lambda v: setattr(self, "filter_time", float(v)),
+        )
+        self.route(r"CALC:CHAN:AVER:COUN:AUTO:MTIM\?", lambda: f"{self.filter_time}")
+        self.route(
+            r"CALC1:LIM1:(LOW|UPP):DATA (\S+)",
+            lambda which, v: self.limits.__setitem__(which, float(v)),
+        )
+        self.route(
+            r"CALC1:LIM1:(LOW|UPP):DATA\?", lambda which: f"{self.limits[which]}"
+        )
         self.route(r"READ\?", self._read)
         self.route(r"FETCH\?", self._read)
 

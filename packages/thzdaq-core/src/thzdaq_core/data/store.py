@@ -1,5 +1,9 @@
 """Measurements on disk: one JSON file each, <root>/<YYYY-MM-DD>/<id>_<procedure>.json
 
+Ids are numbers counted per data folder: the next one is one more than the
+largest in the file names, so they keep growing across runs of the program.
+Start and end times (to the millisecond) are in every file as well.
+
 The runner saves at the start, every few seconds while records come and at
 the end. Writes go to a temporary file first, so a crash leaves the previous
 complete version; a file still marked running reads back as interrupted.
@@ -9,6 +13,7 @@ import csv
 import json
 import math
 import os
+import threading
 from pathlib import Path
 from typing import Any, Iterator, List, Optional, Union
 
@@ -88,16 +93,33 @@ def export_csv(measurement: Measurement, table: str, path: PathLike) -> Path:
     return path
 
 
+def file_id(path: Path) -> Optional[int]:
+    """000042_sis_iv_curve.json -> 42; None for files named otherwise."""
+    head = path.name.split("_", 1)[0]
+    return int(head) if head.isdigit() else None
+
+
 class MeasurementStore:
     """Folder of measurement JSON files."""
 
     def __init__(self, root: PathLike):
         self.root = Path(root)
+        self._last = 0
+        self._lock = threading.Lock()
+
+    def next_id(self) -> int:
+        """A number larger than every measurement in the folder and given so far."""
+        with self._lock:
+            found = [file_id(path) for path in self.paths()]
+            self._last = max([self._last, *(i for i in found if i is not None)]) + 1
+            return self._last
 
     def path_for(self, measurement: Measurement) -> Path:
         day = measurement.started[:10]
         procedure = measurement.procedure.replace(".", "_")
-        return self.root / day / f"{measurement.id}_{procedure}.json"
+        number = measurement.id
+        name = f"{number:06d}" if isinstance(number, int) else str(number)
+        return self.root / day / f"{name}_{procedure}.json"
 
     def save(self, measurement: Measurement, path: Optional[PathLike] = None) -> Path:
         path = write_json(measurement, path or self.path_for(measurement))

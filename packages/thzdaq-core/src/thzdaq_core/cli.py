@@ -113,7 +113,7 @@ def summarize(measurement: Measurement) -> str:
 def cmd_run(args) -> int:
     procedure = build_procedure(args.procedure, args.set or [])
     store = None if args.no_save else MeasurementStore(args.data)
-    with Station.load(args.station, simulate=args.simulate) as station:
+    with Station.load(args.station, simulate=args.simulate, lively=True) as station:
         runner = MeasurementRunner(station, store, [ConsoleObserver(args.quiet)])
         previous = signal.signal(signal.SIGINT, lambda *_: runner.cancel())
         try:

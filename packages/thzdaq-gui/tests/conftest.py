@@ -76,6 +76,7 @@ def session(app, tmp_path, profile):
     from thzdaq_gui.session import Session
 
     session = Session(str(tmp_path / "data"))
+    session.lively = False  # exact simulated values
     session.load_station(profile, simulate=True)
     yield session
     session.shutdown()

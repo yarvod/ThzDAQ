@@ -85,11 +85,15 @@ class Station:
         registry: Optional[DriverRegistry] = None,
         pool: Optional[TransportPool] = None,
         simulate: bool = False,
+        lively: bool = False,
     ):
         self.config = config.validate()
         self.registry = registry or default_registry()
         self.pool = pool
         self.simulate = simulate
+        # Simulators drift and get noisy, as a bench does (the app); tests keep
+        # exact values
+        self.lively = lively
         self._instruments: Dict[str, Instrument] = {}
         self._devices: Dict[str, Any] = {}
         self._lock = threading.RLock()
@@ -145,6 +149,8 @@ class Station:
             )
             if simulate or self.registry.get(spec.driver).simulated:
                 self._apply_settings(instrument, spec.settings)
+                if self.lively and hasattr(instrument, "liven"):
+                    instrument.liven()
             self._instruments[instrument_id] = instrument
             return instrument
 

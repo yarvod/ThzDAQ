@@ -6,7 +6,7 @@ device docks with the device fixed (I-V of this SIS bias).
 """
 
 import json
-from typing import Dict, Mapping, Optional, Type
+from typing import Dict, List, Mapping, Optional, Type
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -14,18 +14,24 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.procedure import Procedure
+from thzdaq_core.measurements.procedures.monitor import (
+    KEY_SEPARATOR,
+    default_quantities,
+    monitor_quantities,
+    split_entry,
+)
 
 from thzdaq_gui import theme
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
@@ -54,6 +60,9 @@ class ProcedureBox(QWidget):
         self.fixed = dict(fixed or {})
         self.runner = session.runner()
         self.measurement = None
+        self.window = None  # seconds of the live curves to show
+        self.raised = False
+        self.reached: List[str] = []  # graphs that got data before the first step
         self.settings_key = f"procedures/{procedure_class.name}"
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -182,6 +191,9 @@ class ProcedureBox(QWidget):
             QMessageBox.warning(self, "Invalid parameters", str(e))
             return
         self.remember(procedure)
+        self.window = procedure.plot_window()
+        self.raised = False
+        self.reached = []
         self.log.clear()
         self.state.setText("Connecting to devices...")
         QTimer.singleShot(STUCK_AFTER_MS, self.offer_abort)
@@ -222,15 +234,29 @@ class ProcedureBox(QWidget):
     def on_started(self, measurement) -> None:
         self.measurement = measurement
         self.state.setText("Running")
-        self.log.appendPlainText(f"started {measurement.id}")
-        for spec in self.procedure_class.plots:
-            self.hub.raise_graph(spec.title)
+        self.log.appendPlainText(f"started #{measurement.id}")
 
     def on_record(self, table: str, record) -> None:
-        if self.measurement is not None:
-            self.hub.feed(self.measurement, self.procedure_class.plots, table, record)
+        if self.measurement is None:
+            return
+        reached = self.hub.feed(
+            self.measurement, self.procedure_class.plots, table, record, self.window
+        )
+        if not self.raised:
+            self.reached.extend(t for t in reached if t not in self.reached)
+
+    def raise_graph(self) -> None:
+        """One graph comes to the front per run, after its first step: of the
+        graphs that got data, the first in the procedure's plots (P-t before
+        T-t and V-t), whatever device was read first."""
+        if self.raised or not self.reached:
+            return
+        self.raised = True
+        order = [spec.title for spec in self.procedure_class.plots]
+        self.hub.raise_graph(min(self.reached, key=order.index))
 
     def on_progress(self, done: int, total) -> None:
+        self.raise_graph()
         if total:
             self.progress.setRange(0, total)
             self.progress.setValue(done)
@@ -242,6 +268,7 @@ class ProcedureBox(QWidget):
         QMessageBox.warning(self, self.procedure_class.title, message)
 
     def on_finished(self, measurement) -> None:
+        self.raise_graph()
         text = f"{measurement.status}"
         if measurement.error:
             text += f": {measurement.error}"
@@ -292,11 +319,17 @@ class MeasureWidget(QScrollArea):
 
 
 class MonitorBox(ProcedureBox):
-    """Monitor over time: devices are ticked in a list instead of slot combos."""
+    """Monitor over time: devices are ticked in a tree, each with the values to read.
+
+    A device expands to its readable values; the measured ones are ticked when
+    the device is ticked (power, voltage and current), setpoints can be added.
+    """
 
     def __init__(self, session, hub, procedure_class, parent=None):
         super().__init__(session, hub, procedure_class, parent=parent)
-        self.watch = QListWidget()
+        self.watch = QTreeWidget()
+        self.watch.setHeaderHidden(True)
+        self.watch.setMinimumHeight(160)
         self.devices_box.setTitle("Devices to watch")
         self.devices_box.layout().addWidget(self.watch)
         self.devices.hide()
@@ -305,50 +338,101 @@ class MonitorBox(ProcedureBox):
             self.form.layout_.setRowVisible(editor.widget, False)
         self.refresh_devices()
 
+    def device_items(self):
+        return [
+            self.watch.topLevelItem(i) for i in range(self.watch.topLevelItemCount())
+        ]
+
     def refresh_devices(self, *_) -> None:
         if not hasattr(self, "watch"):
             return
         station = self.session.station
-        checked = set(self.checked()) or set(
-            self.saved_devices.get("watch", "").split(",")
-        )
+        entries = self.entries() or [
+            e for e in self.saved_devices.get("watch", "").split(",") if e
+        ]
+        chosen: Dict[str, set] = {}
+        for entry in entries:
+            ref, key = split_entry(entry)
+            chosen.setdefault(ref, set())
+            if key:
+                chosen[ref].add(key)
         self.watch.clear()
         if station is None:
             return
         for info in station.devices():
-            if not station.quantities(info.ref):
+            quantities = monitor_quantities(station.quantities(info.ref))
+            if not quantities:
                 continue
-            item = QListWidgetItem(
-                theme.device_icon(info.kind, info.instrument), info.title
-            )
-            item.setData(Qt.UserRole, info.ref)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if info.ref in checked else Qt.Unchecked)
-            self.watch.addItem(item)
+            item = QTreeWidgetItem([info.title])
+            item.setIcon(0, theme.device_icon(info.kind, info.instrument))
+            item.setData(0, Qt.UserRole, info.ref)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+            keys = chosen.get(info.ref)
+            if keys is not None and not keys:  # the device without a choice
+                keys = {q.key for q in default_quantities(quantities)}
+            for quantity in quantities:
+                child = QTreeWidgetItem([quantity.label])
+                child.setData(0, Qt.UserRole, quantity.key)
+                child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+                ticked = keys is not None and quantity.key in keys
+                child.setCheckState(0, Qt.Checked if ticked else Qt.Unchecked)
+                item.addChild(child)
+            self.watch.addTopLevelItem(item)
         self.devices_box.setVisible(True)
 
+    def set_device(self, ref: str, checked: bool) -> None:
+        """Tick a device with its measured values (or untick all of it)."""
+        for item in self.device_items():
+            if item.data(0, Qt.UserRole) != ref:
+                continue
+            quantities = [
+                item.child(i).data(0, Qt.UserRole) for i in range(item.childCount())
+            ]
+            station = self.session.station
+            defaults = {
+                q.key
+                for q in default_quantities(monitor_quantities(station.quantities(ref)))
+            }
+            for i, key in enumerate(quantities):
+                on = checked and key in defaults
+                item.child(i).setCheckState(0, Qt.Checked if on else Qt.Unchecked)
+
+    def entries(self):
+        """ref/key of every ticked value."""
+        if not hasattr(self, "watch"):
+            return []
+        found = []
+        for item in self.device_items():
+            ref = item.data(0, Qt.UserRole)
+            for i in range(item.childCount()):
+                child = item.child(i)
+                if child.checkState(0) == Qt.Checked:
+                    found.append(f"{ref}{KEY_SEPARATOR}{child.data(0, Qt.UserRole)}")
+        return found
+
     def checked(self):
-        return [
-            self.watch.item(i).data(Qt.UserRole)
-            for i in range(self.watch.count())
-            if self.watch.item(i).checkState() == Qt.Checked
-        ]
+        refs = []
+        for entry in self.entries():
+            ref, _ = split_entry(entry)
+            if ref not in refs:
+                refs.append(ref)
+        return refs
 
     def mapping(self) -> Dict[str, str]:
         return {ref: ref for ref in self.checked()}
 
     def start(self) -> None:
-        refs = self.checked()
-        if not refs:
-            QMessageBox.warning(self, "Monitor", "Tick the devices to watch")
+        entries = self.entries()
+        if not entries:
+            QMessageBox.warning(self, "Monitor", "Tick the values to watch")
             return
-        self.form.editors["watch"].set(tuple(refs))
+        self.form.editors["watch"].set(tuple(entries))
         self.devices.combos.clear()
         super().start()
 
     def remember(self, procedure) -> None:
         super().remember(procedure)
-        self.saved_devices = {"watch": ",".join(self.checked())}
+        self.saved_devices = {"watch": ",".join(self.entries())}
         data = {"parameters": procedure.to_json(), "devices": self.saved_devices}
         settings().setValue(self.settings_key, json.dumps(data))
 
