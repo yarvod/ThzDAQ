@@ -62,7 +62,10 @@ def test_a_closed_transport_does_not_break_the_shared_link():
     assert not pool.links()[0].broken and b.query("*IDN?") == "x"
 
 
-def test_abort_wakes_a_read_blocked_on_a_silent_device():
+@pytest.mark.parametrize("platform", ["here", "win32"])
+def test_abort_wakes_a_read_blocked_on_a_silent_device(platform, monkeypatch):
+    if platform == "win32":  # the Windows path (close after shutdown) runs too
+        monkeypatch.setattr("thzdaq_instruments.transport.links.sys.platform", "win32")
     server = socket.socket()
     server.bind(("127.0.0.1", 0))
     server.listen(1)
@@ -86,6 +89,11 @@ def test_abort_wakes_a_read_blocked_on_a_silent_device():
     thread.join(5)
     assert errors and time.monotonic() - started < 3  # not the 10 s timeout
     assert link.broken
+    link.reset()  # reconnects after the abort, on every platform
+    peer.close()
+    peer, _ = server.accept()
+    peer.sendall(b"OK\n")
+    assert link.read_line() == "OK"
     link.close()
     peer.close()
     server.close()

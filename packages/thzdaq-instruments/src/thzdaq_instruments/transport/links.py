@@ -1,4 +1,5 @@
 import socket
+import sys
 from typing import Optional
 
 from thzdaq_instruments.errors import (
@@ -62,9 +63,16 @@ class SocketLink(Link):
         sock = self._socket
         if sock is not None:
             try:
-                sock.shutdown(socket.SHUT_RDWR)  # wakes a blocked recv()
+                sock.shutdown(socket.SHUT_RDWR)  # wakes a blocked recv() on POSIX
             except OSError:
                 pass
+            if sys.platform == "win32":
+                # Windows keeps recv() waiting after shutdown; closesocket() ends
+                # it with an error. The next use reconnects (the link is broken).
+                try:
+                    sock.close()
+                except OSError:
+                    pass
 
     def _require_socket(self) -> socket.socket:
         if self._socket is None:
