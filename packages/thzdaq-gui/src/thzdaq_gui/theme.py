@@ -138,6 +138,17 @@ def dock_style_sheet() -> str:
     return (RESOURCES / "docks.css").read_text(encoding="utf-8")
 
 
+APP_ICON_SIZES = (16, 32, 48, 64, 128, 256)
+
+
+def app_icon() -> QIcon:
+    """The ThzDAQ pixel icon, one hand-drawn picture per size (assets/make_icon.py)."""
+    result = QIcon()
+    for size in APP_ICON_SIZES:
+        result.addFile(str(RESOURCES / "icon" / f"thzdaq_{size}.png"))
+    return result
+
+
 def icon(name: str, color: str = TEXT, active: str = ACCENT) -> QIcon:
     """mdi6 icon by name, e.g. icon("chart-line"); empty icon if unavailable."""
     try:

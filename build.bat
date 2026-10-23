@@ -16,11 +16,12 @@ if exist "%app_dir%\stations" xcopy /E /I /Y "%app_dir%\stations" "%stations_bac
 
 uv sync --locked
 if errorlevel 1 exit /b %errorlevel%
-uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\logo2.png" --noconsole --windowed -y --add-data "assets;assets" --collect-data thzdaq_gui --collect-data qtawesome
+rem The icon is drawn by assets\make_icon.py: every size in thzdaq.ico
+uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\thzdaq.ico" --noconsole --windowed -y --add-data "assets;assets" --collect-data thzdaq_gui --collect-data qtawesome
 if errorlevel 1 exit /b %errorlevel%
 
 rem Updater for in-app updates: standard library only, so a small one-file exe
-uv run pyinstaller updater.py -n updater --onefile --noconsole -y --distpath .\build\updater_dist --workpath .\build\updater_work --specpath .\build
+uv run pyinstaller updater.py -n updater --onefile --noconsole --icon="%cd%\assets\thzdaq.ico" -y --distpath .\build\updater_dist --workpath .\build\updater_work --specpath .\build
 if errorlevel 1 exit /b %errorlevel%
 copy /Y ".\build\updater_dist\updater.exe" "%app_dir%\updater.exe" >nul
 

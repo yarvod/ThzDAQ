@@ -31,13 +31,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     )  # smoke test of a build
     args, qt_args = parser.parse_known_args(argv)
 
+    if sys.platform == "win32":
+        # Own taskbar button and icon, also when run from sources by python.exe
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ThzDAQ.ThzDAQ")
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s"
     )
     app = QApplication.instance() or QApplication([sys.argv[0], *qt_args])
     app.setApplicationName("ThzDAQ")
     theme.apply(app)
-    app.setWindowIcon(theme.icon("chip", theme.ACCENT))
+    app.setWindowIcon(theme.app_icon())
     if args.settings:
         use_file(args.settings)
     session = Session(args.data or str(data_dir()))

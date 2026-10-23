@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         # Ask on exit (layout, dump); off for smoke runs that close on a timer
         self.confirm_exit = True
         self.setWindowTitle(f"ThzDAQ {__version__}")
-        self.setWindowIcon(theme.icon("chip", theme.ACCENT))
+        self.setWindowIcon(theme.app_icon())
         self.resize(1500, 900)
         configure_docking()
         self.dock_manager = QtAds.CDockManager(self)

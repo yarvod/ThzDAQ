@@ -261,3 +261,14 @@ def test_second_instance_is_detected(app, tmp_path):
     first.unlock()
     _locks.remove(first)
     assert instance_lock(path) is not None
+
+
+def test_app_icon_has_a_drawing_for_every_size(app):
+    from thzdaq_gui import theme
+
+    icon = theme.app_icon()
+    sizes = sorted(size.width() for size in icon.availableSizes())
+    assert sizes == list(theme.APP_ICON_SIZES)
+    # Pixel art: the small sizes are drawn, not scaled down from a big picture
+    pixmap = icon.pixmap(16, 16).toImage()
+    assert pixmap.width() == 16 and pixmap.pixelColor(8, 0).alpha() == 255
