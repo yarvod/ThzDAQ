@@ -6,6 +6,7 @@ change the station profile, which is saved at once; device docks follow.
 """
 
 import copy
+import html
 import textwrap
 from typing import Dict, Optional
 
@@ -75,6 +76,12 @@ KIND_TITLES = {
     MODBUS_TCP: "Modbus TCP",
     MODBUS_RTU: "Modbus RTU",
 }
+
+
+def breakable_path(path) -> str:
+    """A path a word-wrapped label may break after any separator (HTML)."""
+    text = html.escape(str(path))
+    return text.replace("\\", "\\\u200b").replace("/", "/\u200b")
 
 
 def connection_text(spec: Optional[ConnectionSpec]) -> str:
@@ -620,10 +627,12 @@ class SetupWidget(QWidget):
         station = self.session.station
         path = self.session.path
         self.profile.setText(
-            f"<b>{station.name}</b><br><span style='color:{theme.MUTED}'>{path}</span>"
+            f"<b>{station.name}</b><br>"
+            f"<span style='color:{theme.MUTED}'>{breakable_path(path)}</span>"
             if station is not None
             else "No station profile"
         )
+        self.profile.setToolTip(str(path) if path else "")
         self.btnAdd.setEnabled(station is not None)
         container = QWidget()
         column = QVBoxLayout(container)

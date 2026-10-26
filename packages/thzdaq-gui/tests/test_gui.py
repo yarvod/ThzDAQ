@@ -49,6 +49,17 @@ class TestForms:
         assert procedure.frequency == Sweep(4e9, 6e9, 5)
         assert "spectrum" in procedure.slots()
 
+    def test_number_boxes_are_as_wide_as_their_values(self, app):
+        form = ParameterForm()
+        form.set_procedure(SidebandRatio)
+        form.set_values({"frequency": Sweep(4e9, 12e9, 5)})
+        row = form.editors["frequency"].widget
+        stop = row.layout().itemAt(1).widget()
+        text = stop.fontMetrics().horizontalAdvance(stop.text())
+        # Not sized for ±1e15 (that made forms 800 px wide), never clipping the value
+        assert text < stop.minimumSizeHint().width() < 160
+        assert row.minimumSizeHint().width() < 400
+
     def test_multi_choice_and_errors(self, app):
         form = ParameterForm()
         form.set_procedure(SisReflection)

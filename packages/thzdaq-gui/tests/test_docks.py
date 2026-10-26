@@ -126,6 +126,24 @@ class TestWindow:
         assert "rigol.dp832a" in keys and "scontel.sis_block" in keys
         assert not [k for k in keys if k.startswith(("sim.", "pfeiffer."))]
 
+    def test_long_profile_path_wraps(self, app):
+        from thzdaq_gui.docks.setup import breakable_path
+
+        path = r"C:\Users\Snake\Desktop\ThzDAQ_Windows_x64\ThzDAQ\stations\lab.yaml"
+        text = breakable_path(path)
+        assert text.replace("\u200b", "") == path and text.count(
+            "\u200b"
+        ) == path.count("\\")
+
+    def test_docks_are_not_wider_than_their_rows_need(self, window):
+        # Number boxes sized for their range made these 700-820 px wide
+        for name in ("device:sis_bias_1", "measure:two_sb.tn"):
+            dock = window.docks[name]
+            dock.toggleView(True)
+            content = dock.widget().content().widget()
+            assert content.minimumSizeHint().width() < 620, name
+        assert window.setupWidget.minimumSizeHint().width() < 450
+
     def test_editing_keeps_a_driver_no_longer_offered(self, app):
         from thzdaq_core.station import InstrumentConfig, StationConfig
         from thzdaq_instruments.transport import SERIAL, ConnectionSpec

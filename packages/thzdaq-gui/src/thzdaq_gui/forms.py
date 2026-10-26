@@ -6,7 +6,7 @@ Procedure(**values).
 
 from typing import Any, Callable, Dict, List, Mapping, Optional, Type
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QSpinBox,
     QWidget,
 )
@@ -25,13 +26,69 @@ from thzdaq_core.measurements.procedure import Procedure
 LIMIT = 1e15
 
 
+class _Compact:
+    """Width from a typical value, not from the range.
+
+    Qt sizes a spin box for its longest possible text: with ±1e15 and six
+    decimals that is ~180 px per box, and a sweep row of three made forms and
+    docks 800 px wide.
+    """
+
+    DIGITS = 4  # before the point in a typical value
+    SHORTEST = "0.00"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Spin boxes default to Minimum: never narrower than the size hint
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        # The minimum follows the shown value
+        self.valueChanged.connect(lambda _: self.updateGeometry())
+
+    def sample(self) -> str:
+        decimals = self.decimals() if hasattr(self, "decimals") else 0
+        return "-" + "0" * self.DIGITS + ("." + "0" * decimals if decimals else "")
+
+    def _width(self, text: str) -> int:
+        metrics = self.fontMetrics()
+        extra = self.prefix() + self.suffix()
+        # frame, padding and the up/down buttons
+        return metrics.horizontalAdvance(text + extra) + 44
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        text = max(self.sample(), self.cleanText(), key=len)
+        return QSize(min(hint.width(), self._width(text)), hint.height())
+
+    def minimumSizeHint(self) -> QSize:
+        # Never narrower than the value it shows: a squeezed row must not clip it
+        hint = super().minimumSizeHint()
+        text = max(self.SHORTEST, self.cleanText(), key=len)
+        return QSize(min(hint.width(), self._width(text)), hint.height())
+
+
+class CompactDoubleSpinBox(_Compact, QDoubleSpinBox):
+    pass
+
+
+class CompactSpinBox(_Compact, QSpinBox):
+    DIGITS = 6
+    SHORTEST = "000"
+
+
+def compact_combo(combo: QComboBox, characters: int = 14) -> QComboBox:
+    """A combo box as wide as a short name; the list itself shows the long ones."""
+    combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    combo.setMinimumContentsLength(characters)
+    return combo
+
+
 def to_si(value: float, scale: float) -> float:
     """Display value -> SI, without 2.6 mV turning into 0.0026000000000000003 V."""
     return float(f"{value * scale:.12g}")
 
 
 def _double_spin(parameter: Parameter) -> QDoubleSpinBox:
-    spin = QDoubleSpinBox()
+    spin = CompactDoubleSpinBox()
     spin.setDecimals(4)
     scale = parameter.display_scale
     minimum = getattr(parameter, "minimum", None)
@@ -66,7 +123,7 @@ def make_editor(parameter: Parameter) -> Editor:
             spin, lambda: to_si(spin.value(), scale), lambda v: spin.setValue(v / scale)
         )
     if kind == "int":
-        spin = QSpinBox()
+        spin = CompactSpinBox()
         minimum = getattr(parameter, "minimum", None)
         maximum = getattr(parameter, "maximum", None)
         spin.setRange(
@@ -124,7 +181,7 @@ def make_editor(parameter: Parameter) -> Editor:
         row = QHBoxLayout(box)
         row.setContentsMargins(0, 0, 0, 0)
         start, stop = _double_spin(parameter), _double_spin(parameter)
-        points = QSpinBox()
+        points = CompactSpinBox()
         points.setRange(1, getattr(parameter, "max_points", 100001))
         points.setSuffix(" pts")
         for widget in (start, stop, points):
@@ -155,6 +212,8 @@ class ParameterForm(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout_ = QFormLayout(self)
+        # Fields as wide as they need, not as the dock: no stretched number boxes
+        self.layout_.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.procedure_class: Optional[Type[Procedure]] = None
         self.parameters: Dict[str, Parameter] = {}
         self.editors: Dict[str, Editor] = {}
@@ -247,7 +306,7 @@ class DeviceSlotsForm(QWidget):
         # Devices chosen before are kept; free slots take the next unused device
         taken = {current[slot] for slot in slots if current.get(slot)}
         for slot, capabilities in slots.items():
-            combo = QComboBox()
+            combo = compact_combo(QComboBox(), 14)
             caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
             caps = tuple(c for c in caps if c is not object)
             devices = station.find(caps) if station is not None else []

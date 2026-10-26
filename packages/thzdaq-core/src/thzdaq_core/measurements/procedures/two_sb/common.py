@@ -111,9 +111,10 @@ class IfSwitchProcedure(TwoSbProcedure):
 
     switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
     upper_when_on = BoolParameter(
-        "IF switch: upper sideband when on",
+        "IF switch on: upper",
         default=True,
-        help="Output state of the IF switch channel that routes the upper sideband",
+        help="On: the IF switch channel routes the upper sideband when its output "
+        "is on; off: when it is off",
     )
 
     def select_channel(self, ctx, side_band: str, delay: float) -> None:

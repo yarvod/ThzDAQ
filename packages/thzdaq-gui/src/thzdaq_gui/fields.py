@@ -13,11 +13,15 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QHBoxLayout,
     QLabel,
+    QStyle,
+    QStyleOptionComboBox,
+    QStylePainter,
     QWidget,
 )
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import prefix_factor, prefixes_for
 
+from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.settings import settings
 
 LIMIT = 1e15
@@ -39,13 +43,20 @@ def default_prefix(kind: str, key: str, unit: str) -> str:
 
 
 class PrefixBox(QComboBox):
-    """Prefixes of one unit ("GHz — ×10⁹"); empty (hidden) for dBm, dB, deg."""
+    """Prefixes of one unit ("GHz — ×10⁹"); empty (hidden) for dBm, dB, deg.
+
+    Closed, it shows only the unit (GHz), so a row stays narrow; the list
+    shows the multipliers.
+    """
 
     def __init__(self, unit: str, prefix: str = "", parent=None):
         super().__init__(parent)
         self.unit = unit
         for name, factor, note in prefixes_for(unit):
             self.addItem(f"{name}{unit} — {note}", name)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(len(unit) + 2)
+        self.view().setMinimumWidth(self.view().sizeHintForColumn(0) + 24)
         index = self.findData(prefix)
         self.setCurrentIndex(index if index >= 0 else max(0, self.findData("")))
         if not self.count():
@@ -59,6 +70,14 @@ class PrefixBox(QComboBox):
 
     def symbol(self) -> str:
         return f"{self.prefix()}{self.unit}"
+
+    def paintEvent(self, event) -> None:
+        painter = QStylePainter(self)
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        option.currentText = self.symbol()
+        painter.drawComplexControl(QStyle.CC_ComboBox, option)
+        painter.drawControl(QStyle.CE_ComboBoxLabel, option)
 
 
 def format_number(value: float, factor: float, symbol: str) -> str:
@@ -91,11 +110,11 @@ class QuantityField(QWidget):
             self.choice.currentIndexChanged.connect(lambda _: self.set_pending(True))
             layout.addWidget(self.choice, 1)
         else:
-            self.spin = QDoubleSpinBox()
+            self.spin = CompactDoubleSpinBox()
+            self.spin.DIGITS = 3
             self.spin.setDecimals(6)
             self.spin.setRange(-LIMIT, LIMIT)
             self.spin.setKeyboardTracking(False)
-            self.spin.setMinimumWidth(110)
             self.spin.valueChanged.connect(lambda _: self.set_pending(True))
             self.spin.lineEdit().returnPressed.connect(self.apply_requested)
             layout.addWidget(self.spin, 1)

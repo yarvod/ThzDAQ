@@ -153,8 +153,9 @@ class QuantityPanel(QWidget):
                 note.hide()
                 grid.addWidget(note, row, 5)
                 self.notes[quantity.key] = note
-        grid.setColumnStretch(1, 1)
-        grid.setColumnMinimumWidth(3, 90)
+        # Spare width goes to the right of the readings, not into the fields
+        grid.setColumnMinimumWidth(3, 72)
+        grid.setColumnStretch(6, 1)
         layout.addLayout(grid)
         self.prefill()
         controls = QHBoxLayout()
@@ -638,6 +639,7 @@ class SisBiasGroup(QGroupBox):
         self.panel = panel
         self.device_id = device_id
         layout = QFormLayout(self)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         settings = self.spec().settings
         # Same fields as the rest of the dock: number + prefix (µV, µA)
         self.offset_voltage = QuantityField(OFFSET_VOLTAGE, device_id, "sis_bias")
