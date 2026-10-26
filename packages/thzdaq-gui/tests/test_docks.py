@@ -380,6 +380,25 @@ class TestDeviceDocks:
         assert finished[0].status == COMPLETED
         assert len(window.hub.graph("I-V").items) == 1
 
+    def test_measured_iv_can_be_analyzed(self, window, wait):
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_1"].widget()
+        box = widget.findChildren(ProcedureBox)[0]
+        box.form.set_values({**FAST_IV, "voltage": Sweep(0, 7e-3, 141)})
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished)
+        bar = window.hub.graph("I-V").analysis
+        # The curve of the run is offered (the list stayed empty before)
+        assert bar.curve.count() == 1
+        assert bar.curve.currentData()[0] == finished[0].id
+        result = bar.analyze()
+        assert result is not None and result.rn_ohm > 0, bar.label.text()
+        window.hub.graph("I-V").clear()
+        assert bar.curve.count() == 0 and not bar.overlay.items
+
 
 class TestMeasureAndData:
     def test_saved_parameters_survive_a_dropped_one(self, window, session):

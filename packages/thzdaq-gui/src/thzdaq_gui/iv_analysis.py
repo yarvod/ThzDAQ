@@ -239,16 +239,25 @@ class IVAnalysisBar(QWidget):
         self.label = QLabel("Select a curve and press Analyze")
         self.label.setTextFormat(Qt.RichText)
         layout.addWidget(self.label)
+        self.keys = []
+        line_plot.curves_changed.connect(self.refresh_curves)
+        self.refresh_curves()
 
     def refresh_curves(self) -> None:
+        """The curves of the plot; a new one (the last run) is selected."""
         current = self.curve.currentData()
+        keys = list(self.line_plot.points)
+        new = [key for key in keys if key not in self.keys]
+        self.keys = keys
         self.curve.blockSignals(True)
         self.curve.clear()
-        for group in self.line_plot.points:
-            self.curve.addItem(self.line_plot.curve_label(group), group)
-        index = self.curve.findData(current)
+        for key in keys:
+            self.curve.addItem(self.line_plot.curve_label(key), key)
+        index = self.curve.findData(new[-1] if new else current)
         self.curve.setCurrentIndex(index if index >= 0 else self.curve.count() - 1)
         self.curve.blockSignals(False)
+        if current is not None and current not in keys:
+            self.clear()  # the analyzed curve is gone: so are its fit lines
 
     def analyze(self) -> Optional[IVResistanceAnalysis]:
         group = self.curve.currentData()
