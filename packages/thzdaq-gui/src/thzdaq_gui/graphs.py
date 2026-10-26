@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QLineEdit,
     QMessageBox,
     QToolButton,
     QVBoxLayout,
@@ -72,14 +73,31 @@ def curve_name(measurement: Measurement, group: Tuple) -> str:
 
 
 class GraphWidget(QWidget):
-    """A line graph with curves from any measurements."""
+    """A line graph with curves from any measurements.
+
+    key names its dock and stays when a graph made with New graph… (custom)
+    is renamed; graphs of the procedures are keyed by their title.
+    """
 
     curves_changed = Signal()
     add_curve_clicked = Signal(object)  # this graph
+    edit_clicked = Signal(object)
+    delete_clicked = Signal(object)
 
-    def __init__(self, title: str, x: Axis, y: Axis, analysis=None, parent=None):
+    def __init__(
+        self,
+        title: str,
+        x: Axis,
+        y: Axis,
+        analysis=None,
+        key: Optional[str] = None,
+        custom: bool = False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.title = title
+        self.key = key or title
+        self.custom = custom
         self.x, self.y = x, y
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
@@ -99,6 +117,17 @@ class GraphWidget(QWidget):
         for button in (self.btnAdd, self.btnHidden, self.btnClear, self.btnRange):
             bar.addWidget(button)
         bar.addStretch()
+        if custom:
+            self.btnEdit = self._tool(
+                "pencil-outline", "Rename the graph, axis labels",
+                lambda: self.edit_clicked.emit(self),
+            )  # fmt: skip
+            self.btnDelete = self._tool(
+                "delete-outline", "Delete the graph",
+                lambda: self.delete_clicked.emit(self),
+            )  # fmt: skip
+            bar.addWidget(self.btnEdit)
+            bar.addWidget(self.btnDelete)
         layout.addLayout(bar)
         self.plot = pg.PlotWidget()
         item = self.plot.getPlotItem()
@@ -125,6 +154,16 @@ class GraphWidget(QWidget):
         button.setToolTip(tip)
         button.clicked.connect(slot)
         return button
+
+    def set_title(self, title: str) -> None:
+        self.title = title
+        self.plot.getPlotItem().setTitle(title, color=theme.ACCENT, size="11pt")
+
+    def set_axes(self, x: Axis, y: Axis) -> None:
+        self.x = Axis(x.label, x.unit, self.x.scale)
+        self.y = Axis(y.label, y.unit, self.y.scale)
+        self._label("bottom", self.x)
+        self._label("left", self.y)
 
     def _label(self, side: str, axis: Axis) -> None:
         if axis.unit:
@@ -314,7 +353,11 @@ class GraphHub(QObject):
     """
 
     graph_created = Signal(object)  # GraphWidget or MapGraphWidget
-    raise_requested = Signal(object)  # show this graph's dock
+    raise_requested = Signal(object)  # show this graph's dock in front
+    show_requested = Signal(object)  # open this graph's dock if closed
+    graph_renamed = Signal(object)  # a custom graph, its new title
+    graph_removed = Signal(object)  # a custom graph to delete
+    custom_changed = Signal()  # the custom graphs to remember
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -335,11 +378,14 @@ class GraphHub(QObject):
                 widget = graph_for_spec(spec)
             else:
                 widget = GraphWidget(title, Axis(), Axis())
-            if isinstance(widget, GraphWidget):
-                widget.add_curve_clicked.connect(self._add_curve)
-            self.graphs[title] = widget
-            self.graph_created.emit(widget)
+            self._add(widget)
         return self.graphs[title]
+
+    def _add(self, widget) -> None:
+        if isinstance(widget, GraphWidget):
+            widget.add_curve_clicked.connect(self._add_curve)
+        self.graphs[widget.title] = widget
+        self.graph_created.emit(widget)
 
     def _add_curve(self, widget) -> None:
         if self.add_curve_request is not None:
@@ -355,10 +401,70 @@ class GraphHub(QObject):
     def raise_graph(self, title: str) -> None:
         self.raise_requested.emit(self.graph(title))
 
-    def new_graph(self, title: str) -> QWidget:
+    def show_graph(self, title: str) -> None:
+        """On screen, without taking the front from another graph."""
+        self.show_requested.emit(self.graph(title))
+
+    def _check_free(self, title: str) -> str:
+        title = title.strip()
+        if not title:
+            raise ValueError("The graph needs a title")
         if title in self.graphs or title in self.specs:
             raise ValueError(f"Graph {title!r} exists")
-        return self.graph(title)
+        return title
+
+    def new_graph(
+        self, title: str, key: Optional[str] = None, x: str = "", y: str = ""
+    ) -> GraphWidget:
+        """A graph of the user's own (New graph…), renamed and deleted at will."""
+        title = self._check_free(title)
+        if key is None:
+            used = {getattr(w, "key", "") for w in self.graphs.values()}
+            key = next(
+                f"custom{n}" for n in range(1, 10000) if f"custom{n}" not in used
+            )
+        widget = GraphWidget(title, Axis(x), Axis(y), key=key, custom=True)
+        widget.edit_clicked.connect(self._edit)
+        widget.delete_clicked.connect(self.graph_removed)
+        self._add(widget)
+        self.custom_changed.emit()
+        return widget
+
+    def custom_graphs(self) -> List[dict]:
+        return [
+            {"key": w.key, "title": w.title, "x": w.x.label, "y": w.y.label}
+            for w in self.graphs.values()
+            if getattr(w, "custom", False)
+        ]
+
+    def rename(self, widget: GraphWidget, title: str) -> None:
+        if title.strip() != widget.title:
+            title = self._check_free(title)
+            del self.graphs[widget.title]
+            widget.set_title(title)
+            self.graphs[title] = widget
+            self.graph_renamed.emit(widget)
+        self.custom_changed.emit()
+
+    def remove(self, widget: GraphWidget) -> None:
+        """Forget a custom graph; the window deletes its dock."""
+        if self.graphs.get(widget.title) is widget and widget.custom:
+            del self.graphs[widget.title]
+            self.custom_changed.emit()
+
+    def _edit(self, widget: GraphWidget) -> None:
+        dialog = GraphDialog(widget)
+        while dialog.exec() == QDialog.Accepted:
+            try:
+                self.rename(widget, dialog.title.text())
+            except ValueError as e:
+                QMessageBox.warning(dialog, "Graph", str(e))
+                continue
+            widget.set_axes(
+                Axis(dialog.x.text().strip()), Axis(dialog.y.text().strip())
+            )
+            self.custom_changed.emit()
+            return
 
     def feed(
         self,
@@ -422,6 +528,29 @@ class GraphHub(QObject):
         if widget.append(("monitor", device, quantity.key), name, t, value, window):
             return graph_title
         return None
+
+
+class GraphDialog(QDialog):
+    """Title and axis labels of a custom graph."""
+
+    def __init__(self, graph: GraphWidget, parent=None):
+        super().__init__(parent or graph)
+        self.setWindowTitle(f"Graph {graph.title}")
+        form = QFormLayout()
+        self.title = QLineEdit(graph.title)
+        self.x = QLineEdit(graph.x.label)
+        self.y = QLineEdit(graph.y.label)
+        self.x.setPlaceholderText("from the first curve")
+        self.y.setPlaceholderText("from the first curve")
+        form.addRow("Title", self.title)
+        form.addRow("X axis", self.x)
+        form.addRow("Y axis", self.y)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
 
 
 class AddCurveDialog(QDialog):

@@ -264,14 +264,19 @@ class ProcedureBox(QWidget):
             self.reached.extend(t for t in reached if t not in self.reached)
 
     def raise_graph(self) -> None:
-        """One graph comes to the front per run, after its first step: of the
-        graphs that got data, the first in the procedure's plots (P-t before
-        T-t and V-t), whatever device was read first."""
+        """After the first step the graphs that got data are on screen (closed
+        ones join the graphs' tab group) and one comes to the front: the first
+        in the procedure's plots (P-t before T-t and V-t), whatever device was
+        read first."""
         if self.raised or not self.reached:
             return
         self.raised = True
         order = [spec.title for spec in self.procedure_class.plots]
-        self.hub.raise_graph(min(self.reached, key=order.index))
+        front = min(self.reached, key=order.index)
+        for title in self.reached:
+            if title != front:
+                self.hub.show_graph(title)
+        self.hub.raise_graph(front)
 
     def on_progress(self, done: int, total) -> None:
         self.raise_graph()

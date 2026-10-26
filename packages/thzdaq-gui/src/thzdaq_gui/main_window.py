@@ -6,6 +6,7 @@ measurement and one per graph. Perspectives are named dock layouts (what a
 task needs now: SIS tuning, 2SB noise, ...), kept in settings.ini.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional
@@ -49,6 +50,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_PERSPECTIVE = "Default"
 AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
 DEVICE_HANG_S = 5.0
+# Where a dock of each kind opens when no dock of its kind is on screen
+HOME_AREAS = {
+    "graph": QtAds.CenterDockWidgetArea,
+    "measure": QtAds.RightDockWidgetArea,
+    "device": QtAds.BottomDockWidgetArea,
+}
+CUSTOM_GRAPHS = "graphs/custom"
 STATE_VERSION = 3
 
 PROCEDURE_ICONS = {
@@ -119,6 +127,11 @@ class MainWindow(QMainWindow):
         self.hub.add_curve_request = self.add_curve
         self.hub.graph_created.connect(self.add_graph_dock)
         self.hub.raise_requested.connect(self.raise_graph)
+        self.hub.show_requested.connect(
+            lambda widget: self.open_dock(graph_dock_name(widget), activate=False)
+        )
+        self.hub.graph_renamed.connect(self.rename_graph_dock)
+        self.hub.graph_removed.connect(self.delete_graph)
 
         self.build_menus()
         self.build_toolbar()
@@ -136,6 +149,8 @@ class MainWindow(QMainWindow):
             self.add_measure_dock(cls)
         for title in self.hub.titles():
             self.hub.graph(title)
+        self.load_custom_graphs()
+        self.hub.custom_changed.connect(self.save_custom_graphs)
         self.sync_device_docks()
         session.station_changed.connect(self.on_station_changed)
         session.config_changed.connect(self.sync_device_docks)
@@ -293,15 +308,46 @@ class MainWindow(QMainWindow):
         dock = self.docks.get(name)
         if dock is None:
             return
-        if dock.isClosed():
-            dock.toggleView(True)
-            dock.setAsCurrentTab()
-        elif not dock.isCurrentTab():
-            dock.setAsCurrentTab()
-            dock.raise_()
+        if dock.isClosed() or not dock.isCurrentTab():
+            self.open_dock(name)
         else:
             dock.toggleView(False)
         self.menu_actions[name].setChecked(not dock.isClosed())
+
+    def open_dock(self, name: str, activate: bool = True) -> None:
+        """Show a dock where its kind is: a closed one joins the tab group of
+        an open dock of the same kind (graphs with graphs, devices with
+        devices), or opens on its side; activate brings it to the front."""
+        dock = self.docks.get(name)
+        if dock is None:
+            return
+        if dock.isClosed():
+            own = dock.dockAreaWidget()
+            if own is None or own.openDockWidgetsCount() == 0:
+                kind = name.split(":", 1)[0]
+                area = self.open_area_of(kind, dock)
+                if area is not None:
+                    self.dock_manager.addDockWidgetTabToArea(dock, area)
+                elif kind in HOME_AREAS:
+                    self.dock_manager.addDockWidget(HOME_AREAS[kind], dock)
+            dock.toggleView(True)
+            activate = True  # a dock just opened is the one to see
+        if activate:
+            dock.setAsCurrentTab()
+            dock.raise_()
+        self.sync_bodies()
+
+    def open_area_of(self, kind: str, besides):
+        """The tab group holding the most open docks of this kind (not floating)."""
+        counts = {}
+        for name, dock in self.docks.items():
+            if dock is besides or dock.isClosed() or not name.startswith(kind + ":"):
+                continue
+            area = dock.dockAreaWidget()
+            if area is None or dock.isFloating() or dock.isAutoHide():
+                continue
+            counts[area] = counts.get(area, 0) + 1
+        return max(counts, key=counts.get) if counts else None
 
     def sync_menu_checks(self) -> None:
         """Check marks from the docks: ADS opens a dock it moves without viewToggled."""
@@ -368,13 +414,13 @@ class MainWindow(QMainWindow):
         )  # fmt: skip
 
     def add_graph_dock(self, widget) -> None:
-        name = f"graph:{widget.title}"
+        name = graph_dock_name(widget)
         if name in self.docks:
             return
         icon = theme.icon(
             "grid" if isinstance(widget, MapGraphWidget) else "chart-line"
         )
-        self.add_dock(
+        dock = self.add_dock(
             name,
             widget.title,
             widget,
@@ -382,13 +428,45 @@ class MainWindow(QMainWindow):
             icon,
             QtAds.CenterDockWidgetArea,
         )
+        if not self._building:
+            # Made later (New graph…, a monitor's new unit): opens with the graphs
+            dock.toggleView(False)
 
     def raise_graph(self, widget) -> None:
-        dock = self.docks.get(f"graph:{widget.title}")
+        self.open_dock(graph_dock_name(widget))
+
+    def rename_graph_dock(self, widget) -> None:
+        name = graph_dock_name(widget)
+        dock = self.docks.get(name)
         if dock is not None:
-            if dock.isClosed():
-                dock.toggleView(True)
-            dock.raise_()
+            dock.setWindowTitle(widget.title)
+            dock.toggleViewAction().setText(widget.title)
+            self.menu_actions[name].setText(widget.title)
+
+    def delete_graph(self, widget) -> None:
+        answer = QMessageBox.question(
+            self, "Delete graph", f"Delete the graph {widget.title!r} and its curves?"
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.hub.remove(widget)
+        self.remove_dock(graph_dock_name(widget))
+
+    def load_custom_graphs(self) -> None:
+        try:
+            saved = json.loads(self.settings.value(CUSTOM_GRAPHS) or "[]")
+        except (TypeError, ValueError):
+            saved = []
+        for item in saved:
+            try:
+                self.hub.new_graph(
+                    item["title"], item.get("key"), item.get("x", ""), item.get("y", "")
+                )
+            except (KeyError, ValueError, TypeError):
+                continue
+
+    def save_custom_graphs(self) -> None:
+        self.settings.setValue(CUSTOM_GRAPHS, json.dumps(self.hub.custom_graphs()))
 
     def device_refs(self):
         station = self.session.station
@@ -731,3 +809,7 @@ class MainWindow(QMainWindow):
         close_plots()
         self.dock_manager.deleteLater()
         event.accept()
+
+
+def graph_dock_name(widget) -> str:
+    return f"graph:{getattr(widget, 'key', widget.title)}"

@@ -55,6 +55,49 @@ class TestWindow:
         assert wrong == []
         assert window.menu_actions["graph:I-V"].isChecked()
 
+    def test_docks_open_with_their_kind(self, window):
+        # Default layout: SIS biases open at the bottom, graphs in the centre
+        bias_area = window.docks["device:sis_bias_1"].dockAreaWidget()
+        supply = window.docks["device:power_supply_1"]
+        assert supply.isClosed()
+        window.menu_actions["device:power_supply_1"].trigger()
+        assert not supply.isClosed() and supply.dockAreaWidget() is bias_area
+        assert (
+            supply.isCurrentTab()
+            and window.menu_actions["device:power_supply_1"].isChecked()
+        )
+
+    def test_custom_graph_rename_delete_and_keep(self, window, session, monkeypatch):
+        from thzdaq_gui.graphs import Axis
+        from thzdaq_gui.main_window import MainWindow
+
+        hub = window.hub
+        graph = hub.new_graph("Mine")
+        dock = window.docks["graph:custom1"]
+        window.raise_graph(graph)
+        # Joins the graphs on screen instead of opening anywhere
+        assert dock.dockAreaWidget() is window.docks["graph:I-V"].dockAreaWidget()
+        assert dock.isCurrentTab()
+        hub.rename(graph, "Mine 2")
+        graph.set_axes(Axis("Voltage"), Axis("Current"))
+        hub.custom_changed.emit()
+        assert hub.graphs["Mine 2"] is graph and "Mine" not in hub.graphs
+        assert dock.windowTitle() == "Mine 2"
+        assert window.menu_actions["graph:custom1"].text() == "Mine 2"
+        with pytest.raises(ValueError):
+            hub.rename(graph, "I-V")  # a graph of the procedures
+        window.save_state()
+        again = MainWindow(session, window.settings.fileName(), check_updates=False)
+        kept = again.hub.graphs["Mine 2"]
+        assert kept.custom and kept.key == "custom1" and kept.y.label == "Current"
+        again.confirm_exit = False
+        again.close()
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+        graph.delete_clicked.emit(graph)
+        assert "Mine 2" not in hub.graphs and "graph:custom1" not in window.docks
+        assert hub.custom_graphs() == []
+        assert not hasattr(hub.graph("I-V"), "btnDelete")  # built-in graphs stay
+
     def test_area_close_button_closes_one_tab(self, window):
         import PySide6QtAds as QtAds
 
@@ -449,6 +492,10 @@ class TestMeasureAndData:
         assert window.hub.graph("P-t").items and window.hub.graph("V-t").items
         assert not window.hub.graph("p-t").items
         assert raised == ["P-t"]  # one graph to the front: the first with data
+        # ... the others with data are on screen too, in the graphs' tab group
+        v_t, p_t = window.docks["graph:V-t"], window.docks["graph:P-t"]
+        assert not v_t.isClosed() and not p_t.isClosed() and p_t.isCurrentTab()
+        assert v_t.dockAreaWidget() is p_t.dockAreaWidget()
         assert box.window == 60
         assert isinstance(finished[0].id, int)
         # The choice is remembered
