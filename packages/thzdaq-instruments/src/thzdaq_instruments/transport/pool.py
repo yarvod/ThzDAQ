@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
@@ -153,6 +154,35 @@ class TransportPool:
                 entry.controller.invalidate()
         logger.info(f"[TransportPool] reset {entry.link!r}")
         return True
+
+    def close_idle(self, max_idle: float) -> List[tuple]:
+        """Close TCP links unused for max_idle seconds; the next command reopens.
+
+        A link in use (its lock held) is left alone. Returns the closed keys.
+        """
+        with self._lock:
+            entries = list(self._entries.items())
+        closed = []
+        for key, entry in entries:
+            link = entry.link
+            if not link.idle_closable or link.idle or link.broken or not link.is_open:
+                continue
+            if time.monotonic() - link.last_used < max_idle:
+                continue
+            if not link.lock.acquire(blocking=False):
+                continue
+            try:
+                if time.monotonic() - link.last_used < max_idle:
+                    continue
+                link.close()
+                link.idle = True
+                if entry.controller is not None:
+                    entry.controller.invalidate()
+            finally:
+                link.lock.release()
+            logger.info(f"[TransportPool] closed {link!r}: unused")
+            closed.append(key)
+        return closed
 
     def abort(self, key: tuple) -> bool:
         """Break a command blocked on this link; the next one reconnects."""

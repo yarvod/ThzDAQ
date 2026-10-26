@@ -220,6 +220,12 @@ class Station:
     def reset_connection(self, key: tuple) -> bool:
         return self.transport_pool.reset(key)
 
+    def close_idle_connections(self, max_idle: float) -> List[tuple]:
+        """Let go of TCP connections unused for max_idle seconds (a stopped
+        monitor): the instrument leaves remote mode and other clients may
+        connect; the next command reconnects."""
+        return self.transport_pool.close_idle(max_idle)
+
     def abort(self, refs) -> None:
         """Break commands blocked on the connections of these devices.
 

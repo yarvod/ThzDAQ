@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_core.data.store import MeasurementStore
 from thzdaq_core.station.config import StationConfig
 from thzdaq_core.station.station import Station
@@ -12,6 +12,10 @@ from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.workers import DeviceWorker, QtRunner
 
 logger = logging.getLogger(__name__)
+
+# A TCP connection unused this long is closed (reopened on the next command):
+# an R&S instrument stays in remote with a client connected
+IDLE_CONNECTION_S = 5.0
 
 
 class Session(QObject):
@@ -34,6 +38,13 @@ class Session(QObject):
         self.path: Optional[Path] = None
         self.simulate = False
         self.lively = True  # simulators drift and get noisy (tests turn it off)
+        self.idleTimer = QTimer(self)
+        self.idleTimer.timeout.connect(self.close_idle_connections)
+        self.idleTimer.start(1000)
+
+    def close_idle_connections(self) -> None:
+        if self.station is not None:
+            self.station.close_idle_connections(IDLE_CONNECTION_S)
 
     def runner(self) -> QtRunner:
         """A runner for one dock; stopped on shutdown."""

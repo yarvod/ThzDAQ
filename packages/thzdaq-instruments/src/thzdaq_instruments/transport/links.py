@@ -12,6 +12,10 @@ CHUNK_SIZE = 4096
 
 
 class SocketLink(Link):
+    # An instrument with a client connected stays in remote (front panel
+    # locked, R&S) and may refuse another client: closed when unused
+    idle_closable = True
+
     def __init__(
         self,
         host: str,

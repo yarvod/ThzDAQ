@@ -94,18 +94,26 @@ class ConnectionSpec:
 class Link(ABC):
     """Physical line-oriented connection (TCP socket, serial port)."""
 
+    # May be closed while unused and reopened on the next command (TCP). A
+    # serial port is kept: opening it resets an Arduino.
+    idle_closable = False
+
     def __init__(self):
         # Reentrant: a transport holds it for a whole query or transaction
         self.lock = threading.RLock()
         # Set after a timeout or a lost connection: the next use reconnects, so a
         # late answer is never read as the answer to the next command
         self.broken = False
+        # Closed for being unused (TransportPool.close_idle): the next use reopens
+        self.idle = False
+        self.last_used = time.monotonic()
 
     def reset(self) -> None:
         """Reconnect: close, open, drop whatever was buffered."""
         self.close()
         self.open()
         self.broken = False
+        self.idle = False
 
     def abort(self) -> None:
         """Break a read blocked in another thread; the next use reconnects.
@@ -168,8 +176,11 @@ class Transport(ABC):
 
     def _prepare(self) -> None:
         self._check_open()
-        if self.link.broken:
-            logger.warning(f"{self.link!r}: reconnecting after an error")
+        if self.link.broken or self.link.idle:
+            if self.link.broken:
+                logger.warning(f"{self.link!r}: reconnecting after an error")
+            else:
+                logger.info(f"{self.link!r}: reopening after a pause")
             self.link.reset()
             self._after_reset()
 
@@ -184,6 +195,8 @@ class Transport(ABC):
             if not self._closed:  # this transport closed: the shared link is fine
                 self.link.broken = True
             raise
+        finally:
+            self.link.last_used = time.monotonic()
 
     def write(self, command: str) -> None:
         with self.link.lock, self._guarded():

@@ -122,3 +122,78 @@ def test_serial_reconnect_drops_a_late_answer(monkeypatch):
     link.open()
     link.reset()
     assert len(opened) == 2 and all(port.buffer == b"" for port in opened)
+
+
+def tcp_links(responses):
+    links = []
+
+    def factory(spec):
+        link = FakeLink(responses)
+        link.idle_closable = True  # a TCP socket
+        links.append(link)
+        return link
+
+    return links, factory
+
+
+def test_unused_connection_is_closed_and_reopened_on_use():
+    links, factory = tcp_links({"FETCH?": "-30.0"})
+    pool = TransportPool(factory)
+    meter = pool.acquire(ConnectionSpec(SOCKET, host="nrx", port=5025))
+    assert meter.query("FETCH?") == "-30.0"
+    link = links[0]
+    assert pool.close_idle(5.0) == []  # just used
+    link.last_used -= 10
+    assert pool.close_idle(5.0) == [("tcp", "nrx", 5025)]
+    assert not link.is_open and link.idle and not link.broken
+    assert meter.query("FETCH?") == "-30.0"  # reopened, nothing lost
+    assert link.open_count == 2 and link.is_open and not link.idle
+
+
+def test_idle_prologix_is_set_up_again_and_busy_links_stay():
+    links, factory = tcp_links(lambda line: "ok" if line == "*IDN?" else None)
+    pool = TransportPool(factory)
+    gen = pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=19))
+    gen.query("*IDN?")
+    link = links[0]
+    link.last_used -= 10
+    with link.lock:  # a command in progress in another thread
+        held = threading.Thread(target=lambda: closed.extend(pool.close_idle(5.0)))
+        closed = []
+        held.start()
+        held.join()
+    assert closed == [] and link.is_open
+    assert pool.close_idle(5.0) and not link.is_open
+    assert gen.query("*IDN?") == "ok"
+    assert link.written.count("++mode 1") == 2 and link.written.count("++addr 19") == 2
+
+
+def test_serial_links_are_never_closed_for_idling():
+    pool = TransportPool(lambda spec: FakeLink({"*IDN?": "x"}))  # not idle_closable
+    pool.acquire(ConnectionSpec(SOCKET, host="h", port=1)).query("*IDN?")
+    (status,) = pool.links()
+    pool._entries[status.key].link.last_used -= 100
+    assert pool.close_idle(5.0) == [] and pool.links()[0].open
+
+
+def test_instrument_sees_the_idle_client_leave():
+    """The NRX stayed in remote after a monitor: the socket was never closed."""
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(2)
+    port = server.getsockname()[1]
+    pool = TransportPool()
+    meter = pool.acquire(ConnectionSpec(SOCKET, host="127.0.0.1", port=port))
+    peer, _ = server.accept()
+    meter.write("SYST:BEEP")
+    assert peer.recv(64) == b"SYST:BEEP\n"
+    next(iter(pool._entries.values())).link.last_used -= 10
+    assert pool.close_idle(5.0)
+    peer.settimeout(2)
+    assert peer.recv(64) == b""  # the client is gone: the instrument goes local
+    meter.write("*CLS")  # the next command connects again
+    again, _ = server.accept()
+    assert again.recv(64) == b"*CLS\n"
+    meter.close()
+    for s in (peer, again, server):
+        s.close()
