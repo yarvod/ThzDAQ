@@ -40,6 +40,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s"
     )
     app = QApplication.instance() or QApplication([sys.argv[0], *qt_args])
+    # Garbage collection only in the GUI thread, on a timer: a collection
+    # started in a device or measurement thread may free Qt objects there
+    from pyqtgraph.util.garbage_collector import GarbageCollector
+
+    collector = GarbageCollector(interval=1.0)  # noqa: F841 (kept while running)
     app.setApplicationName("ThzDAQ")
     theme.apply(app)
     app.setWindowIcon(theme.app_icon())

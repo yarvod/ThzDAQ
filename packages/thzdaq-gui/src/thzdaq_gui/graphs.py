@@ -13,6 +13,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.graphicsItems.GraphicsWidgetAnchor import GraphicsWidgetAnchor
 from PySide6 import QtGui
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import (
@@ -319,6 +320,39 @@ class MapGraphWidget(QWidget):
         self.image.setTransform(transform)
 
 
+def release_anchors(scene) -> None:
+    """Disconnect anchored items (a legend with an offset) from their parent.
+
+    An anchored legend gets its parent's geometryChanged connected to one of
+    its own methods. When the plot is deleted with that connection alive, the
+    garbage collector later frees the legend's wrapper and corrupts memory in
+    PySide 6.8 (a crash at a random later allocation, like PYSIDE-1919).
+    The attributes are private to pyqtgraph's GraphicsWidgetAnchor (0.13.7).
+    """
+    if scene is None:
+        return
+    for item in scene.items():
+        if not isinstance(item, GraphicsWidgetAnchor):
+            continue
+        parent = getattr(item, "_GraphicsWidgetAnchor__parent", None)
+        slot = getattr(item, "_GraphicsWidgetAnchor__geometryChanged", None)
+        if parent is None or slot is None:
+            continue
+        try:
+            parent.geometryChanged.disconnect(slot)
+        except (RuntimeError, TypeError):
+            pass
+        item._GraphicsWidgetAnchor__parent = None
+
+
+def close_views(widget: QWidget) -> None:
+    """Close the pyqtgraph views inside a widget before it is deleted."""
+    for view in widget.findChildren(pg.GraphicsView):
+        if not getattr(view, "closed", False):
+            release_anchors(view.scene())
+            view.close()
+
+
 def close_plots() -> None:
     """Close every pyqtgraph view before the application quits.
 
@@ -329,6 +363,7 @@ def close_plots() -> None:
 
     for view in list(pg.ViewBox.AllViews):
         if isQObjectAlive(view):
+            release_anchors(view.scene())
             view.close()
     pg.ViewBox.AllViews.clear()
     pg.ViewBox.NamedViews.clear()
@@ -395,6 +430,7 @@ class GraphHub(QObject):
         """Delete graphs not owned by docks (tests, a hub without a window)."""
         for widget in self.graphs.values():
             if widget.parent() is None:
+                close_views(widget)
                 widget.deleteLater()
         self.graphs.clear()
 

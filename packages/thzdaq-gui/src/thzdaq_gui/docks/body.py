@@ -12,6 +12,8 @@ from typing import Callable, Optional
 
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
+from thzdaq_gui.graphs import close_views
+
 Factory = Callable[[], QWidget]
 
 
@@ -65,6 +67,7 @@ class DockBody(QWidget):
             return
         self.stop()
         self.set_open(False)
+        close_views(self._content)  # a device dock with a trace plot
         self._content.deleteLater()
         self._content = None
 

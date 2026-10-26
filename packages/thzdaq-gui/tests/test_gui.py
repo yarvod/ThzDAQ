@@ -249,6 +249,27 @@ class TestGraphs:
         assert len(graph.points["c"]) == 14  # no window: nothing dropped
 
 
+def test_deleted_graphs_survive_garbage_collection(app):
+    """A plot deleted with its legend still anchored corrupted memory on the
+    next gc.collect() (random crashes of the test run and the app)."""
+    import gc
+
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from thzdaq_gui.graphs import close_views
+
+    for _ in range(20):
+        graph = GraphWidget("P-t", Axis(), Axis())
+        for t in range(3):
+            graph.append("c", "c", t, -30.0)
+        legend = graph.legend
+        close_views(graph)
+        assert legend._GraphicsWidgetAnchor__parent is None  # anchor released
+        graph.deleteLater()
+        del graph, legend
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
+
+
 def test_device_worker_reports_how_long_a_job_waits(app, wait):
     import time as _time
 

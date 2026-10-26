@@ -38,7 +38,13 @@ from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
 from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
-from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget, close_plots
+from thzdaq_gui.graphs import (
+    AddCurveDialog,
+    GraphHub,
+    MapGraphWidget,
+    close_plots,
+    close_views,
+)
 from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
 from thzdaq_gui.updates import can_self_update, latest_update
 from thzdaq_gui.settings import location
@@ -365,6 +371,8 @@ class MainWindow(QMainWindow):
             widget.dispose()
         elif hasattr(widget, "stop"):
             widget.stop()
+        if widget is not None:
+            close_views(widget)
         for menu in (
             self.menuDevices,
             self.menuMeasures,
