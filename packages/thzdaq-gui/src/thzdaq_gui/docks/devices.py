@@ -104,58 +104,50 @@ class QuantityPanel(QWidget):
         self.started = time.monotonic()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        # Setpoint on the left (field, Set), what the device reports on the right
+        # One row per value: a setpoint is its field (what we set, not polled),
+        # a measured value is its reading; spare width stays on the right
         grid = QGridLayout()
-        first = 0
-        if any(q.settable for q in self.quantities) and any(
-            q.readable for q in self.quantities
-        ):
-            for text, column in (("Setpoint", 1), ("Reading", 3)):
-                header = QLabel(text)
-                header.setProperty("role", "muted")
-                grid.addWidget(header, 0, column)
-            first = 1
-        for row, quantity in enumerate(self.quantities, first):
+        for row, quantity in enumerate(self.quantities):
             grid.addWidget(QLabel(quantity.title), row, 0)
-            field = None
-            if quantity.settable and quantity.kind != "bool":
-                field = QuantityField(quantity, ref, kind)
-                field.apply_requested.connect(lambda q=quantity: self.apply(q))
-                self.fields[quantity.key] = field
-            if quantity.readable:
-                value = QLabel("--")
-                value.setProperty("role", "value")
-                grid.addWidget(value, row, 3)
-                self.values[quantity.key] = value
-                if field is None and quantity.kind != "bool":
-                    display = PrefixBox(
-                        quantity.unit, default_prefix(kind, quantity.key, quantity.unit)
-                    )
-                    display.setToolTip("Unit of the reading")
-                    self.displays[quantity.key] = display
-                    grid.addWidget(display, row, 4)
             if quantity.settable and quantity.kind == "bool":
                 toggle = QPushButton("Off")
                 toggle.setCheckable(True)
                 toggle.clicked.connect(lambda on, q=quantity: self.write(q, on))
-                grid.addWidget(toggle, row, 1, 1, 2)
+                grid.addWidget(toggle, row, 1)
                 self.toggles[quantity.key] = toggle
-            elif field is not None:
+            elif quantity.settable:
+                field = QuantityField(quantity, ref, kind)
+                field.apply_requested.connect(lambda q=quantity: self.apply(q))
+                self.fields[quantity.key] = field
                 button = QPushButton(theme.icon("check"), "Set")
                 button.setToolTip("Write to the device (or press Enter in the field)")
                 button.clicked.connect(lambda _=False, q=quantity: self.apply(q))
                 grid.addWidget(field, row, 1)
                 grid.addWidget(button, row, 2)
+            elif quantity.readable:
+                value = QLabel("--")
+                value.setProperty("role", "value")
+                self.values[quantity.key] = value
+                if quantity.kind == "bool":
+                    grid.addWidget(value, row, 1)
+                else:
+                    display = PrefixBox(
+                        quantity.unit, default_prefix(kind, quantity.key, quantity.unit)
+                    )
+                    display.setToolTip("Unit of the reading")
+                    self.displays[quantity.key] = display
+                    cell = QHBoxLayout()
+                    cell.addWidget(value, 1)
+                    cell.addWidget(display)
+                    grid.addLayout(cell, row, 1)
             if config and quantity.readable:
                 note = QLabel()
                 note.setStyleSheet(f"color: {theme.ACCENT}")
                 note.linkActivated.connect(lambda _, q=quantity: self.take(q))
                 note.hide()
-                grid.addWidget(note, row, 5)
+                grid.addWidget(note, row, 3)
                 self.notes[quantity.key] = note
-        # Spare width goes to the right of the readings, not into the fields
-        grid.setColumnMinimumWidth(3, 72)
-        grid.setColumnStretch(6, 1)
+        grid.setColumnStretch(4, 1)
         layout.addLayout(grid)
         self.prefill()
         controls = QHBoxLayout()
@@ -250,12 +242,23 @@ class QuantityPanel(QWidget):
         if self.pending or self.session.station is None:
             return
         self.pending = True
-        readable = [q for q in self.quantities if q.readable]
+        readable = [q for q in self.quantities if self.polled(q)]
         self.session.worker.submit(
             lambda: read_values(self.device(), readable),
             self.show_values,
             self.failed,
             self.title,
+        )
+
+    def polled(self, quantity: Quantity) -> bool:
+        """A setpoint is read once to fill its field (it is what we set), again
+        only to compare a configuration or to plot it (a coil has nothing else)."""
+        if not quantity.readable:
+            return False
+        if not quantity.settable or quantity.kind == "bool" or self.config:
+            return True
+        return not self.read_once or (
+            self.plot.isChecked() and quantity in self.plotted
         )
 
     def show_values(self, values) -> None:
@@ -350,7 +353,7 @@ class QuantityPanel(QWidget):
         def done(_):
             field = self.fields.get(quantity.key)
             if field is not None:
-                field.set_pending(False)
+                field.set_value(value)  # the field is what the device was set to
             self.remember(quantity, value)
             self.read()
 

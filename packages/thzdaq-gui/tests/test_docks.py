@@ -173,10 +173,14 @@ class TestDeviceDocks:
             "current",
             "short",
         ]
+        # A setpoint is its field: no reading of it, polled only once
+        assert "voltage_set" not in panel.values and "voltage" in panel.values
         voltage = next(q for q in panel.quantities if q.key == "voltage_set")
         panel.write(voltage, 2.5e-3)
-        wait(lambda: panel.values["voltage_set"].text().startswith("2.5"))
-        assert panel.values["voltage_set"].text() == "2.5 mV"
+        wait(lambda: panel.values["voltage"].text().startswith("2.5"))
+        assert panel.values["voltage"].text() == "2.5 mV"
+        assert panel.fields["voltage_set"].value() == pytest.approx(2.5e-3)
+        assert not panel.polled(voltage) and panel.polled(panel.quantities[1])
         # The setpoint is remembered for the next start, not written on it
         from thzdaq_gui.settings import settings
 
