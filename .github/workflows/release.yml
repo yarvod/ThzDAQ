@@ -70,3 +70,5 @@ jobs:
           files: ThzDAQ_Windows_x64_${{ github.ref_name }}.zip
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
+          # release.py --again builds a tag again: the new zip replaces the old one
+          overwrite_files: true

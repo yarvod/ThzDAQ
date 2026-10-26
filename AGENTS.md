@@ -20,7 +20,7 @@ Dependencies point one way: gui → core → instruments. Tests check that core 
 - `uv run pytest` runs all package tests (GUI tests run offscreen); `uv run pytest packages/thzdaq-core` for one package.
 - `sh build.sh` / `build.bat [name]` build the PyInstaller distribution into `dist/`.
 - `uvx pre-commit run --all-files` runs Black, autoflake and hygiene hooks before committing.
-- `uv run python release.py X.Y.Z` stamps `thzdaq_gui/version.py`, tags `vX.Y.Z` and pushes; `.github/workflows/release.yml` then tests, builds the Windows x64 zip and publishes the GitHub release that Help → Check for updates installs (`thzdaq_gui/updates.py`, standalone `thzdaq_gui/updater.py` built as `updater.exe`). `.github/workflows/ci.yml` runs the tests on every push.
+- `uv run python release.py X.Y.Z` stamps `thzdaq_gui/version.py`, tags `vX.Y.Z` and pushes (`--again` moves an existing tag to the current commit after fixes and builds it again); `.github/workflows/release.yml` then tests, builds the Windows x64 zip and publishes the GitHub release that Help → Check for updates installs (`thzdaq_gui/updates.py`, standalone `thzdaq_gui/updater.py` built as `updater.exe`). `.github/workflows/ci.yml` runs the tests on every push.
 
 ## RTK (Rust Token Killer) — Required
 
