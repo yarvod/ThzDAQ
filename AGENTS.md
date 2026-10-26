@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/architecture.md` for the design.
+ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/architecture.md` for the design and `docs/backlog.md` for ideas not taken up yet.
 
 - `packages/thzdaq-instruments` (`thzdaq_instruments`): capability interfaces, quantities (readable/settable values with units derived from capabilities), fixed channels and sub-device types of instruments, transports (TCP, serial, Prologix, VISA, HTTP, Modbus) with a shared pool and per-link locks, instrument drivers in `drivers/`, simulators in `sim/`, driver registry. No Qt, no numpy.
 - `packages/thzdaq-core` (`thzdaq_core`): station profiles with instruments and their configured devices, device kinds (`station/`), procedures with device slots and the runner (`measurements/`), measurement DTOs and the JSON store (`data/`), pure analysis (`analysis/`), SIS tools (`sis/`), CLIs `thzdaq` and `thzdaq-station`. No Qt.
