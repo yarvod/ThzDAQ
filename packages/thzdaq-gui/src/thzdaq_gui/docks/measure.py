@@ -116,10 +116,17 @@ class ProcedureBox(QWidget):
         self.runner.running_changed.connect(self.on_running)
         self.btnAbort.hide()
         self.ui_running = False
+        # One timer for "starting" and "stopping": a timer of an earlier run
+        # never fires into the next one
+        self.stuck = QTimer(self)
+        self.stuck.setSingleShot(True)
+        self.stuck.setInterval(STUCK_AFTER_MS)
+        self.stuck.timeout.connect(self.offer_abort)
         # The thread may end without telling (it should not); the dock checks
         self.watchdog = QTimer(self)
         self.watchdog.setInterval(1000)
         self.watchdog.timeout.connect(self.check_thread)
+        self.ended_unseen = 0
         session.station_changed.connect(self.refresh_devices)
         session.config_changed.connect(self.refresh_devices)
         self.form.changed.connect(self.refresh_devices)
@@ -157,7 +164,10 @@ class ProcedureBox(QWidget):
             return
         try:
             data = json.loads(raw)
-            procedure = self.procedure_class.from_json(data.get("parameters", {}))
+            # A parameter dropped in a newer version must not lose the others
+            known = self.procedure_class.parameters()
+            saved = {k: v for k, v in data.get("parameters", {}).items() if k in known}
+            procedure = self.procedure_class.from_json(saved)
             self.form.set_values(procedure.values())
             self.saved_devices = dict(data.get("devices", {}))
         except (ValueError, ProcedureError, TypeError, AttributeError):
@@ -196,7 +206,7 @@ class ProcedureBox(QWidget):
         self.reached = []
         self.log.clear()
         self.state.setText("Connecting to devices...")
-        QTimer.singleShot(STUCK_AFTER_MS, self.offer_abort)
+        self.stuck.start()
         self.progress.setRange(0, procedure.estimate_steps() or 0)
         self.progress.setValue(0)
         self.runner.start(
@@ -210,11 +220,14 @@ class ProcedureBox(QWidget):
     def stop(self) -> None:
         self.runner.cancel()
         self.state.setText("Stopping...")
-        QTimer.singleShot(STUCK_AFTER_MS, self.offer_abort)
+        self.stuck.start()
 
     def offer_abort(self) -> None:
         """Still waiting after a while: a device probably hangs."""
-        if self.ui_running and self.state.text() != "Running":
+        if self.ui_running and self.state.text() in (
+            "Connecting to devices...",
+            "Stopping...",
+        ):
             self.state.setText(
                 f"{self.state.text()} no answer, Abort breaks the connections"
             )
@@ -227,7 +240,12 @@ class ProcedureBox(QWidget):
         self.log.appendPlainText("aborted: connections of the devices were broken")
 
     def check_thread(self) -> None:
-        if self.ui_running and not self.runner.running:
+        if not self.ui_running or self.runner.running:
+            self.ended_unseen = 0
+            return
+        # The end signal may still be queued: act only on a second look
+        self.ended_unseen += 1
+        if self.ended_unseen > 1:
             self.log.appendPlainText("the measurement thread has ended")
             self.on_running(False)
 
@@ -281,10 +299,12 @@ class ProcedureBox(QWidget):
 
     def on_running(self, running: bool) -> None:
         self.ui_running = running
+        self.ended_unseen = 0
         if running:
             self.watchdog.start()
         else:
             self.watchdog.stop()
+            self.stuck.stop()
             self.btnAbort.hide()
             self.state.setText("Idle")
         self.btnStart.setEnabled(not running)

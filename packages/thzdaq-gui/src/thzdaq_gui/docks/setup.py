@@ -1,7 +1,7 @@
 """Setup dock: the saved instruments, as in the old app, plus their devices.
 
 Every instrument is a card: driver, connection, status and the devices it
-hosts (SIS bias and coil, LO multiplier, IF switch). Add / Edit / Delete
+hosts (SIS bias and coil). Add / Edit / Delete
 change the station profile, which is saved at once; device docks follow.
 """
 
@@ -9,7 +9,7 @@ import copy
 import textwrap
 from typing import Dict, Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -50,6 +50,9 @@ from thzdaq_instruments.transport.base import (
 from thzdaq_gui import theme
 from thzdaq_gui.forms import ParameterForm
 from thzdaq_gui.settings import stations_dir
+
+# How often the Connections group shows the state of the links
+REFRESH_MS = 2000
 
 # Fields each connection kind uses, in form order
 CONNECTION_FIELDS = {
@@ -201,6 +204,14 @@ class InstrumentDialog(QDialog):
         for info in sorted(self.registry.all(), key=lambda i: i.title):
             if not info.simulated:
                 self.driver.addItem(info.title, info.key)
+        if spec is not None and self.driver.findData(spec.driver) < 0:
+            # A driver no longer offered (Pfeiffer, a simulator): keep it as it is
+            title = (
+                self.registry.get(spec.driver).title
+                if spec.driver in self.registry
+                else spec.driver
+            )
+            self.driver.addItem(title, spec.driver)
         self.title = QLineEdit()
         self.title.setPlaceholderText("shown in menus and docks")
         self.ident = QLabel()
@@ -258,6 +269,8 @@ class InstrumentDialog(QDialog):
         self.fill_recommended()
 
     def fill_recommended(self) -> None:
+        if self.driver_key() not in self.registry:
+            return
         cls = self.registry.get(self.driver_key()).cls
         factory = getattr(cls, "connection", None)
         if callable(factory):
@@ -268,11 +281,13 @@ class InstrumentDialog(QDialog):
 
     def instrument(self) -> InstrumentConfig:
         old = self.config.instruments.get(self.instrument_id)
-        info = self.registry.get(self.driver_key())
-        spec = copy.deepcopy(old) if old else InstrumentConfig(self.driver_key())
-        spec.title = self.title.text().strip() or info.title
-        spec.simulate = self.simulate.isChecked() or info.simulated
-        spec.connection = None if info.simulated else self.connection.spec()
+        key = self.driver_key()
+        info = self.registry.get(key) if key in self.registry else None
+        simulated = info is not None and info.simulated
+        spec = copy.deepcopy(old) if old else InstrumentConfig(key)
+        spec.title = self.title.text().strip() or (info.title if info else key)
+        spec.simulate = self.simulate.isChecked() or simulated
+        spec.connection = None if simulated else self.connection.spec()
         return spec
 
     def new_id(self) -> str:
@@ -481,6 +496,7 @@ class ConnectionsGroup(QGroupBox):
         super().__init__("Connections", parent)
         self.station = station
         self.rows: Dict[tuple, QLabel] = {}
+        self.resetting = set()
         self.jobs = []
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
@@ -509,11 +525,15 @@ class ConnectionsGroup(QGroupBox):
             layout.addLayout(row)
             self.rows[connection.key] = state
         self.refresh()
+        # A link breaks or reconnects under measurements and monitors too
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start(REFRESH_MS)
 
     def refresh(self) -> None:
         for connection in self.station.connections():
             state = self.rows.get(connection.key)
-            if state is None:
+            if state is None or connection.key in self.resetting:
                 continue
             if connection.broken:
                 text, color = "error, reconnects", "#e57373"
@@ -528,6 +548,7 @@ class ConnectionsGroup(QGroupBox):
         from thzdaq_gui.update_dialog import Background
 
         self.rows[key].setText("resetting...")
+        self.resetting.add(key)
         station = self.station
 
         def job(_task):
@@ -535,11 +556,17 @@ class ConnectionsGroup(QGroupBox):
             station.transport_pool.abort(key)
             return station.reset_connection(key)
 
+        def done(_):
+            self.resetting.discard(key)
+            self.refresh()
+
+        def failed(message):
+            self.resetting.discard(key)
+            self.rows[key].setText(f"failed: {message}")
+
         task = Background(job, self)
-        task.done.connect(lambda _: self.refresh())
-        task.failed.connect(
-            lambda message: self.rows[key].setText(f"failed: {message}")
-        )
+        task.done.connect(done)
+        task.failed.connect(failed)
         self.jobs.append(task)
         task.start()
 
@@ -734,7 +761,8 @@ class SetupWidget(QWidget):
             if instrument_id in self.cards:
                 self.cards[instrument_id].set_status(text, False)
 
-        self.session.worker.submit(job, done, failed)
+        title = station.config.instruments[instrument_id].title or instrument_id
+        self.session.worker.submit(job, done, failed, title)
 
 
 def ask_profile_path(parent, save: bool) -> Optional[str]:

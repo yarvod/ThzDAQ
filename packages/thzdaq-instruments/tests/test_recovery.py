@@ -97,3 +97,28 @@ def test_abort_wakes_a_read_blocked_on_a_silent_device(platform, monkeypatch):
     link.close()
     peer.close()
     server.close()
+
+
+def test_serial_reconnect_drops_a_late_answer(monkeypatch):
+    import serial
+
+    opened = []
+
+    class Port:
+        def __init__(self, **kwargs):
+            self.buffer = b"late answer\n"  # left from before the reconnect
+            opened.append(self)
+
+        def reset_input_buffer(self):
+            self.buffer = b""
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(serial, "Serial", Port)
+    from thzdaq_instruments.transport.links import SerialLink
+
+    link = SerialLink("/dev/ttyUSB0")
+    link.open()
+    link.reset()
+    assert len(opened) == 2 and all(port.buffer == b"" for port in opened)

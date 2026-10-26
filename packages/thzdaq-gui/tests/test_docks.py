@@ -45,6 +45,16 @@ class TestWindow:
         action.trigger()
         assert dock.isClosed() and not action.isChecked()
 
+    def test_menu_checks_follow_the_default_layout(self, window):
+        # ADS opens the first dock of each area without viewToggled
+        wrong = [
+            name
+            for name, dock in window.docks.items()
+            if window.menu_actions[name].isChecked() == dock.isClosed()
+        ]
+        assert wrong == []
+        assert window.menu_actions["graph:I-V"].isChecked()
+
     def test_area_close_button_closes_one_tab(self, window):
         import PySide6QtAds as QtAds
 
@@ -115,6 +125,18 @@ class TestWindow:
         keys = [dialog.driver.itemData(i) for i in range(dialog.driver.count())]
         assert "rigol.dp832a" in keys and "scontel.sis_block" in keys
         assert not [k for k in keys if k.startswith(("sim.", "pfeiffer."))]
+
+    def test_editing_keeps_a_driver_no_longer_offered(self, app):
+        from thzdaq_core.station import InstrumentConfig, StationConfig
+        from thzdaq_instruments.transport import SERIAL, ConnectionSpec
+
+        spec = ConnectionSpec(SERIAL, serial_port="COM3")
+        config = StationConfig(
+            "bench", {"gauge": InstrumentConfig("pfeiffer.gauge", spec, title="G")}
+        )
+        dialog = InstrumentDialog(config, "gauge")
+        assert dialog.driver_key() == "pfeiffer.gauge"
+        assert dialog.instrument().driver == "pfeiffer.gauge"
 
     def test_connect_reports_identity(self, window, wait):
         window.setupWidget.connect_instrument("sis_block_1")
@@ -295,6 +317,21 @@ class TestDeviceDocks:
 
 
 class TestMeasureAndData:
+    def test_saved_parameters_survive_a_dropped_one(self, window, session):
+        from thzdaq_core.measurements.registry import get_procedure
+        from thzdaq_gui.docks.measure import ProcedureBox
+        from thzdaq_gui.settings import settings
+
+        cls = get_procedure("two_sb.pump_balance")
+        saved = {"bias_delay": 0.7, "upper_when_on": False}  # no longer a parameter
+        key = f"procedures/{cls.name}"
+        settings().setValue(key, json.dumps({"parameters": saved, "devices": {}}))
+        try:
+            box = ProcedureBox(session, window.hub, cls)
+            assert box.form.values()["bias_delay"] == pytest.approx(0.7)
+        finally:
+            settings().remove(key)
+
     def test_measurement_dock_flow(self, window, session, wait, tmp_path):
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.form.set_values(FAST_IV)
@@ -567,8 +604,35 @@ class TestHangs:
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.on_running(True)  # the dock thinks it runs, the thread is gone
         assert not box.btnStart.isEnabled()
+        box.check_thread()  # the end signal may still be queued: wait one more look
+        assert not box.btnStart.isEnabled()
         box.check_thread()
         assert box.btnStart.isEnabled() and box.state.text() == "Idle"
+
+    def test_device_that_does_not_answer_is_named_once(
+        self, window, monkeypatch, caplog
+    ):
+        worker = window.session.worker
+        monkeypatch.setattr(type(worker), "current", property(lambda s: "Rigol 1"))
+        monkeypatch.setattr(type(worker), "started_at", property(lambda s: 1.0))
+        monkeypatch.setattr(worker, "busy_for", lambda: 12.0)
+        with caplog.at_level("WARNING"):
+            window.check_device_worker()
+            window.check_device_worker()
+        named = [r for r in caplog.records if "Rigol 1 does not answer" in r.message]
+        assert len(named) == 1
+        assert "Rigol 1" in window.statusBar().currentMessage()
+
+    def test_abort_is_offered_only_while_starting_or_stopping(self, window):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.on_running(True)
+        box.state.setText("Running")
+        box.offer_abort()  # a timer of an earlier start or stop
+        assert box.btnAbort.isHidden()
+        box.stop()
+        assert box.stuck.isActive()
+        box.on_running(False)
+        assert not box.stuck.isActive()
 
     def test_stop_without_answer_offers_abort(self, window, session, monkeypatch):
         box = window.docks["measure:sis.iv_curve"].widget().box
@@ -614,8 +678,9 @@ class TestHangs:
         (state,) = group.rows.values()
         assert state.text() == "not connected"
         station["rigol:1"].get_output()
-        group.refresh()
-        assert state.text() == "connected"
+        wait(lambda: state.text() == "connected")  # refreshed on its own
+        pool.abort(next(iter(group.rows)))
+        wait(lambda: state.text() == "error, reconnects")
         group.reset(next(iter(group.rows)))
         wait(lambda: state.text() == "connected")
         station.close()

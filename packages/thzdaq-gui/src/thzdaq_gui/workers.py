@@ -30,6 +30,7 @@ class DeviceWorker(QObject):
         super().__init__(parent)
         self._queue: "queue.Queue" = queue.Queue()
         self._job_started: Optional[float] = None
+        self._job_label: Optional[str] = None
         self._done.connect(self._deliver)
         self._thread = threading.Thread(
             target=self._loop, name="DeviceWorker", daemon=True
@@ -41,8 +42,10 @@ class DeviceWorker(QObject):
         job: Callable[[], Any],
         on_result: Callback = None,
         on_error: Callback = None,
+        label: Optional[str] = None,
     ):
-        self._queue.put((job, on_result, on_error))
+        """label: the device the job talks to, named when it does not answer."""
+        self._queue.put((job, on_result, on_error, label))
 
     @property
     def pending(self) -> int:
@@ -53,22 +56,34 @@ class DeviceWorker(QObject):
         started = self._job_started
         return 0.0 if started is None else time.monotonic() - started
 
+    @property
+    def current(self) -> Optional[str]:
+        """Label of the job in progress."""
+        return self._job_label
+
+    @property
+    def started_at(self) -> Optional[float]:
+        """When the job in progress started (monotonic), None when idle."""
+        return self._job_started
+
     def _loop(self):
         while True:
             item = self._queue.get()
             if item is None:
                 return
-            job, on_result, on_error = item
+            job, on_result, on_error, label = item
+            self._job_label = label
             self._job_started = time.monotonic()
             try:
                 result = job()
             except Exception as e:
-                logger.exception("Device job failed")
+                logger.exception(f"Device job failed{f' ({label})' if label else ''}")
                 self._done.emit(on_error, None, e)
             else:
                 self._done.emit(on_result, result, None)
             finally:
                 self._job_started = None
+                self._job_label = None
             # Callbacks hold widgets: their last reference must die in the GUI
             # thread (after delivery), never here, or Qt deletes a widget from
             # this thread and crashes

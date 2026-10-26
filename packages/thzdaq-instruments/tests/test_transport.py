@@ -138,6 +138,14 @@ class TestTransportPool:
             "++read eoi",
         ]
 
+    def test_prologix_read_timeout_stays_in_its_range(self):
+        links = FakeLinks()
+        pool = TransportPool(links)
+        spec = ConnectionSpec(PROLOGIX, host="10.0.0.1", gpib=20, timeout=10.0)
+        pool.acquire(spec).write("INIT")
+        # The controller takes 1..3000 ms; the socket waits the full 10 s
+        assert "++read_tmo_ms 3000" in links.links[0].written
+
     def test_direct_and_prologix_on_same_endpoint_conflict(self):
         pool = TransportPool(FakeLinks())
         pool.acquire(ConnectionSpec(PROLOGIX, host="10.0.0.1", gpib=19))

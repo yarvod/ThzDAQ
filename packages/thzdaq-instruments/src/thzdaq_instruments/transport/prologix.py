@@ -18,7 +18,9 @@ class PrologixController:
                 return
             self.link.write_line("++mode 1")  # controller mode
             self.link.write_line("++auto 0")  # no read-after-write, reads are explicit
-            self.link.write_line(f"++read_tmo_ms {int(self.timeout * 1e3)}")
+            # The controller accepts 1..3000 ms; longer waits are the socket timeout
+            read_ms = min(max(int(self.timeout * 1e3), 1), 3000)
+            self.link.write_line(f"++read_tmo_ms {read_ms}")
             self.link.write_line("++eos 3")  # don't append CR/LF to GPIB data
             self.link.write_line("++savecfg 0")
             self._configured = True

@@ -244,10 +244,11 @@ def test_device_worker_reports_how_long_a_job_waits(app, wait):
     worker = DeviceWorker()
     assert worker.busy_for() == 0
     done = []
-    worker.submit(lambda: _time.sleep(0.3), done.append)
+    worker.submit(lambda: _time.sleep(0.3), done.append, None, "Rigol 1")
     wait(lambda: worker.busy_for() > 0.1)
+    assert worker.current == "Rigol 1" and worker.started_at is not None
     wait(lambda: done)
-    assert worker.busy_for() == 0
+    assert worker.busy_for() == 0 and worker.current is None
     worker.stop()
 
 

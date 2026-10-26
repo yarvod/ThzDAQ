@@ -66,12 +66,6 @@ class TwoSbProcedure(Procedure):
         "Precise bias", default=True,
         help="Correct the bias by readback (slow: ~1 s per iteration)",
     )  # fmt: skip
-    switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
-    upper_when_on = BoolParameter(
-        "IF switch: upper sideband when on",
-        default=True,
-        help="Output state of the IF switch channel that routes the upper sideband",
-    )
     control_yig_power = BoolParameter(
         "Control YIG power",
         default=False,
@@ -110,6 +104,17 @@ class TwoSbProcedure(Procedure):
         tone = ctx["test_tone"]
         ctx.on_exit(lambda: tone.set_output(False))
         tone.set_output(True)
+
+
+class IfSwitchProcedure(TwoSbProcedure):
+    """2SB measurement reading both IF channels through the IF switch."""
+
+    switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
+    upper_when_on = BoolParameter(
+        "IF switch: upper sideband when on",
+        default=True,
+        help="Output state of the IF switch channel that routes the upper sideband",
+    )
 
     def select_channel(self, ctx, side_band: str, delay: float) -> None:
         if side_band not in ("upper", "lower"):

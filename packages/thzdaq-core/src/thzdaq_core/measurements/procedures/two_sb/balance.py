@@ -20,6 +20,7 @@ from thzdaq_core.measurements.plots import PlotSpec
 from thzdaq_core.measurements.procedures.common import mv, set_bias
 from thzdaq_core.measurements.procedures.two_sb.common import (
     SOURCE,
+    IfSwitchProcedure,
     TwoSbProcedure,
     if_sweep,
 )
@@ -27,7 +28,7 @@ from thzdaq_core.measurements.registry import register_procedure
 
 
 @register_procedure
-class IfBalance(TwoSbProcedure):
+class IfBalance(IfSwitchProcedure):
     name = "two_sb.if_balance"
     title = "2SB IF balance"
     description = (

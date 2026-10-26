@@ -17,9 +17,9 @@ from thzdaq_core.measurements.procedures.two_sb.common import (
     SIDE_BAND_CHOICES,
     SOURCE,
     HotColdMixin,
+    IfSwitchProcedure,
     LoMixin,
     SpectrumMixin,
-    TwoSbProcedure,
     if_sweep,
     side_bands,
     voltage_parameter,
@@ -43,7 +43,7 @@ NOISE_PLOTS = (
 
 
 @register_procedure
-class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, TwoSbProcedure):
+class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
     name = "two_sb.srr"
     title = "2SB sideband ratio"
     description = (
@@ -148,7 +148,7 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, TwoSbProcedure):
 
 
 @register_procedure
-class TwoSbNoise(LoMixin, HotColdMixin, TwoSbProcedure):
+class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     name = "two_sb.tn"
     title = "2SB noise temperature"
     description = "Hot/cold Y-factor and Tn of the upper and lower IF channels."

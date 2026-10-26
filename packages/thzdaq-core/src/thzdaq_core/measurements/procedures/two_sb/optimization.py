@@ -12,8 +12,8 @@ from thzdaq_core.measurements.procedures.common import set_bias
 from thzdaq_core.measurements.procedures.two_sb.common import (
     SOURCE,
     HotColdMixin,
+    IfSwitchProcedure,
     LoMixin,
-    TwoSbProcedure,
 )
 from thzdaq_core.measurements.registry import register_procedure
 
@@ -27,7 +27,7 @@ def _map(key: str, title: str, z: str, z_label: str) -> PlotSpec:
 
 
 @register_procedure
-class TwoSbOptimization(LoMixin, HotColdMixin, TwoSbProcedure):
+class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
     name = "two_sb.optimization"
     title = "2SB SRR/Tn bias optimization"
     description = (

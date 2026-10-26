@@ -126,6 +126,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.stationLabel)
         session.worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
         # Manual control runs in one thread: tell when a device keeps it waiting
+        self._hang_reported: Optional[float] = None
         self.hangWatch = QTimer(self)
         self.hangWatch.timeout.connect(self.check_device_worker)
         self.hangWatch.start(2000)
@@ -186,6 +187,13 @@ class MainWindow(QMainWindow):
         self.menuDevices = bar.addMenu("&Devices")
         self.menuMeasures = bar.addMenu("&Measures")
         self.menuGraphs = bar.addMenu("&Graphs")
+        for menu in (
+            self.menuBase,
+            self.menuDevices,
+            self.menuMeasures,
+            self.menuGraphs,
+        ):
+            menu.aboutToShow.connect(self.sync_menu_checks)
         new_graph = QAction(theme.icon("plus"), "New graph…", self)
         new_graph.triggered.connect(self.new_graph)
         self.menuGraphs.addAction(new_graph)
@@ -278,6 +286,7 @@ class MainWindow(QMainWindow):
             body = dock.widget()
             if isinstance(body, DockBody):
                 body.set_open(not dock.isClosed())
+        self.sync_menu_checks()
 
     def menu_toggled(self, name: str, checked: bool) -> None:
         """Open a closed dock; a dock hidden behind another tab is brought to front."""
@@ -293,6 +302,13 @@ class MainWindow(QMainWindow):
         else:
             dock.toggleView(False)
         self.menu_actions[name].setChecked(not dock.isClosed())
+
+    def sync_menu_checks(self) -> None:
+        """Check marks from the docks: ADS opens a dock it moves without viewToggled."""
+        for name, dock in self.docks.items():
+            action = self.menu_actions.get(name)
+            if action is not None:
+                action.setChecked(not dock.isClosed())
 
     def remove_dock(self, name: str) -> None:
         dock = self.docks.pop(name, None)
@@ -446,12 +462,22 @@ class MainWindow(QMainWindow):
             return label
 
     def check_device_worker(self) -> None:
-        waiting = self.session.worker.busy_for()
-        if waiting > DEVICE_HANG_S:
-            self.statusBar().showMessage(
-                f"A device has not answered for {waiting:.0f} s; manual control waits. "
-                "Reset its connection in Setup → Connections.",
-                2500,
+        worker = self.session.worker
+        waiting = worker.busy_for()
+        if waiting <= DEVICE_HANG_S:
+            self._hang_reported = None
+            return
+        device = worker.current or "A device"
+        self.statusBar().showMessage(
+            f"{device} has not answered for {waiting:.0f} s; manual control waits. "
+            "Reset its connection in Setup → Connections.",
+            2500,
+        )
+        # Once per hang in the event log
+        if self._hang_reported != worker.started_at:
+            self._hang_reported = worker.started_at
+            logger.warning(
+                f"{device} does not answer: manual control and monitors wait for it"
             )
 
     # Station
@@ -625,6 +651,7 @@ class MainWindow(QMainWindow):
         if DEFAULT_PERSPECTIVE not in self.dock_manager.perspectiveNames():
             self.dock_manager.addPerspective(DEFAULT_PERSPECTIVE)
             self.perspective = DEFAULT_PERSPECTIVE
+        self.sync_menu_checks()
 
     def save_perspectives(self) -> None:
         self.settings.remove("Perspectives")

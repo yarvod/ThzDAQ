@@ -141,11 +141,17 @@ class SerialLink(Link):
         import serial
 
         try:
-            self._serial = serial.Serial(
+            port = serial.Serial(
                 port=self.port, baudrate=self.baudrate, timeout=self.timeout
             )
         except (serial.SerialException, OSError) as e:
             raise InstrumentConnectionError(f"{self!r}: {e}") from e
+        try:
+            # A late answer may wait in the driver buffer after a reconnect
+            port.reset_input_buffer()
+        except (serial.SerialException, OSError):
+            pass
+        self._serial = port
 
     def close(self) -> None:
         if self._serial is None:

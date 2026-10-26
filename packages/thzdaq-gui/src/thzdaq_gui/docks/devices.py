@@ -104,8 +104,18 @@ class QuantityPanel(QWidget):
         self.started = time.monotonic()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        # Setpoint on the left (field, Set), what the device reports on the right
         grid = QGridLayout()
-        for row, quantity in enumerate(self.quantities):
+        first = 0
+        if any(q.settable for q in self.quantities) and any(
+            q.readable for q in self.quantities
+        ):
+            for text, column in (("Setpoint", 1), ("Reading", 3)):
+                header = QLabel(text)
+                header.setProperty("role", "muted")
+                grid.addWidget(header, 0, column)
+            first = 1
+        for row, quantity in enumerate(self.quantities, first):
             grid.addWidget(QLabel(quantity.title), row, 0)
             field = None
             if quantity.settable and quantity.kind != "bool":
@@ -115,34 +125,36 @@ class QuantityPanel(QWidget):
             if quantity.readable:
                 value = QLabel("--")
                 value.setProperty("role", "value")
-                grid.addWidget(value, row, 1)
+                grid.addWidget(value, row, 3)
                 self.values[quantity.key] = value
                 if field is None and quantity.kind != "bool":
                     display = PrefixBox(
                         quantity.unit, default_prefix(kind, quantity.key, quantity.unit)
                     )
+                    display.setToolTip("Unit of the reading")
                     self.displays[quantity.key] = display
-                    grid.addWidget(display, row, 2)
+                    grid.addWidget(display, row, 4)
             if quantity.settable and quantity.kind == "bool":
                 toggle = QPushButton("Off")
                 toggle.setCheckable(True)
                 toggle.clicked.connect(lambda on, q=quantity: self.write(q, on))
-                grid.addWidget(toggle, row, 2, 1, 2)
+                grid.addWidget(toggle, row, 1, 1, 2)
                 self.toggles[quantity.key] = toggle
             elif field is not None:
                 button = QPushButton(theme.icon("check"), "Set")
                 button.setToolTip("Write to the device (or press Enter in the field)")
                 button.clicked.connect(lambda _=False, q=quantity: self.apply(q))
-                grid.addWidget(field, row, 2)
-                grid.addWidget(button, row, 3)
+                grid.addWidget(field, row, 1)
+                grid.addWidget(button, row, 2)
             if config and quantity.readable:
                 note = QLabel()
                 note.setStyleSheet(f"color: {theme.ACCENT}")
                 note.linkActivated.connect(lambda _, q=quantity: self.take(q))
                 note.hide()
-                grid.addWidget(note, row, 4)
+                grid.addWidget(note, row, 5)
                 self.notes[quantity.key] = note
         grid.setColumnStretch(1, 1)
+        grid.setColumnMinimumWidth(3, 90)
         layout.addLayout(grid)
         self.prefill()
         controls = QHBoxLayout()
@@ -239,7 +251,10 @@ class QuantityPanel(QWidget):
         self.pending = True
         readable = [q for q in self.quantities if q.readable]
         self.session.worker.submit(
-            lambda: read_values(self.device(), readable), self.show_values, self.failed
+            lambda: read_values(self.device(), readable),
+            self.show_values,
+            self.failed,
+            self.title,
         )
 
     def show_values(self, values) -> None:
@@ -338,8 +353,15 @@ class QuantityPanel(QWidget):
             self.remember(quantity, value)
             self.read()
 
+        def failed(error):
+            toggle = self.toggles.get(quantity.key)
+            if toggle is not None:  # the click has already flipped it
+                toggle.setChecked(not value)
+                toggle.setText("On" if not value else "Off")
+            self.failed(error)
+
         self.session.worker.submit(
-            lambda: quantity.write(self.device(), value), done, self.failed
+            lambda: quantity.write(self.device(), value), done, failed, self.title
         )
 
     def stop(self) -> None:
@@ -374,6 +396,7 @@ class ActionsGroup(QGroupBox):
             lambda: call(self.panel.device()),
             lambda value: self.result.setText("" if value is None else str(value)),
             lambda error: self.result.setText(f"{error}"),
+            self.panel.title,
         )
 
 
@@ -436,6 +459,7 @@ class ChopperGroup(QGroupBox):
             lambda: call(self.panel.device()),
             done,
             lambda error: self.result.setText(f"{error}"),
+            self.panel.title,
         )
 
 
@@ -472,7 +496,9 @@ class CompressorGroup(QGroupBox):
                 + "\np: " + ", ".join(pg.siFormat(p, suffix="Pa") for p in pressures)
             )  # fmt: skip
 
-        self.panel.session.worker.submit(job, show, lambda e: self.text.setText(str(e)))
+        self.panel.session.worker.submit(
+            job, show, lambda e: self.text.setText(str(e)), self.panel.title
+        )
 
 
 class TraceGroup(QGroupBox):
@@ -539,14 +565,17 @@ class TraceGroup(QGroupBox):
                 device.set_center_frequency(start)
                 device.set_span(stop)
 
-        self.panel.session.worker.submit(job, None, self.panel.failed)
+        self.panel.session.worker.submit(job, None, self.panel.failed, self.panel.title)
 
     def read(self) -> None:
         if self.pending:
             return
         self.pending = True
         self.panel.session.worker.submit(
-            lambda: self.panel.device().read_trace(), self.show, self.error
+            lambda: self.panel.device().read_trace(),
+            self.show,
+            self.error,
+            self.panel.title,
         )
 
     def show(self, trace) -> None:
@@ -679,6 +708,7 @@ class SisBiasGroup(QGroupBox):
                 self, "Calibration", f"Block answered: {answer}"
             ),
             lambda error: QMessageBox.critical(self, "Calibration", str(error)),
+            self.panel.title,
         )
 
 

@@ -312,3 +312,14 @@ def test_if_switch_polarity_is_a_parameter():
     bench.switch.set_output = lambda value: (seen.append(value), original(value))
     run(procedure, bench)
     assert seen and seen[0] is False
+
+
+def test_if_switch_parameters_only_where_the_switch_is_used():
+    from thzdaq_core.measurements.registry import get_procedure
+
+    for name in ("two_sb.if_balance", "two_sb.srr", "two_sb.tn", "two_sb.optimization"):
+        parameters = get_procedure(name).parameters()
+        assert "upper_when_on" in parameters and "switch_delay" in parameters
+    pump = get_procedure("two_sb.pump_balance")
+    assert "upper_when_on" not in pump.parameters()
+    assert "if_selector" not in pump().slots()
