@@ -590,6 +590,143 @@ with lab.measurement("pv_fine", devices=[bias, pm], comment="узкий P-V") as
 - Свои процедуры с формой в GUI (папка `procedures/`, демон загружает классы `Procedure`)
   — следующий шаг, после сессий скриптов.
 
+### Формат данных сессии
+Тот же файл, что у встроенных процедур: `data/<дата>/<id>_script_<имя>.json`, формат
+`thzdaq-measurement` v1 (`data/measurement.py`). Отдельного формата нет: Data → Plot / Add
+curve, экспорт CSV и `thzdaq show` работают как с любым измерением.
+
+**Правило для сложных циклов:** одна таблица на один вид точки, а каждая переменная
+вложенного цикла — это колонка. Вложенные циклы не превращаются во вложенные таблицы: таблица
+остаётся плоской («длинной»), и любой срез потом делается фильтром по колонкам. Кривые на
+графике разводятся `group_by`.
+
+Пример: P-V hot/cold при нескольких токах катушки, с Y-фактором и картой Tn.
+```python
+from thzdaq_core import connect
+
+lab = connect()
+bias, coil = lab["sis_bias_1"], lab["sis_coil_1"]
+pm, load, gen = lab["power_meter_1"], lab["chopper_1"], lab["signal_generator_1"]
+
+with lab.measurement(
+    "pv_vs_coil",
+    devices=[bias, coil, pm, load, gen],
+    parameters={"coil": "0:20:5 mA", "bias": "1.5:3.5:81 mV", "lo": "230 GHz"},
+    comment="P-V hot/cold при разных токах катушки",
+) as m:
+    m.columns(y=("Y-factor", "dB"), tn=("Noise temperature", "K"))  # только посчитанное
+    m.plot("pv", x="voltage", y="power", group_by=("coil", "load"))  # кривая на ток и hot/cold
+    m.plot("y", x="voltage", y="y", group_by=("coil",))
+    m.plot("y", x="voltage", y="coil", z="tn", kind="map")
+    m.restore(bias, "voltage_set")
+    m.restore(coil, "current_set")
+
+    gen.frequency = "230GHz"
+    for i_coil in m.sweep("0:20:5", unit="mA"):   # проверяет отмену, считает прогресс
+        coil.current_set = i_coil
+        m.sleep(1.0)                              # просыпается сразу при отмене
+        hot = {}
+        for state in ("hot", "cold"):
+            getattr(load, f"to_{state}")()
+            for v in m.sweep("1.5:3.5:81", unit="mV"):
+                bias.voltage_set = v
+                m.sleep(0.05)
+                r = bias.read()                   # напряжение и ток одним опросом
+                p = pm.power
+                m.record("pv", coil=i_coil, load=state,
+                         voltage=r.voltage, current=r.current, power=p)
+                if state == "hot":
+                    hot[v] = p
+                else:
+                    y = hot[v] - p
+                    m.record("y", coil=i_coil, voltage=r.voltage, y=y,
+                             tn=y_to_tn(y, t_hot=300, t_cold=77))
+    m.result("note", "минимум Tn см. карту")
+```
+Что попадает в файл (сокращённо):
+```json
+{
+  "format": "thzdaq-measurement", "version": 1,
+  "id": 57, "procedure": "script:pv_vs_coil", "status": "completed",
+  "parameters": {"coil": "0:20:5 mA", "bias": "1.5:3.5:81 mV", "lo": "230 GHz"},
+  "devices": {"sis_bias_1": {...}, "sis_coil_1": {...}, "power_meter_1": {...}, ...},
+  "tables": {
+    "pv": {
+      "columns": [
+        {"key": "coil", "title": "Coil", "unit": "A"},
+        {"key": "load", "title": "Load", "unit": ""},
+        {"key": "voltage", "title": "Voltage", "unit": "V", "source": "sis_bias_1/voltage"},
+        {"key": "current", "title": "Current", "unit": "A", "source": "sis_bias_1/current"},
+        {"key": "power", "title": "Power", "unit": "dBm", "source": "power_meter_1/power"}
+      ],
+      "data": {"coil": [0.0, 0.0, ...], "load": ["hot", "hot", ...],
+               "voltage": [0.0015, ...], "current": [...], "power": [...]}
+    },
+    "y": {"columns": [..., {"key": "y", "title": "Y-factor", "unit": "dB"},
+                           {"key": "tn", "title": "Noise temperature", "unit": "K"}],
+          "data": {...}}
+  },
+  "results": {"note": "минимум Tn см. карту"},
+  "station": {...},
+  "metadata": {"script": {"path": "...", "sha256": "...", "text": "..."},
+               "plots": [{"table": "pv", "x": "voltage", "y": "power", "group_by": ["coil", "load"]}, ...]}
+}
+```
+- **Единицы и названия колонок.** Показания устройства (`pm.power`, `r.voltage`) и
+  значения развёртки (`m.sweep(..., unit="mA")`) — числа с единицей, названием и
+  источником (подкласс `float`: в расчётах ведёт себя как обычное число). `m.record`
+  берёт описание колонки из них сам. Для посчитанных значений (`y`, `tn`) — `m.columns(...)`;
+  без описания — название из ключа и пустая единица, как сейчас для неизвестных ключей.
+- В `Column` добавляется необязательное поле `source` (устройство/величина). Это
+  совместимое расширение формата v1: старые файлы читаются, новые поля старой версией
+  игнорируются.
+- В `metadata` — путь, хеш и текст скрипта (воспроизводимость), а также спецификации
+  графиков из `m.plot`, чтобы Data → Plot строил их потом так же.
+- Значения хранятся в СИ, как везде. Трасса (массив) в ячейке допустима — это обычный
+  список JSON.
+
+### Долгие измерения на диске
+Сейчас раннер каждые 5 с перезаписывает файл целиком. Для многочасового мониторинга (десятки
+тысяч строк) это мегабайты каждые несколько секунд. Предлагаю для всех измерений:
+- во время работы дописывать строки в соседний `<id>_<имя>.jsonl` (одна строка — одна
+  запись, только добавление);
+- JSON обновлять реже, а в конце собрать его целиком и удалить `.jsonl`;
+- после сбоя читать JSON + хвост `.jsonl`: данные не теряются, статус `interrupted`.
+
+### Живой график без GUI
+Если GUI открыт, ничего делать не нужно: измерение скрипта или CLI появляется в нём, а
+графики из `m.plot` выходят вперёд. Если GUI закрыт, есть несколько способов, и все они
+подписываются на события демона, а не читают файл:
+- **Окно графиков по запросу:** `thzdaq plot <id>` или в Python `m.show()` / `run.show()` /
+  `lab.plot(id)`. Открывается лёгкое окно только с графиками этого измерения — тот же
+  `graphs.py`, без доков и профиля (`thzdaq_gui.viewer`, у сборки `ThzDAQ.exe --plot <id>`).
+  Можно указать свой график: `thzdaq plot 57 --table pv --x voltage --y power --group coil`.
+  Нужен установленный `thzdaq-gui` или exe (путь берётся из файла хоста). Окно — отдельный
+  процесс, скрипт не ждёт его закрытия.
+- **В терминале:** `thzdaq watch <id> --plot [--table … --x … --y …]` рисует график
+  символами (plotext) и обновляет его на месте; без `--plot` — прогресс и последние строки.
+  Удобно по ssh и для агентов.
+- **В Jupyter:** `run.live_plot()` / `m.live_plot()` — график в ячейке, обновляется по
+  событиям (matplotlib или plotly — extra `thzdaq-core[jupyter]`).
+- **Из `m.plot`:** `m.plot(..., show=True)` открывает окно сразу при старте, если GUI
+  закрыт. По умолчанию окно не открывается.
+
+### Сырые команды прибору
+Для команд, которые драйвер пока не оборачивает. С осторожностью, только вручную:
+- `thzdaq raw <instrument> "<команда>"`, `lab.raw(instrument, "<команда>")`, консоль в
+  доке прибора (раздел Advanced, свёрнут).
+- Идут через полосу прибора и блокировку линка, поэтому не мешают измерениям и опросу.
+  Устройство под арендой чужого измерения — отказ.
+- **Запросы** (команда с `?`): разрешены человеку и скриптам.
+- **Запись:**
+  - опасное действие: пределы и `GuardedPort` не проверяют сырую команду;
+  - человек в GUI или CLI подтверждает (в CLI — `--yes` или вопрос в терминале);
+  - скрипт — только если запущен с явным разрешением (`thzdaq script start --allow-raw`);
+  - агентам и ассистенту сырая запись запрещена без вариантов, запросы — `ask`.
+- Каждая сырая команда пишется в журнал с origin и ответом. После сырой записи состояние
+  устройства в доках и кэше демона помечается «неизвестно» и перечитывается.
+- Если команда нужна постоянно, её добавляют в драйвер как величину или действие.
+
 ## Пакеты на PyPI
 - Тот же workflow релиза по тегу публикует на PyPI `thzdaq-instruments`, `thzdaq-core`
   (библиотека, клиент, CLI `thzdaq`) и `thzdaq-mcp` (trusted publishing из GitHub Actions)
@@ -679,6 +816,9 @@ MCP лишь передаёт этот список чужой программ�
     `lab.measurement` (сессия скрипта), `connect` (реэкспорт из `thzdaq_core`);
   - `service/scripts.py` — сессии и запуск скриптов демоном (`thzdaq script ...`), `restore`
     при обрыве;
+  - `data/measurement.py` (`Column.source`), `data/store.py` (дозапись `.jsonl` во время
+    измерения, сборка JSON в конце, чтение после сбоя);
+  - `service/operations.py` — `raw` (запрос / запись с подтверждением);
   - `cli.py` — тонкая обёртка над `client.py`, группы `thzdaq daemon ...`,
     `thzdaq script ...`, `thzdaq agent-setup`;
   - `transport/prologix.py` (instruments) — `++loc` для использованных адресов перед
@@ -697,7 +837,9 @@ MCP лишь передаёт этот список чужой программ�
     `instance_lock` убирается;
   - `exit_dialog.py` — выбор: оставить демон работать / завершить измерения и остановить
     демон;
-  - `updater.py`/`updates.py` — остановка демона перед заменой файлов.
+  - `updater.py`/`updates.py` — остановка демона перед заменой файлов;
+  - `viewer.py` — окно только с графиками одного измерения (`thzdaq plot`, `--plot <id>`);
+  - консоль сырых команд в доке прибора (Advanced).
 - `thzdaq-mcp` (новый, зависит от core и `mcp`): `thzdaq mcp` по stdio — клиент демона.
 - `main.py`, `build.sh`/`build.bat` — режим `--serve` в той же сборке.
 - `release.py`, `.github/workflows/release.yml` — одна версия всем пакетам, публикация на
@@ -725,6 +867,11 @@ MCP лишь передаёт этот список чужой программ�
    - `--local` — старый режим без демона, для отладки;
    - Python-клиент (`client.py`): функции и объекты устройств, `lab.run`, сессии скриптов
      с `restore` и отменой из CLI, `thzdaq script start|list|logs|stop`;
+   - формат сессии: значения с единицей и источником, `m.columns`, `m.plot` в метаданных,
+     текст скрипта; дозапись `.jsonl` для долгих измерений;
+   - живые графики без GUI: `thzdaq plot` / `m.show()` (окно), `thzdaq watch --plot`
+     (терминал), `live_plot()` (Jupyter);
+   - `thzdaq raw` / `lab.raw` с правилами подтверждения;
    - отпускание приборов: `++loc` для GPIB за Prologix при простое;
    - публикация пакетов на PyPI из релиза.
 5. **MCP** (подробно — раздел «MCP-сервер»):
@@ -795,6 +942,11 @@ MCP лишь передаёт этот список чужой программ�
     - `thzdaq cancel` останавливает `m.sweep`;
     - убитый процесс скрипта → `interrupted` и `restore`;
     - `thzdaq script start/stop` с логом;
+    - колонки получают единицу и `source` из показаний и развёрток; старый файл без
+      `source` читается;
+    - процесс убит посреди записи → JSON + хвост `.jsonl` дают все строки;
+    - `thzdaq watch --plot` и viewer получают точки по событиям;
+    - сырая запись: отказ агенту, подтверждение человеку, отказ под чужой арендой, журнал;
   - пул: простаивающее соединение Prologix перед закрытием шлёт `++loc` использованным
     адресам (`FakeLink`);
   - опасные действия (компрессор, нагреватель) всегда `ask` с вводом подтверждения,
