@@ -221,7 +221,12 @@ class GraphWidget(QWidget):
         group_by=(),
         where=(),
     ) -> int:
-        """Whole columns of a measurement table; returns the number of curves."""
+        """Whole columns of a measurement table; returns the number of curves.
+
+        A curve of this measurement already drawn (its live run, an earlier
+        Plot) is drawn again from the start, not continued: appending the
+        sweep once more joined its end back to its start.
+        """
         data = measurement.tables.get(table)
         if data is None:
             return 0
@@ -231,7 +236,9 @@ class GraphWidget(QWidget):
                 continue
             group = tuple(row.get(g) for g in group_by)
             key = (measurement.id, table, x, y, group)
-            keys.add(key)
+            if key not in keys:
+                keys.add(key)
+                self.points.pop(key, None)
             self.append(key, curve_name(measurement, group), row.get(x), row.get(y))
         return len(keys)
 

@@ -242,6 +242,24 @@ class TestGraphs:
         custom.remove_hidden()
         assert custom.items == {}
 
+    def test_plotting_a_measurement_again_keeps_one_curve_per_group(self, hub):
+        """Live curves plotted again from Data got the sweep appended a second
+        time: a line from the end back to the start under every curve."""
+        run = Measurement("sis.pv_curve", title="SIS P-V curve", id=12)
+        for angle in (2.0, 5.75):
+            for v in (1.7e-3, 2.2e-3, 2.78e-3):
+                record = {"angle": angle, "load": "hot", "voltage": v,
+                          "current": v / 20, "power": -30.0}  # fmt: skip
+                run.append("pv", record)
+                hub.feed(run, PVCurve.plots, "pv", record)
+        hub.show_measurement(run, PVCurve.plots)  # Plot in Data
+        hub.show_measurement(run, PVCurve.plots)  # and once more
+        graph = hub.graph("P-V")
+        assert len(graph.items) == 2
+        for key, item in graph.items.items():
+            xs, _ = item.getData()
+            assert list(xs) == pytest.approx([1.7, 2.2, 2.78]), key
+
     def test_monitor_values(self, hub):
         from thzdaq_instruments.quantities import Quantity
 
