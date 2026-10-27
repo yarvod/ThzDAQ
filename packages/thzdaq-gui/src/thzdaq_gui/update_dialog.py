@@ -1,6 +1,7 @@
 """Help → Check for updates: list GitHub releases, download one and restart into it."""
 
 import logging
+import shutil
 import tempfile
 import threading
 from pathlib import Path
@@ -68,22 +69,31 @@ def fetch_job(task: Background) -> List[updates.Release]:
 
 def download_job(release: updates.Release) -> Callable[[Background], object]:
     def job(task: Background) -> Optional[str]:
-        folder = Path(tempfile.mkdtemp(prefix="thzdaq_update_"))
-        root = updates.download(
-            release,
-            folder,
-            progress=lambda done, total: task._emit(task.progress, done, total),
-            cancelled=task.cancelled.is_set,
-        )
-        return str(root) if root is not None else None
+        folder = Path(tempfile.mkdtemp(prefix=updates.DOWNLOAD_PREFIX))
+        try:
+            root = updates.download(
+                release,
+                folder,
+                progress=lambda done, total: task._emit(task.progress, done, total),
+                cancelled=task.cancelled.is_set,
+            )
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        if root is None:  # cancelled
+            shutil.rmtree(folder, ignore_errors=True)
+            return None
+        return str(root)
 
     return job
 
 
 class UpdateDialog(QDialog):
-    """quit_app closes the main window once the updater has started."""
+    """quit_app(build folder) closes the main window and installs the build."""
 
-    def __init__(self, quit_app: Callable[[], None], busy=lambda: False, parent=None):
+    def __init__(
+        self, quit_app: Callable[[Path], None], busy=lambda: False, parent=None
+    ):
         super().__init__(parent)
         self.quit_app = quit_app
         self.busy = busy
@@ -211,13 +221,10 @@ class UpdateDialog(QDialog):
             progress.close()
             if source is None:
                 return
-            try:
-                updates.launch_updater(Path(source))
-            except Exception as e:
-                QMessageBox.critical(self, "Update", str(e))
-                return
+            # The updater starts when the window really closes (after the exit
+            # question), so it never gives up waiting for a slow answer
             self.accept()
-            self.quit_app()
+            self.quit_app(Path(source))
 
         self.downloader.progress.connect(on_progress)
         self.downloader.failed.connect(on_failed)

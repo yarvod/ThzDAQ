@@ -23,6 +23,10 @@ from thzdaq_gui.version import REPO_SLUG, __version__
 API = "https://api.github.com"
 APP_NAME = "ThzDAQ"
 UPDATER = "updater.exe"
+# Temporary folders (system temp): the downloaded build, the running updater
+DOWNLOAD_PREFIX = "thzdaq_update_"
+RUNNER_PREFIX = "thzdaq_updater_"
+LEFTOVER_AGE_S = 3600.0
 _VERSION = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-?([a-z]+)\.?(\d+))?$", re.IGNORECASE)
 
 
@@ -164,15 +168,21 @@ def download(
             with open(archive, "wb") as f:
                 for chunk in response.iter_content(chunk_size=256 * 1024):
                     if cancelled():
-                        return None
+                        break
                     f.write(chunk)
                     done += len(chunk)
                     if progress is not None:
                         progress(done, total)
+        if cancelled():
+            archive.unlink(missing_ok=True)
+            return None
     except requests.RequestException as e:
+        archive.unlink(missing_ok=True)
         raise UpdateError(f"Download failed: {e}") from e
-    root = unpack(archive, folder / "unpacked")
-    archive.unlink()
+    try:
+        root = unpack(archive, folder / "unpacked")
+    finally:
+        archive.unlink(missing_ok=True)
     return root
 
 
@@ -187,6 +197,41 @@ def unpack(archive: Path, target: Path) -> Path:
     if not (root / f"{APP_NAME}.exe").exists():
         raise UpdateError(f"{archive.name} has no {APP_NAME}.exe")
     return root
+
+
+def download_folder(source: Path) -> Optional[Path]:
+    """The temporary folder a build was downloaded into (removed after installing)."""
+    for folder in (source, *source.parents):
+        if folder.name.startswith(DOWNLOAD_PREFIX):
+            return folder
+    return None
+
+
+def clean_leftovers(
+    temp: Optional[Path] = None, max_age: float = LEFTOVER_AGE_S
+) -> List[Path]:
+    """Remove update folders left in the system temp folder (a failed or
+    interrupted update, the copy of the updater that ran last time)."""
+    import time
+
+    temp = Path(temp or tempfile.gettempdir())
+    removed = []
+    try:
+        entries = list(temp.iterdir())
+    except OSError:
+        return removed
+    now = time.time()
+    for entry in entries:
+        if not entry.name.startswith((DOWNLOAD_PREFIX, RUNNER_PREFIX)):
+            continue
+        try:
+            if now - entry.stat().st_mtime < max_age or not entry.is_dir():
+                continue  # maybe an update in progress
+            shutil.rmtree(entry)
+            removed.append(entry)
+        except OSError:
+            continue  # in use (the updater running) or locked: next time
+    return removed
 
 
 def install_dir() -> Optional[Path]:
@@ -218,7 +263,7 @@ def launch_updater(source: Path, target: Optional[Path] = None) -> None:
         updater = target / UPDATER
     if not updater.exists():
         raise UpdateError(f"{UPDATER} is missing in {target}")
-    runner = Path(tempfile.mkdtemp(prefix="thzdaq_updater_")) / UPDATER
+    runner = Path(tempfile.mkdtemp(prefix=RUNNER_PREFIX)) / UPDATER
     shutil.copy2(updater, runner)
     command = [
         str(runner),
@@ -227,6 +272,9 @@ def launch_updater(source: Path, target: Optional[Path] = None) -> None:
         "--target", str(target),
         "--exe", str(Path(sys.executable) if install_dir() == target else target / f"{APP_NAME}.exe"),
     ]  # fmt: skip
+    cleanup = download_folder(Path(source))
+    if cleanup is not None:
+        command += ["--cleanup", str(cleanup)]
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
         subprocess, "CREATE_NEW_PROCESS_GROUP", 0
     )

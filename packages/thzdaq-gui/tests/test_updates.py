@@ -1,6 +1,8 @@
+import shutil
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 from thzdaq_gui import updater, updates
@@ -288,3 +290,99 @@ class TestDialog:
         assert window.updateDialog.isVisible()
         wait(lambda: "latest version" in window.updateDialog.status.text())
         window.updateDialog.close()
+
+
+class TestCleanup:
+    """Update files go to the system temp folder and never stay there."""
+
+    def test_failed_and_cancelled_downloads_leave_nothing(self, tmp_path, monkeypatch):
+        from thzdaq_gui.update_dialog import Background, download_job
+
+        monkeypatch.setattr(updates.tempfile, "gettempdir", lambda: str(tmp_path))
+        monkeypatch.setattr(
+            "thzdaq_gui.update_dialog.tempfile.mkdtemp",
+            lambda prefix: str(
+                (tmp_path / f"{prefix}x").mkdir() or tmp_path / f"{prefix}x"
+            ),
+        )
+        monkeypatch.setattr(
+            updates.requests, "get", lambda *a, **k: FakeResponse(chunks=[b"broken"])
+        )
+        release = Release("v0.3.0", "", "", False, "", "https://x/a.zip")
+        task = Background(download_job(release))
+        with pytest.raises(UpdateError, match="Broken"):
+            task.job(task)
+        assert list(tmp_path.iterdir()) == []
+        task.cancelled.set()
+        assert task.job(task) is None
+        assert list(tmp_path.iterdir()) == []
+
+    def test_updater_removes_the_download_whatever_happens(self, tmp_path, monkeypatch):
+        finished = subprocess.Popen([sys.executable, "-c", "pass"])
+        finished.wait()
+        monkeypatch.setattr(updater.subprocess, "Popen", lambda cmd, **k: None)
+        for ok in (True, False):
+            download = tmp_path / f"{updates.DOWNLOAD_PREFIX}{ok}"
+            source = make_build(download / "unpacked" / "ThzDAQ", TestUpdater.NEW)
+            target = make_build(tmp_path / f"app{ok}", TestUpdater.OLD)
+            if not ok:
+                monkeypatch.setattr(
+                    updater,
+                    "install",
+                    lambda *a: (_ for _ in ()).throw(OSError("full")),
+                )
+            monkeypatch.setattr(updater, "show_error", lambda message: None)
+            code = updater.main(
+                ["--pid", str(finished.pid), "--source", str(source),
+                 "--target", str(target), "--exe", str(target / "ThzDAQ.exe"),
+                 "--cleanup", str(download)]
+            )  # fmt: skip
+            assert code == (0 if ok else 1) and not download.exists()
+
+    def test_leftovers_of_earlier_updates_are_removed(self, tmp_path):
+        import os
+        import time
+
+        old = time.time() - 2 * updates.LEFTOVER_AGE_S
+        names = [
+            f"{updates.DOWNLOAD_PREFIX}old", f"{updates.RUNNER_PREFIX}old",
+            f"{updates.DOWNLOAD_PREFIX}new", "someone_else",
+        ]  # fmt: skip
+        for name in names:
+            (tmp_path / name).mkdir()
+            if name.endswith("old") or name == "someone_else":
+                os.utime(tmp_path / name, (old, old))
+        removed = updates.clean_leftovers(tmp_path)
+        assert sorted(p.name for p in removed) == sorted(names[:2])
+        assert sorted(p.name for p in tmp_path.iterdir()) == sorted(names[2:])
+
+    def test_launch_passes_the_download_folder(self, tmp_path, monkeypatch):
+        target = make_build(tmp_path / "app", TestUpdater.OLD)
+        (target / updates.UPDATER).write_text("updater")
+        download = tmp_path / f"{updates.DOWNLOAD_PREFIX}abc"
+        source = make_build(download / "unpacked" / "ThzDAQ", TestUpdater.NEW)
+        started = []
+        monkeypatch.setattr(
+            updates.subprocess, "Popen", lambda cmd, **k: started.append(cmd)
+        )
+        updates.launch_updater(source, target)
+        (command,) = started
+        assert command[command.index("--cleanup") + 1] == str(download)
+        shutil.rmtree(Path(command[0]).parent)
+
+
+def test_update_installs_when_the_window_really_closes(
+    window, exit_answer, monkeypatch
+):
+    from PySide6.QtWidgets import QDialog, QMessageBox
+
+    launched, told = [], []
+    monkeypatch.setattr("thzdaq_gui.main_window.launch_updater", launched.append)
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: told.append(a[2]))
+    build = Path("/tmp/thzdaq_update_x/unpacked/ThzDAQ")
+    exit_answer["result"] = QDialog.Rejected  # "not now" in the exit question
+    window.quit_for_update(build)
+    assert window.isVisible() and launched == [] and "when you close" in told[0]
+    exit_answer["result"] = QDialog.Accepted
+    window.close()
+    assert launched == [build]

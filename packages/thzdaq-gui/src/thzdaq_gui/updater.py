@@ -24,7 +24,12 @@ LOG = "updater.log"
 logger = logging.getLogger("thzdaq.updater")
 
 
-def wait_for_exit(pid: int, timeout: float = 60.0) -> bool:
+# The updater starts once the application has decided to quit; what is left
+# (stopping threads, a dump of the measurements) may still take a while
+EXIT_TIMEOUT_S = 300.0
+
+
+def wait_for_exit(pid: int, timeout: float = EXIT_TIMEOUT_S) -> bool:
     if sys.platform == "win32":
         import ctypes
 
@@ -142,29 +147,41 @@ def setup_logging(target: Path) -> None:
     )
 
 
+def cleanup(args) -> None:
+    """The downloaded build is not needed after an attempt: free the disk."""
+    folder = args.cleanup or args.source
+    shutil.rmtree(folder, ignore_errors=True)
+    logger.info("removed %s", folder)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="updater", description="ThzDAQ updater")
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--exe", type=Path, required=True)
+    parser.add_argument(
+        "--cleanup", type=Path, help="temporary download folder, removed at the end"
+    )
     args = parser.parse_args(argv)
 
     setup_logging(args.target)
     logger.info("update %s <- %s", args.target, args.source)
     if not wait_for_exit(args.pid):
+        cleanup(args)
         show_error(f"ThzDAQ (pid {args.pid}) did not quit, update cancelled.")
         return 1
     try:
         install(args.source, args.target)
     except Exception as e:
+        cleanup(args)
         show_error(
             f"Update failed, the previous version is kept.\n\n{e}\n\n"
             f"Details: {args.target / LOG}"
         )
         code = 1
     else:
-        shutil.rmtree(args.source, ignore_errors=True)
+        cleanup(args)
         code = 0
     try:
         subprocess.Popen([str(args.exe)], cwd=str(args.target))

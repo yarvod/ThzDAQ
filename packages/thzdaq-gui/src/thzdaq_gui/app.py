@@ -50,6 +50,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     app.setWindowIcon(theme.app_icon())
     if args.settings:
         use_file(args.settings)
+    # Folders of an earlier update left in the system temp folder
+    from thzdaq_gui.updates import clean_leftovers
+
+    clean_leftovers()
     session = Session(args.data or str(data_dir()))
     # The station comes first: its devices get docks the saved layout restores
     profile = args.station or settings().value("station/path")

@@ -46,7 +46,7 @@ from thzdaq_gui.graphs import (
     close_views,
 )
 from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
-from thzdaq_gui.updates import can_self_update, latest_update
+from thzdaq_gui.updates import can_self_update, latest_update, launch_updater
 from thzdaq_gui.settings import location
 from thzdaq_gui.settings import settings as app_settings
 from thzdaq_gui.version import __version__
@@ -115,6 +115,7 @@ class MainWindow(QMainWindow):
             else app_settings()
         )
         self.updateDialog = None
+        self.pending_update: Optional[Path] = None  # a downloaded build to install
         self.perspective: Optional[str] = None
         # Ask on exit (layout, dump); off for smoke runs that close on a timer
         self.confirm_exit = True
@@ -772,7 +773,7 @@ class MainWindow(QMainWindow):
     def show_updates(self) -> None:
         if self.updateDialog is None:
             self.updateDialog = UpdateDialog(
-                quit_app=self.close, busy=self.session.busy, parent=self
+                quit_app=self.quit_for_update, busy=self.session.busy, parent=self
             )
         self.updateDialog.check()
         self.updateDialog.show()
@@ -788,6 +789,26 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(button)
 
     # Closing
+    def quit_for_update(self, build: Path) -> None:
+        """Close and install the downloaded build; if closing is cancelled, the
+        build stays ready and installs when the window is closed later."""
+        self.pending_update = build
+        if not self.close():
+            QMessageBox.information(
+                self,
+                "Update",
+                "The update is downloaded: it installs when you close ThzDAQ.",
+            )
+
+    def start_pending_update(self) -> None:
+        if self.pending_update is None:
+            return
+        try:
+            launch_updater(self.pending_update)
+        except Exception as e:
+            logger.error(f"Update not started: {e}")
+            QMessageBox.critical(self, "Update", f"The update did not start: {e}")
+
     def closeEvent(self, event) -> None:
         store_state, dump = True, False
         if self.confirm_exit:
@@ -816,6 +837,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Dump", f"Could not dump measurements: {e}")
         close_plots()
         self.dock_manager.deleteLater()
+        # Last: the updater waits for this process to end, then replaces the files
+        self.start_pending_update()
         event.accept()
 
 
