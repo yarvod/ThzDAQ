@@ -308,6 +308,13 @@ class TestDeviceDocks:
         group.btnStop.click()
         wait(lambda: not chopper.running)
 
+    def test_device_docks_use_their_instrument_queue(self, window):
+        sis = window.docks["device:sis_bias_1"].widget().panels[0]
+        meter = window.docks["device:power_meter_1"].widget().panels[0]
+        supply = window.docks["device:power_supply_1"].widget().panels
+        assert (sis.lane, meter.lane) == ("sis_block_1", "power_meter_1")
+        assert {panel.lane for panel in supply} == {"power_supply_1"}  # channels too
+
     def test_instrument_dock_has_its_channels(self, window):
         widget = window.docks["device:power_supply_1"].widget()
         assert [p.ref for p in widget.panels] == [

@@ -95,6 +95,34 @@ class TestWorkers:
         assert results == ["DeviceWorker"] and isinstance(errors[0], ZeroDivisionError)
         worker.stop()
 
+    def test_instruments_do_not_wait_for_each_other(self, app, wait):
+        """A slow power meter must not hold the SIS monitor."""
+        import time as _time
+
+        worker = DeviceWorker()
+        release = threading.Event()
+        done = []
+        worker.submit(lambda: release.wait(5), done.append, None, "NRX", key="nrx")
+        wait(lambda: worker.current == "NRX")
+        started = _time.monotonic()
+        worker.submit(lambda: "sis", done.append, None, "SIS", key="sis_block_1")
+        wait(lambda: "sis" in done)
+        assert _time.monotonic() - started < 1 and worker.current == "NRX"
+        release.set()
+        wait(lambda: True in done)
+        worker.stop()
+
+    def test_jobs_of_one_instrument_keep_their_order(self, app, wait):
+        import time as _time
+
+        worker = DeviceWorker()
+        order = []
+        worker.submit(lambda: _time.sleep(0.05) or order.append(1), key="sis")
+        worker.submit(lambda: order.append(2), key="sis")
+        wait(lambda: len(order) == 2)
+        assert order == [1, 2]
+        worker.stop()
+
     def test_unhandled_job_error_is_signalled(self, app, wait):
         worker = DeviceWorker()
         messages = []

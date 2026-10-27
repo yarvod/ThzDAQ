@@ -93,6 +93,11 @@ class QuantityPanel(QWidget):
         self.ref = ref
         self.title = title
         self.config = config
+        # The instrument whose queue the reads and writes join (DeviceWorker)
+        try:
+            self.lane = session.station.info(ref).instrument
+        except Exception:
+            self.lane = ref
         self.quantities: List[Quantity] = [
             q for q in session.station.quantities(ref) if q.persistent == config
         ]
@@ -251,6 +256,7 @@ class QuantityPanel(QWidget):
             self.show_values,
             self.failed,
             self.title,
+            key=self.lane,
         )
 
     def polled(self, quantity: Quantity) -> bool:
@@ -368,7 +374,11 @@ class QuantityPanel(QWidget):
             self.failed(error)
 
         self.session.worker.submit(
-            lambda: quantity.write(self.device(), value), done, failed, self.title
+            lambda: quantity.write(self.device(), value),
+            done,
+            failed,
+            self.title,
+            key=self.lane,
         )
 
     def stop(self) -> None:
@@ -404,6 +414,7 @@ class ActionsGroup(QGroupBox):
             lambda value: self.result.setText("" if value is None else str(value)),
             lambda error: self.result.setText(f"{error}"),
             self.panel.title,
+            key=self.panel.lane,
         )
 
 
@@ -467,6 +478,7 @@ class ChopperGroup(QGroupBox):
             done,
             lambda error: self.result.setText(f"{error}"),
             self.panel.title,
+            key=self.panel.lane,
         )
 
 
@@ -504,7 +516,11 @@ class CompressorGroup(QGroupBox):
             )  # fmt: skip
 
         self.panel.session.worker.submit(
-            job, show, lambda e: self.text.setText(str(e)), self.panel.title
+            job,
+            show,
+            lambda e: self.text.setText(str(e)),
+            self.panel.title,
+            key=self.panel.lane,
         )
 
 
@@ -572,7 +588,9 @@ class TraceGroup(QGroupBox):
                 device.set_center_frequency(start)
                 device.set_span(stop)
 
-        self.panel.session.worker.submit(job, None, self.panel.failed, self.panel.title)
+        self.panel.session.worker.submit(
+            job, None, self.panel.failed, self.panel.title, key=self.panel.lane
+        )
 
     def read(self) -> None:
         if self.pending:
@@ -583,6 +601,7 @@ class TraceGroup(QGroupBox):
             self.show,
             self.error,
             self.panel.title,
+            key=self.panel.lane,
         )
 
     def show(self, trace) -> None:
@@ -717,6 +736,7 @@ class SisBiasGroup(QGroupBox):
             ),
             lambda error: QMessageBox.critical(self, "Calibration", str(error)),
             self.panel.title,
+            key=self.panel.lane,
         )
 
 

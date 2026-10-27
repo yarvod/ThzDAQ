@@ -771,7 +771,7 @@ class SetupWidget(QWidget):
                 self.cards[instrument_id].set_status(text, False)
 
         title = station.config.instruments[instrument_id].title or instrument_id
-        self.session.worker.submit(job, done, failed, title)
+        self.session.worker.submit(job, done, failed, title, key=instrument_id)
 
 
 def ask_profile_path(parent, save: bool) -> Optional[str]:
