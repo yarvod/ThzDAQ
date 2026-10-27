@@ -308,6 +308,21 @@ class TestDeviceDocks:
         group.btnStop.click()
         wait(lambda: not chopper.running)
 
+    def test_coil_monitor_shows_the_current(self, window, session, wait):
+        """The coil had only its setpoint field: Monitor showed nothing new."""
+        panel = window.docks["device:sis_coil_1"].widget().panels[0]
+        coil = session.station.device("sis_coil_1")
+        coil.set_current(2.5e-3)  # e.g. a demagnetization left it there
+        label = panel.values["coil_current"]
+        assert label.property("role") == "value"  # orange, as the bias values
+        assert panel.displays["coil_current"].prefix() == "m"
+        panel.interval.setValue(0.1)
+        panel.monitor.setChecked(True)
+        wait(lambda: label.text() == "2.5 mA")
+        coil.set_current(1e-3)
+        wait(lambda: label.text() == "1 mA")
+        panel.monitor.setChecked(False)
+
     def test_device_docks_use_their_instrument_queue(self, window):
         sis = window.docks["device:sis_bias_1"].widget().panels[0]
         meter = window.docks["device:power_meter_1"].widget().panels[0]

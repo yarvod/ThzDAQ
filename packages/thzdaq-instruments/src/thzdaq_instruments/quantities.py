@@ -143,6 +143,10 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
 }  # fmt: skip
 
 
+# Coil current the SIS block reports (the setpoint field is what was asked)
+COIL_CURRENT = Quantity("coil_current", "Current", "A", get=lambda t: t.read_current())
+
+
 # A bias or coil output of the SIS block is active when it is not shorted
 SHORT = Quantity(
     "active", "Active", kind="bool",

@@ -42,8 +42,8 @@ def default_quantities(quantities: Iterable[Quantity]) -> List[Quantity]:
 
 def plot_for(quantity: Quantity) -> str:
     """The time graph of a quantity, by its unit."""
-    if quantity.unit == "A" and quantity.key == "current_set":
-        return "Coil-t"
+    if quantity.unit == "A" and quantity.key in ("current_set", "coil_current"):
+        return "Coil-t"  # mA of a coil, not the µA of a SIS on I-t
     return UNIT_PLOTS.get(quantity.unit, "Value-t")
 
 

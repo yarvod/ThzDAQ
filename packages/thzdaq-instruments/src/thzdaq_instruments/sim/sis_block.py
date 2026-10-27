@@ -3,7 +3,7 @@ from typing import Optional
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import Channel, Instrument, SubdeviceType
-from thzdaq_instruments.quantities import SHORT
+from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim.lively import Wobble, still
 
@@ -61,7 +61,7 @@ class SimSisBiasChannel(Channel):
 
 
 class SimSisCtrlChannel(Channel):
-    quantities = (SHORT,)
+    quantities = (COIL_CURRENT, SHORT)
 
     def __init__(self, instrument: "SimSisBlock", key: str):
         super().__init__(instrument, key)
@@ -78,6 +78,9 @@ class SimSisCtrlChannel(Channel):
         self._current = current
 
     def get_current(self) -> float:
+        return self._current
+
+    def read_current(self) -> float:
         return self._current
 
 

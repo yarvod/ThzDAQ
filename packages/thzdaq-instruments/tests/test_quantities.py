@@ -31,7 +31,7 @@ class TestQuantities:
     def test_driver_quantities(self):
         block = SimSisBlock()
         assert keys(block.channel("DEV4"))[-1] == "active"
-        assert keys(block.ctrl("DEV3")) == ["current_set", "active"]
+        assert keys(block.ctrl("DEV3")) == ["current_set", "coil_current", "active"]
 
     def test_read_and_write(self):
         channel = SimPowerSupply().channel(2)

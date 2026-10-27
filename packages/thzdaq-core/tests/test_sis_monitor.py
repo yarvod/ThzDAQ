@@ -116,7 +116,7 @@ class TestMonitor:
 
         assert keys(SimSisBlock().channel("DEV4")) == ["voltage", "current"]
         assert keys(SimPowerMeter()) == ["power"]
-        assert keys(SimSisBlock().ctrl("DEV3")) == ["current_set"]  # no meter
+        assert keys(SimSisBlock().ctrl("DEV3")) == ["coil_current"]  # what it reports
         assert keys(SimChopper()) == []
         supply = [
             q.key

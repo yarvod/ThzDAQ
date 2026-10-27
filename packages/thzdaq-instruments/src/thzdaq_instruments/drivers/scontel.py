@@ -9,7 +9,7 @@ from thzdaq_instruments.errors import (
     InstrumentResponseError,
 )
 from thzdaq_instruments.instrument import Channel, ScpiInstrument, SubdeviceType
-from thzdaq_instruments.quantities import SHORT
+from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 
@@ -120,13 +120,17 @@ class SisCtrlChannel(Channel):
     """Magnetic field coil current of one device: CurrentSource."""
 
     instrument: "ScontelSisBlock"
-    quantities = (SHORT,)
+    quantities = (COIL_CURRENT, SHORT)
 
     def set_current(self, current: float) -> None:
         self.instrument.command(f"CTRL:{self.key}:CURR {current}")
 
     def get_current(self) -> float:
         return self.instrument.command_float(f"CTRL:{self.key}:CURR?")
+
+    def read_current(self) -> float:
+        """The current the block reports now (monitors, plots)."""
+        return self.get_current()
 
     def get_short(self) -> bool:
         return self.instrument.command(f"CTRL:{self.key}:SHOR?") == "1"
