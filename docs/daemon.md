@@ -574,7 +574,9 @@ with lab.measurement("pv_fine", devices=[bias, pm], comment="узкий P-V") as
 - `thzdaq cancel <id>` из другого терминала, Stop в GUI или агент → событие скрипту →
   `m.sweep`/`m.check_cancel()` выбрасывают `Cancelled` → `with` закрывает измерение со
   статусом `cancelled`.
-- `m.restore(...)` выполняет **демон**: при нормальном конце, при отмене и если скрипт умер
+- `m.restore(device, key)` (вернуть значение) и `m.on_exit(device, action)` (вызвать
+  действие, например `to_cold`) выполняет **демон**: при нормальном конце, при отмене и если
+  скрипт умер
   (Ctrl+C, закрытый терминал — нет SSE и heartbeat дольше ~10 с). Измерение тогда
   `interrupted`, аренды снимаются, значения возвращаются через `GuardedPort`.
 - Пределы, аренды и права те же, что у всех: origin `script:<имя>`.
@@ -604,76 +606,89 @@ curve, экспорт CSV и `thzdaq show` работают как с любым
 остаётся плоской («длинной»), и любой срез потом делается фильтром по колонкам. Кривые на
 графике разводятся `group_by`.
 
-Пример: P-V hot/cold при нескольких токах катушки, с Y-фактором и картой Tn.
+Пример: P-V hot/cold по углам сетки, с Y-фактором и Tn. Встроенная процедура `sis.pv_curve`
+(`hot_cold` + `use_grid`) делает то же самое. Пример показывает, как это пишется скриптом,
+чтобы потом менять под себя.
 ```python
 from thzdaq_core import connect
+from thzdaq_core.analysis.noise import match_hot_cold, noise_temperature
 
 lab = connect()
-bias, coil = lab["sis_bias_1"], lab["sis_coil_1"]
-pm, load, gen = lab["power_meter_1"], lab["chopper_1"], lab["signal_generator_1"]
+bias, pm = lab["sis_bias_1"], lab["power_meter_1"]
+load, grid = lab["chopper_1"], lab["grid_1"]
+T_HOT, T_COLD = 300.0, 77.0
 
 with lab.measurement(
-    "pv_vs_coil",
-    devices=[bias, coil, pm, load, gen],
-    parameters={"coil": "0:20:5 mA", "bias": "1.5:3.5:81 mV", "lo": "230 GHz"},
-    comment="P-V hot/cold при разных токах катушки",
+    "pv_hot_cold_grid",
+    devices=[bias, pm, load, grid],
+    parameters={"bias": "0:7:351 mV", "angle": "0:90:10 deg", "t_hot": T_HOT, "t_cold": T_COLD},
+    comment="P-V hot/cold по углам сетки",
 ) as m:
-    m.columns(y=("Y-factor", "dB"), tn=("Noise temperature", "K"))  # только посчитанное
-    m.plot("pv", x="voltage", y="power", group_by=("coil", "load"))  # кривая на ток и hot/cold
-    m.plot("y", x="voltage", y="y", group_by=("coil",))
-    m.plot("y", x="voltage", y="coil", z="tn", kind="map")
-    m.restore(bias, "voltage_set")
-    m.restore(coil, "current_set")
+    m.plot("pv", x="voltage", y="power", group_by=("angle", "load"))           # P-V
+    m.plot("y_factor", x="voltage", y="noise_temperature", group_by=("angle",))  # Tn-V
+    m.restore(bias, "voltage_set")   # демон вернёт смещение при любом завершении
+    m.restore(grid, "angle")
+    m.on_exit(load, "to_cold")       # и поставит холодную нагрузку
 
-    gen.frequency = "230GHz"
-    for i_coil in m.sweep("0:20:5", unit="mA"):   # проверяет отмену, считает прогресс
-        coil.current_set = i_coil
-        m.sleep(1.0)                              # просыпается сразу при отмене
-        hot = {}
+    for angle in m.sweep("0:90:10", unit="deg"):    # проверяет отмену на каждом шаге
+        grid.angle = angle
+        m.sleep(1.0)                                # сетка доезжает
+        sweeps = {}
         for state in ("hot", "cold"):
             getattr(load, f"to_{state}")()
-            for v in m.sweep("1.5:3.5:81", unit="mV"):
+            m.sleep(2.0)
+            points = []
+            for v in m.sweep("0:7:351", unit="mV"):
                 bias.voltage_set = v
-                m.sleep(0.05)
-                r = bias.read()                   # напряжение и ток одним опросом
+                m.sleep(0.01)
+                r = bias.read()                     # напряжение и ток одним опросом
                 p = pm.power
-                m.record("pv", coil=i_coil, load=state,
+                m.record("pv", angle=angle, load=state, voltage_set=v,
                          voltage=r.voltage, current=r.current, power=p)
-                if state == "hot":
-                    hot[v] = p
-                else:
-                    y = hot[v] - p
-                    m.record("y", coil=i_coil, voltage=r.voltage, y=y,
-                             tn=y_to_tn(y, t_hot=300, t_cold=77))
-    m.result("note", "минимум Tn см. карту")
+                points.append((r.voltage, p))
+                m.progress()
+            sweeps[state] = points
+        for v, hot, cold in match_hot_cold(sweeps["hot"], sweeps["cold"]):
+            m.record("y_factor", angle=angle, voltage=v, y_factor=hot - cold,
+                     noise_temperature=noise_temperature(hot, cold, T_HOT, T_COLD))
 ```
+Описывать колонки здесь не нужно:
+- `voltage`, `current`, `power` приходят с приборов;
+- `angle` и `voltage_set` — из развёрток;
+- `y_factor`, `noise_temperature`, `load` есть в `KNOWN_COLUMNS`.
+
+Переименовать колонку можно необязательным `m.columns(power=("IF power", "dBm"))`.
+
 Что попадает в файл (сокращённо):
 ```json
 {
   "format": "thzdaq-measurement", "version": 1,
-  "id": 57, "procedure": "script:pv_vs_coil", "status": "completed",
-  "parameters": {"coil": "0:20:5 mA", "bias": "1.5:3.5:81 mV", "lo": "230 GHz"},
-  "devices": {"sis_bias_1": {...}, "sis_coil_1": {...}, "power_meter_1": {...}, ...},
+  "id": 57, "procedure": "script:pv_hot_cold_grid", "status": "completed",
+  "parameters": {"bias": "0:7:351 mV", "angle": "0:90:10 deg", "t_hot": 300.0, "t_cold": 77.0},
+  "devices": {"sis_bias_1": {...}, "power_meter_1": {...}, "chopper_1": {...}, "grid_1": {...}},
   "tables": {
     "pv": {
       "columns": [
-        {"key": "coil", "title": "Coil", "unit": "A"},
+        {"key": "angle", "title": "Angle", "unit": "deg"},
         {"key": "load", "title": "Load", "unit": ""},
+        {"key": "voltage_set", "title": "Voltage setpoint", "unit": "V"},
         {"key": "voltage", "title": "Voltage", "unit": "V", "source": "sis_bias_1/voltage"},
         {"key": "current", "title": "Current", "unit": "A", "source": "sis_bias_1/current"},
         {"key": "power", "title": "Power", "unit": "dBm", "source": "power_meter_1/power"}
       ],
-      "data": {"coil": [0.0, 0.0, ...], "load": ["hot", "hot", ...],
-               "voltage": [0.0015, ...], "current": [...], "power": [...]}
+      "data": {"angle": [0.0, 0.0, ...], "load": ["hot", "hot", ...],
+               "voltage_set": [0.0, 2.0e-5, ...], "voltage": [...], "current": [...], "power": [...]}
     },
-    "y": {"columns": [..., {"key": "y", "title": "Y-factor", "unit": "dB"},
-                           {"key": "tn", "title": "Noise temperature", "unit": "K"}],
-          "data": {...}}
+    "y_factor": {
+      "columns": [{"key": "angle", ...}, {"key": "voltage", ...},
+                  {"key": "y_factor", "title": "Y-factor", "unit": "dB"},
+                  {"key": "noise_temperature", "title": "Noise temperature", "unit": "K"}],
+      "data": {...}
+    }
   },
-  "results": {"note": "минимум Tn см. карту"},
   "station": {...},
-  "metadata": {"script": {"path": "...", "sha256": "...", "text": "..."},
-               "plots": [{"table": "pv", "x": "voltage", "y": "power", "group_by": ["coil", "load"]}, ...]}
+  "metadata": {"script": {"path": "scripts/pv_hot_cold_grid.py", "sha256": "...", "text": "..."},
+               "plots": [{"table": "pv", "x": "voltage", "y": "power", "group_by": ["angle", "load"]}, ...]}
 }
 ```
 - **Единицы и названия колонок (решено: автоматически, явное — по желанию).** Показания
@@ -707,7 +722,7 @@ with lab.measurement(
 - **Окно графиков по запросу:** `thzdaq plot <id>` или в Python `m.show()` / `run.show()` /
   `lab.plot(id)`. Открывается лёгкое окно только с графиками этого измерения — тот же
   `graphs.py`, без доков и профиля (`thzdaq_gui.viewer`, у сборки `ThzDAQ.exe --plot <id>`).
-  Можно указать свой график: `thzdaq plot 57 --table pv --x voltage --y power --group coil`.
+  Можно указать свой график: `thzdaq plot 57 --table pv --x voltage --y power --group angle`.
   Нужен установленный `thzdaq-gui` или exe (путь берётся из файла хоста). Окно — отдельный
   процесс, скрипт не ждёт его закрытия.
 - **В терминале:** `thzdaq watch <id> --plot [--table … --x … --y …]` рисует график
@@ -865,6 +880,68 @@ my-experiment/
     «сравнить».
 - Запуск скрипта агентом — всегда через подтверждение (класс прав `run`), независимо от
   того, кто правил текст.
+
+## Скрипт → виджет измерения (подумать позже)
+
+Сейчас не обязательно, но направление нужно держать в голове, чтобы API скриптов ему не
+мешал. Встроенные измерения захардкожены и отлажены; хочется, чтобы своё измерение из скрипта
+тоже можно было превратить в док с формой параметров, выбором устройств, Start/Stop и
+графиками, сохранить и запускать из GUI, как встроенные.
+
+### Путь созревания
+1. **Скрипт** — как в примере выше: значения прямо в коде.
+2. **Скрипт с объявленными параметрами и слотами** — GUI строит по ним форму, а
+   `thzdaq script start` принимает `--set` / `--device`, как `thzdaq run`.
+3. **Сохранённое своё измерение** — пункт в Measures → Custom, свой док, последние значения
+   запоминаются, как у встроенных.
+4. **Встроенная процедура** — если измерение прижилось, его переносят в
+   `measurements/procedures/` с тестами на симуляторах.
+
+### Как могло бы выглядеть объявление
+Параметры, слоты и графики объявляются тем же, что уже есть у `Procedure`
+(`parameters.py`, возможности, `PlotSpec`). Тогда GUI переиспользует `ParameterForm`,
+`DeviceSlotsForm` и `ProcedureBox` без нового кода форм.
+```python
+from thzdaq_core.script import Script, Sweep, Float, Slot, Plot
+from thzdaq_instruments.capabilities import (
+    LoadSwitch, PowerDetector, Rotator, VoltageCurrentMeter, VoltageSource,
+)
+
+class PVGrid(Script):
+    title = "P-V hot/cold по сетке"
+    devices = {
+        "bias": Slot(VoltageSource, VoltageCurrentMeter, kind="sis_bias"),
+        "detector": Slot(PowerDetector),
+        "load": Slot(LoadSwitch),
+        "grid": Slot(Rotator),
+    }
+    bias_voltage = Sweep("Bias voltage", default="0:7:351", unit="mV")
+    angle = Sweep("Grid angle", default="0:90:10", unit="deg")
+    t_hot = Float("Hot load", default=300, unit="K")
+    t_cold = Float("Cold load", default=77, unit="K")
+    plots = [Plot("pv", x="voltage", y="power", group_by=("angle", "load"))]
+
+    def run(self, m, d):     # m — сессия, d — устройства по слотам
+        for angle in m.sweep(self.angle):
+            ...              # тело как в примере, значения — из self.*
+```
+- Файл импортируется без запуска измерения: на верхнем уровне только объявления, а
+  проверка в редакторе предупреждает о вызовах приборов вне `run`. Форма строится из класса.
+- Запуск из дока = `thzdaq script start pv_grid.py --set ... --device ...`: скрипт так же
+  выполняется своим процессом с выбранным интерпретатором, а пределы, аренды и `restore`
+  работают как у любой сессии.
+- Встроенные процедуры и такие скрипты различаются только тем, где идёт цикл: процедура —
+  в демоне, скрипт — в своём процессе.
+
+### Открытые вопросы
+- Где хранить сохранённые измерения: в рабочей папке (`scripts/`) или общие для стенда
+  (рядом с `stations/`), и как делиться ими между папками.
+- Нужно ли выполнять такие измерения внутри демона (папка `procedures/`), а не своим
+  процессом, ради скорости и независимости от клиента.
+- Версии: измерение, сохранённое как виджет, со временем меняется. Текст скрипта и так
+  кладётся в каждое измерение, но нужно ли хранить историю самого виджета.
+- Хватит ли автоматической формы, или понадобится своя раскладка (группы, условные поля,
+  как `hot_cold` → слот `load` у P-V).
 
 ## Пакеты на PyPI
 - Тот же workflow релиза по тегу публикует на PyPI `thzdaq-instruments`, `thzdaq-core`
@@ -1060,6 +1137,12 @@ MCP лишь передаёт этот список чужой программ�
      сборке;
    - inline-diff правок ассистента и правок с диска; инструменты `script_*` и
      `editor_state` у ассистента и MCP.
+
+**Позже (обдумать):**
+- скрипт → виджет измерения (раздел «Скрипт → виджет измерения»);
+- свои процедуры в папке `procedures/` внутри демона;
+- условные блокировки в `safety`;
+- WebSocket-адаптер и веб-клиент.
 
 ## Переиспользуем
 - `Station` целиком (`thzdaq_core/station/station.py`) — в демоне без изменений
