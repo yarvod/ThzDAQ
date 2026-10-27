@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -47,6 +46,7 @@ from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
 from thzdaq_gui.docks.measure import ProcedureBox
+from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.fields import (
     PrefixBox,
     QuantityField,
@@ -162,14 +162,14 @@ class QuantityPanel(QWidget):
         self.btnRead = QPushButton(theme.icon("refresh"), "Read")
         self.btnRead.clicked.connect(self.read)
         self.monitor = QCheckBox("Monitor")
-        self.interval = QDoubleSpinBox()
+        self.interval = CompactDoubleSpinBox()
         self.interval.setRange(0.1, 3600)
         self.interval.setValue(1.0)
         self.interval.setSuffix(" s")
         self.plot = QCheckBox("Plot")
         self.plot.setToolTip("Send the measured values to the P-t, V-t, I-t ... graphs")
         self.plot.toggled.connect(self.plot_toggled)
-        self.window = QDoubleSpinBox()
+        self.window = CompactDoubleSpinBox()
         self.window.setRange(0, 1e6)
         self.window.setDecimals(0)
         self.window.setValue(600)
@@ -441,7 +441,7 @@ class ChopperGroup(QGroupBox):
         layout.addLayout(moves)
         rotation = QHBoxLayout()
         rotation.addWidget(QLabel("Frequency"))
-        self.frequency = QDoubleSpinBox()
+        self.frequency = CompactDoubleSpinBox()
         self.frequency.setRange(0.1, 20.0)
         self.frequency.setDecimals(2)
         self.frequency.setSingleStep(0.1)

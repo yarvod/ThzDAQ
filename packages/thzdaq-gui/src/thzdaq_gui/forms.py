@@ -65,6 +65,45 @@ class _Compact:
         text = max(self.SHORTEST, self.cleanText(), key=len)
         return QSize(min(hint.width(), self._width(text)), hint.height())
 
+    # Arrows and the wheel change the digit at the cursor (as in the old app):
+    # 123|.45 steps by 1, 12|3.45 by 10, 123.|45 and 123.4|5 by 0.1, 123.45| by 0.01
+    def _layout(self):
+        """(first digit, decimal point, end) positions of the number in the text."""
+        text = self.lineEdit().text()
+        start = len(self.prefix())
+        end = len(text) - len(self.suffix())
+        if text[start : start + 1] in ("+", "-"):
+            start += 1
+        point = -1
+        if isinstance(self, QDoubleSpinBox) and self.decimals() > 0:
+            point = text.find(self.locale().decimalPoint(), start, end)
+        return start, (end if point < 0 else point), end
+
+    def stepBy(self, steps: int) -> None:
+        edit = self.lineEdit()
+        start, point, end = self._layout()
+        cursor = min(max(edit.cursorPosition(), start), end)
+        if cursor <= start:
+            exponent = max(point - start - 1, 0)  # before the number: its first digit
+        elif cursor <= point:
+            exponent = point - cursor
+        else:
+            exponent = -max(1, cursor - point - 1)
+        decimals = self.decimals() if isinstance(self, QDoubleSpinBox) else 0
+        exponent = max(exponent, -decimals)
+        step = 10.0**exponent if decimals else 10 ** max(exponent, 0)
+        from_point = point - max(cursor, start)
+        usual = self.singleStep()
+        self.setSingleStep(step)
+        try:
+            super().stepBy(steps)
+        finally:
+            self.setSingleStep(usual)
+        # The cursor stays on the same digit when the number gets longer or shorter
+        start, point, end = self._layout()
+        edit.deselect()
+        edit.setCursorPosition(min(max(point - from_point, start), end))
+
 
 class CompactDoubleSpinBox(_Compact, QDoubleSpinBox):
     pass

@@ -49,6 +49,47 @@ class TestForms:
         assert procedure.frequency == Sweep(4e9, 6e9, 5)
         assert "spectrum" in procedure.slots()
 
+    def test_arrows_change_the_digit_at_the_cursor(self, app):
+        from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
+
+        spin = CompactDoubleSpinBox()
+        spin.setDecimals(2)
+        spin.setRange(-1e6, 1e6)
+        spin.setSuffix(" mV")
+
+        def step(value, offset, steps=1):
+            """Cursor `offset` characters from the decimal point, then step."""
+            spin.setValue(value)
+            text = spin.lineEdit().text()
+            spin.lineEdit().setCursorPosition(
+                text.index(spin.locale().decimalPoint()) + offset
+            )
+            spin.stepBy(steps)
+            return spin.value()
+
+        assert step(123.45, 0) == pytest.approx(124.45)  # 123|.45
+        assert step(123.45, -1) == pytest.approx(133.45)  # 12|3.45
+        assert step(123.45, 1) == pytest.approx(123.55)  # 123.|45
+        assert step(123.45, 2) == pytest.approx(123.55)  # 123.4|5
+        assert step(123.45, 3, -1) == pytest.approx(123.44)  # 123.45|
+        # The cursor stays on the ones when the number gets longer or crosses 0
+        assert step(99.5, 0) == pytest.approx(100.5)
+        text = spin.lineEdit().text()
+        assert spin.lineEdit().cursorPosition() == text.index(
+            spin.locale().decimalPoint()
+        )
+        assert step(0.5, 0, -1) == pytest.approx(-0.5)
+        text = spin.lineEdit().text()
+        assert text.index(spin.locale().decimalPoint()) == (
+            spin.lineEdit().cursorPosition()
+        )
+        whole = CompactSpinBox()
+        whole.setRange(1, 100001)
+        whole.setValue(351)
+        whole.lineEdit().setCursorPosition(1)  # 3|51
+        whole.stepBy(1)
+        assert whole.value() == 451
+
     def test_multi_choice_and_errors(self, app):
         form = ParameterForm()
         form.set_procedure(SisReflection)
