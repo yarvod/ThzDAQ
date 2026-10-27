@@ -97,7 +97,7 @@ class TestDemagnetization:
             def require(self, devices, requirements):
                 return {"coil": coil}
 
-            def snapshot(self):
+            def snapshot(self, refs=None):
                 return {}
 
         procedure = Demagnetize(minimum=-10e-3, maximum=10e-3, step=5e-3, step_delay=0)
@@ -141,7 +141,7 @@ class TestMonitor:
             def require(self, devices, requirements):
                 return {slot: ports[slot] for slot in requirements}
 
-            def snapshot(self):
+            def snapshot(self, refs=None):
                 return {}
 
         return MeasurementRunner(Bench()).run(Monitor(**parameters))

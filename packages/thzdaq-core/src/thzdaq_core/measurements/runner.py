@@ -3,7 +3,17 @@ import threading
 import itertools
 import time
 import traceback
-from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+)
 
 from thzdaq_core.data.measurement import (
     CANCELLED,
@@ -36,7 +46,7 @@ class StationLike(Protocol):
     def device_use(self, ref: str) -> DeviceUse:
         ...
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self, refs: Optional[Iterable[str]] = None) -> Dict[str, Any]:
         ...
 
 
@@ -211,7 +221,7 @@ class MeasurementRunner:
             parameters=procedure.to_json(),
             comment=comment,
             devices={slot: self.station.device_use(ref) for slot, ref in refs.items()},
-            station=self.station.snapshot(),
+            station=self.station.snapshot(refs.values()),
         )
         measurement.id = self.store.next_id() if self.store else next(_LOCAL_IDS)
         self.current = measurement

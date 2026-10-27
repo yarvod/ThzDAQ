@@ -74,7 +74,8 @@ class PymodbusRegisters:
         with self.lock:
             try:
                 return self._check(func(*args, slave=self.slave, **kwargs), what)
-            except ConnectionException as e:
+            except (ConnectionException, OSError) as e:
+                # A reset socket (WinError 10054) comes as a bare OSError
                 raise InstrumentConnectionError(f"Modbus {what}: {e}") from e
             except ModbusException as e:
                 raise InstrumentResponseError(f"Modbus {what}: {e}") from e

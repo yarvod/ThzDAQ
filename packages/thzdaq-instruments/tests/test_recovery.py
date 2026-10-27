@@ -197,3 +197,17 @@ def test_instrument_sees_the_idle_client_leave():
     meter.close()
     for s in (peer, again, server):
         s.close()
+
+
+def test_modbus_socket_reset_is_an_instrument_error():
+    """pymodbus lets a reset socket (WinError 10054) through as a bare OSError."""
+    from thzdaq_instruments.transport.modbus import PymodbusRegisters
+
+    class Client:
+        def read_holding_registers(self, *args, **kwargs):
+            raise ConnectionResetError(10054, "the remote host closed the connection")
+
+    registers = PymodbusRegisters.__new__(PymodbusRegisters)
+    registers.client, registers.slave, registers.lock = Client(), 1, threading.RLock()
+    with pytest.raises(InstrumentConnectionError):
+        registers.read(0x10)

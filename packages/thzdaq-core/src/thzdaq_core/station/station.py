@@ -1,7 +1,18 @@
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any, Dict, Hashable, List, Mapping, Optional, Tuple, Type, Union
+from typing import (
+    Any,
+    Dict,
+    Hashable,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from thzdaq_instruments import default_registry
 from thzdaq_instruments.capabilities import capabilities_of
@@ -427,15 +438,30 @@ class Station:
             self.config = config
             self._devices.clear()
 
-    def snapshot(self) -> Dict[str, Any]:
-        """Profile plus identities of opened instruments, for measurement metadata."""
+    def snapshot(self, refs: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+        """Profile plus identities of opened instruments, for measurement metadata.
+
+        refs: only the instruments of these devices are asked (a measurement's
+        own): an unrelated one that does not answer (a chopper used earlier)
+        must not delay or break the start. A failed identity is recorded.
+        """
+        wanted = None
+        if refs is not None:
+            wanted = set()
+            for ref in refs:
+                try:
+                    wanted.add(self.info(ref).instrument)
+                except StationError:
+                    continue
         identities = {}
-        for instrument_id, instrument in self._instruments.items():
+        for instrument_id, instrument in list(self._instruments.items()):
+            if wanted is not None and instrument_id not in wanted:
+                continue
             identify = getattr(instrument, "identify", None)
             try:
                 identities[instrument_id] = identify() if identify else None
-            except InstrumentError as e:
-                identities[instrument_id] = f"error: {e}"
+            except Exception as e:  # metadata only: never stops a measurement
+                identities[instrument_id] = f"error: {e.__class__.__name__}: {e}"
         return {
             "station": station_to_dict(self.config),
             "simulate": self.simulate,

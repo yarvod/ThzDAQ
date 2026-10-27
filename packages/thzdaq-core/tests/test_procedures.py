@@ -105,7 +105,7 @@ class Bench:
     def device_use(self, ref):
         return DeviceUse(ref)
 
-    def snapshot(self):
+    def snapshot(self, refs=None):
         return {"station": {"name": "sim 2sb bench"}}
 
 

@@ -1,3 +1,4 @@
+import math
 from typing import Literal, Optional
 
 from thzdaq_instruments.errors import ConfigurationError
@@ -14,7 +15,9 @@ DBUV_TO_DBM = -107.0
 class RohdeSchwarzNRX(ScpiInstrument):
     """R&S NRX power meter, sensor 1, LAN port 5025.
 
-    read_power() always returns dBm whatever display unit is selected.
+    read_power() always returns dBm whatever display unit is selected (also
+    one changed on the front panel). In W the noise near zero gives values
+    <= 0 that have no dBm: they are NaN, which plots and monitors skip.
     """
 
     quantities = POWER_METER_QUANTITIES
@@ -103,10 +106,10 @@ class RohdeSchwarzNRX(ScpiInstrument):
         return self.query_float("FETCH?")
 
     def read_power(self) -> float:
-        unit = self._unit or self.get_units()
+        unit = self.get_units()  # the front panel may have changed it
         value = self.read()
         if unit == "W":
-            return watt_to_dbm(value)
+            return watt_to_dbm(value) if value > 0 else math.nan
         if unit == "DBUV":
             return value + DBUV_TO_DBM
         return value

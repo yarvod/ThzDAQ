@@ -452,3 +452,32 @@ class TestStorage:
         path.write_text("instruments: [", encoding="utf-8")
         with pytest.raises(StationError, match="invalid YAML"):
             load_station(path)
+
+
+def test_snapshot_asks_only_the_measurement_instruments():
+    """A chopper opened earlier and not answering broke the start of an I-V."""
+    from thzdaq_core.station import InstrumentConfig, Station, StationConfig
+
+    config = StationConfig(
+        "bench",
+        {
+            "supply": InstrumentConfig("rigol.dp832a", simulate=True),
+            "chopper": InstrumentConfig("chopper.modbus", simulate=True),
+        },
+    )
+    station = Station(config)
+    station.instrument("supply")
+    chopper = station.instrument("chopper")
+    asked = []
+
+    def silent():
+        asked.append("chopper")
+        raise ConnectionResetError(10054, "the remote host closed the connection")
+
+    chopper.identify = silent
+    snapshot = station.snapshot(["supply:1"])
+    assert list(snapshot["identities"]) == ["supply"] and asked == []
+    # Asked anyway (all opened instruments): recorded, never raised
+    everything = station.snapshot()["identities"]
+    assert everything["chopper"].startswith("error: ConnectionResetError")
+    station.close()

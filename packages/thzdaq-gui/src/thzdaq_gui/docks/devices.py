@@ -8,6 +8,7 @@ compressor, analyzers) add their own groups below.
 
 import copy
 import json
+import math
 import time
 from typing import Dict, List, Optional
 
@@ -60,6 +61,8 @@ def format_value(value, quantity: Quantity, factor: float = 1.0, symbol=None) ->
         return "--"
     if quantity.kind == "bool":
         return "ON" if value else "OFF"
+    if isinstance(value, float) and not math.isfinite(value):
+        return "--"  # no value (a power meter in W at zero has no dBm)
     if isinstance(value, (int, float)):
         return format_number(value, factor, quantity.unit if symbol is None else symbol)
     return str(value)

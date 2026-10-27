@@ -143,10 +143,10 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
 }  # fmt: skip
 
 
-# Short circuit of a bias or coil output (SIS block)
+# A bias or coil output of the SIS block is active when it is not shorted
 SHORT = Quantity(
-    "short", "Short", kind="bool",
-    get=lambda t: t.get_short(), set=lambda t, v: t.set_short(bool(v)),
+    "active", "Active", kind="bool",
+    get=lambda t: not t.get_short(), set=lambda t, v: t.set_short(not v),
 )  # fmt: skip
 
 

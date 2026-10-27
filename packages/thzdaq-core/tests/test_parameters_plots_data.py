@@ -204,7 +204,7 @@ class TestDataStore:
             def require(self, devices, requirements):
                 return {}
 
-            def snapshot(self):
+            def snapshot(self, refs=None):
                 return {}
 
         store = MeasurementStore(tmp_path)

@@ -1,4 +1,5 @@
 import json
+import math
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -173,7 +174,22 @@ class TestNrx:
         meter, link = make(RohdeSchwarzNRX, emulator)
         assert meter.read_power() == pytest.approx(-23.5, abs=1e-3)
         assert meter.read_power() == pytest.approx(-23.5, abs=1e-3)
-        assert link.written.count("UNIT1:POW?") == 1
+
+    def test_unit_changed_on_the_front_panel_is_followed(self):
+        emulator = NrxEmulator(power_dbm=-23.5)
+        meter, _ = make(RohdeSchwarzNRX, emulator)
+        assert meter.read_power() == pytest.approx(-23.5, abs=1e-3)
+        emulator.unit = "W"  # by hand on the meter
+        assert meter.read_power() == pytest.approx(-23.5, abs=1e-3)
+
+    @pytest.mark.parametrize("watt", [0.0, -3.2e-11])
+    def test_watts_at_or_below_zero_have_no_dbm(self, watt):
+        """Noise near zero in W used to raise and stop the monitor."""
+        emulator = NrxEmulator()
+        emulator.unit, emulator.watt = "W", watt
+        meter, _ = make(RohdeSchwarzNRX, emulator)
+        assert math.isnan(meter.read_power())
+        assert meter.fetch() == pytest.approx(watt)  # the reading itself is kept
 
     def test_options_configure_meter(self):
         emulator = NrxEmulator()

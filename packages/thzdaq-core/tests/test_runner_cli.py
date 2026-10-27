@@ -83,7 +83,7 @@ class CoupledStation:
     def device_use(self, ref):
         return DeviceUse(ref)
 
-    def snapshot(self):
+    def snapshot(self, refs=None):
         return {"station": {"name": "coupled"}}
 
 

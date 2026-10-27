@@ -205,7 +205,7 @@ class TestDeviceDocks:
             "voltage_set",
             "voltage",
             "current",
-            "short",
+            "active",
         ]
         # A setpoint is its field: no reading of it, polled only once
         assert "voltage_set" not in panel.values and "voltage" in panel.values
@@ -219,10 +219,15 @@ class TestDeviceDocks:
         from thzdaq_gui.settings import settings
 
         assert float(settings().value("setpoints/sis_bias_1/voltage_set")) == 2.5e-3
-        short = next(q for q in panel.quantities if q.key == "short")
-        panel.write(short, True)
-        wait(lambda: panel.toggles["short"].isChecked())
-        assert session.station.instrument("sis_block_1").channel("DEV4").get_short()
+        # Active is the opposite of the block's short: off shorts the output
+        active = next(q for q in panel.quantities if q.key == "active")
+        panel.write(active, True)
+        wait(lambda: panel.toggles["active"].isChecked())
+        channel = session.station.instrument("sis_block_1").channel("DEV4")
+        assert not channel.get_short()
+        panel.write(active, False)
+        wait(lambda: not panel.toggles["active"].isChecked())
+        assert channel.get_short()
 
     def test_generator_configuration_from_the_profile(
         self, window, session, profile, wait

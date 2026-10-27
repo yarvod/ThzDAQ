@@ -155,6 +155,7 @@ class NrxEmulator(ScpiEmulator):
     def __init__(self, power_dbm: float = -30.0):
         super().__init__()
         self.power_dbm = power_dbm
+        self.watt = None  # a reading in W as the meter gives it (noise below 0)
         self.unit = "DBM"
         self.aperture = None
         self.averaging = None
@@ -187,7 +188,8 @@ class NrxEmulator(ScpiEmulator):
 
     def _read(self):
         if self.unit == "W":
-            return f"{dbm_to_watt(self.power_dbm):.6E}"
+            watt = self.watt if self.watt is not None else dbm_to_watt(self.power_dbm)
+            return f"{watt:.6E}"
         if self.unit == "DBUV":
             return f"{self.power_dbm + 107:.3f}"
         return f"{self.power_dbm:.3f}"
