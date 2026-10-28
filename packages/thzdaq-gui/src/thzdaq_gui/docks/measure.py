@@ -101,9 +101,14 @@ class ProcedureBox(QWidget):
         self.footer = QFrame()
         self.footer.setObjectName("procedureFooter")
         footer = QVBoxLayout(self.footer)
+        # Comment, Start/Stop, state, progress: the bar on top drives them in Lite
+        self.controls = QWidget()
+        controls = QVBoxLayout(self.controls)
+        controls.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(self.controls)
         self.comment = QLineEdit()
         self.comment.setPlaceholderText("Comment")
-        footer.addWidget(self.comment)
+        controls.addWidget(self.comment)
         row = QHBoxLayout()
         self.btnStart = QPushButton(theme.icon("play", "#111111"), "Start")
         self.btnStart.setProperty("accent", True)
@@ -120,14 +125,14 @@ class ProcedureBox(QWidget):
         row.addWidget(self.btnStart)
         row.addWidget(self.btnStop)
         row.addWidget(self.btnAbort)
-        footer.addLayout(row)
+        controls.addLayout(row)
         self.state = QLabel("Idle")
         self.state.setProperty("role", "muted")
-        footer.addWidget(self.state)
+        controls.addWidget(self.state)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        footer.addWidget(self.progress)
+        controls.addWidget(self.progress)
         # Folded, the log shows its last line
         self.log_box = Collapsible("Log", f"{sections}/log", expanded=False)
         self.log = QPlainTextEdit()
@@ -244,6 +249,13 @@ class ProcedureBox(QWidget):
         if self.process is not None:
             self.process.update(status=text or self.state.text())
 
+    def set_controls_visible(self, on: bool) -> None:
+        """Lite runs measurements from the bar on top: the dock keeps the setup."""
+        self.controls.setVisible(on)
+
+    def abort_offered(self) -> bool:
+        return not self.btnAbort.isHidden()
+
     def set_state(self, text: str) -> None:
         self.state.setText(text)
         self.status_changed.emit(self.status_text())
@@ -333,10 +345,10 @@ class ProcedureBox(QWidget):
             "Connecting to devices...",
             "Stopping...",
         ):
+            self.btnAbort.show()  # first: the state change tells the bar on top
             self.set_state(
                 f"{self.state.text()} no answer, Abort breaks the connections"
             )
-            self.btnAbort.show()
             if self.process is not None:
                 self.process.update(can_abort=True)
 

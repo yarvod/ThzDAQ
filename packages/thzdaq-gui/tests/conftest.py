@@ -91,6 +91,7 @@ def window(session, tmp_path):
         str(tmp_path / "settings.ini"),
         restore_layout=False,
         check_updates=False,
+        mode="pro",  # the tests of docks per measurement and perspectives
     )
     window.show()
     yield window

@@ -642,7 +642,7 @@ class TestPerspectives:
 
         settings = str(tmp_path / "layout.ini")
         window = MainWindow(
-            session, settings, restore_layout=False, check_updates=False
+            session, settings, restore_layout=False, check_updates=False, mode="pro"
         )
         window.show()
         assert "Default" in window.dock_manager.perspectiveNames()
@@ -668,7 +668,7 @@ class TestPerspectives:
 
         settings = str(tmp_path / "layout.ini")
         window = MainWindow(
-            session, settings, restore_layout=False, check_updates=False
+            session, settings, restore_layout=False, check_updates=False, mode="pro"
         )
         window.show()
         answers = iter(["Noise", "Tn", "Default"])
@@ -812,7 +812,11 @@ def test_no_stray_windows_flash(app, session, tmp_path):
     app.installEventFilter(spy)
     try:
         window = MainWindow(
-            session, str(tmp_path / "s.ini"), restore_layout=False, check_updates=False
+            session,
+            str(tmp_path / "s.ini"),
+            restore_layout=False,
+            check_updates=False,
+            mode="pro",
         )
         window.show()
         config = copy.deepcopy(session.station.config)
@@ -1124,4 +1128,122 @@ class TestProcesses:
         # Back on its side bar, not floating
         assert dock.isAutoHide() and not dock.isFloating()
         assert again.dock_state("processes") == "front"
+        again.close()
+
+
+@pytest.fixture
+def lite(session, tmp_path):
+    from thzdaq_gui.main_window import MainWindow
+
+    window = MainWindow(
+        session, str(tmp_path / "lite.ini"), restore_layout=False, check_updates=False
+    )
+    window.resize(1500, 900)
+    window.show()
+    yield window
+    if window.isVisible():
+        window.close()
+
+
+class TestLite:
+    def test_lite_is_the_default_with_the_bar_on_top(self, lite, app):
+        app.processEvents()
+        assert lite.mode == "lite" and lite.modeActions["lite"].isChecked()
+        assert lite.runBar.isVisible() and not lite.perspectives.isVisible()
+        measurement = lite.docks["measurement"]
+        assert not measurement.isClosed() and measurement.tabWidget().isVisible()
+        assert measurement.windowTitle() == "SIS I-V curve"
+        assert lite.runBar.chosen_name() == "sis.iv_curve"
+        assert all(
+            dock.isClosed()
+            for n, dock in lite.docks.items()
+            if n.startswith("measure:")
+        )
+        # The dock keeps the setup, the bar has the controls
+        box = lite.runBar.box
+        assert box.parameters_box.isVisibleTo(lite) and not box.controls.isVisibleTo(
+            lite
+        )
+        # Sized for its content once the window is shown
+        assert (
+            measurement.dockAreaWidget().width()
+            >= 0.9 * measurement.widget().sizeHint().width()
+        )
+
+    def test_every_dock_of_the_default_layout_shows_its_tab(self, lite):
+        hidden = [
+            name
+            for name, dock in lite.docks.items()
+            if not dock.isClosed() and not dock.isAutoHide()
+            and not dock.tabWidget().isVisible()
+        ]  # fmt: skip
+        assert hidden == []
+
+    def test_the_bar_runs_the_chosen_measurement(self, lite, wait):
+        processes = lite.session.processes
+        bar = lite.runBar
+        bar.chosen.emit("sis.iv_curve")
+        iv = bar.box
+        iv.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        bar.comment.setText("from the bar")
+        bar.comment.textEdited.emit("from the bar")
+        bar.btnStart.click()
+        wait(lambda: iv.measurement is not None and bar.btnStop.isEnabled())
+        assert iv.measurement.comment == "from the bar"
+        assert not bar.btnStart.isEnabled() and "Running" in bar.progress.format()
+        # Another measurement chosen: the first goes on
+        bar.chosen.emit("sis.pv_curve")
+        assert bar.box is not iv and bar.btnStart.isEnabled()
+        assert lite.docks["measurement"].windowTitle() == "SIS P-V curve"
+        assert iv.ui_running and [p.title for p in processes.items] == ["SIS I-V curve"]
+        bar.chosen.emit("sis.iv_curve")
+        assert bar.box is iv and bar.btnStop.isEnabled()
+        bar.btnStop.click()
+        wait(lambda: not iv.ui_running)
+        assert bar.btnStart.isEnabled() and bar.progress.format().startswith(
+            "cancelled"
+        )
+
+    def test_menus_and_find_choose_a_measurement(self, lite):
+        assert lite.dock_state("measure:sis.pv_curve") == "closed"
+        lite.show_dock("measure:sis.pv_curve")
+        assert lite.runBar.chosen_name() == "sis.pv_curve"
+        assert lite.docks["measure:sis.pv_curve"].isClosed()  # no Pro dock in Lite
+        assert lite.dock_state("measure:sis.pv_curve") == "front"
+        assert lite.dock_state("measure:sis.iv_curve") == "closed"
+
+    def test_modes_keep_their_layouts_and_running_measurements(
+        self, lite, session, wait, app
+    ):
+        from thzdaq_gui.main_window import MainWindow
+
+        box = lite.runBar.box
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        lite.runBar.btnStart.click()
+        wait(lambda: box.ui_running)
+        lite.show_dock("device:power_supply_1")  # Lite's own layout
+        lite.set_mode("pro")
+        app.processEvents()  # the toolbar shows its widgets on its next layout
+        assert lite.perspectives.isVisible() and not lite.runBar.isVisible()
+        assert lite.docks["measurement"].isClosed()
+        assert lite.docks["device:power_supply_1"].isClosed()  # Pro's default
+        # The running box is back in its Pro dock with its own controls
+        pro_dock = lite.docks["measure:sis.iv_curve"]
+        assert not pro_dock.isClosed() and pro_dock.widget().isAncestorOf(box)
+        assert box.controls.isVisibleTo(pro_dock) and box.ui_running
+        lite.set_mode("lite")
+        assert lite.runBar.box is box and lite.measurementHost.isAncestorOf(box)
+        assert not lite.docks["device:power_supply_1"].isClosed()
+        box.stop()
+        wait(lambda: not box.ui_running)
+        lite.save_state()  # as on exit, without shutting the session down
+        again = MainWindow(session, lite.settings.fileName(), check_updates=False)
+        assert (
+            again.mode == "lite" and not again.docks["device:power_supply_1"].isClosed()
+        )
+        again.confirm_exit = False
         again.close()
