@@ -299,8 +299,8 @@ class MainWindow(QMainWindow):
                 "Update current perspective",
                 self.update_perspective,
             ),
+            ("rename-outline", "Rename current perspective", self.rename_perspective),
             ("delete-outline", "Delete current perspective", self.delete_perspective),
-            ("restore", "Restore the default layout", self.restore_defaults),
         ):
             action = toolbar.addAction(theme.icon(icon_name), tip)
             action.triggered.connect(slot)
@@ -869,14 +869,38 @@ class MainWindow(QMainWindow):
             self.refresh_perspectives()
             self.save_perspectives()
 
-    def restore_defaults(self) -> None:
-        answer = QMessageBox.question(
-            self,
-            "Default layout",
-            "Arrange the docks as by default? Perspectives stay.",
+    def rename_perspective(self) -> None:
+        old = self.perspectives.currentText()
+        if not old:
+            return
+        name, ok = QInputDialog.getText(
+            self, "Rename perspective", "New name", text=old
         )
-        if answer == QMessageBox.Yes:
-            self.apply_default_layout()
+        name = name.strip()
+        if not ok or not name or name == old:
+            return
+        if name in self.dock_manager.perspectiveNames():
+            QMessageBox.warning(self, "Rename perspective", f"{name!r} exists")
+            return
+        # ADS cannot rename: the saved list is read back with the new name
+        self.save_perspectives()
+        count = self.settings.beginReadArray("Perspectives")
+        saved = []
+        for i in range(count):
+            self.settings.setArrayIndex(i)
+            saved.append((self.settings.value("Name"), self.settings.value("State")))
+        self.settings.endArray()
+        self.settings.remove("Perspectives")
+        self.settings.beginWriteArray("Perspectives", len(saved))
+        for i, (key, state) in enumerate(saved):
+            self.settings.setArrayIndex(i)
+            self.settings.setValue("Name", name if key == old else key)
+            self.settings.setValue("State", state)
+        self.settings.endArray()
+        self.settings.sync()
+        self.dock_manager.loadPerspectives(self.settings)
+        self.perspective = name
+        self.refresh_perspectives()
 
     def apply_default_layout(self) -> None:
         """Graphs in the centre, measurements on the right, devices below."""

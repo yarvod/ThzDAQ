@@ -663,6 +663,40 @@ class TestPerspectives:
         assert not again.docks["graph:Tn-V"].isClosed()
         again.close()
 
+    def test_rename_keeps_the_layout(self, session, tmp_path, monkeypatch):
+        from thzdaq_gui.main_window import MainWindow
+
+        settings = str(tmp_path / "layout.ini")
+        window = MainWindow(
+            session, settings, restore_layout=False, check_updates=False
+        )
+        window.show()
+        answers = iter(["Noise", "Tn", "Default"])
+        monkeypatch.setattr(
+            "thzdaq_gui.main_window.QInputDialog.getText",
+            lambda *a, **k: (next(answers), True),
+        )
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+        window.docks["graph:Tn-V"].toggleView(True)
+        window.create_perspective()
+        window.rename_perspective()
+        assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        assert window.perspectives.currentText() == "Tn"
+        window.rename_perspective()  # to a name in use: refused
+        assert warnings == ["'Default' exists"]
+        assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        window.docks["graph:Tn-V"].toggleView(False)
+        window.open_perspective("Tn")  # the layout saved as Noise
+        assert not window.docks["graph:Tn-V"].isClosed()
+        window.close()
+        again = MainWindow(session, settings, check_updates=False)
+        assert set(again.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        assert again.perspectives.currentText() == "Tn"
+        again.close()
+
     def test_switching_keeps_widths_and_holds_only_open_contents(self, window, app):
         from PySide6.QtCore import QCoreApplication, QEvent
         from PySide6.QtWidgets import QSplitter
