@@ -867,3 +867,58 @@ class TestHangs:
         group.reset(next(iter(group.rows)))
         wait(lambda: state.text() == "connected")
         station.close()
+
+
+class TestFolding:
+    def test_controls_stay_below_the_scrolling_setup(self, window):
+        box = window.docks["measure:two_sb.tn"].widget().box
+        setup = box.scroll.widget()
+        assert (
+            box.devices_box.parent() is setup and box.parameters_box.parent() is setup
+        )
+        for control in (
+            box.btnStart,
+            box.btnStop,
+            box.comment,
+            box.progress,
+            box.state,
+        ):
+            assert not setup.isAncestorOf(control) and box.footer.isAncestorOf(control)
+
+    def test_folded_devices_say_which_are_chosen(self, window, session):
+        box = window.docks["measure:sis.pv_curve"].widget().box
+        box.devices_box.set_expanded(False)
+        summary = box.devices_box.summary
+        assert summary.isVisibleTo(box) and "SIS1" in summary.text()
+        assert not box.devices_box.body.isVisibleTo(box)
+        # Remembered for the next dock of this procedure
+        again = type(box)(session, window.hub, box.procedure_class)
+        assert not again.devices_box.expanded()
+        box.devices_box.set_expanded(True)
+
+    def test_a_missing_device_unfolds_the_devices(self, window, monkeypatch):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.devices_box.set_expanded(False)
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+        box.devices.combos["bias"].setCurrentIndex(-1)
+        box.start()
+        assert box.devices_box.expanded()
+
+    def test_device_scans_are_folded_and_tell_how_they_run(self, window, wait):
+        from thzdaq_gui.collapsible import Collapsible
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_1"].widget()
+        section = next(
+            s for s in widget.findChildren(Collapsible) if s.title() == "I-V scan"
+        )
+        assert not section.expanded()
+        box = section.findChildren(ProcedureBox)[0]
+        box.form.set_values(FAST_IV)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished and not box.ui_running)
+        assert section.summary.text() == f"completed #{finished[0].id}"
+        # The folded log shows its last line
+        assert box.log_box.summary.text().startswith("saved ")

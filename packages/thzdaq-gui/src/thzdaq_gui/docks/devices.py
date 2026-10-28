@@ -45,6 +45,7 @@ from thzdaq_instruments.capabilities import (
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
+from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.docks.measure import ProcedureBox
 from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.fields import (
@@ -740,13 +741,14 @@ class SisBiasGroup(QGroupBox):
         )
 
 
-def scan_group(session, hub, title: str, procedure: str, fixed) -> QGroupBox:
-    box = QGroupBox(title)
-    layout = QVBoxLayout(box)
-    layout.addWidget(
-        ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
-    )
-    return box
+def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
+    """A quick measurement of this device, folded by default: the measurement
+    docks run the same; folded, the title line shows how it runs."""
+    section = Collapsible(title, f"scan/{procedure}", expanded=False)
+    box = ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
+    box.status_changed.connect(section.set_summary)
+    section.addWidget(box)
+    return section
 
 
 # Capabilities whose dock has its own group even without quantities
