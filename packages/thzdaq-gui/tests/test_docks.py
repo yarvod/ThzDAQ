@@ -144,6 +144,21 @@ class TestWindow:
         assert supply.isCurrentTab()
         assert window.dock_state("device:power_supply_1") == "front"
 
+    def test_a_dock_opened_on_its_side_has_a_tab_and_fits(self, window, app):
+        window.resize(1500, 900)
+        for name, dock in window.docks.items():
+            if name.startswith("measure:") and not dock.isClosed():
+                dock.toggleView(False)
+        window.show_dock("measure:if.hot_cold")
+        app.processEvents()
+        dock = window.docks["measure:if.hot_cold"]
+        # ADS hid the tab of a closed dock moved into a new area
+        assert dock.tabWidget().isVisible()
+        # Sized for the content, not for the empty body it had before opening
+        wanted = dock.widget().sizeHint().width()
+        assert dock.dockAreaWidget().width() >= wanted
+        assert dock.dockAreaWidget().width() <= 0.45 * window.width()
+
     def test_custom_graph_rename_delete_and_keep(self, window, session, monkeypatch):
         from thzdaq_gui.graphs import Axis
         from thzdaq_gui.main_window import MainWindow

@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSplitter,
+    QStyle,
     QToolButton,
     QWidget,
     QWidgetAction,
@@ -69,6 +71,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PERSPECTIVE = "Default"
 AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
 DEVICE_HANG_S = 5.0
+FIT_SHARE = 0.4  # a dock opened on its side takes at most this part of the window
 # Where a dock of each kind opens when no dock of its kind is on screen
 HOME_AREAS = {
     "graph": QtAds.CenterDockWidgetArea,
@@ -407,14 +410,18 @@ class MainWindow(QMainWindow):
             return
         if dock.isClosed():
             own = dock.dockAreaWidget()
-            if own is None or own.openDockWidgetsCount() == 0:
+            move = own is None or own.openDockWidgetsCount() == 0
+            # Open before moving: ADS keeps the tab of a closed dock it moves
+            # into a new area hidden, and the content is built by now
+            dock.toggleView(True)
+            if move:
                 kind = name.split(":", 1)[0]
                 area = self.open_area_of(kind, dock)
                 if area is not None:
                     self.dock_manager.addDockWidgetTabToArea(dock, area)
                 elif kind in HOME_AREAS:
-                    self.dock_manager.addDockWidget(HOME_AREAS[kind], dock)
-            dock.toggleView(True)
+                    area = self.dock_manager.addDockWidget(HOME_AREAS[kind], dock)
+                    self.fit_area(area, dock)
             activate = True  # a dock just opened is the one to see
         if activate:
             dock.setAsCurrentTab()
@@ -422,6 +429,29 @@ class MainWindow(QMainWindow):
             if dock.isAutoHide() and dock.autoHideDockContainer() is not None:
                 dock.autoHideDockContainer().collapseView(False)
         self.sync_bodies()
+
+    def fit_area(self, area, dock) -> None:
+        """A new area on a side as wide (or tall) as its dock wants, up to
+        FIT_SHARE of the window: ADS sizes it before the content exists."""
+        splitter = area.parentWidget() if area is not None else None
+        if not isinstance(splitter, QSplitter):
+            return
+        index, sizes = splitter.indexOf(area), splitter.sizes()
+        if index < 0 or len(sizes) < 2:
+            return
+        horizontal = splitter.orientation() == Qt.Horizontal
+        hint = dock.widget().sizeHint()
+        wanted = (
+            hint.width() if horizontal else hint.height()
+        ) + self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
+        wanted = min(wanted, int(sum(sizes) * FIT_SHARE))
+        if sizes[index] >= wanted:
+            return
+        # Taken from the largest neighbour (the graphs)
+        other = max((i for i in range(len(sizes)) if i != index), key=sizes.__getitem__)
+        sizes[other] -= wanted - sizes[index]
+        sizes[index] = wanted
+        splitter.setSizes(sizes)
 
     def open_area_of(self, kind: str, besides):
         """The tab group holding the most open docks of this kind (not floating)."""
