@@ -76,6 +76,11 @@ class PVCurve(Procedure):
         help="Wait |Δangle| / speed after each rotation",
     )  # fmt: skip
 
+    def active_plots(self, quantities=None):
+        if self.hot_cold:
+            return self.plots
+        return tuple(p for p in self.plots if p.table != "y_factor")
+
     def slots(self):
         slots = dict(self.requires)
         if self.hot_cold:

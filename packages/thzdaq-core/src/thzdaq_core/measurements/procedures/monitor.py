@@ -125,8 +125,23 @@ class Monitor(Procedure):
     def plot_window(self):
         return self.window or None
 
+    def active_plots(self, quantities=None):
+        """The graphs of the units of the chosen values (P-t for dBm, ...)."""
+        if quantities is None:
+            return self.plots
+        titles = set()
+        for ref in self.refs():
+            try:
+                titles.update(plot_for(q) for q in self.choose(ref, quantities(ref)))
+            except ProcedureError:
+                continue
+        return tuple(p for p in self.plots if p.title in titles)
+
     def chosen(self, ref: str, device: Any) -> List[Quantity]:
-        available = monitor_quantities(quantities_of(device))
+        return self.choose(ref, quantities_of(device))
+
+    def choose(self, ref: str, quantities: Iterable[Quantity]) -> List[Quantity]:
+        available = monitor_quantities(quantities)
         keys = [key for r, key in map(split_entry, self.watch) if r == ref and key]
         if not keys:
             return default_quantities(available)

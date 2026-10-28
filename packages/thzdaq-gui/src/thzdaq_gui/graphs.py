@@ -397,6 +397,7 @@ class GraphHub(QObject):
     graph_created = Signal(object)  # GraphWidget or MapGraphWidget
     raise_requested = Signal(object)  # show this graph's dock in front
     show_requested = Signal(object)  # open this graph's dock if closed
+    run_requested = Signal(list)  # graphs of a run starting: all on screen
     graph_renamed = Signal(object)  # a custom graph, its new title
     graph_removed = Signal(object)  # a custom graph to delete
     custom_changed = Signal()  # the custom graphs to remember
@@ -447,6 +448,10 @@ class GraphHub(QObject):
     def show_graph(self, title: str) -> None:
         """On screen, without taking the front from another graph."""
         self.show_requested.emit(self.graph(title))
+
+    def show_run(self, titles: List[str]) -> None:
+        """Graphs a run fills, each in front of its own tab group."""
+        self.run_requested.emit([self.graph(title) for title in titles])
 
     def _check_free(self, title: str) -> str:
         title = title.strip()

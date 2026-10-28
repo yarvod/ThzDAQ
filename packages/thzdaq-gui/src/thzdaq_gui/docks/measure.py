@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.errors import ProcedureError
+from thzdaq_core.errors import ProcedureError, StationError
 from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_core.measurements.procedures.monitor import (
     KEY_SEPARATOR,
@@ -34,6 +34,7 @@ from thzdaq_core.measurements.procedures.monitor import (
     monitor_quantities,
     split_entry,
 )
+from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
@@ -74,6 +75,7 @@ class ProcedureBox(QWidget):
         self.window = None  # seconds of the live curves to show
         self.raised = False
         self.reached: List[str] = []  # graphs that got data before the first step
+        self.expected: List[str] = []  # graphs put on screen at Start
         self.outcome = ""  # how the last run ended, for the status line
         self.ui_running = False
         self.settings_key = f"procedures/{procedure_class.name}"
@@ -206,6 +208,14 @@ class ProcedureBox(QWidget):
     def mapping(self) -> Dict[str, str]:
         return {**self.devices.mapping(), **self.fixed}
 
+    def slot_quantities(self, slot: str):
+        """What the device chosen for a slot reads (a monitor's graphs by unit)."""
+        ref = self.mapping().get(slot)
+        try:
+            return self.session.station.quantities(ref) if ref else []
+        except (StationError, InstrumentError):
+            return []
+
     # Status for the folded log and for whoever shows this run elsewhere
     def note(self, text: str) -> None:
         self.log.appendPlainText(text)
@@ -273,6 +283,8 @@ class ProcedureBox(QWidget):
         self.window = procedure.plot_window()
         self.raised = False
         self.reached = []
+        self.expected = [p.title for p in procedure.active_plots(self.slot_quantities)]
+        self.hub.show_run(self.expected)
         self.log.clear()
         self.log_box.set_summary("")
         self.set_state("Connecting to devices...")
@@ -334,19 +346,14 @@ class ProcedureBox(QWidget):
             self.reached.extend(t for t in reached if t not in self.reached)
 
     def raise_graph(self) -> None:
-        """After the first step the graphs that got data are on screen (closed
-        ones join the graphs' tab group) and one comes to the front: the first
-        in the procedure's plots (P-t before T-t and V-t), whatever device was
-        read first."""
+        """After the first step: graphs that got data without being expected
+        at Start join the graphs of the run."""
         if self.raised or not self.reached:
             return
         self.raised = True
-        order = [spec.title for spec in self.procedure_class.plots]
-        front = min(self.reached, key=order.index)
-        for title in self.reached:
-            if title != front:
-                self.hub.show_graph(title)
-        self.hub.raise_graph(front)
+        extra = [title for title in self.reached if title not in self.expected]
+        if extra:
+            self.hub.show_run(self.expected + extra)
 
     def on_progress(self, done: int, total) -> None:
         self.raise_graph()

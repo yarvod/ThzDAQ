@@ -607,11 +607,15 @@ class TestMeasureAndData:
         box.form.editors["interval"].set(0.05)
         box.form.editors["duration"].set(0.2)
         box.form.editors["window"].set(60)
-        raised = []
-        window.hub.raise_requested.connect(lambda w: raised.append(w.title))
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
         finished = []
         box.runner.finished.connect(finished.append)
         box.start()
+        # At Start, before any reading: the graphs of the units chosen
+        assert shown == [["P-t", "V-t"]]
         wait(lambda: finished)
         samples = finished[0].records("samples")
         assert {(s["device"], s["key"]) for s in samples} == {
@@ -620,11 +624,11 @@ class TestMeasureAndData:
         }
         assert window.hub.graph("P-t").items and window.hub.graph("V-t").items
         assert not window.hub.graph("p-t").items
-        assert raised == ["P-t"]  # one graph to the front: the first with data
-        # ... the others with data are on screen too, in the graphs' tab group
+        assert shown == [["P-t", "V-t"]]  # nothing unexpected got data
+        # Both in front, each in its own tab group
         v_t, p_t = window.docks["graph:V-t"], window.docks["graph:P-t"]
-        assert not v_t.isClosed() and not p_t.isClosed() and p_t.isCurrentTab()
-        assert v_t.dockAreaWidget() is p_t.dockAreaWidget()
+        assert p_t.isCurrentTab() and v_t.isCurrentTab()
+        assert v_t.dockAreaWidget() is not p_t.dockAreaWidget()
         assert box.window == 60
         assert isinstance(finished[0].id, int)
         # The choice is remembered
@@ -937,3 +941,61 @@ class TestFolding:
         assert section.summary.text() == f"completed #{finished[0].id}"
         # The folded log shows its last line
         assert box.log_box.summary.text().startswith("saved ")
+
+
+class TestRunGraphs:
+    @staticmethod
+    def corner(window, dock):
+        return dock.dockAreaWidget().mapTo(
+            window, dock.dockAreaWidget().rect().topLeft()
+        )
+
+    def test_four_graphs_of_a_run_make_a_grid(self, window, app):
+        window.resize(1500, 900)
+        titles = ["P-V", "I-V", "Y-V", "Tn-V"]
+        window.hub.show_run(titles)
+        app.processEvents()
+        docks = [window.docks[f"graph:{t}"] for t in titles]
+        areas = [d.dockAreaWidget() for d in docks]
+        assert len(set(areas)) == 4
+        assert all(d.isCurrentTab() and not d.isClosed() for d in docks)
+        # 2 x 2: P-V | I-V over Y-V | Tn-V
+        (x0, y0), (x1, y1), (x2, y2), (x3, y3) = [
+            (p.x(), p.y()) for p in (self.corner(window, d) for d in docks)
+        ]
+        assert y0 == y1 and x0 == x2 and y2 == y3 and x1 == x3
+        assert x1 > x0 and y2 > y0
+
+    def test_groups_of_the_user_are_reused(self, window, app):
+        import PySide6QtAds as QtAds
+
+        iv, pv = window.docks["graph:I-V"], window.docks["graph:P-V"]
+        window.dock_manager.addDockWidget(
+            QtAds.RightDockWidgetArea, pv, iv.dockAreaWidget()
+        )
+        iv.dockAreaWidget().setCurrentDockWidget(window.docks["graph:Y-V"])
+        before = len(window.graph_areas())
+        window.hub.show_run(["P-V", "I-V"])
+        app.processEvents()
+        # Nothing moves: each is in front of the group it was in
+        assert len(window.graph_areas()) == before
+        assert pv.isCurrentTab() and iv.isCurrentTab()
+        assert pv.dockAreaWidget() is not iv.dockAreaWidget()
+
+    def test_past_four_groups_graphs_wait_behind_tabs(self, window, app):
+        titles = ["P-V", "I-V", "Y-V", "Tn-V", "P-IF"]
+        window.hub.show_run(titles)
+        app.processEvents()
+        assert len(window.graph_areas()) == 4
+        assert not window.docks["graph:P-IF"].isClosed()
+        assert all(window.docks[f"graph:{t}"].isCurrentTab() for t in titles[:4])
+
+    def test_pv_without_loads_opens_two_graphs_at_start(self, window, monkeypatch):
+        box = window.docks["measure:sis.pv_curve"].widget().box
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
+        monkeypatch.setattr(box.runner, "start", lambda *a, **k: None)
+        box.start()
+        assert shown == [["P-V", "I-V"]]

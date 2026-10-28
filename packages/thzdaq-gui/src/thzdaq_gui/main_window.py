@@ -72,6 +72,13 @@ DEFAULT_PERSPECTIVE = "Default"
 AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
 DEVICE_HANG_S = 5.0
 FIT_SHARE = 0.4  # a dock opened on its side takes at most this part of the window
+# Splits that grow the graph groups of a run to 2 x 2, by groups in use:
+# right of the first, below the first, below the second
+GRID_SPLITS = {
+    1: (QtAds.RightDockWidgetArea, 0),
+    2: (QtAds.BottomDockWidgetArea, 0),
+    3: (QtAds.BottomDockWidgetArea, 1),
+}
 # Where a dock of each kind opens when no dock of its kind is on screen
 HOME_AREAS = {
     "graph": QtAds.CenterDockWidgetArea,
@@ -155,6 +162,7 @@ class MainWindow(QMainWindow):
         self.hub.show_requested.connect(
             lambda widget: self.open_dock(graph_dock_name(widget), activate=False)
         )
+        self.hub.run_requested.connect(self.show_run_graphs)
         self.hub.graph_renamed.connect(self.rename_graph_dock)
         self.hub.graph_removed.connect(self.delete_graph)
 
@@ -536,6 +544,53 @@ class MainWindow(QMainWindow):
 
     def raise_graph(self, widget) -> None:
         self.open_dock(graph_dock_name(widget))
+
+    def show_run_graphs(self, widgets) -> None:
+        """Graphs of a starting run all on screen, each in front of its tab
+        group and no two in one group: a graph that would share one moves to
+        a graph group showing nothing of this run, else a group splits
+        towards a 2 x 2 grid. Past four groups the rest wait behind tabs."""
+        used, placed = [], []
+        for widget in widgets:
+            name = graph_dock_name(widget)
+            dock = self.docks.get(name)
+            if dock is None:
+                continue
+            if dock.isClosed():
+                self.open_dock(name, activate=False)
+            area = dock.dockAreaWidget()
+            if area is None or dock.isFloating() or dock.isAutoHide():
+                dock.setAsCurrentTab()
+                continue
+            if area in used:
+                free = [a for a in self.graph_areas() if a not in used]
+                if free:
+                    self.dock_manager.addDockWidgetTabToArea(dock, free[0])
+                elif len(used) in GRID_SPLITS:
+                    side, index = GRID_SPLITS[len(used)]
+                    self.dock_manager.addDockWidget(side, dock, used[index])
+                else:
+                    continue  # stays behind a tab of a group in use
+                area = dock.dockAreaWidget()
+            used.append(area)
+            placed.append(dock)
+        # Last: a graph opened into a group and moved on leaves another in front
+        for dock in placed:
+            dock.setAsCurrentTab()
+        self.sync_bodies()
+
+    def graph_areas(self):
+        """Tab groups in the window holding open graphs."""
+        areas = []
+        for name, dock in self.docks.items():
+            if not name.startswith("graph:") or dock.isClosed():
+                continue
+            if dock.isFloating() or dock.isAutoHide():
+                continue
+            area = dock.dockAreaWidget()
+            if area is not None and area not in areas:
+                areas.append(area)
+        return areas
 
     def rename_graph_dock(self, widget) -> None:
         name = graph_dock_name(widget)
