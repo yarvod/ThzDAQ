@@ -8,8 +8,10 @@ from thzdaq_core.station.config import StationConfig
 from thzdaq_core.station.station import Station
 from thzdaq_core.station.storage import load_station, save_station
 
+from thzdaq_gui.folders import MEASUREMENTS, PROFILES, Folders
 from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.processes import Processes
+from thzdaq_gui.settings import stations_dir
 from thzdaq_gui.workers import DeviceWorker, QtRunner
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,10 @@ class Session(QObject):
         self.store = MeasurementStore(data_root)
         self.worker = DeviceWorker(self)
         self.measurements = MeasurementsModel(self.store, self)
+        # Where file dialogs start until the user picks a folder of a kind
+        self.folders = Folders(
+            {MEASUREMENTS: lambda: self.store.root, PROFILES: stations_dir}
+        )
         self.runners: List[QtRunner] = []
         self.processes = Processes(self)  # what runs now, for the Processes dock
         self.station: Optional[Station] = None

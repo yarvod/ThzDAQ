@@ -566,7 +566,7 @@ class TestMeasureAndData:
         path = MeasurementStore(tmp_path / "other").save(measurement)
         data = window.dataWidget
         monkeypatch.setattr(
-            "thzdaq_gui.docks.data.QFileDialog.getOpenFileNames",
+            "thzdaq_gui.folders.QFileDialog.getOpenFileNames",
             lambda *a, **k: ([str(path)], ""),
         )
         data.open_files()
@@ -575,7 +575,7 @@ class TestMeasureAndData:
         data.table.selectRow(0)
         csv_path = tmp_path / "iv.csv"
         monkeypatch.setattr(
-            "thzdaq_gui.docks.data.QFileDialog.getSaveFileName",
+            "thzdaq_gui.folders.QFileDialog.getSaveFileName",
             lambda *a, **k: (str(csv_path), ""),
         )
         data.export()
@@ -584,6 +584,43 @@ class TestMeasureAndData:
             .splitlines()[0]
             .startswith('"Voltage, V"')
         )
+
+    def test_file_dialogs_start_where_the_last_file_went(
+        self, window, session, tmp_path, monkeypatch
+    ):
+        import shutil
+        from pathlib import Path
+
+        from thzdaq_core.data import Measurement
+        from thzdaq_gui.folders import MEASUREMENTS, Folders
+        from thzdaq_gui.settings import settings
+
+        settings().remove("folders")
+        measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+        measurement.append("iv", {"voltage": 1e-3, "current": 5e-5})
+        session.measurements.add(measurement)
+        window.dataWidget.table.selectRow(0)
+        results = tmp_path / "results"
+        starts = []
+
+        def save(parent, title, start, filters):
+            starts.append(Path(start).parent.resolve())
+            return str(results / Path(start).name), ""
+
+        monkeypatch.setattr("thzdaq_gui.folders.QFileDialog.getSaveFileName", save)
+        # Nothing chosen yet: the data folder of the session, not the program's
+        window.dataWidget.save_as()
+        assert starts[0] == Path(session.store.root).resolve()
+        assert (results / f"{measurement.id}_sis_iv_curve.json").exists()
+        # Then where the last file went, also after a restart
+        window.dataWidget.export()
+        assert starts[1] == results.resolve()
+        assert (results / f"{measurement.id}_iv.csv").exists()
+        later = Folders({MEASUREMENTS: lambda: tmp_path / "data"})
+        assert later.folder(MEASUREMENTS) == results.resolve()
+        # A folder that is gone (a removed USB stick): the default again
+        shutil.rmtree(results)
+        assert later.folder(MEASUREMENTS) == tmp_path / "data"
 
     def test_monitor_dock_watches_ticked_values(self, window, session, wait):
         box = window.docks["measure:monitor.time"].widget().box

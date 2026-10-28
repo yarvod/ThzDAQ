@@ -41,8 +41,9 @@ from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.processes import ProcessesWidget
 from thzdaq_gui.docks.measure import measure_widget
-from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
+from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
+from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graphs import (
     AddCurveDialog,
     GraphHub,
@@ -829,12 +830,16 @@ class MainWindow(QMainWindow):
             self.settings.setValue("station/path", str(self.session.path))
 
     def open_profile(self) -> None:
-        path = ask_profile_path(self, save=False)
+        path = self.session.folders.open_path(
+            self, PROFILES, "Open station profile", "YAML (*.yaml *.yml)"
+        )
         if path:
             self.load_profile(path, self.session.simulate)
 
     def new_profile(self) -> None:
-        path = ask_profile_path(self, save=True)
+        path = self.session.folders.save_path(
+            self, PROFILES, "New station profile", "", "YAML (*.yaml)"
+        )
         if path:
             try:
                 self.session.new_station(path, Path(path).stem)
