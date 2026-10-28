@@ -14,6 +14,7 @@ from thzdaq_core.measurements.procedures.common import (
     BIAS,
     restore_angle_on_exit,
     restore_bias_on_exit,
+    warn_without_contrast,
 )
 from thzdaq_core.measurements.registry import register_procedure
 
@@ -123,18 +124,21 @@ class PVCurve(Procedure):
                     ctx.sleep(self.load_delay)
                 sweeps[state] = self._sweep(ctx, bias, detector, angle, state)
             if load is not None:
+                temperatures = []
                 for voltage, hot, cold in match_hot_cold(
                     sweeps["hot"], sweeps["cold"], self.match_window
                 ):
+                    tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
+                    temperatures.append(tn)
                     ctx.record(
                         "y_factor",
                         angle=angle,
                         voltage=voltage,
                         y_factor=hot - cold,
-                        noise_temperature=noise_temperature(
-                            hot, cold, self.t_hot, self.t_cold
-                        ),
+                        noise_temperature=tn,
                     )
+                where = f"angle {angle:g} deg" if grid is not None else "hot/cold"
+                warn_without_contrast(ctx, temperatures, where)
 
     def _sweep(self, ctx, bias, detector, angle, load):
         points = []

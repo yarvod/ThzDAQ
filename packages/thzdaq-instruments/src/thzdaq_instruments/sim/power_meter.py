@@ -1,3 +1,4 @@
+import math
 import random
 from typing import Callable, Optional
 
@@ -6,12 +7,26 @@ from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.quantities import POWER_METER_QUANTITIES, POWER_UNITS
 from thzdaq_instruments.sim.lively import Wobble, still
 
+# The receiver a simulated bench measures with its hot and cold loads
+T_COLD, T_HOT = 77.0, 300.0  # K
+T_RECEIVER = 60.0  # K
+
+
+def load_power(power: float, load: Optional[str]) -> float:
+    """Power with a load in the beam, P ∝ T_load + T_receiver: `power` with the
+    cold load (or none), more with the hot one (Y ≈ 4.2 dB, Tn = T_RECEIVER)."""
+    if load != "hot":
+        return power
+    return power + 10 * math.log10((T_HOT + T_RECEIVER) / (T_COLD + T_RECEIVER))
+
 
 class SimPowerMeter(Instrument):
     """Reads `power` (dBm) or, when given, the value of `model()`.
 
     The model lets a simulated bench couple instruments, e.g. power that depends
-    on the chopper position or the IF filter frequency. Has the settings of an
+    on the chopper position or the IF filter frequency. `load_position()`, when
+    given, says where the load of the bench is ("hot", "cold"): the hot one adds
+    power as a receiver would see it (load_power). Has the settings of an
     R&S NRX (display unit, averaging, filter and aperture time, limits).
     """
 
@@ -29,6 +44,7 @@ class SimPowerMeter(Instrument):
         super().__init__(name=name)
         self.power = power
         self.model = model
+        self.load_position: Optional[Callable[[], Optional[str]]] = None
         self.noise = noise
         self._random = random.Random(seed)
         self.wobble = still
@@ -48,6 +64,8 @@ class SimPowerMeter(Instrument):
 
     def read_power(self) -> float:
         value = self.model() if self.model is not None else self.power
+        if self.load_position is not None:
+            value = load_power(value, self.load_position())
         if self.noise:
             value += self._random.gauss(0.0, self.noise)
         self._last = value + self.wobble()
