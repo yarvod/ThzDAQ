@@ -25,47 +25,124 @@ class TestWindow:
         assert not any(name.startswith("device:power_supply_1:") for name in names)
         menus = [a.text() for a in window.menuBar().actions()]
         assert menus == ["&File", "&Base", "&Devices", "&Measures", "&Graphs", "&Help"]
-        titles = [a.text() for a in window.menuDevices.actions()]
+        titles = [e.title for e in window.dock_entries() if e.section == "Devices"]
         assert "SIS1" in titles and "IF switch supply" in titles
 
-    def test_menus_show_checks_and_bring_docks_forward(self, window):
-        action = window.menu_actions["graph:Tn-V"]
-        assert action.isCheckable() and action.icon().isNull()
-        assert not action.isChecked()
-        action.trigger()
+    def test_device_menu_is_a_tree_by_type(self, window):
+        navigator = window.navigators["Devices"]
+        navigator.prepare()
+        top = [
+            navigator.tree.topLevelItem(i).text(0)
+            for i in range(navigator.tree.topLevelItemCount())
+        ]
+        # Several devices of a type share a branch, a single one stays a row
+        assert "SIS bias  (2)" in top and "SIS coil  (2)" in top
+        assert "Power supply  (2)" in top and "SIS1" not in top
+        assert "R&S NRX" in top  # the only power meter
+        group = navigator.tree.topLevelItem(top.index("SIS bias  (2)"))
+        assert [group.child(i).text(0) for i in range(group.childCount())] == [
+            "SIS1",
+            "SIS2",
+        ]
+        assert not group.isExpanded()
+        navigator.clicked(group, 0)
+        assert group.isExpanded()
+        # The branch stays open the next time the menu opens
+        navigator.prepare()
+        group = navigator.tree.topLevelItem(top.index("SIS bias  (2)"))
+        assert group.isExpanded()
+        measures = window.navigators["Measures"]
+        measures.prepare()
+        assert "2SB  (5)" in [
+            measures.tree.topLevelItem(i).text(0)
+            for i in range(measures.tree.topLevelItemCount())
+        ]
+
+    def test_search_finds_docks_flat(self, window):
+        navigator = window.navigators["Devices"]
+        navigator.prepare()
+        navigator.search.setText("sis2")
+        found = [item.text(0) for item in navigator.items()]
+        assert found == ["SIS2", "SIS2 coil"]
+        assert navigator.items()[0].text(1) == "Devices › SIS bias"
+        # Words in any order, the type included
+        navigator.search.setText("supply power")
+        assert len(navigator.items()) == 2
+        navigator.search.setText("nothing like this")
+        assert navigator.items() == []
+
+    def test_click_shows_a_dock_and_the_eye_closes_it(self, window):
+        navigator = window.navigators["Graphs"]
+        navigator.prepare()
+        navigator.search.setText("Tn-V")
+        item = navigator.item("graph:Tn-V")
         dock = window.docks["graph:Tn-V"]
-        assert not dock.isClosed() and action.isChecked()
-        # Behind another tab: the menu brings it forward instead of closing it
+        assert dock.isClosed() and window.dock_state("graph:Tn-V") == "closed"
+        shown = []
+        navigator.activated.connect(shown.append)
+        navigator.clicked(item, 0)
+        assert not dock.isClosed() and dock.isCurrentTab()
+        assert shown == ["graph:Tn-V"] and window.dock_state("graph:Tn-V") == "front"
+        # Behind another tab: a click brings it forward instead of closing it
         other = window.docks["graph:I-V"]
         window.dock_manager.addDockWidgetTabToArea(dock, other.dockAreaWidget())
         other.setAsCurrentTab()
-        assert not dock.isCurrentTab()
-        action.trigger()
-        assert dock.isCurrentTab() and action.isChecked()
-        action.trigger()
-        assert dock.isClosed() and not action.isChecked()
+        assert window.dock_state("graph:Tn-V") == "behind"
+        navigator.clicked(navigator.item("graph:Tn-V"), 0)
+        assert dock.isCurrentTab() and not dock.isClosed()
+        # Only the eye closes it, and opens it again
+        navigator.clicked(navigator.item("graph:Tn-V"), 2)
+        assert dock.isClosed()
+        navigator.clicked(navigator.item("graph:Tn-V"), 2)
+        assert not dock.isClosed()
 
-    def test_menu_checks_follow_the_default_layout(self, window):
+    def test_shown_docks_flash_and_side_bars_unfold(self, window):
+        from thzdaq_gui.navigator import Flash
+
+        window.show_dock("data")
+        dock = window.docks["data"]
+        assert dock.isAutoHide() and dock.autoHideDockContainer().isVisible()
+        assert window.dock_state("data") == "front"
+        assert dock.findChildren(Flash)
+
+    def test_quick_find_lists_every_dock(self, window):
+        window.quickFind.popup()
+        navigator = window.quickFind.navigator
+        sections = [
+            navigator.tree.topLevelItem(i).text(0)
+            for i in range(navigator.tree.topLevelItemCount())
+        ]
+        assert sections == ["Base", "Devices", "Measures", "Graphs"]
+        navigator.search.setText("p-v")
+        assert navigator.tree.currentItem().data(0, Qt.UserRole) == "graph:P-V"
+        from PySide6.QtCore import QEvent
+        from PySide6.QtGui import QKeyEvent
+
+        navigator.eventFilter(
+            navigator.search, QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier)
+        )
+        assert window.dock_state("graph:P-V") == "front"
+        assert not window.quickFind.isVisible()
+
+    def test_menu_states_follow_the_default_layout(self, window):
         # ADS opens the first dock of each area without viewToggled
         wrong = [
             name
             for name, dock in window.docks.items()
-            if window.menu_actions[name].isChecked() == dock.isClosed()
+            if (window.dock_state(name) == "closed") != dock.isClosed()
         ]
         assert wrong == []
-        assert window.menu_actions["graph:I-V"].isChecked()
+        assert window.dock_state("graph:I-V") != "closed"
 
     def test_docks_open_with_their_kind(self, window):
         # Default layout: SIS biases open at the bottom, graphs in the centre
         bias_area = window.docks["device:sis_bias_1"].dockAreaWidget()
         supply = window.docks["device:power_supply_1"]
         assert supply.isClosed()
-        window.menu_actions["device:power_supply_1"].trigger()
+        window.show_dock("device:power_supply_1")
         assert not supply.isClosed() and supply.dockAreaWidget() is bias_area
-        assert (
-            supply.isCurrentTab()
-            and window.menu_actions["device:power_supply_1"].isChecked()
-        )
+        assert supply.isCurrentTab()
+        assert window.dock_state("device:power_supply_1") == "front"
 
     def test_custom_graph_rename_delete_and_keep(self, window, session, monkeypatch):
         from thzdaq_gui.graphs import Axis
@@ -83,7 +160,7 @@ class TestWindow:
         hub.custom_changed.emit()
         assert hub.graphs["Mine 2"] is graph and "Mine" not in hub.graphs
         assert dock.windowTitle() == "Mine 2"
-        assert window.menu_actions["graph:custom1"].text() == "Mine 2"
+        assert window.entries["graph:custom1"].title == "Mine 2"
         with pytest.raises(ValueError):
             hub.rename(graph, "I-V")  # a graph of the procedures
         window.save_state()

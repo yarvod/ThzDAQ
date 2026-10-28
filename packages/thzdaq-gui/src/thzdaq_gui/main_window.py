@@ -13,7 +13,7 @@ from typing import Dict, Optional
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -24,7 +24,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QToolButton,
     QWidget,
+    QWidgetAction,
 )
 from thzdaq_core.errors import ProcedureError
 from thzdaq_core.measurements.registry import get_procedure, list_procedures
@@ -44,6 +46,17 @@ from thzdaq_gui.graphs import (
     MapGraphWidget,
     close_plots,
     close_views,
+)
+from thzdaq_gui.navigator import (
+    BEHIND,
+    CLOSED,
+    FRONT,
+    DockEntry,
+    DockNavigator,
+    Flash,
+    QuickFind,
+    instrument_type,
+    type_title,
 )
 from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
 from thzdaq_gui.updates import can_self_update, latest_update, launch_updater
@@ -72,6 +85,8 @@ PROCEDURE_ICONS = {
     "monitor": "monitor-eye",
     "grid": "rotate-3d-variant",
 }
+PROCEDURE_GROUPS = {"sis": "SIS", "if": "IF", "two_sb": "2SB"}
+SECTIONS = ("Base", "Devices", "Measures", "Graphs")
 
 
 def configure_docking() -> None:
@@ -126,7 +141,7 @@ class MainWindow(QMainWindow):
         self.dock_manager = QtAds.CDockManager(self)
         self.dock_manager.setStyleSheet(theme.dock_style_sheet())
         self.docks: Dict[str, QtAds.CDockWidget] = {}
-        self.menu_actions: Dict[str, QAction] = {}
+        self.entries: Dict[str, DockEntry] = {}
         self.dock_signatures: Dict[str, tuple] = {}
         # Docks are added open and then arranged: build contents only after that
         self._building = True
@@ -209,17 +224,23 @@ class MainWindow(QMainWindow):
         self.menuDevices = bar.addMenu("&Devices")
         self.menuMeasures = bar.addMenu("&Measures")
         self.menuGraphs = bar.addMenu("&Graphs")
-        for menu in (
-            self.menuBase,
-            self.menuDevices,
-            self.menuMeasures,
-            self.menuGraphs,
-        ):
-            menu.aboutToShow.connect(self.sync_menu_checks)
         new_graph = QAction(theme.icon("plus"), "New graph…", self)
         new_graph.triggered.connect(self.new_graph)
         self.menuGraphs.addAction(new_graph)
         self.menuGraphs.addSeparator()
+        # Each menu is a search field over the tree of its docks
+        self.navigators: Dict[str, DockNavigator] = {}
+        for section, menu in zip(
+            SECTIONS,
+            (self.menuBase, self.menuDevices, self.menuMeasures, self.menuGraphs),
+        ):
+            navigator = self.navigator((section,))
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(navigator)
+            menu.addAction(action)
+            menu.aboutToShow.connect(navigator.prepare)
+            navigator.activated.connect(lambda _, m=menu: m.close())
+            self.navigators[section] = navigator
         help_menu = bar.addMenu("&Help")
         updates = QAction(theme.icon("update"), "Check for updates…", self)
         updates.triggered.connect(self.show_updates)
@@ -227,6 +248,16 @@ class MainWindow(QMainWindow):
         about = QAction(theme.icon("information-outline"), "About ThzDAQ", self)
         about.triggered.connect(self.about)
         help_menu.addAction(about)
+
+    def navigator(self, sections=None) -> DockNavigator:
+        return DockNavigator(
+            self.dock_entries,
+            self.dock_state,
+            self.show_dock,
+            self.toggle_dock,
+            sections,
+            self.settings,
+        )
 
     def about(self) -> None:
         where = (
@@ -268,10 +299,35 @@ class MainWindow(QMainWindow):
             action = toolbar.addAction(theme.icon(icon_name), tip)
             action.triggered.connect(slot)
         toolbar.addSeparator()
+        # Ctrl+K (Cmd+K on macOS) finds any dock, from any window of the app
+        self.quickFind = QuickFind(self.navigator(), self)
+        find = QAction(theme.icon("magnify"), "Find…", self)
+        find.setToolTip("Find a device, measurement or graph (Ctrl+K)")
+        find.triggered.connect(self.quickFind.popup)
+        self.findShortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.findShortcut.setContext(Qt.ApplicationShortcut)
+        self.findShortcut.activated.connect(self.quickFind.popup)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.toolbarSpacer = toolbar.addWidget(spacer)
+        button = QToolButton()
+        button.setDefaultAction(find)
+        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        button.setText("Find…  Ctrl+K")
+        toolbar.addWidget(button)
 
     # Docks
     def add_dock(
-        self, name: str, title: str, widget, menu, icon=None, area=None, auto_hide=None
+        self,
+        name: str,
+        title: str,
+        widget,
+        section: str,
+        icon=None,
+        area=None,
+        auto_hide=None,
+        group: str = "",
+        hint: str = "",
     ):
         dock = QtAds.CDockWidget(name)
         dock.setWindowTitle(title)
@@ -280,13 +336,9 @@ class MainWindow(QMainWindow):
             dock.setIcon(icon)
         dock.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, False)
         dock.toggleViewAction().setText(title)
-        # Menus show a check mark: a checkable action with an icon draws no check
-        action = QAction(title, self)
-        action.setCheckable(True)
-        action.triggered.connect(lambda checked, n=name: self.menu_toggled(n, checked))
-        dock.viewToggled.connect(action.setChecked)
-        menu.addAction(action)
-        self.menu_actions[name] = action
+        self.entries[name] = DockEntry(
+            name, title, section, icon or theme.icon("dock-window"), group, hint
+        )
         if isinstance(widget, DockBody):
             dock.viewToggled.connect(
                 lambda on, body=widget: self._building or body.set_open(on)
@@ -297,7 +349,6 @@ class MainWindow(QMainWindow):
         else:
             self.dock_manager.addDockWidgetTab(area or QtAds.CenterDockWidgetArea, dock)
         self.docks[name] = dock
-        action.setChecked(not dock.isClosed())
         if isinstance(widget, DockBody) and not self._building:
             widget.set_open(not dock.isClosed())
         return dock
@@ -308,18 +359,44 @@ class MainWindow(QMainWindow):
             body = dock.widget()
             if isinstance(body, DockBody):
                 body.set_open(not dock.isClosed())
-        self.sync_menu_checks()
 
-    def menu_toggled(self, name: str, checked: bool) -> None:
-        """Open a closed dock; a dock hidden behind another tab is brought to front."""
+    # Finding docks (menus, Ctrl+K)
+    def dock_entries(self):
+        entries = [self.entries[name] for name in self.docks if name in self.entries]
+        return sorted(entries, key=lambda e: SECTIONS.index(e.section))
+
+    def dock_state(self, name: str) -> str:
+        dock = self.docks.get(name)
+        if dock is None or dock.isClosed():
+            return CLOSED
+        if dock.isAutoHide():
+            container = dock.autoHideDockContainer()
+            return FRONT if container is not None and container.isVisible() else BEHIND
+        return FRONT if dock.isCurrentTab() else BEHIND
+
+    def show_dock(self, name: str) -> None:
+        """Wherever the dock is, bring it in front of the user and flash it."""
         dock = self.docks.get(name)
         if dock is None:
             return
-        if dock.isClosed() or not dock.isCurrentTab():
+        self.open_dock(name)
+        window = dock.window()
+        if window.isMinimized():
+            window.showNormal()
+        window.raise_()
+        window.activateWindow()
+        self.dock_manager.setDockWidgetFocused(dock)
+        Flash(dock)
+
+    def toggle_dock(self, name: str) -> None:
+        dock = self.docks.get(name)
+        if dock is None:
+            return
+        if dock.isClosed():
             self.open_dock(name)
         else:
             dock.toggleView(False)
-        self.menu_actions[name].setChecked(not dock.isClosed())
+            self.sync_bodies()
 
     def open_dock(self, name: str, activate: bool = True) -> None:
         """Show a dock where its kind is: a closed one joins the tab group of
@@ -342,6 +419,8 @@ class MainWindow(QMainWindow):
         if activate:
             dock.setAsCurrentTab()
             dock.raise_()
+            if dock.isAutoHide() and dock.autoHideDockContainer() is not None:
+                dock.autoHideDockContainer().collapseView(False)
         self.sync_bodies()
 
     def open_area_of(self, kind: str, besides):
@@ -356,13 +435,6 @@ class MainWindow(QMainWindow):
             counts[area] = counts.get(area, 0) + 1
         return max(counts, key=counts.get) if counts else None
 
-    def sync_menu_checks(self) -> None:
-        """Check marks from the docks: ADS opens a dock it moves without viewToggled."""
-        for name, dock in self.docks.items():
-            action = self.menu_actions.get(name)
-            if action is not None:
-                action.setChecked(not dock.isClosed())
-
     def remove_dock(self, name: str) -> None:
         dock = self.docks.pop(name, None)
         if dock is None:
@@ -374,14 +446,7 @@ class MainWindow(QMainWindow):
             widget.stop()
         if widget is not None:
             close_views(widget)
-        for menu in (
-            self.menuDevices,
-            self.menuMeasures,
-            self.menuGraphs,
-            self.menuBase,
-        ):
-            menu.removeAction(self.menu_actions.get(name))
-        self.menu_actions.pop(name, None)
+        self.entries.pop(name, None)
         self.dock_manager.removeDockWidget(dock)
         dock.deleteLater()
 
@@ -403,14 +468,9 @@ class MainWindow(QMainWindow):
             ),
         ):
             dock = self.add_dock(
-                name,
-                title,
-                widget,
-                self.menuBase,
-                theme.icon(icon_name),
-                auto_hide=side,
+                name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
             )
-            self.toolbar.addAction(dock.toggleViewAction())
+            self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
 
     def add_measure_dock(self, cls) -> None:
         group = cls.name.split(".")[0]
@@ -418,8 +478,9 @@ class MainWindow(QMainWindow):
         # Built when the dock is first opened (DockBody)
         body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
         self.add_dock(
-            f"measure:{cls.name}", cls.title or cls.name, body, self.menuMeasures,
+            f"measure:{cls.name}", cls.title or cls.name, body, "Measures",
             icon, QtAds.RightDockWidgetArea,
+            group=PROCEDURE_GROUPS.get(group, type_title(group)), hint=cls.name,
         )  # fmt: skip
 
     def add_graph_dock(self, widget) -> None:
@@ -433,9 +494,11 @@ class MainWindow(QMainWindow):
             name,
             widget.title,
             widget,
-            self.menuGraphs,
+            "Graphs",
             icon,
             QtAds.CenterDockWidgetArea,
+            group="Custom" if getattr(widget, "custom", False) else "",
+            hint=name,
         )
         if not self._building:
             # Made later (New graph…, a monitor's new unit): opens with the graphs
@@ -450,7 +513,7 @@ class MainWindow(QMainWindow):
         if dock is not None:
             dock.setWindowTitle(widget.title)
             dock.toggleViewAction().setText(widget.title)
-            self.menu_actions[name].setText(widget.title)
+            self.entries[name].title = widget.title
 
     def delete_graph(self, widget) -> None:
         answer = QMessageBox.question(
@@ -522,14 +585,17 @@ class MainWindow(QMainWindow):
             factory = lambda ref=info.ref: self.device_widget(ref)  # noqa: E731
             self.dock_signatures[name] = signature
             icon = theme.device_icon(info.kind, info.instrument)
+            group, hint = self.device_group(info)
             if dock is None:
                 dock = self.add_dock(
                     name,
                     info.title,
                     DockBody(factory),
-                    self.menuDevices,
+                    "Devices",
                     icon,
                     QtAds.BottomDockWidgetArea,
+                    group=group,
+                    hint=hint,
                 )
                 if not getattr(self, "_restoring", False):
                     dock.toggleView(False)
@@ -537,7 +603,18 @@ class MainWindow(QMainWindow):
                 dock.widget().replace(factory)
                 dock.setWindowTitle(info.title)
                 dock.toggleViewAction().setText(info.title)
-                self.menu_actions[name].setText(info.title)
+                entry = self.entries[name]
+                entry.title, entry.icon, entry.group, entry.hint = (
+                    info.title, icon, group, hint,
+                )  # fmt: skip
+
+    def device_group(self, info):
+        """Branch of the menu (the type: SIS bias, Power supply) and words to search."""
+        spec = self.session.station.config.instruments[info.instrument]
+        key = (
+            info.kind if info.kind != "instrument" else instrument_type(info.instrument)
+        )
+        return type_title(key), f"{info.ref} {info.instrument} {spec.driver}"
 
     def device_widget(self, ref: str) -> QWidget:
         try:
@@ -738,7 +815,6 @@ class MainWindow(QMainWindow):
         if DEFAULT_PERSPECTIVE not in self.dock_manager.perspectiveNames():
             self.dock_manager.addPerspective(DEFAULT_PERSPECTIVE)
             self.perspective = DEFAULT_PERSPECTIVE
-        self.sync_menu_checks()
 
     def save_perspectives(self) -> None:
         self.settings.remove("Perspectives")
