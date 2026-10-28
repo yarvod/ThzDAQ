@@ -368,7 +368,7 @@ instruments:
       timeout: 10.0
   power_meter_1:
     driver: rs.nrx
-    title: R&S NRX
+    title: Rohde Schwarz NRX Power Meter
     connection:
       kind: socket
       host: 169.254.2.20
