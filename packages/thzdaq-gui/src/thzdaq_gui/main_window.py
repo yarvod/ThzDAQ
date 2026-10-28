@@ -64,6 +64,7 @@ from thzdaq_gui.navigator import (
 )
 from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
 from thzdaq_gui.updates import can_self_update, latest_update, launch_updater
+from thzdaq_gui.modes import MEASUREMENT, MODE_KEY, Lite, Pro
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 from thzdaq_gui.settings import location
 from thzdaq_gui.settings import settings as app_settings
@@ -86,17 +87,9 @@ GRID_SPLITS = {
 HOME_AREAS = {
     "graph": QtAds.CenterDockWidgetArea,
     "measure": QtAds.RightDockWidgetArea,
-    "measurement": QtAds.RightDockWidgetArea,
+    MEASUREMENT: QtAds.RightDockWidgetArea,
     "device": QtAds.BottomDockWidgetArea,
 }
-# Lite: one layout, the chosen measurement run from the bar on top; Pro:
-# perspectives and a dock per measurement
-LITE, PRO = "lite", "pro"
-MODE_KEY = "ui/mode"
-CHOSEN_KEY = "ui/measurement"
-# Each mode keeps its layout; Pro keeps the key of the layouts before modes
-STATE_KEYS = {PRO: "window/docks", LITE: "window/docks_lite"}
-DEFAULT_MEASUREMENT = "sis.iv_curve"
 CUSTOM_GRAPHS = "graphs/custom"
 STATE_VERSION = 3
 
@@ -145,8 +138,6 @@ class MainWindow(QMainWindow):
             if settings_file
             else app_settings()
         )
-        saved_mode = self.settings.value(MODE_KEY)
-        self.mode = mode or (saved_mode if saved_mode in (LITE, PRO) else LITE)
         self.updateDialog = None
         self.pending_update: Optional[Path] = None  # a downloaded build to install
         self.perspective: Optional[str] = None
@@ -162,6 +153,14 @@ class MainWindow(QMainWindow):
         self.entries: Dict[str, DockEntry] = {}
         self.auto_hide_sides: Dict[str, int] = {}  # base docks: their side bar
         self.dock_signatures: Dict[str, tuple] = {}
+        # Lite runs the chosen measurement from the bar on top, its widget
+        # borrowed into the Measurement dock
+        self.runBar = RunBar(list_procedures())
+        self.runBar.parameters_requested.connect(lambda: self.show_dock(MEASUREMENT))
+        self.measurementHost = MeasurementHost()
+        lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
+        self.modes = {m.key: m for m in (lite, Pro())}
+        self.mode = self.modes.get(mode or self.settings.value(MODE_KEY), lite)
         # Docks are added open and then arranged: build contents only after that
         self._building = True
         self.hub = GraphHub(self)
@@ -189,10 +188,8 @@ class MainWindow(QMainWindow):
         self.add_base_docks()
         for cls in list_procedures():
             self.add_measure_dock(cls)
-        # Lite: the chosen measurement, its widget borrowed from its Pro dock
-        self.measurementHost = MeasurementHost()
         self.add_dock(
-            "measurement", "Measurement", self.measurementHost, "Measures",
+            MEASUREMENT, "Measurement", self.measurementHost, "Measures",
             theme.icon("play-circle-outline"), QtAds.RightDockWidgetArea,
             listed=False,
         )  # fmt: skip
@@ -211,7 +208,7 @@ class MainWindow(QMainWindow):
             self.apply_default_layout()
         self._building = False
         self.apply_mode()
-        self.settle_mode()
+        self.enter_mode()
         # A default layout gets its widths once the window has a size
         self._fit_on_show = not restored
         self.refresh_perspectives()
@@ -307,9 +304,6 @@ class MainWindow(QMainWindow):
         toolbar.setObjectName("main_toolbar")
         toolbar.setMovable(False)
         self.toolbar = toolbar
-        self.runBar = RunBar(list_procedures())
-        self.runBar.chosen.connect(self.choose_measurement)
-        self.runBar.parameters_requested.connect(lambda: self.show_dock("measurement"))
         self.runBarAction = toolbar.addWidget(self.runBar)
         self.perspectives = QComboBox()
         self.perspectives.setSizeAdjustPolicy(QComboBox.AdjustToContents)
@@ -349,17 +343,14 @@ class MainWindow(QMainWindow):
         self.toolbarSpacer = toolbar.addWidget(spacer)
         self.modeActions: Dict[str, QAction] = {}
         group = QActionGroup(self)
-        for mode, text, tip in (
-            (LITE, "Lite", "One layout; measurements run from the bar on top"),
-            (PRO, "Pro", "Perspectives and a dock per measurement"),
-        ):
-            action = QAction(text, self)
+        for mode in self.modes.values():
+            action = QAction(mode.title, self)
             action.setCheckable(True)
-            action.setToolTip(tip)
-            action.triggered.connect(lambda _=False, m=mode: self.set_mode(m))
+            action.setToolTip(mode.tip)
+            action.triggered.connect(lambda _=False, key=mode.key: self.set_mode(key))
             group.addAction(action)
             toolbar.addAction(action)
-            self.modeActions[mode] = action
+            self.modeActions[mode.key] = action
         toolbar.addSeparator()
         button = QToolButton()
         button.setDefaultAction(find)
@@ -420,12 +411,8 @@ class MainWindow(QMainWindow):
         return sorted(entries, key=lambda e: SECTIONS.index(e.section))
 
     def dock_state(self, name: str) -> str:
-        if self.mode == LITE and name.startswith("measure:"):
-            # A measurement is on screen in Lite as the chosen one
-            if name != f"measure:{self.runBar.chosen_name()}":
-                return CLOSED
-            name = "measurement"
-        dock = self.docks.get(name)
+        shown = self.mode.dock_of(name)  # Lite: a measurement in its one dock
+        dock = self.docks.get(shown) if shown else None
         if dock is None or dock.isClosed():
             return CLOSED
         if dock.isAutoHide():
@@ -435,9 +422,7 @@ class MainWindow(QMainWindow):
 
     def show_dock(self, name: str) -> None:
         """Wherever the dock is, bring it in front of the user and flash it."""
-        if self.mode == LITE and name.startswith("measure:"):
-            self.choose_measurement(name.split(":", 1)[1])
-            name = "measurement"
+        name = self.mode.reveal(name)
         dock = self.docks.get(name)
         if dock is None:
             return
@@ -451,7 +436,7 @@ class MainWindow(QMainWindow):
         Flash(dock)
 
     def toggle_dock(self, name: str) -> None:
-        if self.mode == LITE and name.startswith("measure:"):
+        if self.mode.dock_of(name) != name:  # shown in another dock: choose it
             self.show_dock(name)
             return
         dock = self.docks.get(name)
@@ -968,7 +953,7 @@ class MainWindow(QMainWindow):
         """Graphs in the centre, measurements on the right (Lite: the chosen
         one), devices below."""
         for name, dock in self.docks.items():
-            if name.startswith(("graph:", "measure:", "device:", "measurement")):
+            if name.startswith(("graph:", "measure:", "device:", MEASUREMENT)):
                 dock.toggleView(False)
         center = None
         for title in ("I-V", "P-V", "Y-V", "P-IF"):
@@ -983,15 +968,7 @@ class MainWindow(QMainWindow):
             else:
                 self.dock_manager.addDockWidgetTabToArea(dock, center)
         right = None
-        for name in (
-            ("measurement",)
-            if self.mode == LITE
-            else (
-                "measure:sis.iv_curve",
-                "measure:sis.pv_curve",
-                "measure:monitor.time",
-            )
-        ):
+        for name in self.mode.measure_column:
             dock = self.docks.get(name)
             if dock is None:
                 continue
@@ -1013,7 +990,7 @@ class MainWindow(QMainWindow):
             else:
                 self.dock_manager.addDockWidgetTabToArea(dock, bottom)
         if (
-            self.mode == PRO
+            self.mode.perspectives
             and DEFAULT_PERSPECTIVE not in self.dock_manager.perspectiveNames()
         ):
             self.dock_manager.addPerspective(DEFAULT_PERSPECTIVE)
@@ -1021,31 +998,16 @@ class MainWindow(QMainWindow):
 
     # Modes
     def apply_mode(self) -> None:
-        """The toolbar of the mode: the run bar in Lite, perspectives in Pro."""
-        lite = self.mode == LITE
-        self.runBarAction.setVisible(lite)
+        """The toolbar of the mode: the run bar or perspectives."""
+        self.runBarAction.setVisible(self.mode.run_bar)
         for action in self.perspectiveActions:
-            action.setVisible(not lite)
-        self.modeActions[self.mode].setChecked(True)
+            action.setVisible(self.mode.perspectives)
+        self.modeActions[self.mode.key].setChecked(True)
 
-    def settle_mode(self) -> None:
-        """The docks of the mode: Lite shows the chosen measurement in its one
-        dock, Pro has a dock per measurement."""
-        measurement = self.docks["measurement"]
-        if self.mode == LITE:
-            for name, dock in self.docks.items():
-                if name.startswith("measure:") and not dock.isClosed():
-                    dock.toggleView(False)
-            self.sync_bodies()
-            chosen = self.settings.value(CHOSEN_KEY) or DEFAULT_MEASUREMENT
-            if f"measure:{chosen}" not in self.docks:
-                chosen = DEFAULT_MEASUREMENT
-            self.choose_measurement(chosen)
-        else:
-            self.measurementHost.release()
-            if not measurement.isClosed():
-                measurement.toggleView(False)
-            self.sync_bodies()
+    def enter_mode(self) -> None:
+        """After the layout of the mode is restored or made."""
+        self.mode.enter()
+        self.sync_bodies()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -1056,44 +1018,29 @@ class MainWindow(QMainWindow):
     def fit_measurements(self) -> None:
         """After a default layout: the measurement column as wide as its dock
         wants; the layout was made before the dock had its content."""
-        name = "measurement" if self.mode == LITE else "measure:sis.iv_curve"
-        dock = self.docks.get(name)
+        dock = self.docks.get(self.mode.measure_column[0])
         area = dock.dockAreaWidget() if dock is not None else None
         if area is None or dock.isClosed():
             return
         self.fit_area(area, area.currentDockWidget() or dock)
 
-    def choose_measurement(self, name: str) -> None:
-        """Lite: the measurement the bar on top and the Measurement dock show;
-        one that runs goes on running."""
-        dock = self.docks.get(f"measure:{name}")
-        if dock is None:
-            return
-        content = self.measurementHost.take(dock.widget())
-        self.runBar.bind(content.box)
-        cls = content.box.procedure_class
-        measurement = self.docks["measurement"]
-        measurement.setWindowTitle(cls.title or cls.name)
-        measurement.setIcon(theme.icon(theme.procedure_icon_name(name)))
-        self.settings.setValue(CHOSEN_KEY, name)
-
-    def set_mode(self, mode: str) -> None:
+    def set_mode(self, key: str) -> None:
         """Switch modes, each with its own layout; running measurements go on."""
-        if mode == self.mode:
+        mode = self.modes[key]
+        if mode is self.mode:
             self.apply_mode()
             return
         self.settings.setValue(
-            STATE_KEYS[self.mode], self.dock_manager.saveState(STATE_VERSION)
+            self.mode.state_key, self.dock_manager.saveState(STATE_VERSION)
         )
-        # Before Pro opens the measurement docks, Lite gives their widgets back
-        self.measurementHost.release()
+        self.mode.leave()
         self.mode = mode
-        self.settings.setValue(MODE_KEY, mode)
+        self.settings.setValue(MODE_KEY, mode.key)
         self.apply_mode()
         QApplication.setOverrideCursor(Qt.WaitCursor)
         self.setUpdatesEnabled(False)
         try:
-            state = self.settings.value(STATE_KEYS[mode])
+            state = self.settings.value(mode.state_key)
             self._restoring = True
             restored = state is not None and bool(
                 self.dock_manager.restoreState(state, STATE_VERSION)
@@ -1101,7 +1048,7 @@ class MainWindow(QMainWindow):
             self._restoring = False
             if not restored:
                 self.apply_default_layout()
-            self.settle_mode()
+            self.enter_mode()
             if not restored:
                 self.fit_measurements()
         finally:
@@ -1122,7 +1069,7 @@ class MainWindow(QMainWindow):
             geometry = self.settings.value("window/geometry")
             if geometry is not None:
                 self.restoreGeometry(geometry)
-            state = self.settings.value(STATE_KEYS[self.mode])
+            state = self.settings.value(self.mode.state_key)
             if state is None:
                 return False
             return bool(self.dock_manager.restoreState(state, STATE_VERSION))
@@ -1133,9 +1080,9 @@ class MainWindow(QMainWindow):
     def save_state(self) -> None:
         self.settings.setValue("window/geometry", self.saveGeometry())
         self.settings.setValue(
-            STATE_KEYS[self.mode], self.dock_manager.saveState(STATE_VERSION)
+            self.mode.state_key, self.dock_manager.saveState(STATE_VERSION)
         )
-        self.settings.setValue(MODE_KEY, self.mode)
+        self.settings.setValue(MODE_KEY, self.mode.key)
         self.settings.setValue("perspective", self.perspective or "")
         self.save_perspectives()
 

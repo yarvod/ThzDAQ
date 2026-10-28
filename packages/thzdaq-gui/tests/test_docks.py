@@ -2,6 +2,7 @@ import json
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_core.data import COMPLETED, read_json
 from thzdaq_core.measurements.parameters import Sweep
@@ -532,11 +533,11 @@ class TestMeasureAndData:
         box.devices.combos["bias"].setCurrentIndex(
             box.devices.combos["bias"].findData("sis_bias_2")
         )
-        box.comment.setText("smoke test")
+        QTest.keyClicks(box.controls.comment, "smoke test")
         finished = []
         box.runner.finished.connect(finished.append)
-        box.btnStart.click()
-        wait(lambda: finished and box.btnStart.isEnabled())
+        box.controls.btnStart.click()
+        wait(lambda: finished and box.controls.btnStart.isEnabled())
         measurement = finished[0]
         assert measurement.status == COMPLETED and measurement.comment == "smoke test"
         assert measurement.devices["bias"].ref == "sis_bias_2"
@@ -880,11 +881,11 @@ class TestHangs:
     def test_watchdog_returns_the_dock_to_idle(self, window):
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.on_running(True)  # the dock thinks it runs, the thread is gone
-        assert not box.btnStart.isEnabled()
+        assert not box.controls.btnStart.isEnabled()
         box.check_thread()  # the end signal may still be queued: wait one more look
-        assert not box.btnStart.isEnabled()
+        assert not box.controls.btnStart.isEnabled()
         box.check_thread()
-        assert box.btnStart.isEnabled() and box.state.text() == "Idle"
+        assert box.controls.btnStart.isEnabled() and box.status().state == "Idle"
 
     def test_device_that_does_not_answer_is_named_once(
         self, window, monkeypatch, caplog
@@ -903,9 +904,9 @@ class TestHangs:
     def test_abort_is_offered_only_while_starting_or_stopping(self, window):
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.on_running(True)
-        box.state.setText("Running")
+        box.update_status(state="Running")
         box.offer_abort()  # a timer of an earlier start or stop
-        assert box.btnAbort.isHidden()
+        assert box.controls.btnAbort.isHidden()
         box.stop()
         assert box.stuck.isActive()
         box.on_running(False)
@@ -919,13 +920,14 @@ class TestHangs:
         )
         box.on_running(True)
         box.stop()
-        assert box.state.text() == "Stopping..." and box.btnAbort.isHidden()
+        abort = box.controls.btnAbort
+        assert box.status().state == "Stopping..." and abort.isHidden()
         box.offer_abort()  # STUCK_AFTER_MS later, still running
-        assert not box.btnAbort.isHidden() and "Abort" in box.state.text()
+        assert not abort.isHidden() and "Abort" in box.controls.state.text()
         box.abort()
         assert aborted and "sis_bias" in aborted[0][0]
         box.on_running(False)
-        assert box.btnAbort.isHidden()
+        assert abort.isHidden()
 
     def test_start_while_running_warns(self, window, monkeypatch):
         box = window.docks["measure:sis.iv_curve"].widget().box
@@ -970,14 +972,8 @@ class TestFolding:
         assert (
             box.devices_box.parent() is setup and box.parameters_box.parent() is setup
         )
-        for control in (
-            box.btnStart,
-            box.btnStop,
-            box.comment,
-            box.progress,
-            box.state,
-        ):
-            assert not setup.isAncestorOf(control) and box.footer.isAncestorOf(control)
+        assert not setup.isAncestorOf(box.controls)
+        assert box.footer.isAncestorOf(box.controls)
 
     def test_folded_devices_say_which_are_chosen(self, window, session):
         box = window.docks["measure:sis.pv_curve"].widget().box
@@ -1012,7 +1008,7 @@ class TestFolding:
         finished = []
         box.runner.finished.connect(finished.append)
         box.start()
-        wait(lambda: finished and not box.ui_running)
+        wait(lambda: finished and not box.status().running)
         assert section.summary.text() == f"completed #{finished[0].id}"
         # The folded log shows its last line
         assert box.log_box.summary.text().startswith("saved ")
@@ -1092,7 +1088,7 @@ class TestProcesses:
         assert window.docks["processes"].windowTitle() == "Processes (1)"
         assert window.processesWidget.tree.topLevelItemCount() == 1
         process.stop()
-        wait(lambda: not processes.items and not box.ui_running)
+        wait(lambda: not processes.items and not box.status().running)
         assert window.docks["processes"].windowTitle() == "Processes"
         assert window.processesWidget.tree.topLevelItemCount() == 0
 
@@ -1120,7 +1116,7 @@ class TestProcesses:
         assert window.dock_state("device:sis_bias_2") == "front"
         assert section.expanded()
         processes.stop_all()
-        wait(lambda: not processes.items and not box.ui_running)
+        wait(lambda: not processes.items and not box.status().running)
         section.set_expanded(False)
 
     def test_polling_in_a_device_dock_is_a_process(self, window):
@@ -1185,7 +1181,7 @@ def lite(session, tmp_path):
 class TestLite:
     def test_lite_is_the_default_with_the_bar_on_top(self, lite, app):
         app.processEvents()
-        assert lite.mode == "lite" and lite.modeActions["lite"].isChecked()
+        assert lite.mode.key == "lite" and lite.modeActions["lite"].isChecked()
         assert lite.runBar.isVisible() and not lite.perspectives.isVisible()
         measurement = lite.docks["measurement"]
         assert not measurement.isClosed() and measurement.tabWidget().isVisible()
@@ -1197,7 +1193,7 @@ class TestLite:
             if n.startswith("measure:")
         )
         # The dock keeps the setup, the bar has the controls
-        box = lite.runBar.box
+        box = lite.runBar.controls.run
         assert box.parameters_box.isVisibleTo(lite) and not box.controls.isVisibleTo(
             lite
         )
@@ -1220,27 +1216,33 @@ class TestLite:
         processes = lite.session.processes
         bar = lite.runBar
         bar.chosen.emit("sis.iv_curve")
-        iv = bar.box
+        iv = bar.controls.run
         iv.form.set_values(
             {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
-        bar.comment.setText("from the bar")
-        bar.comment.textEdited.emit("from the bar")
-        bar.btnStart.click()
-        wait(lambda: iv.measurement is not None and bar.btnStop.isEnabled())
+        bar.controls.comment.setText("from the bar")
+        bar.controls.comment.textEdited.emit("from the bar")
+        bar.controls.btnStart.click()
+        wait(lambda: iv.measurement is not None and bar.controls.btnStop.isEnabled())
         assert iv.measurement.comment == "from the bar"
-        assert not bar.btnStart.isEnabled() and "Running" in bar.progress.format()
+        assert (
+            not bar.controls.btnStart.isEnabled()
+            and "Running" in bar.controls.progress.format()
+        )
         # Another measurement chosen: the first goes on
         bar.chosen.emit("sis.pv_curve")
-        assert bar.box is not iv and bar.btnStart.isEnabled()
+        assert bar.controls.run is not iv and bar.controls.btnStart.isEnabled()
         assert lite.docks["measurement"].windowTitle() == "SIS P-V curve"
-        assert iv.ui_running and [p.title for p in processes.items] == ["SIS I-V curve"]
+        assert iv.status().running and [p.title for p in processes.items] == [
+            "SIS I-V curve"
+        ]
         bar.chosen.emit("sis.iv_curve")
-        assert bar.box is iv and bar.btnStop.isEnabled()
-        bar.btnStop.click()
-        wait(lambda: not iv.ui_running)
-        assert bar.btnStart.isEnabled() and bar.progress.format().startswith(
-            "cancelled"
+        assert bar.controls.run is iv and bar.controls.btnStop.isEnabled()
+        bar.controls.btnStop.click()
+        wait(lambda: not iv.status().running)
+        assert (
+            bar.controls.btnStart.isEnabled()
+            and bar.controls.progress.format().startswith("cancelled")
         )
 
     def test_menus_and_find_choose_a_measurement(self, lite):
@@ -1256,12 +1258,12 @@ class TestLite:
     ):
         from thzdaq_gui.main_window import MainWindow
 
-        box = lite.runBar.box
+        box = lite.runBar.controls.run
         box.form.set_values(
             {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
-        lite.runBar.btnStart.click()
-        wait(lambda: box.ui_running)
+        lite.runBar.controls.btnStart.click()
+        wait(lambda: box.status().running)
         lite.show_dock("device:power_supply_1")  # Lite's own layout
         lite.set_mode("pro")
         app.processEvents()  # the toolbar shows its widgets on its next layout
@@ -1271,16 +1273,19 @@ class TestLite:
         # The running box is back in its Pro dock with its own controls
         pro_dock = lite.docks["measure:sis.iv_curve"]
         assert not pro_dock.isClosed() and pro_dock.widget().isAncestorOf(box)
-        assert box.controls.isVisibleTo(pro_dock) and box.ui_running
+        assert box.controls.isVisibleTo(pro_dock) and box.status().running
         lite.set_mode("lite")
-        assert lite.runBar.box is box and lite.measurementHost.isAncestorOf(box)
+        assert lite.runBar.controls.run is box and lite.measurementHost.isAncestorOf(
+            box
+        )
         assert not lite.docks["device:power_supply_1"].isClosed()
         box.stop()
-        wait(lambda: not box.ui_running)
+        wait(lambda: not box.status().running)
         lite.save_state()  # as on exit, without shutting the session down
         again = MainWindow(session, lite.settings.fileName(), check_updates=False)
         assert (
-            again.mode == "lite" and not again.docks["device:power_supply_1"].isClosed()
+            again.mode.key == "lite"
+            and not again.docks["device:power_supply_1"].isClosed()
         )
         again.confirm_exit = False
         again.close()

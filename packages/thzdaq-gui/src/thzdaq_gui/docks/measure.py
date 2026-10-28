@@ -8,18 +8,15 @@ at the bottom, so they never scroll out of sight.
 """
 
 import json
+from dataclasses import replace
 from typing import Dict, List, Mapping, Optional, Type
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
-    QPushButton,
     QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
@@ -39,6 +36,14 @@ from thzdaq_instruments import InstrumentError
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
+from thzdaq_gui.run_controls import (
+    CONNECTING,
+    IDLE,
+    RUNNING,
+    STOPPING,
+    RunControls,
+    RunStatus,
+)
 from thzdaq_gui.settings import settings
 
 # A start or a stop that takes this long is treated as a hung device
@@ -50,10 +55,12 @@ class ProcedureBox(QWidget):
 
     compact (a scan inside a device dock): one column, the dock scrolls it.
     Otherwise the devices and parameters (under the header) scroll and the
-    controls are pinned below them.
+    controls are pinned below them. How the run goes is a RunStatus; the
+    controls in the footer, and the bar on top in Lite, show it.
     """
 
-    status_changed = Signal(str)  # one line: "Running 42 %", "completed #12"
+    status_changed = Signal(str)  # its line: "Running 42 %", "completed #12"
+    comment_changed = Signal(str)
 
     def __init__(
         self,
@@ -79,8 +86,8 @@ class ProcedureBox(QWidget):
         self.raised = False
         self.reached: List[str] = []  # graphs that got data before the first step
         self.expected: List[str] = []  # graphs put on screen at Start
-        self.outcome = ""  # how the last run ended, for the status line
-        self.ui_running = False
+        self.run_status = RunStatus()
+        self.comment = ""  # of the next run
         self.settings_key = f"procedures/{procedure_class.name}"
         # Folded sections are remembered apart for scans in device docks
         sections = f"{'scan/' if compact else ''}{procedure_class.name}"
@@ -101,38 +108,10 @@ class ProcedureBox(QWidget):
         self.footer = QFrame()
         self.footer.setObjectName("procedureFooter")
         footer = QVBoxLayout(self.footer)
-        # Comment, Start/Stop, state, progress: the bar on top drives them in Lite
-        self.controls = QWidget()
-        controls = QVBoxLayout(self.controls)
-        controls.setContentsMargins(0, 0, 0, 0)
+        # Hidden in Lite: the bar on top shows the chosen run
+        self.controls = RunControls()
+        self.controls.bind(self)
         footer.addWidget(self.controls)
-        self.comment = QLineEdit()
-        self.comment.setPlaceholderText("Comment")
-        controls.addWidget(self.comment)
-        row = QHBoxLayout()
-        self.btnStart = QPushButton(theme.icon("play", "#111111"), "Start")
-        self.btnStart.setProperty("accent", True)
-        self.btnStart.clicked.connect(self.start)
-        self.btnStop = QPushButton(theme.icon("stop"), "Stop")
-        self.btnStop.setEnabled(False)
-        self.btnStop.clicked.connect(self.stop)
-        self.btnAbort = QPushButton(theme.icon("lan-disconnect"), "Abort")
-        self.btnAbort.setToolTip(
-            "The measurement waits for a device that does not answer: break the "
-            "connections of its devices (they reconnect on the next command)"
-        )
-        self.btnAbort.clicked.connect(self.abort)
-        row.addWidget(self.btnStart)
-        row.addWidget(self.btnStop)
-        row.addWidget(self.btnAbort)
-        controls.addLayout(row)
-        self.state = QLabel("Idle")
-        self.state.setProperty("role", "muted")
-        controls.addWidget(self.state)
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 1)
-        self.progress.setValue(0)
-        controls.addWidget(self.progress)
         # Folded, the log shows its last line
         self.log_box = Collapsible("Log", f"{sections}/log", expanded=False)
         self.log = QPlainTextEdit()
@@ -171,7 +150,6 @@ class ProcedureBox(QWidget):
         self.status_changed.connect(self.show_process_status)
         # A device dock rebuilt during a scan: no process left behind
         self.destroyed.connect(lambda: session.processes.finish(self.process))
-        self.btnAbort.hide()
         # One timer for "starting" and "stopping": a timer of an earlier run
         # never fires into the next one
         self.stuck = QTimer(self)
@@ -247,27 +225,20 @@ class ProcedureBox(QWidget):
 
     def show_process_status(self, text: str) -> None:
         if self.process is not None:
-            self.process.update(status=text or self.state.text())
+            self.process.update(status=text or self.run_status.state)
 
-    def set_controls_visible(self, on: bool) -> None:
-        """Lite runs measurements from the bar on top: the dock keeps the setup."""
-        self.controls.setVisible(on)
+    # The run, as RunControls see it
+    def status(self) -> RunStatus:
+        return self.run_status
 
-    def abort_offered(self) -> bool:
-        return not self.btnAbort.isHidden()
+    def update_status(self, **changes) -> None:
+        self.run_status = replace(self.run_status, **changes)
+        self.status_changed.emit(self.run_status.line())
 
-    def set_state(self, text: str) -> None:
-        self.state.setText(text)
-        self.status_changed.emit(self.status_text())
-
-    def status_text(self) -> str:
-        if not self.ui_running:
-            return self.outcome
-        maximum = self.progress.maximum()
-        if maximum > 0:
-            percent = round(100 * self.progress.value() / maximum)
-            return f"{self.state.text()} {percent} %"
-        return self.state.text()
+    def set_comment(self, text: str) -> None:
+        if text != self.comment:
+            self.comment = text
+            self.comment_changed.emit(text)
 
     # Persistence of the last values
     def restore(self) -> None:
@@ -322,32 +293,30 @@ class ProcedureBox(QWidget):
         self.hub.show_run(self.expected)
         self.log.clear()
         self.log_box.set_summary("")
-        self.set_state("Connecting to devices...")
+        self.update_status(
+            state=CONNECTING, done=0, total=procedure.estimate_steps() or None
+        )
         self.stuck.start()
-        self.progress.setRange(0, procedure.estimate_steps() or 0)
-        self.progress.setValue(0)
         self.runner.start(
             self.session.station,
             self.session.store,
             procedure,
             self.mapping(),
-            self.comment.text(),
+            self.comment,
         )
 
     def stop(self) -> None:
         self.runner.cancel()
-        self.set_state("Stopping...")
+        self.update_status(state=STOPPING)
         self.stuck.start()
 
     def offer_abort(self) -> None:
         """Still waiting after a while: a device probably hangs."""
-        if self.ui_running and self.state.text() in (
-            "Connecting to devices...",
-            "Stopping...",
-        ):
-            self.btnAbort.show()  # first: the state change tells the bar on top
-            self.set_state(
-                f"{self.state.text()} no answer, Abort breaks the connections"
+        status = self.run_status
+        if status.running and status.state in (CONNECTING, STOPPING):
+            self.update_status(
+                state=f"{status.state} no answer, Abort breaks the connections",
+                can_abort=True,
             )
             if self.process is not None:
                 self.process.update(can_abort=True)
@@ -359,7 +328,7 @@ class ProcedureBox(QWidget):
         self.note("aborted: connections of the devices were broken")
 
     def check_thread(self) -> None:
-        if not self.ui_running or self.runner.running:
+        if not self.run_status.running or self.runner.running:
             self.ended_unseen = 0
             return
         # The end signal may still be queued: act only on a second look
@@ -370,7 +339,7 @@ class ProcedureBox(QWidget):
 
     def on_started(self, measurement) -> None:
         self.measurement = measurement
-        self.set_state("Running")
+        self.update_status(state=RUNNING)
         self.note(f"started #{measurement.id}")
 
     def on_record(self, table: str, record) -> None:
@@ -394,18 +363,13 @@ class ProcedureBox(QWidget):
 
     def on_progress(self, done: int, total) -> None:
         self.raise_graph()
-        if total:
-            self.progress.setRange(0, total)
-            self.progress.setValue(done)
-        else:
-            self.progress.setRange(0, 0)
         if self.process is not None:
             self.process.update(progress=(done, total) if total else None)
-        self.status_changed.emit(self.status_text())
+        self.update_status(done=done, total=total or None)
 
     def on_failed(self, message: str) -> None:
         self.note(message)
-        self.outcome = "failed to start"
+        self.update_status(outcome="failed to start")
         QMessageBox.warning(self, self.procedure_class.title, message)
 
     def on_finished(self, measurement) -> None:
@@ -416,13 +380,12 @@ class ProcedureBox(QWidget):
         if measurement.metadata.get("path"):
             text += f"\nsaved {measurement.metadata['path']}"
         self.note(text)
-        self.outcome = f"{measurement.status} #{measurement.id}"
-        if self.progress.maximum() == 0:
-            self.progress.setRange(0, 1)
-            self.progress.setValue(1)
+        ended = {"outcome": f"{measurement.status} #{measurement.id}"}
+        if self.run_status.total is None:  # a busy bar: full at the end
+            ended.update(done=1, total=1)
+        self.update_status(**ended)
 
     def on_running(self, running: bool) -> None:
-        self.ui_running = running
         self.ended_unseen = 0
         if running and self.process is None:
             self.process = self.session.processes.start(
@@ -441,16 +404,13 @@ class ProcedureBox(QWidget):
         else:
             self.watchdog.stop()
             self.stuck.stop()
-            self.btnAbort.hide()
-        self.btnStart.setEnabled(not running)
-        self.btnStop.setEnabled(running)
         # Folding stays possible while running: only the fields are locked
         self.parameters_box.body.setEnabled(not running)
         self.devices_box.body.setEnabled(not running)
         if running:
-            self.status_changed.emit(self.status_text())
+            self.update_status(running=True)
         else:
-            self.set_state("Idle")
+            self.update_status(running=False, state=IDLE, can_abort=False)
 
 
 class MeasureWidget(QWidget):
@@ -476,6 +436,10 @@ class MeasureWidget(QWidget):
 
     def make_box(self, session, hub, procedure_class, header):
         return ProcedureBox(session, hub, procedure_class, header=header)
+
+    def show_controls(self, on: bool) -> None:
+        """Off in Lite: the bar on top runs the chosen measurement."""
+        self.box.controls.setVisible(on)
 
 
 class MonitorBox(ProcedureBox):
