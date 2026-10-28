@@ -71,9 +71,7 @@ class DeviceDocks:
 
     def sync(self, *_) -> None:
         wanted = {dock_name(DEVICE, info.ref): info for info in self.refs()}
-        for name in [
-            n for n in self.docks if key_of(n, DEVICE) and n not in wanted
-        ]:
+        for name in [n for n in self.docks if key_of(n, DEVICE) and n not in wanted]:
             self.docks.remove(name)
             self.signatures.pop(name, None)
         for name, info in wanted.items():

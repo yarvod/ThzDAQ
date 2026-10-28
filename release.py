@@ -1,6 +1,7 @@
 """Cut a release: stamp the version, commit, tag vX.Y.Z and push; CI builds and publishes it.
 
     uv run python release.py 0.3.0          # release
+    uv run python release.py 0.3.0-beta.1   # pre-release: beta.2 for the next one
     uv run python release.py 0.3.0-rc.1     # pre-release
     uv run python release.py 0.3.0 --no-push
     uv run python release.py 0.3.0 --again  # build the same tag again after fixes
@@ -29,7 +30,7 @@ def git(*args: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("version", help="X.Y.Z or X.Y.Z-rc.N")
+    parser.add_argument("version", help="X.Y.Z or X.Y.Z-beta.N, X.Y.Z-rc.N")
     parser.add_argument("--no-push", action="store_true")
     parser.add_argument(
         "--again",
@@ -39,7 +40,7 @@ def main() -> int:
     args = parser.parse_args()
     version = args.version.lstrip("v")
     if not VERSION.match(version):
-        parser.error(f"{args.version!r} is not X.Y.Z[-rc.N]")
+        parser.error(f"{args.version!r} is not X.Y.Z[-beta.N|-rc.N|-alpha.N]")
     tag = f"v{version}"
     if git("status", "--porcelain"):
         parser.error("commit or stash your changes first")

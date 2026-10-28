@@ -2,6 +2,8 @@
 
 Updates of the main window: a button in its status bar when a newer release is
 out, the dialog, and a downloaded build installed when the window closes.
+Pre-releases (betas) are offered, in the dialog and at start, once "Show
+pre-releases" is ticked; until it is ever changed, to who runs a pre-release.
 """
 
 import logging
@@ -29,10 +31,16 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme, updates
+from thzdaq_gui.settings import settings
 from thzdaq_gui.version import REPO_SLUG, __version__
 
 logger = logging.getLogger(__name__)
 RELEASES_PAGE = f"https://github.com/{REPO_SLUG}/releases"
+PRERELEASES_KEY = "updates/prereleases"
+
+
+def wants_prereleases(current: str = __version__) -> bool:
+    return settings().value(PRERELEASES_KEY, updates.is_prerelease(current), type=bool)
 
 
 class Background(QObject):
@@ -117,6 +125,11 @@ class UpdateDialog(QDialog):
         self.notes.setReadOnly(True)
         layout.addWidget(self.notes, 1)
         self.prereleases = QCheckBox("Show pre-releases")
+        self.prereleases.setToolTip("Betas too: here and in the check at start")
+        self.prereleases.setChecked(wants_prereleases())
+        self.prereleases.toggled.connect(
+            lambda on: settings().setValue(PRERELEASES_KEY, on)
+        )
         self.prereleases.toggled.connect(self.populate)
         layout.addWidget(self.prereleases)
 
@@ -142,7 +155,9 @@ class UpdateDialog(QDialog):
 
     def set_releases(self, releases: List[updates.Release]) -> None:
         self.releases = releases
-        newest = updates.latest_update(releases)
+        newest = updates.latest_update(
+            releases, prereleases=self.prereleases.isChecked()
+        )
         if newest is not None:
             text = f"Version <b>{newest.tag}</b> is available."
         else:
@@ -255,7 +270,7 @@ class Updates(QObject):
         self.checker.start()
 
     def offer(self, releases) -> None:
-        release = updates.latest_update(releases)
+        release = updates.latest_update(releases, prereleases=wants_prereleases())
         if release is None:
             return
         button = QPushButton(theme.icon("update"), f"Update to {release.tag}")

@@ -74,7 +74,9 @@ class Perspectives:
         self.current = name
 
     def create(self) -> None:
-        name, ok = QInputDialog.getText(self.window, "Create perspective", "Unique name")
+        name, ok = QInputDialog.getText(
+            self.window, "Create perspective", "Unique name"
+        )
         if ok and name.strip():
             self.manager.addPerspective(name.strip())
             self.current = name.strip()
