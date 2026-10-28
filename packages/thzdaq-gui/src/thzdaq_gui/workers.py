@@ -10,7 +10,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_core.data.store import MeasurementStore
 from thzdaq_core.measurements.procedure import Procedure
 from thzdaq_core.measurements.runner import MeasurementRunner, RunObserver
@@ -139,6 +139,38 @@ class DeviceWorker(QObject):
         deadline = time.monotonic() + timeout
         for lane in lanes:
             lane.thread.join(max(0.0, deadline - time.monotonic()))
+
+
+class HangWatch(QObject):
+    """Manual control waits while a device does not answer: says so on every
+    look (message), and once per hang in the event log."""
+
+    message = Signal(str)
+
+    def __init__(self, worker: DeviceWorker, limit_s: float, parent=None):
+        super().__init__(parent)
+        self.worker = worker
+        self.limit_s = limit_s
+        self._reported: Optional[float] = None
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check)
+        self.timer.start(2000)
+
+    def check(self) -> None:
+        waiting = self.worker.busy_for()
+        if waiting <= self.limit_s:
+            self._reported = None
+            return
+        device = self.worker.current or "A device"
+        self.message.emit(
+            f"{device} has not answered for {waiting:.0f} s; manual control waits. "
+            "Reset its connection in Setup → Connections."
+        )
+        if self._reported != self.worker.started_at:
+            self._reported = self.worker.started_at
+            logger.warning(
+                f"{device} does not answer: manual control and monitors wait for it"
+            )
 
 
 class _Forward(RunObserver):

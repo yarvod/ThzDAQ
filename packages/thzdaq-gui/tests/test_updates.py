@@ -286,10 +286,10 @@ class TestDialog:
         monkeypatch.setattr(updates, "fetch_releases", lambda: [])
         titles = [a.text() for a in window.menuBar().actions()]
         assert "&Help" in titles and window.windowTitle().startswith("ThzDAQ ")
-        window.show_updates()
-        assert window.updateDialog.isVisible()
-        wait(lambda: "latest version" in window.updateDialog.status.text())
-        window.updateDialog.close()
+        window.updates.show()
+        assert window.updates.dialog.isVisible()
+        wait(lambda: "latest version" in window.updates.dialog.status.text())
+        window.updates.dialog.close()
 
 
 class TestCleanup:
@@ -377,11 +377,11 @@ def test_update_installs_when_the_window_really_closes(
     from PySide6.QtWidgets import QDialog, QMessageBox
 
     launched, told = [], []
-    monkeypatch.setattr("thzdaq_gui.main_window.launch_updater", launched.append)
+    monkeypatch.setattr("thzdaq_gui.updates.launch_updater", launched.append)
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: told.append(a[2]))
     build = Path("/tmp/thzdaq_update_x/unpacked/ThzDAQ")
     exit_answer["result"] = QDialog.Rejected  # "not now" in the exit question
-    window.quit_for_update(build)
+    window.updates.quit_for(build)
     assert window.isVisible() and launched == [] and "when you close" in told[0]
     exit_answer["result"] = QDialog.Accepted
     window.close()

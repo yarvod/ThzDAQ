@@ -26,7 +26,7 @@ class TestWindow:
         assert not any(name.startswith("device:power_supply_1:") for name in names)
         menus = [a.text() for a in window.menuBar().actions()]
         assert menus == ["&File", "&Base", "&Devices", "&Measures", "&Graphs", "&Help"]
-        titles = [e.title for e in window.dock_entries() if e.section == "Devices"]
+        titles = [e.title for e in window.docks.listed() if e.section == "Devices"]
         assert "SIS1" in titles and "IF switch supply" in titles
 
     def test_device_menu_is_a_tree_by_type(self, window):
@@ -167,7 +167,7 @@ class TestWindow:
         hub = window.hub
         graph = hub.new_graph("Mine")
         dock = window.docks["graph:custom1"]
-        window.raise_graph(graph)
+        window.graphs.show(graph)
         # Joins the graphs on screen instead of opening anywhere
         assert dock.dockAreaWidget() is window.docks["graph:I-V"].dockAreaWidget()
         assert dock.isCurrentTab()
@@ -176,7 +176,7 @@ class TestWindow:
         hub.custom_changed.emit()
         assert hub.graphs["Mine 2"] is graph and "Mine" not in hub.graphs
         assert dock.windowTitle() == "Mine 2"
-        assert window.entries["graph:custom1"].title == "Mine 2"
+        assert window.docks.entries["graph:custom1"].title == "Mine 2"
         with pytest.raises(ValueError):
             hub.rename(graph, "I-V")  # a graph of the procedures
         window.save_state()
@@ -686,13 +686,13 @@ class TestPerspectives:
         assert "Default" in window.dock_manager.perspectiveNames()
         window.docks["graph:Tn-V"].toggleView(True)
         monkeypatch.setattr(
-            "thzdaq_gui.main_window.QInputDialog.getText",
+            "thzdaq_gui.perspectives.QInputDialog.getText",
             lambda *a, **k: ("Noise", True),
         )
-        window.create_perspective()
-        assert window.perspectives.currentText() == "Noise"
+        window.perspectives.create()
+        assert window.perspectives.combo.currentText() == "Noise"
         window.docks["graph:Tn-V"].toggleView(False)
-        window.open_perspective("Noise")
+        window.perspectives.open("Noise")
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
 
@@ -711,7 +711,7 @@ class TestPerspectives:
         window.show()
         answers = iter(["Noise", "Tn", "Default"])
         monkeypatch.setattr(
-            "thzdaq_gui.main_window.QInputDialog.getText",
+            "thzdaq_gui.perspectives.QInputDialog.getText",
             lambda *a, **k: (next(answers), True),
         )
         warnings = []
@@ -719,20 +719,20 @@ class TestPerspectives:
             QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
         )
         window.docks["graph:Tn-V"].toggleView(True)
-        window.create_perspective()
-        window.rename_perspective()
+        window.perspectives.create()
+        window.perspectives.rename()
         assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
-        assert window.perspectives.currentText() == "Tn"
-        window.rename_perspective()  # to a name in use: refused
+        assert window.perspectives.combo.currentText() == "Tn"
+        window.perspectives.rename()  # to a name in use: refused
         assert warnings == ["'Default' exists"]
         assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
         window.docks["graph:Tn-V"].toggleView(False)
-        window.open_perspective("Tn")  # the layout saved as Noise
+        window.perspectives.open("Tn")  # the layout saved as Noise
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
         again = MainWindow(session, settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) == {"Default", "Tn"}
-        assert again.perspectives.currentText() == "Tn"
+        assert again.perspectives.combo.currentText() == "Tn"
         again.close()
 
     def test_switching_keeps_widths_and_holds_only_open_contents(self, window, app):
@@ -767,7 +767,7 @@ class TestPerspectives:
         window.dock_manager.addPerspective("Wide")
         wide = widths()
         for name, expected in (("Narrow", narrow), ("Wide", wide), ("Narrow", narrow)):
-            window.open_perspective(name)
+            window.perspectives.open(name)
             settle()
             assert widths() == expected, name
         # Closed device and measurement docks carry no content (fast switching)
@@ -869,7 +869,7 @@ def test_no_stray_windows_flash(app, session, tmp_path):
         dock.toggleView(False)
         window.dock_manager.addPerspective("P")
         dock.toggleView(True)
-        window.open_perspective("P")
+        window.perspectives.open("P")
         app.processEvents()
     finally:
         app.removeEventFilter(spy)
@@ -895,8 +895,8 @@ class TestHangs:
         monkeypatch.setattr(type(worker), "started_at", property(lambda s: 1.0))
         monkeypatch.setattr(worker, "busy_for", lambda: 12.0)
         with caplog.at_level("WARNING"):
-            window.check_device_worker()
-            window.check_device_worker()
+            window.hangWatch.check()
+            window.hangWatch.check()
         named = [r for r in caplog.records if "Rigol 1 does not answer" in r.message]
         assert len(named) == 1
         assert "Rigol 1" in window.statusBar().currentMessage()
@@ -1045,11 +1045,11 @@ class TestRunGraphs:
             QtAds.RightDockWidgetArea, pv, iv.dockAreaWidget()
         )
         iv.dockAreaWidget().setCurrentDockWidget(window.docks["graph:Y-V"])
-        before = len(window.graph_areas())
+        before = len(window.docks.areas_of("graph"))
         window.hub.show_run(["P-V", "I-V"])
         app.processEvents()
         # Nothing moves: each is in front of the group it was in
-        assert len(window.graph_areas()) == before
+        assert len(window.docks.areas_of("graph")) == before
         assert pv.isCurrentTab() and iv.isCurrentTab()
         assert pv.dockAreaWidget() is not iv.dockAreaWidget()
 
@@ -1057,7 +1057,7 @@ class TestRunGraphs:
         titles = ["P-V", "I-V", "Y-V", "Tn-V", "P-IF"]
         window.hub.show_run(titles)
         app.processEvents()
-        assert len(window.graph_areas()) == 4
+        assert len(window.docks.areas_of("graph")) == 4
         assert not window.docks["graph:P-IF"].isClosed()
         assert all(window.docks[f"graph:{t}"].isCurrentTab() for t in titles[:4])
 
@@ -1151,7 +1151,7 @@ class TestProcesses:
     ):
         from thzdaq_gui.main_window import MainWindow
 
-        window.remove_dock("processes")  # as a layout saved by an older version
+        window.docks.remove("processes")  # as a layout saved by an older version
         window.save_state()
         again = MainWindow(session, window.settings.fileName(), check_updates=False)
         again.confirm_exit = False
@@ -1182,7 +1182,7 @@ class TestLite:
     def test_lite_is_the_default_with_the_bar_on_top(self, lite, app):
         app.processEvents()
         assert lite.mode.key == "lite" and lite.modeActions["lite"].isChecked()
-        assert lite.runBar.isVisible() and not lite.perspectives.isVisible()
+        assert lite.runBar.isVisible() and not lite.perspectives.combo.isVisible()
         measurement = lite.docks["measurement"]
         assert not measurement.isClosed() and measurement.tabWidget().isVisible()
         assert measurement.windowTitle() == "SIS I-V curve"
@@ -1267,7 +1267,7 @@ class TestLite:
         lite.show_dock("device:power_supply_1")  # Lite's own layout
         lite.set_mode("pro")
         app.processEvents()  # the toolbar shows its widgets on its next layout
-        assert lite.perspectives.isVisible() and not lite.runBar.isVisible()
+        assert lite.perspectives.combo.isVisible() and not lite.runBar.isVisible()
         assert lite.docks["measurement"].isClosed()
         assert lite.docks["device:power_supply_1"].isClosed()  # Pro's default
         # The running box is back in its Pro dock with its own controls

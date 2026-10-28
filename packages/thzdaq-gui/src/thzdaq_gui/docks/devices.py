@@ -46,6 +46,7 @@ from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
+from thzdaq_gui.dock_names import DEVICE, dock_name
 from thzdaq_gui.docks.measure import ProcedureBox
 from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.fields import (
@@ -101,7 +102,7 @@ class QuantityPanel(QWidget):
         except Exception:
             self.lane = ref
         # A fixed channel is shown in its instrument's dock
-        self.dock = f"device:{self.lane if kind == 'channel' else ref}"
+        self.dock = dock_name(DEVICE, self.lane if kind == "channel" else ref)
         self.quantities: List[Quantity] = [
             q for q in session.station.quantities(ref) if q.persistent == config
         ]

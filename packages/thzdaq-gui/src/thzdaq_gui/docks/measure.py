@@ -35,6 +35,7 @@ from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
+from thzdaq_gui.dock_names import DEVICE, MEASURE, dock_name
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
 from thzdaq_gui.run_controls import (
     CONNECTING,
@@ -220,8 +221,8 @@ class ProcedureBox(QWidget):
     def dock_name(self) -> str:
         """The dock that shows this box: a scan is in its device's dock."""
         if self.compact and self.fixed:
-            return f"device:{next(iter(self.fixed.values()))}"
-        return f"measure:{self.procedure_class.name}"
+            return dock_name(DEVICE, next(iter(self.fixed.values())))
+        return dock_name(MEASURE, self.procedure_class.name)
 
     def show_process_status(self, text: str) -> None:
         if self.process is not None:

@@ -5,23 +5,17 @@ layout; the measurement chosen in the bar on top runs from there, its setup
 in the Measurement dock. Each mode keeps its own layout.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
 
+from thzdaq_gui.dock_names import MEASURE, MEASUREMENT, dock_name, key_of
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 
 MODE_KEY = "ui/mode"
-MEASURE = "measure:"  # the Pro dock of a procedure: measure:sis.iv_curve
-MEASUREMENT = "measurement"  # the Lite dock of the chosen measurement
 CHOSEN_KEY = "ui/measurement"
 DEFAULT_MEASUREMENT = "sis.iv_curve"
-
-
-def procedure_of(dock: str) -> Optional[str]:
-    """measure:sis.iv_curve -> sis.iv_curve; None for other docks."""
-    return dock[len(MEASURE) :] if dock.startswith(MEASURE) else None
 
 
 class Mode:
@@ -53,10 +47,9 @@ class Pro(Mode):
     tip = "Perspectives and a dock per measurement"
     state_key = "window/docks"  # also the layouts saved before the modes
     perspectives = True
-    measure_column = (
-        "measure:sis.iv_curve",
-        "measure:sis.pv_curve",
-        "measure:monitor.time",
+    measure_column = tuple(
+        dock_name(MEASURE, procedure)
+        for procedure in ("sis.iv_curve", "sis.pv_curve", "monitor.time")
     )
 
 
@@ -75,7 +68,7 @@ class Lite(Mode):
         self,
         bar: RunBar,
         host: MeasurementHost,
-        docks: Dict[str, QtAds.CDockWidget],
+        docks: Mapping[str, QtAds.CDockWidget],
         settings: QSettings,
     ):
         self.bar = bar
@@ -87,10 +80,12 @@ class Lite(Mode):
 
     def enter(self) -> None:
         for name, dock in self.docks.items():
-            if procedure_of(name) and not dock.isClosed():
+            if key_of(name, MEASURE) and not dock.isClosed():
                 dock.toggleView(False)
         chosen = self.settings.value(CHOSEN_KEY) or DEFAULT_MEASUREMENT
-        self.choose(chosen if MEASURE + chosen in self.docks else DEFAULT_MEASUREMENT)
+        if dock_name(MEASURE, chosen) not in self.docks:
+            chosen = DEFAULT_MEASUREMENT
+        self.choose(chosen)
 
     def leave(self) -> None:
         self.host.release()  # back to the Pro docks
@@ -99,7 +94,7 @@ class Lite(Mode):
     def choose(self, procedure: str) -> None:
         """The measurement the bar runs and the Measurement dock shows; one
         that runs goes on running."""
-        pro = self.docks.get(MEASURE + procedure)
+        pro = self.docks.get(dock_name(MEASURE, procedure))
         if pro is None:
             return
         content = self.host.take(pro.widget())
@@ -111,13 +106,13 @@ class Lite(Mode):
         self.settings.setValue(CHOSEN_KEY, procedure)
 
     def dock_of(self, name: str) -> Optional[str]:
-        procedure = procedure_of(name)
+        procedure = key_of(name, MEASURE)
         if procedure is None:
             return name
         return MEASUREMENT if procedure == self.chosen else None
 
     def reveal(self, name: str) -> str:
-        procedure = procedure_of(name)
+        procedure = key_of(name, MEASURE)
         if procedure is None:
             return name
         self.choose(procedure)
