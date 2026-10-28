@@ -999,3 +999,95 @@ class TestRunGraphs:
         monkeypatch.setattr(box.runner, "start", lambda *a, **k: None)
         box.start()
         assert shown == [["P-V", "I-V"]]
+
+
+class TestProcesses:
+    def test_a_measurement_runs_in_processes_until_stopped(self, window, wait):
+        processes = window.session.processes
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        box.start()
+        wait(lambda: processes.items and processes.items[0].progress)
+        (process,) = processes.items
+        assert process.title == "SIS I-V curve"
+        assert process.dock == "measure:sis.iv_curve"
+        assert process.progress[1] == 2000 and not process.can_abort
+        assert window.docks["processes"].windowTitle() == "Processes (1)"
+        assert window.processesWidget.tree.topLevelItemCount() == 1
+        process.stop()
+        wait(lambda: not processes.items and not box.ui_running)
+        assert window.docks["processes"].windowTitle() == "Processes"
+        assert window.processesWidget.tree.topLevelItemCount() == 0
+
+    def test_a_scan_shows_its_device_dock_unfolded(self, window, wait):
+        from thzdaq_gui.collapsible import Collapsible
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_2"].widget()
+        section = next(
+            s for s in widget.findChildren(Collapsible) if s.title() == "I-V scan"
+        )
+        box = section.findChildren(ProcedureBox)[0]
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        box.start()
+        processes = window.session.processes
+        wait(lambda: processes.items)
+        (process,) = processes.items
+        assert process.title == "SIS I-V curve · SIS2"
+        assert process.dock == "device:sis_bias_2"
+        window.docks["device:sis_bias_2"].toggleView(False)
+        assert not section.expanded()
+        window.processesWidget.show_process(process)
+        assert window.dock_state("device:sis_bias_2") == "front"
+        assert section.expanded()
+        processes.stop_all()
+        wait(lambda: not processes.items and not box.ui_running)
+        section.set_expanded(False)
+
+    def test_polling_in_a_device_dock_is_a_process(self, window):
+        processes = window.session.processes
+        panel = window.docks["device:power_meter_1"].widget().panels[0]
+        panel.interval.setValue(0.5)
+        panel.monitor.setChecked(True)
+        (process,) = processes.items
+        assert process.title == "Monitor · R&S NRX"
+        assert process.status == "every 0.5 s" and process.progress is None
+        panel.interval.setValue(2)
+        assert process.status == "every 2 s"
+        process.stop()
+        assert not panel.monitor.isChecked() and processes.items == []
+
+    def test_chopper_rotation_follows_the_chopper(self, window, wait):
+        from thzdaq_gui.docks.devices import ChopperGroup
+
+        group = window.docks["device:chopper_1"].widget().findChildren(ChopperGroup)[0]
+        processes = window.session.processes
+        group.frequency.setValue(7.5)  # the last one is remembered across tests
+        group.start()
+        wait(lambda: processes.items)
+        (process,) = processes.items
+        assert process.title == "Rotation · Chopper" and process.status == "7.5 Hz"
+        process.stop()
+        wait(lambda: not processes.items)
+        assert not window.session.station.instrument("chopper_1").is_running()
+
+    def test_a_layout_saved_before_processes_still_opens_it(
+        self, window, session, tmp_path
+    ):
+        from thzdaq_gui.main_window import MainWindow
+
+        window.remove_dock("processes")  # as a layout saved by an older version
+        window.save_state()
+        again = MainWindow(session, window.settings.fileName(), check_updates=False)
+        again.confirm_exit = False
+        again.show()
+        again.show_dock("processes")
+        dock = again.docks["processes"]
+        # Back on its side bar, not floating
+        assert dock.isAutoHide() and not dock.isFloating()
+        assert again.dock_state("processes") == "front"
+        again.close()

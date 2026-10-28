@@ -70,6 +70,9 @@ class ProcedureBox(QWidget):
         self.hub = hub
         self.procedure_class = procedure_class
         self.fixed = dict(fixed or {})
+        self.compact = compact
+        self.process = None  # in the session's Processes while running
+        self.reveal = None  # shows this box once its dock is in front (a folded scan)
         self.runner = session.runner()
         self.measurement = None
         self.window = None  # seconds of the live curves to show
@@ -160,6 +163,9 @@ class ProcedureBox(QWidget):
         self.runner.failed.connect(self.on_failed)
         self.runner.finished.connect(self.on_finished)
         self.runner.running_changed.connect(self.on_running)
+        self.status_changed.connect(self.show_process_status)
+        # A device dock rebuilt during a scan: no process left behind
+        self.destroyed.connect(lambda: session.processes.finish(self.process))
         self.btnAbort.hide()
         # One timer for "starting" and "stopping": a timer of an earlier run
         # never fires into the next one
@@ -220,6 +226,23 @@ class ProcedureBox(QWidget):
     def note(self, text: str) -> None:
         self.log.appendPlainText(text)
         self.log_box.set_summary(text.splitlines()[-1] if text else "")
+
+    def process_title(self) -> str:
+        title = self.procedure_class.title or self.procedure_class.name
+        if self.compact and self.fixed and self.session.station is not None:
+            ref = next(iter(self.fixed.values()))
+            return f"{title} · {self.session.station.title(ref)}"
+        return title
+
+    def dock_name(self) -> str:
+        """The dock that shows this box: a scan is in its device's dock."""
+        if self.compact and self.fixed:
+            return f"device:{next(iter(self.fixed.values()))}"
+        return f"measure:{self.procedure_class.name}"
+
+    def show_process_status(self, text: str) -> None:
+        if self.process is not None:
+            self.process.update(status=text or self.state.text())
 
     def set_state(self, text: str) -> None:
         self.state.setText(text)
@@ -314,6 +337,8 @@ class ProcedureBox(QWidget):
                 f"{self.state.text()} no answer, Abort breaks the connections"
             )
             self.btnAbort.show()
+            if self.process is not None:
+                self.process.update(can_abort=True)
 
     def abort(self) -> None:
         self.runner.cancel()
@@ -362,6 +387,8 @@ class ProcedureBox(QWidget):
             self.progress.setValue(done)
         else:
             self.progress.setRange(0, 0)
+        if self.process is not None:
+            self.process.update(progress=(done, total) if total else None)
         self.status_changed.emit(self.status_text())
 
     def on_failed(self, message: str) -> None:
@@ -385,6 +412,18 @@ class ProcedureBox(QWidget):
     def on_running(self, running: bool) -> None:
         self.ui_running = running
         self.ended_unseen = 0
+        if running and self.process is None:
+            self.process = self.session.processes.start(
+                self.process_title(),
+                theme.procedure_icon_name(self.procedure_class.name),
+                self.dock_name(),
+                stop=self.stop,
+                abort=self.abort,
+                reveal=lambda: self.reveal() if self.reveal is not None else None,
+            )
+        elif not running:
+            self.session.processes.finish(self.process)
+            self.process = None
         if running:
             self.watchdog.start()
         else:

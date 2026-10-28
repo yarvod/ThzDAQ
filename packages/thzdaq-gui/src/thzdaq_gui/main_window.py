@@ -39,6 +39,7 @@ from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.docks.log import LogWidget
+from thzdaq_gui.docks.processes import ProcessesWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
 from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
@@ -69,7 +70,7 @@ from thzdaq_gui.version import __version__
 logger = logging.getLogger(__name__)
 
 DEFAULT_PERSPECTIVE = "Default"
-AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
+AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260, "processes": 220}
 DEVICE_HANG_S = 5.0
 FIT_SHARE = 0.4  # a dock opened on its side takes at most this part of the window
 # Splits that grow the graph groups of a run to 2 x 2, by groups in use:
@@ -88,13 +89,6 @@ HOME_AREAS = {
 CUSTOM_GRAPHS = "graphs/custom"
 STATE_VERSION = 3
 
-PROCEDURE_ICONS = {
-    "sis": "alpha-s-box-outline",
-    "if": "waveform",
-    "two_sb": "chart-bell-curve-cumulative",
-    "monitor": "monitor-eye",
-    "grid": "rotate-3d-variant",
-}
 PROCEDURE_GROUPS = {"sis": "SIS", "if": "IF", "two_sb": "2SB"}
 SECTIONS = ("Base", "Devices", "Measures", "Graphs")
 
@@ -152,6 +146,7 @@ class MainWindow(QMainWindow):
         self.dock_manager.setStyleSheet(theme.dock_style_sheet())
         self.docks: Dict[str, QtAds.CDockWidget] = {}
         self.entries: Dict[str, DockEntry] = {}
+        self.auto_hide_sides: Dict[str, int] = {}  # base docks: their side bar
         self.dock_signatures: Dict[str, tuple] = {}
         # Docks are added open and then arranged: build contents only after that
         self._building = True
@@ -355,6 +350,7 @@ class MainWindow(QMainWindow):
                 lambda on, body=widget: self._building or body.set_open(on)
             )
         if auto_hide is not None:
+            self.auto_hide_sides[name] = auto_hide
             container = self.dock_manager.addAutoHideDockWidget(auto_hide, dock)
             container.setSize(AUTO_HIDE_SIZES.get(name, 420))
         else:
@@ -419,6 +415,17 @@ class MainWindow(QMainWindow):
         if dock.isClosed():
             own = dock.dockAreaWidget()
             move = own is None or own.openDockWidgetsCount() == 0
+            side = self.auto_hide_sides.get(name)
+            if (
+                own is None
+                and dock.autoHideDockContainer() is None
+                and side is not None
+            ):
+                # Not in a layout saved before this dock existed: ADS would
+                # float it; back to its side bar
+                container = self.dock_manager.addAutoHideDockWidget(side, dock)
+                container.setSize(AUTO_HIDE_SIZES.get(name, 420))
+                move = False
             # Open before moving: ADS keeps the tab of a closed dock it moves
             # into a new area hidden, and the content is built by now
             dock.toggleView(True)
@@ -494,6 +501,8 @@ class MainWindow(QMainWindow):
         self.setupWidget.new_profile_requested.connect(self.new_profile)
         self.dataWidget = DataWidget(self.session)
         self.logWidget = LogWidget()
+        self.processesWidget = ProcessesWidget(self.session.processes)
+        self.processesWidget.show_requested.connect(self.show_dock)
         for name, title, widget, icon_name, side in (
             ("setup", "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             ("data", "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
@@ -504,15 +513,30 @@ class MainWindow(QMainWindow):
                 "text-box-outline",
                 QtAds.SideBarBottom,
             ),
+            (
+                "processes",
+                "Processes",
+                self.processesWidget,
+                "progress-clock",
+                QtAds.SideBarBottom,
+            ),
         ):
             dock = self.add_dock(
                 name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
             )
             self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
+        self.processesWidget.count_changed.connect(self.show_process_count)
+
+    def show_process_count(self, count: int) -> None:
+        """How many run, on the Processes tab and toolbar button."""
+        text = f"Processes ({count})" if count else "Processes"
+        dock = self.docks["processes"]
+        dock.setWindowTitle(text)
+        dock.toggleViewAction().setText(text)
 
     def add_measure_dock(self, cls) -> None:
         group = cls.name.split(".")[0]
-        icon = theme.icon(PROCEDURE_ICONS.get(group, "play-circle-outline"))
+        icon = theme.icon(theme.procedure_icon_name(cls.name))
         # Built when the dock is first opened (DockBody)
         body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
         self.add_dock(

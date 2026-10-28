@@ -9,6 +9,7 @@ from thzdaq_core.station.station import Station
 from thzdaq_core.station.storage import load_station, save_station
 
 from thzdaq_gui.measurements import MeasurementsModel
+from thzdaq_gui.processes import Processes
 from thzdaq_gui.workers import DeviceWorker, QtRunner
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class Session(QObject):
         self.worker = DeviceWorker(self)
         self.measurements = MeasurementsModel(self.store, self)
         self.runners: List[QtRunner] = []
+        self.processes = Processes(self)  # what runs now, for the Processes dock
         self.station: Optional[Station] = None
         self.path: Optional[Path] = None
         self.simulate = False
