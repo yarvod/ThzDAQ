@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -50,7 +49,6 @@ from thzdaq_instruments.transport.base import (
 
 from thzdaq_gui import theme
 from thzdaq_gui.forms import ParameterForm
-from thzdaq_gui.settings import stations_dir
 
 # How often the Connections group shows the state of the links
 REFRESH_MS = 2000
@@ -772,16 +770,3 @@ class SetupWidget(QWidget):
 
         title = station.config.instruments[instrument_id].title or instrument_id
         self.session.worker.submit(job, done, failed, title, key=instrument_id)
-
-
-def ask_profile_path(parent, save: bool) -> Optional[str]:
-    folder = str(stations_dir())
-    if save:
-        path, _ = QFileDialog.getSaveFileName(
-            parent, "New station profile", folder, "YAML (*.yaml)"
-        )
-    else:
-        path, _ = QFileDialog.getOpenFileName(
-            parent, "Open station profile", folder, "YAML (*.yaml *.yml)"
-        )
-    return path or None

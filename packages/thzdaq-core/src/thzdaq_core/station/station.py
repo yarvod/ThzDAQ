@@ -162,8 +162,19 @@ class Station:
                 self._apply_settings(instrument, spec.settings)
                 if self.lively and hasattr(instrument, "liven"):
                     instrument.liven()
+            if simulate and hasattr(instrument, "load_position"):
+                # A simulated detector sees the simulated load of this bench:
+                # hot/cold give a receiver's Y, not the drift of two sweeps
+                instrument.load_position = self._simulated_load
             self._instruments[instrument_id] = instrument
             return instrument
+
+    def _simulated_load(self) -> Optional[str]:
+        """Where the open simulated load switch (a chopper) is: hot, cold, None."""
+        for instrument_id, instrument in list(self._instruments.items()):
+            if self.simulated(instrument_id) and hasattr(instrument, "load_state"):
+                return instrument.load_state()
+        return None
 
     @staticmethod
     def _apply_settings(instrument: Instrument, settings: Dict[str, Any]) -> None:

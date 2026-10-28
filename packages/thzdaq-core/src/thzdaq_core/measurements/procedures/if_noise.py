@@ -5,6 +5,7 @@ from thzdaq_core.analysis.noise import noise_temperature, y_factor_db
 from thzdaq_core.measurements.parameters import FloatParameter, SweepParameter
 from thzdaq_core.measurements.plots import PlotSpec
 from thzdaq_core.measurements.procedure import Procedure
+from thzdaq_core.measurements.procedures.common import warn_without_contrast
 from thzdaq_core.measurements.registry import register_procedure
 
 LOADS = ("cold", "hot")
@@ -98,11 +99,15 @@ class IFNoise(Procedure):
                     power=power,
                 )
                 ctx.progress()
+        temperatures = []
         for frequency in self.frequency.values():
             hot, cold = powers["hot", frequency], powers["cold", frequency]
+            tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
+            temperatures.append(tn)
             ctx.record(
                 "noise",
                 frequency=frequency,
                 y_factor=y_factor_db(hot, cold),
-                noise_temperature=noise_temperature(hot, cold, self.t_hot, self.t_cold),
+                noise_temperature=tn,
             )
+        warn_without_contrast(ctx, temperatures, "IF noise")

@@ -325,10 +325,13 @@ def capability_text(capabilities) -> str:
 class DeviceSlotsForm(QWidget):
     """Which station device plays each procedure slot; only suitable devices are listed."""
 
+    changed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout_ = QFormLayout(self)
         self.combos: Dict[str, QComboBox] = {}
+        self.titles: Callable[[str], str] = lambda slot: slot
 
     def set_slots(
         self,
@@ -339,6 +342,7 @@ class DeviceSlotsForm(QWidget):
         kinds: Optional[Mapping[str, str]] = None,
     ) -> None:
         current = {**(preferred or {}), **self.mapping()}
+        self.titles = titles
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.combos.clear()
@@ -368,8 +372,10 @@ class DeviceSlotsForm(QWidget):
             if combo.currentData():
                 taken.add(combo.currentData())
             combo.setToolTip(capability_text(capabilities))
+            combo.currentIndexChanged.connect(self.changed)
             self.layout_.addRow(titles(slot), combo)
             self.combos[slot] = combo
+        self.changed.emit()
 
     def mapping(self) -> Dict[str, str]:
         return {
@@ -380,3 +386,10 @@ class DeviceSlotsForm(QWidget):
 
     def unmapped(self) -> List[str]:
         return [slot for slot, combo in self.combos.items() if not combo.currentData()]
+
+    def summary(self) -> str:
+        """One line for the folded group: SIS bias: SIS1 · Detector: R&S NRX."""
+        return " · ".join(
+            f"{self.titles(slot)}: {combo.currentText() or '—'}"
+            for slot, combo in self.combos.items()
+        )

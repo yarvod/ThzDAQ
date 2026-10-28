@@ -2,99 +2,75 @@
 
 Every part of the application is a dock the user places anywhere: Setup,
 Data and Log (base), one dock per instrument and configured device, one per
-measurement and one per graph. Perspectives are named dock layouts (what a
-task needs now: SIS tuning, 2SB noise, ...), kept in settings.ini.
+measurement and one per graph. The window builds them, its menus and its
+toolbar, and keeps the layout of each mode; the parts live apart:
+
+- docking.py: the docks by name and where they open (DockSpace);
+- graph_docks.py, device_docks.py: docks that follow the graphs and the station;
+- perspectives.py: saved layouts of Pro;
+- modes.py: what differs in Lite and Pro;
+- update_dialog.py (Updates), workers.py (HangWatch).
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication,
-    QComboBox,
     QDialog,
-    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QSizePolicy,
+    QToolButton,
     QWidget,
+    QWidgetAction,
 )
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements.registry import get_procedure, list_procedures
+from thzdaq_core.measurements.registry import list_procedures
 from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme
+from thzdaq_gui.device_docks import DeviceDocks
+from thzdaq_gui.dock_names import (
+    DATA,
+    DEVICE,
+    GRAPH,
+    LOG,
+    MEASURE,
+    MEASUREMENT,
+    PROCESSES,
+    SETUP,
+    dock_name,
+)
+from thzdaq_gui.docking import SECTIONS, DockSpace, configure_docking, one_repaint
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.data import DataWidget
-from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
-from thzdaq_gui.docks.setup import SetupWidget, ask_profile_path
+from thzdaq_gui.docks.processes import ProcessesWidget
+from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
-from thzdaq_gui.graphs import (
-    AddCurveDialog,
-    GraphHub,
-    MapGraphWidget,
-    close_plots,
-    close_views,
-)
-from thzdaq_gui.update_dialog import Background, UpdateDialog, fetch_job
-from thzdaq_gui.updates import can_self_update, latest_update, launch_updater
+from thzdaq_gui.folders import PROFILES
+from thzdaq_gui.graph_docks import GraphDocks
+from thzdaq_gui.graphs import GraphHub, close_plots
+from thzdaq_gui.modes import MODE_KEY, Lite, Pro
+from thzdaq_gui.navigator import DockNavigator, QuickFind, type_title
+from thzdaq_gui.perspectives import Perspectives
+from thzdaq_gui.runbar import MeasurementHost, RunBar
 from thzdaq_gui.settings import location
 from thzdaq_gui.settings import settings as app_settings
+from thzdaq_gui.update_dialog import Updates
 from thzdaq_gui.version import __version__
+from thzdaq_gui.workers import HangWatch
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PERSPECTIVE = "Default"
-AUTO_HIDE_SIZES = {"setup": 460, "data": 640, "log": 260}
 DEVICE_HANG_S = 5.0
-# Where a dock of each kind opens when no dock of its kind is on screen
-HOME_AREAS = {
-    "graph": QtAds.CenterDockWidgetArea,
-    "measure": QtAds.RightDockWidgetArea,
-    "device": QtAds.BottomDockWidgetArea,
-}
-CUSTOM_GRAPHS = "graphs/custom"
 STATE_VERSION = 3
-
-PROCEDURE_ICONS = {
-    "sis": "alpha-s-box-outline",
-    "if": "waveform",
-    "two_sb": "chart-bell-curve-cumulative",
-    "monitor": "monitor-eye",
-    "grid": "rotate-3d-variant",
-}
-
-
-def configure_docking() -> None:
-    """Global ADS flags; must run before the first CDockManager exists."""
-    manager = QtAds.CDockManager
-    manager.setConfigFlag(manager.FocusHighlighting, True)
-    manager.setConfigFlag(manager.OpaqueSplitterResize, True)
-    manager.setConfigFlag(manager.DockAreaHasTabsMenuButton, True)
-    manager.setConfigFlag(manager.FloatingContainerHasWidgetIcon, True)
-    manager.setConfigFlag(manager.AllTabsHaveCloseButton, True)
-    # The close button of a tab group closes its current tab, not the whole group
-    manager.setConfigFlag(manager.DockAreaCloseButtonClosesTab, True)
-    manager.setAutoHideConfigFlags(QtAds.CDockManager.DefaultAutoHideConfig)
-    provider = manager.iconProvider()
-    for which, name in (
-        (QtAds.TabCloseIcon, "close"),
-        (QtAds.DockAreaCloseIcon, "close"),
-        (QtAds.DockAreaMenuIcon, "chevron-down"),
-        (QtAds.DockAreaUndockIcon, "dock-window"),
-        (QtAds.DockAreaMinimizeIcon, "window-minimize"),
-        (QtAds.AutoHideIcon, "pin-outline"),
-    ):
-        provider.registerCustomIcon(which, theme.icon(name))
+PROCEDURE_GROUPS = {"sis": "SIS", "if": "IF", "two_sb": "2SB"}
 
 
 class MainWindow(QMainWindow):
@@ -104,6 +80,7 @@ class MainWindow(QMainWindow):
         settings_file: Optional[str] = None,
         restore_layout: bool = True,
         check_updates: bool = True,
+        mode: Optional[str] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -114,9 +91,6 @@ class MainWindow(QMainWindow):
             if settings_file
             else app_settings()
         )
-        self.updateDialog = None
-        self.pending_update: Optional[Path] = None  # a downloaded build to install
-        self.perspective: Optional[str] = None
         # Ask on exit (layout, dump); off for smoke runs that close on a timer
         self.confirm_exit = True
         self.setWindowTitle(f"ThzDAQ {__version__}")
@@ -125,20 +99,22 @@ class MainWindow(QMainWindow):
         configure_docking()
         self.dock_manager = QtAds.CDockManager(self)
         self.dock_manager.setStyleSheet(theme.dock_style_sheet())
-        self.docks: Dict[str, QtAds.CDockWidget] = {}
-        self.menu_actions: Dict[str, QAction] = {}
-        self.dock_signatures: Dict[str, tuple] = {}
+        self.docks = DockSpace(self.dock_manager)
         # Docks are added open and then arranged: build contents only after that
-        self._building = True
+        self.docks.building = True
+        self.perspectives = Perspectives(self.docks, self.settings, self)
+        self.updates = Updates(self, session.busy)
+        # Lite runs the chosen measurement from the bar on top, its widget
+        # borrowed into the Measurement dock
+        self.runBar = RunBar(list_procedures())
+        self.runBar.parameters_requested.connect(lambda: self.show_dock(MEASUREMENT))
+        self.measurementHost = MeasurementHost()
+        lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
+        self.modes = {m.key: m for m in (lite, Pro())}
+        self.mode = self.modes.get(mode or self.settings.value(MODE_KEY), lite)
         self.hub = GraphHub(self)
-        self.hub.add_curve_request = self.add_curve
-        self.hub.graph_created.connect(self.add_graph_dock)
-        self.hub.raise_requested.connect(self.raise_graph)
-        self.hub.show_requested.connect(
-            lambda widget: self.open_dock(graph_dock_name(widget), activate=False)
-        )
-        self.hub.graph_renamed.connect(self.rename_graph_dock)
-        self.hub.graph_removed.connect(self.delete_graph)
+        self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
+        self.devices = DeviceDocks(session, self.hub, self.docks)
 
         self.build_menus()
         self.build_toolbar()
@@ -146,34 +122,35 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.stationLabel)
         session.worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
         # Manual control runs in one thread: tell when a device keeps it waiting
-        self._hang_reported: Optional[float] = None
-        self.hangWatch = QTimer(self)
-        self.hangWatch.timeout.connect(self.check_device_worker)
-        self.hangWatch.start(2000)
+        self.hangWatch = HangWatch(session.worker, DEVICE_HANG_S, self)
+        self.hangWatch.message.connect(lambda m: self.statusBar().showMessage(m, 2500))
 
         self.add_base_docks()
         for cls in list_procedures():
             self.add_measure_dock(cls)
-        for title in self.hub.titles():
-            self.hub.graph(title)
-        self.load_custom_graphs()
-        self.hub.custom_changed.connect(self.save_custom_graphs)
-        self.sync_device_docks()
+        self.docks.add(
+            MEASUREMENT, "Measurement", self.measurementHost, "Measures",
+            theme.icon("play-circle-outline"), QtAds.RightDockWidgetArea,
+            listed=False,
+        )  # fmt: skip
+        self.graphs.add_all()
+        self.devices.sync()
         session.station_changed.connect(self.on_station_changed)
-        session.config_changed.connect(self.sync_device_docks)
-        self.dataWidget.plot_requested.connect(self.plot_measurement)
+        self.dataWidget.plot_requested.connect(self.graphs.plot)
         self.show_station()
 
         restored = restore_layout and self.restore_state()
         if not restored:
             self.apply_default_layout()
-        self._building = False
-        self.sync_bodies()
-        self.refresh_perspectives()
-        if check_updates and can_self_update():
-            self.updateCheck = Background(fetch_job, self)
-            self.updateCheck.done.connect(self.offer_update)
-            self.updateCheck.start()
+        self.docks.hide_empty_splitters()  # the window is not shown yet
+        self.docks.building = False
+        self.apply_mode()
+        self.enter_mode()
+        # A default layout gets its widths once the window has a size
+        self._fit_on_show = not restored
+        self.perspectives.refresh()
+        if check_updates:
+            self.updates.check_in_background()
 
     # Menus and toolbar
     def build_menus(self) -> None:
@@ -209,24 +186,40 @@ class MainWindow(QMainWindow):
         self.menuDevices = bar.addMenu("&Devices")
         self.menuMeasures = bar.addMenu("&Measures")
         self.menuGraphs = bar.addMenu("&Graphs")
-        for menu in (
-            self.menuBase,
-            self.menuDevices,
-            self.menuMeasures,
-            self.menuGraphs,
-        ):
-            menu.aboutToShow.connect(self.sync_menu_checks)
         new_graph = QAction(theme.icon("plus"), "New graph…", self)
-        new_graph.triggered.connect(self.new_graph)
+        new_graph.triggered.connect(self.graphs.new)
         self.menuGraphs.addAction(new_graph)
         self.menuGraphs.addSeparator()
+        # Each menu is a search field over the tree of its docks
+        self.navigators: Dict[str, DockNavigator] = {}
+        for section, menu in zip(
+            SECTIONS,
+            (self.menuBase, self.menuDevices, self.menuMeasures, self.menuGraphs),
+        ):
+            navigator = self.navigator((section,))
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(navigator)
+            menu.addAction(action)
+            menu.aboutToShow.connect(navigator.prepare)
+            navigator.activated.connect(lambda _, m=menu: m.close())
+            self.navigators[section] = navigator
         help_menu = bar.addMenu("&Help")
-        updates = QAction(theme.icon("update"), "Check for updates…", self)
-        updates.triggered.connect(self.show_updates)
-        help_menu.addAction(updates)
+        check = QAction(theme.icon("update"), "Check for updates…", self)
+        check.triggered.connect(self.updates.show)
+        help_menu.addAction(check)
         about = QAction(theme.icon("information-outline"), "About ThzDAQ", self)
         about.triggered.connect(self.about)
         help_menu.addAction(about)
+
+    def navigator(self, sections=None) -> DockNavigator:
+        return DockNavigator(
+            self.docks.listed,
+            self.dock_state,
+            self.show_dock,
+            self.toggle_dock,
+            sections,
+            self.settings,
+        )
 
     def about(self) -> None:
         where = (
@@ -246,326 +239,101 @@ class MainWindow(QMainWindow):
         toolbar.setObjectName("main_toolbar")
         toolbar.setMovable(False)
         self.toolbar = toolbar
-        self.perspectives = QComboBox()
-        self.perspectives.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.perspectives.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        self.perspectives.setToolTip("Perspective: a saved layout of docks")
-        self.perspectives.textActivated.connect(self.open_perspective)
-        label = QLabel(" Perspective ")
-        label.setProperty("role", "muted")
-        toolbar.addWidget(label)
-        toolbar.addWidget(self.perspectives)
-        for icon_name, tip, slot in (
-            ("view-grid-plus-outline", "Create perspective", self.create_perspective),
-            (
-                "content-save-outline",
-                "Update current perspective",
-                self.update_perspective,
-            ),
-            ("delete-outline", "Delete current perspective", self.delete_perspective),
-            ("restore", "Restore the default layout", self.restore_defaults),
-        ):
-            action = toolbar.addAction(theme.icon(icon_name), tip)
-            action.triggered.connect(slot)
+        self.runBarAction = toolbar.addWidget(self.runBar)
+        self.perspectives.add_to(toolbar)
         toolbar.addSeparator()
+        # Ctrl+K (Cmd+K on macOS) finds any dock, from any window of the app
+        self.quickFind = QuickFind(self.navigator(), self)
+        find = QAction(theme.icon("magnify"), "Find…", self)
+        find.setToolTip("Find a device, measurement or graph (Ctrl+K)")
+        find.triggered.connect(self.quickFind.popup)
+        self.findShortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.findShortcut.setContext(Qt.ApplicationShortcut)
+        self.findShortcut.activated.connect(self.quickFind.popup)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.toolbarSpacer = toolbar.addWidget(spacer)
+        self.modeActions: Dict[str, QAction] = {}
+        group = QActionGroup(self)
+        for mode in self.modes.values():
+            action = QAction(mode.title, self)
+            action.setCheckable(True)
+            action.setToolTip(mode.tip)
+            action.triggered.connect(lambda _=False, key=mode.key: self.set_mode(key))
+            group.addAction(action)
+            toolbar.addAction(action)
+            self.modeActions[mode.key] = action
+        toolbar.addSeparator()
+        button = QToolButton()
+        button.setDefaultAction(find)
+        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        button.setText("Find…  Ctrl+K")
+        toolbar.addWidget(button)
 
     # Docks
-    def add_dock(
-        self, name: str, title: str, widget, menu, icon=None, area=None, auto_hide=None
-    ):
-        dock = QtAds.CDockWidget(name)
-        dock.setWindowTitle(title)
-        dock.setWidget(widget)
-        if icon is not None:
-            dock.setIcon(icon)
-        dock.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, False)
-        dock.toggleViewAction().setText(title)
-        # Menus show a check mark: a checkable action with an icon draws no check
-        action = QAction(title, self)
-        action.setCheckable(True)
-        action.triggered.connect(lambda checked, n=name: self.menu_toggled(n, checked))
-        dock.viewToggled.connect(action.setChecked)
-        menu.addAction(action)
-        self.menu_actions[name] = action
-        if isinstance(widget, DockBody):
-            dock.viewToggled.connect(
-                lambda on, body=widget: self._building or body.set_open(on)
-            )
-        if auto_hide is not None:
-            container = self.dock_manager.addAutoHideDockWidget(auto_hide, dock)
-            container.setSize(AUTO_HIDE_SIZES.get(name, 420))
-        else:
-            self.dock_manager.addDockWidgetTab(area or QtAds.CenterDockWidgetArea, dock)
-        self.docks[name] = dock
-        action.setChecked(not dock.isClosed())
-        if isinstance(widget, DockBody) and not self._building:
-            widget.set_open(not dock.isClosed())
-        return dock
-
-    def sync_bodies(self) -> None:
-        """Content only in open docks (after a layout or perspective is restored)."""
-        for dock in self.docks.values():
-            body = dock.widget()
-            if isinstance(body, DockBody):
-                body.set_open(not dock.isClosed())
-        self.sync_menu_checks()
-
-    def menu_toggled(self, name: str, checked: bool) -> None:
-        """Open a closed dock; a dock hidden behind another tab is brought to front."""
-        dock = self.docks.get(name)
-        if dock is None:
-            return
-        if dock.isClosed() or not dock.isCurrentTab():
-            self.open_dock(name)
-        else:
-            dock.toggleView(False)
-        self.menu_actions[name].setChecked(not dock.isClosed())
-
-    def open_dock(self, name: str, activate: bool = True) -> None:
-        """Show a dock where its kind is: a closed one joins the tab group of
-        an open dock of the same kind (graphs with graphs, devices with
-        devices), or opens on its side; activate brings it to the front."""
-        dock = self.docks.get(name)
-        if dock is None:
-            return
-        if dock.isClosed():
-            own = dock.dockAreaWidget()
-            if own is None or own.openDockWidgetsCount() == 0:
-                kind = name.split(":", 1)[0]
-                area = self.open_area_of(kind, dock)
-                if area is not None:
-                    self.dock_manager.addDockWidgetTabToArea(dock, area)
-                elif kind in HOME_AREAS:
-                    self.dock_manager.addDockWidget(HOME_AREAS[kind], dock)
-            dock.toggleView(True)
-            activate = True  # a dock just opened is the one to see
-        if activate:
-            dock.setAsCurrentTab()
-            dock.raise_()
-        self.sync_bodies()
-
-    def open_area_of(self, kind: str, besides):
-        """The tab group holding the most open docks of this kind (not floating)."""
-        counts = {}
-        for name, dock in self.docks.items():
-            if dock is besides or dock.isClosed() or not name.startswith(kind + ":"):
-                continue
-            area = dock.dockAreaWidget()
-            if area is None or dock.isFloating() or dock.isAutoHide():
-                continue
-            counts[area] = counts.get(area, 0) + 1
-        return max(counts, key=counts.get) if counts else None
-
-    def sync_menu_checks(self) -> None:
-        """Check marks from the docks: ADS opens a dock it moves without viewToggled."""
-        for name, dock in self.docks.items():
-            action = self.menu_actions.get(name)
-            if action is not None:
-                action.setChecked(not dock.isClosed())
-
-    def remove_dock(self, name: str) -> None:
-        dock = self.docks.pop(name, None)
-        if dock is None:
-            return
-        widget = dock.widget()
-        if isinstance(widget, DockBody):
-            widget.dispose()
-        elif hasattr(widget, "stop"):
-            widget.stop()
-        if widget is not None:
-            close_views(widget)
-        for menu in (
-            self.menuDevices,
-            self.menuMeasures,
-            self.menuGraphs,
-            self.menuBase,
-        ):
-            menu.removeAction(self.menu_actions.get(name))
-        self.menu_actions.pop(name, None)
-        self.dock_manager.removeDockWidget(dock)
-        dock.deleteLater()
-
     def add_base_docks(self) -> None:
         self.setupWidget = SetupWidget(self.session)
         self.setupWidget.open_profile_requested.connect(self.open_profile)
         self.setupWidget.new_profile_requested.connect(self.new_profile)
         self.dataWidget = DataWidget(self.session)
         self.logWidget = LogWidget()
+        self.processesWidget = ProcessesWidget(self.session.processes)
+        self.processesWidget.show_requested.connect(self.show_dock)
         for name, title, widget, icon_name, side in (
-            ("setup", "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
-            ("data", "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
+            (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
+            (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
+            (LOG, "Event log", self.logWidget, "text-box-outline", QtAds.SideBarBottom),
             (
-                "log",
-                "Event log",
-                self.logWidget,
-                "text-box-outline",
+                PROCESSES,
+                "Processes",
+                self.processesWidget,
+                "progress-clock",
                 QtAds.SideBarBottom,
             ),
         ):
-            dock = self.add_dock(
-                name,
-                title,
-                widget,
-                self.menuBase,
-                theme.icon(icon_name),
-                auto_hide=side,
+            dock = self.docks.add(
+                name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
             )
-            self.toolbar.addAction(dock.toggleViewAction())
+            self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
+        self.processesWidget.count_changed.connect(self.show_process_count)
+
+    def show_process_count(self, count: int) -> None:
+        """How many run, on the Processes tab and toolbar button."""
+        self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
     def add_measure_dock(self, cls) -> None:
         group = cls.name.split(".")[0]
-        icon = theme.icon(PROCEDURE_ICONS.get(group, "play-circle-outline"))
+        icon = theme.icon(theme.procedure_icon_name(cls.name))
         # Built when the dock is first opened (DockBody)
         body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
-        self.add_dock(
-            f"measure:{cls.name}", cls.title or cls.name, body, self.menuMeasures,
+        self.docks.add(
+            dock_name(MEASURE, cls.name), cls.title or cls.name, body, "Measures",
             icon, QtAds.RightDockWidgetArea,
+            group=PROCEDURE_GROUPS.get(group, type_title(group)), hint=cls.name,
         )  # fmt: skip
 
-    def add_graph_dock(self, widget) -> None:
-        name = graph_dock_name(widget)
-        if name in self.docks:
-            return
-        icon = theme.icon(
-            "grid" if isinstance(widget, MapGraphWidget) else "chart-line"
-        )
-        dock = self.add_dock(
-            name,
-            widget.title,
-            widget,
-            self.menuGraphs,
-            icon,
-            QtAds.CenterDockWidgetArea,
-        )
-        if not self._building:
-            # Made later (New graph…, a monitor's new unit): opens with the graphs
-            dock.toggleView(False)
+    # Docks as the mode shows them (menus, Ctrl+K, Processes)
+    def dock_state(self, name: str) -> str:
+        return self.docks.state(self.mode.dock_of(name))
 
-    def raise_graph(self, widget) -> None:
-        self.open_dock(graph_dock_name(widget))
+    def show_dock(self, name: str) -> None:
+        self.docks.show(self.mode.reveal(name))
 
-    def rename_graph_dock(self, widget) -> None:
-        name = graph_dock_name(widget)
-        dock = self.docks.get(name)
-        if dock is not None:
-            dock.setWindowTitle(widget.title)
-            dock.toggleViewAction().setText(widget.title)
-            self.menu_actions[name].setText(widget.title)
+    def toggle_dock(self, name: str) -> None:
+        if self.mode.dock_of(name) != name:  # shown in another dock: choose it
+            self.show_dock(name)
+        else:
+            self.docks.toggle(name)
 
-    def delete_graph(self, widget) -> None:
-        answer = QMessageBox.question(
-            self, "Delete graph", f"Delete the graph {widget.title!r} and its curves?"
-        )
-        if answer != QMessageBox.Yes:
-            return
-        self.hub.remove(widget)
-        self.remove_dock(graph_dock_name(widget))
-
-    def load_custom_graphs(self) -> None:
-        try:
-            saved = json.loads(self.settings.value(CUSTOM_GRAPHS) or "[]")
-        except (TypeError, ValueError):
-            saved = []
-        for item in saved:
-            try:
-                self.hub.new_graph(
-                    item["title"], item.get("key"), item.get("x", ""), item.get("y", "")
-                )
-            except (KeyError, ValueError, TypeError):
-                continue
-
-    def save_custom_graphs(self) -> None:
-        self.settings.setValue(CUSTOM_GRAPHS, json.dumps(self.hub.custom_graphs()))
-
-    def device_refs(self):
-        station = self.session.station
-        if station is None:
-            return []
-        # Fixed channels live inside their instrument's dock; an instrument with
-        # nothing to show (a SIS block: its parts are devices) gets no dock
-        return [
-            info
-            for info in station.devices()
-            if info.kind != "channel" and has_content(station, info)
-        ]
-
-    def dock_signature(self, info) -> tuple:
-        """What a device dock is built from; it is rebuilt only when this changes.
-
-        Instrument settings (multiplier, OEM head) are left out: the dock writes
-        them itself and must survive saving them.
-        """
-        station = self.session.station
-        spec = station.config.instruments[info.instrument]
-        found = station.config.find_device(info.ref)
-        device = found[1] if found else None
-        return (
-            info,
-            spec.driver,
-            spec.title,
-            spec.simulate or self.session.simulate,
-            repr(device),
-        )
-
-    def sync_device_docks(self, *_) -> None:
-        wanted = {f"device:{info.ref}": info for info in self.device_refs()}
-        for name in [
-            n for n in self.docks if n.startswith("device:") and n not in wanted
-        ]:
-            self.remove_dock(name)
-            self.dock_signatures.pop(name, None)
-        for name, info in wanted.items():
-            signature = self.dock_signature(info)
-            dock = self.docks.get(name)
-            if dock is not None and self.dock_signatures.get(name) == signature:
-                continue
-            factory = lambda ref=info.ref: self.device_widget(ref)  # noqa: E731
-            self.dock_signatures[name] = signature
-            icon = theme.device_icon(info.kind, info.instrument)
-            if dock is None:
-                dock = self.add_dock(
-                    name,
-                    info.title,
-                    DockBody(factory),
-                    self.menuDevices,
-                    icon,
-                    QtAds.BottomDockWidgetArea,
-                )
-                if not getattr(self, "_restoring", False):
-                    dock.toggleView(False)
-            else:
-                dock.widget().replace(factory)
-                dock.setWindowTitle(info.title)
-                dock.toggleViewAction().setText(info.title)
-                self.menu_actions[name].setText(info.title)
-
-    def device_widget(self, ref: str) -> QWidget:
-        try:
-            return DeviceWidget(self.session, self.hub, ref)
-        except (InstrumentError, KeyError) as e:
-            logger.error(f"Device dock {ref}: {e}")
-            label = QLabel(f"{ref}: {e}")
-            label.setWordWrap(True)
-            return label
-
-    def check_device_worker(self) -> None:
-        worker = self.session.worker
-        waiting = worker.busy_for()
-        if waiting <= DEVICE_HANG_S:
-            self._hang_reported = None
-            return
-        device = worker.current or "A device"
-        self.statusBar().showMessage(
-            f"{device} has not answered for {waiting:.0f} s; manual control waits. "
-            "Reset its connection in Setup → Connections.",
-            2500,
-        )
-        # Once per hang in the event log
-        if self._hang_reported != worker.started_at:
-            self._hang_reported = worker.started_at
-            logger.warning(
-                f"{device} does not answer: manual control and monitors wait for it"
-            )
+    def apply_default_layout(self) -> None:
+        """Devices on the left, graphs in the centre, measurements on the
+        right (Lite: the chosen one)."""
+        self.docks.close_kinds(GRAPH, MEASURE, DEVICE, MEASUREMENT)
+        self.docks.tab_group(QtAds.CenterDockWidgetArea, self.graphs.default_docks())
+        self.docks.tab_group(QtAds.RightDockWidgetArea, self.mode.measure_column)
+        self.docks.tab_group(QtAds.LeftDockWidgetArea, self.devices.default_docks())
+        if self.mode.perspectives:
+            self.perspectives.add_default()
 
     # Station
     def show_station(self) -> None:
@@ -579,19 +347,21 @@ class MainWindow(QMainWindow):
             self.simulateAction.setChecked(self.session.simulate)
 
     def on_station_changed(self, station) -> None:
-        self.dock_signatures.clear()  # another Station: every dock is rebuilt
-        self.sync_device_docks()
         self.show_station()
         if self.session.path is not None:
             self.settings.setValue("station/path", str(self.session.path))
 
     def open_profile(self) -> None:
-        path = ask_profile_path(self, save=False)
+        path = self.session.folders.open_path(
+            self, PROFILES, "Open station profile", "YAML (*.yaml *.yml)"
+        )
         if path:
             self.load_profile(path, self.session.simulate)
 
     def new_profile(self) -> None:
-        path = ask_profile_path(self, save=True)
+        path = self.session.folders.save_path(
+            self, PROFILES, "New station profile", "", "YAML (*.yaml)"
+        )
         if path:
             try:
                 self.session.new_station(path, Path(path).stem)
@@ -612,203 +382,80 @@ class MainWindow(QMainWindow):
             self.load_profile(self.session.path, on)
             self.show_station()
 
-    # Graphs and data
-    def add_curve(self, graph) -> None:
-        AddCurveDialog(self.session.measurements.items, graph, self).exec()
+    # Modes
+    def apply_mode(self) -> None:
+        """The toolbar of the mode: the run bar or perspectives."""
+        self.runBarAction.setVisible(self.mode.run_bar)
+        self.perspectives.set_visible(self.mode.perspectives)
+        self.modeActions[self.mode.key].setChecked(True)
 
-    def new_graph(self) -> None:
-        title, ok = QInputDialog.getText(self, "New graph", "Title")
-        if ok and title.strip():
-            try:
-                widget = self.hub.new_graph(title.strip())
-            except ValueError as e:
-                QMessageBox.warning(self, "New graph", str(e))
-                return
-            self.raise_graph(widget)
+    def enter_mode(self) -> None:
+        """After the layout of the mode is restored or made."""
+        self.mode.enter()
+        self.docks.sync_bodies()
 
-    def plot_measurement(self, measurement) -> None:
-        try:
-            specs = get_procedure(measurement.procedure).plots
-        except ProcedureError:
-            specs = ()
-        for title in self.hub.show_measurement(measurement, specs):
-            self.hub.raise_graph(title)
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._fit_on_show:
+            self._fit_on_show = False
+            QTimer.singleShot(0, self.fit_columns)
 
-    # Perspectives
-    def refresh_perspectives(self) -> None:
-        with QSignalBlocker(self.perspectives):
-            self.perspectives.clear()
-            self.perspectives.addItems(self.dock_manager.perspectiveNames())
-            if self.perspective:
-                self.perspectives.setCurrentText(self.perspective)
+    def fit_columns(self) -> None:
+        """After a default layout: the device and measurement columns as wide
+        as their docks want, the graphs the rest; the layout was made before
+        the docks had their content."""
+        self.docks.fit_columns()
 
-    def open_perspective(self, name: str) -> None:
-        if not name:
+    def set_mode(self, key: str) -> None:
+        """Switch modes, each with its own layout; running measurements go on."""
+        mode = self.modes[key]
+        if mode is self.mode:
+            self.apply_mode()
             return
-        # One repaint for the new layout instead of every step of the rebuild
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        self.setUpdatesEnabled(False)
-        try:
-            self.dock_manager.openPerspective(name)
-            self.sync_bodies()
-        finally:
-            self.setUpdatesEnabled(True)
-            QApplication.restoreOverrideCursor()
-        self.perspective = name
+        self.save_layout()
+        self.mode.leave()
+        self.mode = mode
+        self.settings.setValue(MODE_KEY, mode.key)
+        self.apply_mode()
+        with one_repaint(self):
+            restored = self.load_layout()
+            if not restored:
+                self.apply_default_layout()
+            self.enter_mode()
+            if not restored:
+                self.fit_columns()
+        self.perspectives.refresh()
 
-    def create_perspective(self) -> None:
-        name, ok = QInputDialog.getText(self, "Create perspective", "Unique name")
-        if ok and name.strip():
-            self.dock_manager.addPerspective(name.strip())
-            self.perspective = name.strip()
-            self.refresh_perspectives()
-            self.save_perspectives()
-
-    def update_perspective(self) -> None:
-        name = self.perspectives.currentText()
-        if name:
-            self.dock_manager.addPerspective(name)
-            self.save_perspectives()
-
-    def delete_perspective(self) -> None:
-        name = self.perspectives.currentText()
-        if not name:
-            return
-        answer = QMessageBox.question(
-            self, "Delete perspective", f"Delete perspective {name!r}?"
+    # State: geometry, the layout of each mode, perspectives
+    def save_layout(self) -> None:
+        self.settings.setValue(
+            self.mode.state_key, self.dock_manager.saveState(STATE_VERSION)
         )
-        if answer == QMessageBox.Yes:
-            self.dock_manager.removePerspective(name)
-            self.perspective = None
-            self.refresh_perspectives()
-            self.save_perspectives()
 
-    def restore_defaults(self) -> None:
-        answer = QMessageBox.question(
-            self,
-            "Default layout",
-            "Arrange the docks as by default? Perspectives stay.",
+    def load_layout(self) -> bool:
+        """The layout saved for the mode; False: none (or one ADS refused)."""
+        state = self.settings.value(self.mode.state_key)
+        return state is not None and bool(
+            self.dock_manager.restoreState(state, STATE_VERSION)
         )
-        if answer == QMessageBox.Yes:
-            self.apply_default_layout()
-
-    def apply_default_layout(self) -> None:
-        """Graphs in the centre, measurements on the right, devices below."""
-        for name, dock in self.docks.items():
-            if name.startswith(("graph:", "measure:", "device:")):
-                dock.toggleView(False)
-        center = None
-        for title in ("I-V", "P-V", "Y-V", "P-IF"):
-            dock = self.docks.get(f"graph:{title}")
-            if dock is None:
-                continue
-            if center is None:
-                center = self.dock_manager.addDockWidget(
-                    QtAds.CenterDockWidgetArea, dock
-                )
-            else:
-                self.dock_manager.addDockWidgetTabToArea(dock, center)
-            dock.toggleView(True)
-        right = None
-        for name in (
-            "measure:sis.iv_curve",
-            "measure:sis.pv_curve",
-            "measure:monitor.time",
-        ):
-            dock = self.docks.get(name)
-            if dock is None:
-                continue
-            if right is None:
-                right = self.dock_manager.addDockWidget(QtAds.RightDockWidgetArea, dock)
-            else:
-                self.dock_manager.addDockWidgetTabToArea(dock, right)
-            dock.toggleView(True)
-        bottom = None
-        for info in self.device_refs():
-            if info.kind not in ("sis_bias", "sis_coil"):
-                continue
-            dock = self.docks[f"device:{info.ref}"]
-            if bottom is None:
-                bottom = self.dock_manager.addDockWidget(
-                    QtAds.BottomDockWidgetArea, dock, center
-                )
-            else:
-                self.dock_manager.addDockWidgetTabToArea(dock, bottom)
-            dock.toggleView(True)
-        if DEFAULT_PERSPECTIVE not in self.dock_manager.perspectiveNames():
-            self.dock_manager.addPerspective(DEFAULT_PERSPECTIVE)
-            self.perspective = DEFAULT_PERSPECTIVE
-        self.sync_menu_checks()
-
-    def save_perspectives(self) -> None:
-        self.settings.remove("Perspectives")
-        self.dock_manager.savePerspectives(self.settings)
-        self.settings.sync()
 
     def restore_state(self) -> bool:
-        self._restoring = True
         try:
-            self.dock_manager.loadPerspectives(self.settings)
-            self.perspective = self.settings.value("perspective") or None
+            self.perspectives.load()
             geometry = self.settings.value("window/geometry")
             if geometry is not None:
                 self.restoreGeometry(geometry)
-            state = self.settings.value("window/docks")
-            if state is None:
-                return False
-            return bool(self.dock_manager.restoreState(state, STATE_VERSION))
+            return self.load_layout()
         finally:
-            self.sync_bodies()
-            self._restoring = False
+            self.docks.sync_bodies()
 
     def save_state(self) -> None:
         self.settings.setValue("window/geometry", self.saveGeometry())
-        self.settings.setValue(
-            "window/docks", self.dock_manager.saveState(STATE_VERSION)
-        )
-        self.settings.setValue("perspective", self.perspective or "")
-        self.save_perspectives()
-
-    # Updates
-    def show_updates(self) -> None:
-        if self.updateDialog is None:
-            self.updateDialog = UpdateDialog(
-                quit_app=self.quit_for_update, busy=self.session.busy, parent=self
-            )
-        self.updateDialog.check()
-        self.updateDialog.show()
-        self.updateDialog.raise_()
-
-    def offer_update(self, releases) -> None:
-        release = latest_update(releases)
-        if release is None:
-            return
-        button = QPushButton(theme.icon("update"), f"Update to {release.tag}")
-        button.setFlat(True)
-        button.clicked.connect(self.show_updates)
-        self.statusBar().addPermanentWidget(button)
+        self.save_layout()
+        self.settings.setValue(MODE_KEY, self.mode.key)
+        self.perspectives.save()
 
     # Closing
-    def quit_for_update(self, build: Path) -> None:
-        """Close and install the downloaded build; if closing is cancelled, the
-        build stays ready and installs when the window is closed later."""
-        self.pending_update = build
-        if not self.close():
-            QMessageBox.information(
-                self,
-                "Update",
-                "The update is downloaded: it installs when you close ThzDAQ.",
-            )
-
-    def start_pending_update(self) -> None:
-        if self.pending_update is None:
-            return
-        try:
-            launch_updater(self.pending_update)
-        except Exception as e:
-            logger.error(f"Update not started: {e}")
-            QMessageBox.critical(self, "Update", f"The update did not start: {e}")
-
     def closeEvent(self, event) -> None:
         store_state, dump = True, False
         if self.confirm_exit:
@@ -838,9 +485,5 @@ class MainWindow(QMainWindow):
         close_plots()
         self.dock_manager.deleteLater()
         # Last: the updater waits for this process to end, then replaces the files
-        self.start_pending_update()
+        self.updates.install_pending()
         event.accept()
-
-
-def graph_dock_name(widget) -> str:
-    return f"graph:{getattr(widget, 'key', widget.title)}"

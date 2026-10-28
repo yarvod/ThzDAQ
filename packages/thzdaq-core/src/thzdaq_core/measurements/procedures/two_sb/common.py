@@ -40,6 +40,7 @@ from thzdaq_core.measurements.procedures.common import (
     BIAS,
     restore_bias_on_exit,
     set_bias,
+    warn_without_contrast,
 )
 
 SOURCE = (FrequencySource, Switchable)
@@ -195,17 +196,19 @@ class HotColdMixin:
                         power=power,
                     )
                     ctx.progress()
+            temperatures = []
             for frequency in frequencies:
                 hot, cold = powers["hot", frequency], powers["cold", frequency]
+                tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
+                temperatures.append(tn)
                 ctx.record(
                     "noise",
                     channel=side_band,
                     frequency=frequency,
                     y_factor=hot - cold,
-                    noise_temperature=noise_temperature(
-                        hot, cold, self.t_hot, self.t_cold
-                    ),
+                    noise_temperature=tn,
                 )
+            warn_without_contrast(ctx, temperatures, f"{side_band} channel")
 
 
 class SpectrumMixin:

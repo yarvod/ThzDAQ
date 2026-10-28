@@ -6,10 +6,21 @@ ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/archi
 
 - `packages/thzdaq-instruments` (`thzdaq_instruments`): capability interfaces, quantities (readable/settable values with units derived from capabilities), fixed channels and sub-device types of instruments, transports (TCP, serial, Prologix, VISA, HTTP, Modbus) with a shared pool and per-link locks, instrument drivers in `drivers/`, simulators in `sim/`, driver registry. No Qt, no numpy.
 - `packages/thzdaq-core` (`thzdaq_core`): station profiles with instruments and their configured devices, device kinds (`station/`), procedures with device slots and the runner (`measurements/`), measurement DTOs and the JSON store (`data/`), pure analysis (`analysis/`), SIS tools (`sis/`), CLIs `thzdaq` and `thzdaq-station`. No Qt.
-- `packages/thzdaq-gui` (`thzdaq_gui`): PySide6 + PySide6-QtAds + pyqtgraph application in the layout of the old app: docks (`docks/`: Setup, device docks, measurement docks, Data, Log), graph docks (`graphs.py`), perspectives, dark theme with orange accents and qtawesome icons (`theme.py`). Docks only display and drive core objects.
+- `packages/thzdaq-gui` (`thzdaq_gui`): PySide6 + PySide6-QtAds + pyqtgraph application in the layout of the old app: the window only assembles the parts (`main_window.py`), docks by name and where they open (`docking.py`, names in `dock_names.py`), graph and device docks that follow the graphs and the station (`graph_docks.py`, `device_docks.py`), perspectives (`perspectives.py`), docks (`docks/`: Setup, device docks, measurement docks, Data, Log, Processes: what runs now, `processes.py`), graph docks (`graphs.py`), dock search (`navigator.py`: menus as a searchable tree by type, Ctrl+K), Lite and Pro modes (`modes.py`; Lite: one layout and the run bar on top, `runbar.py`; Pro: a dock per measurement and perspectives), run controls as a view of a run's status (`run_controls.py`), file dialogs that remember their folder (`folders.py`), dark theme with orange accents and qtawesome icons (`theme.py`). Docks only display and drive core objects.
 - `stations/`: bench profiles (YAML, version 2: instruments with `devices`; ids name the kind of device, e.g. `power_supply_3`). `main.py` is the GUI entry point. `assets/` holds the pixel app icon (`thzdaq.ico`, `thzdaq.icns`, drawn by `assets/make_icon.py`; rerun it after changing the drawing). `firmware/` keeps device firmware (Arduino grid rotators).
 
 Dependencies point one way: gui → core → instruments. Tests check that core and instruments never import Qt.
+
+## Architecture Rules — Required
+
+Fix the design, not the symptom. A change that only works with a hack is not done: restructure, or stop and ask.
+
+- **One-way dependencies, no cycles.** Between packages gui → core → instruments; inside the GUI the entry point (`app.py`) → the window (`main_window.py`, it only assembles) → its parts (`docking.py`, `graph_docks.py`, `device_docks.py`, `perspectives.py`, `modes.py`, `runbar.py`) → docks (`docks/`) → widgets and view models (`forms.py`, `run_controls.py`, `collapsible.py`) → `theme.py`, `settings.py`, `dock_names.py`. A lower module never imports a higher one; it tells through Qt signals or callbacks it is given.
+- **One owner per responsibility.** New behaviour goes into the object that owns the concept, not into `MainWindow` or into a widget that happens to be near. A concept lives in one place (dock names in `dock_names.py`, dialog folders in `folders.py`, a run's state in `RunStatus`); never parse or rebuild it elsewhere.
+- **Polymorphism over branching.** What differs by mode, kind or device is an object asked for its answer (`Mode.dock_of`, capability interfaces), not `if mode == …` / `isinstance` chains spread over callers.
+- **State in models, widgets are views.** Widgets show a model and call its methods; they never read another widget's labels, buttons or progress bars to learn state.
+- **No hacks.** No flags that silence a path for one caller, no sleeps or timers to "let it settle", no retries, no `getattr(self, "_x", default)` for attributes that may not exist, no catch-all `except` to hide a failure, no dead code left behind. If a third-party library (Qt, ADS, pyqtgraph) needs a workaround, it lives in the module that wraps that library (ADS: `docking.py`), runs once at the point where the library's behaviour causes the problem, and its comment names that behaviour.
+- **Prove it.** A bug fix reproduces the bug first (a test, or a script on simulators) and checks the fix against it.
 
 ## Build, Test, and Development Commands
 
@@ -20,7 +31,7 @@ Dependencies point one way: gui → core → instruments. Tests check that core 
 - `uv run pytest` runs all package tests (GUI tests run offscreen); `uv run pytest packages/thzdaq-core` for one package.
 - `sh build.sh` / `build.bat [name]` build the PyInstaller distribution into `dist/`.
 - `uvx pre-commit run --all-files` runs Black, autoflake and hygiene hooks before committing.
-- `uv run python release.py X.Y.Z` stamps `thzdaq_gui/version.py`, tags `vX.Y.Z` and pushes (`--again` moves an existing tag to the current commit after fixes and builds it again); `.github/workflows/release.yml` then tests, builds the Windows x64 zip and publishes the GitHub release that Help → Check for updates installs (`thzdaq_gui/updates.py`, standalone `thzdaq_gui/updater.py` built as `updater.exe`). `.github/workflows/ci.yml` runs the tests on every push.
+- `uv run python release.py X.Y.Z` (or `X.Y.Z-beta.N`: a GitHub pre-release, a new number for every beta) stamps `thzdaq_gui/version.py`, tags `vX.Y.Z` and pushes (`--again` moves an existing tag to the current commit after fixes and builds it again); `.github/workflows/release.yml` then tests, builds the Windows x64 zip and publishes the GitHub release that Help → Check for updates installs (`thzdaq_gui/updates.py`, standalone `thzdaq_gui/updater.py` built as `updater.exe`). `.github/workflows/ci.yml` runs the tests on every push.
 
 ## RTK (Rust Token Killer) — Required
 

@@ -87,6 +87,11 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
     def check(self):
         return self.hot_cold_problems() if self.measure_y_factor else []
 
+    def active_plots(self, quantities=None):
+        if self.measure_y_factor:
+            return self.plots
+        return tuple(p for p in self.plots if p not in NOISE_PLOTS)
+
     def estimate_steps(self) -> int:
         tones = len(side_bands(self.tones)) * len(SIDE_BANDS) * self.frequency.points
         noise = (

@@ -323,3 +323,83 @@ def test_if_switch_parameters_only_where_the_switch_is_used():
     pump = get_procedure("two_sb.pump_balance")
     assert "upper_when_on" not in pump.parameters()
     assert "if_selector" not in pump().slots()
+
+
+class TestActivePlots:
+    """Plots a run fills, known at Start: a viewer opens just these."""
+
+    @staticmethod
+    def titles(procedure, quantities=None):
+        return [p.title for p in procedure.active_plots(quantities)]
+
+    def test_loads_bring_y_factor_and_noise(self):
+        pv = get_procedure("sis.pv_curve")
+        assert self.titles(pv()) == ["P-V", "I-V"]
+        assert self.titles(pv(hot_cold=True)) == ["P-V", "I-V", "Y-V", "Tn-V"]
+        assert "Tn-V" in self.titles(get_procedure("sis.y_factor_voltage")())
+        srr = get_procedure("two_sb.srr")
+        assert self.titles(srr(measure_y_factor=False)) == ["Test tone P-IF", "SRR-IF"]
+        assert "Tn-IF" in self.titles(srr())
+
+    def test_monitor_graphs_follow_the_units(self):
+        from pathlib import Path
+
+        from thzdaq_core.station import Station, load_station
+
+        example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
+        station = Station(load_station(example))
+        monitor = get_procedure("monitor.time")(
+            watch=("power_meter_1", "sis_bias_1/voltage", "sis_coil_1")
+        )
+        assert self.titles(monitor, station.quantities) == ["P-t", "V-t", "Coil-t"]
+        # Without the devices nothing is left out
+        assert self.titles(monitor) == [p.title for p in monitor.plots]
+
+
+class TestHotColdContrast:
+    def test_the_log_says_why_tn_is_missing(self):
+        from thzdaq_core.measurements import RunObserver
+
+        class Logs(RunObserver):
+            def __init__(self):
+                self.lines = []
+
+            def on_log(self, message):
+                self.lines.append(message)
+
+        bench = Bench()
+        hot_at_first_angle = bench.power
+        # The first angle: the load never switched, hot reads like cold
+        bench.power = lambda: (
+            -32.0 if bench.ports["grid"].get_angle() == 0 else hot_at_first_angle()
+        )
+        procedure = PVCurve(
+            voltage=(1e-3, 4e-3, 4), hot_cold=True, use_grid=True, angle=(0, 30, 2),
+            settle_time=0, first_point_delay=0, load_delay=0, grid_speed=1e6,
+        )  # fmt: skip
+        bench.ports["detector"].model = bench.power
+        logs = Logs()
+        dataset = MeasurementRunner(bench, observers=[logs]).run(procedure)
+        assert dataset.status == COMPLETED
+        assert logs.lines == [
+            "angle 0 deg: hot is not above cold at any point (Y <= 0 dB), no Tn: "
+            "did the load switch?"
+        ]
+
+    def test_a_simulated_detector_sees_the_simulated_load(self):
+        from pathlib import Path
+
+        from thzdaq_core.station import Station, load_station
+        from thzdaq_instruments.sim.power_meter import T_RECEIVER
+
+        example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
+        with Station(load_station(example), simulate=True) as station:
+            detector = station.instrument("power_meter_1")
+            alone = detector.read_power()  # no load open: as the profile says
+            chopper = station.instrument("chopper_1")
+            chopper.to_cold()
+            cold = detector.read_power()
+            chopper.to_hot()
+            hot = detector.read_power()
+        assert cold == alone
+        assert noise_temperature(hot, cold) == pytest.approx(T_RECEIVER)

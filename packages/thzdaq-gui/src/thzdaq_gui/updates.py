@@ -1,6 +1,6 @@
 """Updates from GitHub releases: find a newer build, download it, hand over to the updater.
 
-Releases are tagged vX.Y.Z (vX.Y.Z-rc.N for pre-releases) and carry one asset
+Releases are tagged vX.Y.Z (vX.Y.Z-beta.N, vX.Y.Z-rc.N for pre-releases) and carry one asset
 per platform, ThzDAQ_Windows_x64_<tag>.zip, with the ThzDAQ folder inside.
 """
 
@@ -49,6 +49,14 @@ def parse_version(tag: str) -> Tuple[int, int, int, int, str, int]:
         (label or "").lower(),
         int(number or 0),
     )
+
+
+def is_prerelease(tag: str) -> bool:
+    """v0.0.6-beta.1, v0.3.0-rc.1."""
+    try:
+        return parse_version(tag)[3] == 0
+    except ValueError:
+        return False
 
 
 def is_newer(tag: str, current: str = __version__) -> bool:

@@ -1,7 +1,8 @@
 """Data dock: measurements of the session and opened files, as the old table.
 
 Every measurement is saved to data/<date>/ as it runs; here it can be
-commented, plotted again, saved elsewhere as JSON or exported to CSV.
+commented, plotted again, saved elsewhere as JSON or exported to CSV. The
+file dialogs start in the folder used last (Session.folders).
 """
 
 import json
@@ -13,7 +14,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from thzdaq_core.data.store import dumps, export_csv
 
 from thzdaq_gui import theme
+from thzdaq_gui.folders import MEASUREMENTS
 
 
 class DetailsDialog(QDialog):
@@ -100,11 +101,8 @@ class DataWidget(QWidget):
         return [self.model.measurement(r) for r in rows]
 
     def open_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Open measurements",
-            str(self.session.store.root),
-            "Measurements (*.json)",
+        paths = self.session.folders.open_paths(
+            self, MEASUREMENTS, "Open measurements", "Measurements (*.json)"
         )
         for path in paths:
             try:
@@ -121,8 +119,8 @@ class DataWidget(QWidget):
     def save_as(self) -> None:
         for measurement in self.selected():
             name = f"{measurement.id}_{measurement.procedure.replace('.', '_')}.json"
-            path, _ = QFileDialog.getSaveFileName(
-                self, "Save measurement", name, "JSON (*.json)"
+            path = self.session.folders.save_path(
+                self, MEASUREMENTS, "Save measurement", name, "JSON (*.json)"
             )
             if path:
                 self.model.save(measurement, path)
@@ -140,8 +138,8 @@ class DataWidget(QWidget):
                 if not ok:
                     continue
             name = f"{measurement.id}_{table}.csv"
-            path, _ = QFileDialog.getSaveFileName(
-                self, "Export CSV", name, "CSV (*.csv)"
+            path = self.session.folders.save_path(
+                self, MEASUREMENTS, "Export CSV", name, "CSV (*.csv)"
             )
             if path:
                 export_csv(measurement, table, path)

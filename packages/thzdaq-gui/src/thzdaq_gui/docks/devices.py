@@ -45,6 +45,8 @@ from thzdaq_instruments.capabilities import (
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
+from thzdaq_gui.collapsible import Collapsible
+from thzdaq_gui.dock_names import DEVICE, dock_name
 from thzdaq_gui.docks.measure import ProcedureBox
 from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.fields import (
@@ -93,11 +95,14 @@ class QuantityPanel(QWidget):
         self.ref = ref
         self.title = title
         self.config = config
+        self.process = None  # polling, in the session's Processes
         # The instrument whose queue the reads and writes join (DeviceWorker)
         try:
             self.lane = session.station.info(ref).instrument
         except Exception:
             self.lane = ref
+        # A fixed channel is shown in its instrument's dock
+        self.dock = dock_name(DEVICE, self.lane if kind == "channel" else ref)
         self.quantities: List[Quantity] = [
             q for q in session.station.quantities(ref) if q.persistent == config
         ]
@@ -202,6 +207,7 @@ class QuantityPanel(QWidget):
         self.interval.valueChanged.connect(
             lambda v: self.timer.setInterval(int(v * 1000))
         )
+        self.interval.valueChanged.connect(self.show_process_status)
 
     # Where values are remembered
     def instrument_spec(self):
@@ -239,9 +245,23 @@ class QuantityPanel(QWidget):
         if on:
             self.started = time.monotonic()
             self.timer.start(int(self.interval.value() * 1000))
+            if self.process is None:
+                self.process = self.session.processes.start(
+                    f"Monitor · {self.title}",
+                    "timer-outline",
+                    self.dock,
+                    stop=lambda: self.monitor.setChecked(False),
+                )
+            self.show_process_status()
             self.read()
         else:
             self.timer.stop()
+            self.session.processes.finish(self.process)
+            self.process = None
+
+    def show_process_status(self, *_) -> None:
+        if self.process is not None:
+            self.process.update(status=f"every {self.interval.value():g} s")
 
     def device(self):
         return self.session.station.device(self.ref)
@@ -453,33 +473,57 @@ class ChopperGroup(QGroupBox):
         )
         self.btnStart.clicked.connect(self.start)
         self.btnStop = QPushButton(theme.icon("stop"), "Stop")
-        self.btnStop.clicked.connect(lambda: self.run(lambda d: d.stop()))
+        self.btnStop.clicked.connect(self.stop)
         for widget in (self.frequency, self.btnStart, self.btnStop):
             rotation.addWidget(widget)
         layout.addLayout(rotation)
         self.result = QLabel()
         self.result.setProperty("role", "muted")
         layout.addWidget(self.result)
+        self.process = None  # continuous rotation, in the session's Processes
+        self.destroyed.connect(lambda: panel.session.processes.finish(self.process))
 
     def start(self) -> None:
         frequency = self.frequency.value()
         settings().setValue(f"setpoints/{self.panel.ref}/chopper_frequency", frequency)
         self.run(lambda d: d.start_rotation(frequency))
 
+    def stop(self) -> None:
+        self.run(lambda d: d.stop())
+
     def run(self, call) -> None:
         self.result.setText("working...")
 
-        def done(_):
+        def job():
+            device = self.panel.device()
+            call(device)
+            return device.is_running() if hasattr(device, "is_running") else False
+
+        def done(rotating):
             self.result.setText("")
+            self.show_rotation(rotating)
             self.panel.read()
 
         self.panel.session.worker.submit(
-            lambda: call(self.panel.device()),
+            job,
             done,
             lambda error: self.result.setText(f"{error}"),
             self.panel.title,
             key=self.panel.lane,
         )
+
+    def show_rotation(self, rotating: bool) -> None:
+        """The rotation in Processes as the chopper reports it after each command."""
+        processes = self.panel.session.processes
+        if rotating and self.process is None:
+            self.process = processes.start(
+                f"Rotation · {self.panel.title}", "fan", self.panel.dock, stop=self.stop
+            )
+        elif not rotating:
+            processes.finish(self.process)
+            self.process = None
+        if self.process is not None:
+            self.process.update(status=f"{self.frequency.value():g} Hz")
 
 
 class CompressorGroup(QGroupBox):
@@ -568,7 +612,7 @@ class TraceGroup(QGroupBox):
         self.graph.setLabel("left", "|S|, dB" if vna else "Power, dBm")
         self.graph.showGrid(x=True, y=True, alpha=0.25)
         self.graph.setMinimumHeight(220)
-        self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=2))
+        self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=1))
         layout.addWidget(self.graph)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.read)
@@ -740,13 +784,15 @@ class SisBiasGroup(QGroupBox):
         )
 
 
-def scan_group(session, hub, title: str, procedure: str, fixed) -> QGroupBox:
-    box = QGroupBox(title)
-    layout = QVBoxLayout(box)
-    layout.addWidget(
-        ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
-    )
-    return box
+def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
+    """A quick measurement of this device, folded by default: the measurement
+    docks run the same; folded, the title line shows how it runs."""
+    section = Collapsible(title, f"scan/{procedure}", expanded=False)
+    box = ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
+    box.reveal = lambda: section.set_expanded(True)
+    box.status_changed.connect(section.set_summary)
+    section.addWidget(box)
+    return section
 
 
 # Capabilities whose dock has its own group even without quantities

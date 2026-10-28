@@ -2,6 +2,7 @@ import json
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_core.data import COMPLETED, read_json
 from thzdaq_core.measurements.parameters import Sweep
@@ -25,47 +26,139 @@ class TestWindow:
         assert not any(name.startswith("device:power_supply_1:") for name in names)
         menus = [a.text() for a in window.menuBar().actions()]
         assert menus == ["&File", "&Base", "&Devices", "&Measures", "&Graphs", "&Help"]
-        titles = [a.text() for a in window.menuDevices.actions()]
+        titles = [e.title for e in window.docks.listed() if e.section == "Devices"]
         assert "SIS1" in titles and "IF switch supply" in titles
 
-    def test_menus_show_checks_and_bring_docks_forward(self, window):
-        action = window.menu_actions["graph:Tn-V"]
-        assert action.isCheckable() and action.icon().isNull()
-        assert not action.isChecked()
-        action.trigger()
+    def test_device_menu_is_a_tree_by_type(self, window):
+        navigator = window.navigators["Devices"]
+        navigator.prepare()
+        top = [
+            navigator.tree.topLevelItem(i).text(0)
+            for i in range(navigator.tree.topLevelItemCount())
+        ]
+        # Several devices of a type share a branch, a single one stays a row
+        assert "SIS bias  (2)" in top and "SIS coil  (2)" in top
+        assert "Power supply  (2)" in top and "SIS1" not in top
+        assert "R&S NRX" in top  # the only power meter
+        group = navigator.tree.topLevelItem(top.index("SIS bias  (2)"))
+        assert [group.child(i).text(0) for i in range(group.childCount())] == [
+            "SIS1",
+            "SIS2",
+        ]
+        assert not group.isExpanded()
+        navigator.clicked(group, 0)
+        assert group.isExpanded()
+        # The branch stays open the next time the menu opens
+        navigator.prepare()
+        group = navigator.tree.topLevelItem(top.index("SIS bias  (2)"))
+        assert group.isExpanded()
+        measures = window.navigators["Measures"]
+        measures.prepare()
+        assert "2SB  (5)" in [
+            measures.tree.topLevelItem(i).text(0)
+            for i in range(measures.tree.topLevelItemCount())
+        ]
+
+    def test_search_finds_docks_flat(self, window):
+        navigator = window.navigators["Devices"]
+        navigator.prepare()
+        navigator.search.setText("sis2")
+        found = [item.text(0) for item in navigator.items()]
+        assert found == ["SIS2", "SIS2 coil"]
+        assert navigator.items()[0].text(1) == "Devices › SIS bias"
+        # Words in any order, the type included
+        navigator.search.setText("supply power")
+        assert len(navigator.items()) == 2
+        navigator.search.setText("nothing like this")
+        assert navigator.items() == []
+
+    def test_click_shows_a_dock_and_the_eye_closes_it(self, window):
+        navigator = window.navigators["Graphs"]
+        navigator.prepare()
+        navigator.search.setText("Tn-V")
+        item = navigator.item("graph:Tn-V")
         dock = window.docks["graph:Tn-V"]
-        assert not dock.isClosed() and action.isChecked()
-        # Behind another tab: the menu brings it forward instead of closing it
+        assert dock.isClosed() and window.dock_state("graph:Tn-V") == "closed"
+        shown = []
+        navigator.activated.connect(shown.append)
+        navigator.clicked(item, 0)
+        assert not dock.isClosed() and dock.isCurrentTab()
+        assert shown == ["graph:Tn-V"] and window.dock_state("graph:Tn-V") == "front"
+        # Behind another tab: a click brings it forward instead of closing it
         other = window.docks["graph:I-V"]
         window.dock_manager.addDockWidgetTabToArea(dock, other.dockAreaWidget())
         other.setAsCurrentTab()
-        assert not dock.isCurrentTab()
-        action.trigger()
-        assert dock.isCurrentTab() and action.isChecked()
-        action.trigger()
-        assert dock.isClosed() and not action.isChecked()
+        assert window.dock_state("graph:Tn-V") == "behind"
+        navigator.clicked(navigator.item("graph:Tn-V"), 0)
+        assert dock.isCurrentTab() and not dock.isClosed()
+        # Only the eye closes it, and opens it again
+        navigator.clicked(navigator.item("graph:Tn-V"), 2)
+        assert dock.isClosed()
+        navigator.clicked(navigator.item("graph:Tn-V"), 2)
+        assert not dock.isClosed()
 
-    def test_menu_checks_follow_the_default_layout(self, window):
+    def test_shown_docks_flash_and_side_bars_unfold(self, window):
+        from thzdaq_gui.navigator import Flash
+
+        window.show_dock("data")
+        dock = window.docks["data"]
+        assert dock.isAutoHide() and dock.autoHideDockContainer().isVisible()
+        assert window.dock_state("data") == "front"
+        assert dock.findChildren(Flash)
+
+    def test_quick_find_lists_every_dock(self, window):
+        window.quickFind.popup()
+        navigator = window.quickFind.navigator
+        sections = [
+            navigator.tree.topLevelItem(i).text(0)
+            for i in range(navigator.tree.topLevelItemCount())
+        ]
+        assert sections == ["Base", "Devices", "Measures", "Graphs"]
+        navigator.search.setText("p-v")
+        assert navigator.tree.currentItem().data(0, Qt.UserRole) == "graph:P-V"
+        from PySide6.QtCore import QEvent
+        from PySide6.QtGui import QKeyEvent
+
+        navigator.eventFilter(
+            navigator.search, QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier)
+        )
+        assert window.dock_state("graph:P-V") == "front"
+        assert not window.quickFind.isVisible()
+
+    def test_menu_states_follow_the_default_layout(self, window):
         # ADS opens the first dock of each area without viewToggled
         wrong = [
             name
             for name, dock in window.docks.items()
-            if window.menu_actions[name].isChecked() == dock.isClosed()
+            if (window.dock_state(name) == "closed") != dock.isClosed()
         ]
         assert wrong == []
-        assert window.menu_actions["graph:I-V"].isChecked()
+        assert window.dock_state("graph:I-V") != "closed"
 
     def test_docks_open_with_their_kind(self, window):
         # Default layout: SIS biases open at the bottom, graphs in the centre
         bias_area = window.docks["device:sis_bias_1"].dockAreaWidget()
         supply = window.docks["device:power_supply_1"]
         assert supply.isClosed()
-        window.menu_actions["device:power_supply_1"].trigger()
+        window.show_dock("device:power_supply_1")
         assert not supply.isClosed() and supply.dockAreaWidget() is bias_area
-        assert (
-            supply.isCurrentTab()
-            and window.menu_actions["device:power_supply_1"].isChecked()
-        )
+        assert supply.isCurrentTab()
+        assert window.dock_state("device:power_supply_1") == "front"
+
+    def test_a_dock_opened_on_its_side_has_a_tab_and_fits(self, window, app):
+        window.resize(1500, 900)
+        for name, dock in window.docks.items():
+            if name.startswith("measure:") and not dock.isClosed():
+                dock.toggleView(False)
+        window.show_dock("measure:if.hot_cold")
+        app.processEvents()
+        dock = window.docks["measure:if.hot_cold"]
+        # ADS hid the tab of a closed dock moved into a new area
+        assert dock.tabWidget().isVisible()
+        # Sized for the content, not for the empty body it had before opening
+        wanted = dock.widget().sizeHint().width()
+        assert dock.dockAreaWidget().width() >= wanted
+        assert dock.dockAreaWidget().width() <= 0.45 * window.width()
 
     def test_custom_graph_rename_delete_and_keep(self, window, session, monkeypatch):
         from thzdaq_gui.graphs import Axis
@@ -74,7 +167,7 @@ class TestWindow:
         hub = window.hub
         graph = hub.new_graph("Mine")
         dock = window.docks["graph:custom1"]
-        window.raise_graph(graph)
+        window.graphs.show(graph)
         # Joins the graphs on screen instead of opening anywhere
         assert dock.dockAreaWidget() is window.docks["graph:I-V"].dockAreaWidget()
         assert dock.isCurrentTab()
@@ -83,7 +176,7 @@ class TestWindow:
         hub.custom_changed.emit()
         assert hub.graphs["Mine 2"] is graph and "Mine" not in hub.graphs
         assert dock.windowTitle() == "Mine 2"
-        assert window.menu_actions["graph:custom1"].text() == "Mine 2"
+        assert window.docks.entries["graph:custom1"].title == "Mine 2"
         with pytest.raises(ValueError):
             hub.rename(graph, "I-V")  # a graph of the procedures
         window.save_state()
@@ -440,11 +533,11 @@ class TestMeasureAndData:
         box.devices.combos["bias"].setCurrentIndex(
             box.devices.combos["bias"].findData("sis_bias_2")
         )
-        box.comment.setText("smoke test")
+        QTest.keyClicks(box.controls.comment, "smoke test")
         finished = []
         box.runner.finished.connect(finished.append)
-        box.btnStart.click()
-        wait(lambda: finished and box.btnStart.isEnabled())
+        box.controls.btnStart.click()
+        wait(lambda: finished and box.controls.btnStart.isEnabled())
         measurement = finished[0]
         assert measurement.status == COMPLETED and measurement.comment == "smoke test"
         assert measurement.devices["bias"].ref == "sis_bias_2"
@@ -474,7 +567,7 @@ class TestMeasureAndData:
         path = MeasurementStore(tmp_path / "other").save(measurement)
         data = window.dataWidget
         monkeypatch.setattr(
-            "thzdaq_gui.docks.data.QFileDialog.getOpenFileNames",
+            "thzdaq_gui.folders.QFileDialog.getOpenFileNames",
             lambda *a, **k: ([str(path)], ""),
         )
         data.open_files()
@@ -483,7 +576,7 @@ class TestMeasureAndData:
         data.table.selectRow(0)
         csv_path = tmp_path / "iv.csv"
         monkeypatch.setattr(
-            "thzdaq_gui.docks.data.QFileDialog.getSaveFileName",
+            "thzdaq_gui.folders.QFileDialog.getSaveFileName",
             lambda *a, **k: (str(csv_path), ""),
         )
         data.export()
@@ -492,6 +585,43 @@ class TestMeasureAndData:
             .splitlines()[0]
             .startswith('"Voltage, V"')
         )
+
+    def test_file_dialogs_start_where_the_last_file_went(
+        self, window, session, tmp_path, monkeypatch
+    ):
+        import shutil
+        from pathlib import Path
+
+        from thzdaq_core.data import Measurement
+        from thzdaq_gui.folders import MEASUREMENTS, Folders
+        from thzdaq_gui.settings import settings
+
+        settings().remove("folders")
+        measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+        measurement.append("iv", {"voltage": 1e-3, "current": 5e-5})
+        session.measurements.add(measurement)
+        window.dataWidget.table.selectRow(0)
+        results = tmp_path / "results"
+        starts = []
+
+        def save(parent, title, start, filters):
+            starts.append(Path(start).parent.resolve())
+            return str(results / Path(start).name), ""
+
+        monkeypatch.setattr("thzdaq_gui.folders.QFileDialog.getSaveFileName", save)
+        # Nothing chosen yet: the data folder of the session, not the program's
+        window.dataWidget.save_as()
+        assert starts[0] == Path(session.store.root).resolve()
+        assert (results / f"{measurement.id}_sis_iv_curve.json").exists()
+        # Then where the last file went, also after a restart
+        window.dataWidget.export()
+        assert starts[1] == results.resolve()
+        assert (results / f"{measurement.id}_iv.csv").exists()
+        later = Folders({MEASUREMENTS: lambda: tmp_path / "data"})
+        assert later.folder(MEASUREMENTS) == results.resolve()
+        # A folder that is gone (a removed USB stick): the default again
+        shutil.rmtree(results)
+        assert later.folder(MEASUREMENTS) == tmp_path / "data"
 
     def test_monitor_dock_watches_ticked_values(self, window, session, wait):
         box = window.docks["measure:monitor.time"].widget().box
@@ -515,11 +645,15 @@ class TestMeasureAndData:
         box.form.editors["interval"].set(0.05)
         box.form.editors["duration"].set(0.2)
         box.form.editors["window"].set(60)
-        raised = []
-        window.hub.raise_requested.connect(lambda w: raised.append(w.title))
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
         finished = []
         box.runner.finished.connect(finished.append)
         box.start()
+        # At Start, before any reading: the graphs of the units chosen
+        assert shown == [["P-t", "V-t"]]
         wait(lambda: finished)
         samples = finished[0].records("samples")
         assert {(s["device"], s["key"]) for s in samples} == {
@@ -528,11 +662,11 @@ class TestMeasureAndData:
         }
         assert window.hub.graph("P-t").items and window.hub.graph("V-t").items
         assert not window.hub.graph("p-t").items
-        assert raised == ["P-t"]  # one graph to the front: the first with data
-        # ... the others with data are on screen too, in the graphs' tab group
+        assert shown == [["P-t", "V-t"]]  # nothing unexpected got data
+        # Both in front, each in its own tab group
         v_t, p_t = window.docks["graph:V-t"], window.docks["graph:P-t"]
-        assert not v_t.isClosed() and not p_t.isClosed() and p_t.isCurrentTab()
-        assert v_t.dockAreaWidget() is p_t.dockAreaWidget()
+        assert p_t.isCurrentTab() and v_t.isCurrentTab()
+        assert v_t.dockAreaWidget() is not p_t.dockAreaWidget()
         assert box.window == 60
         assert isinstance(finished[0].id, int)
         # The choice is remembered
@@ -546,25 +680,59 @@ class TestPerspectives:
 
         settings = str(tmp_path / "layout.ini")
         window = MainWindow(
-            session, settings, restore_layout=False, check_updates=False
+            session, settings, restore_layout=False, check_updates=False, mode="pro"
         )
         window.show()
         assert "Default" in window.dock_manager.perspectiveNames()
         window.docks["graph:Tn-V"].toggleView(True)
         monkeypatch.setattr(
-            "thzdaq_gui.main_window.QInputDialog.getText",
+            "thzdaq_gui.perspectives.QInputDialog.getText",
             lambda *a, **k: ("Noise", True),
         )
-        window.create_perspective()
-        assert window.perspectives.currentText() == "Noise"
+        window.perspectives.create()
+        assert window.perspectives.combo.currentText() == "Noise"
         window.docks["graph:Tn-V"].toggleView(False)
-        window.open_perspective("Noise")
+        window.perspectives.open("Noise")
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
 
         again = MainWindow(session, settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) >= {"Default", "Noise"}
         assert not again.docks["graph:Tn-V"].isClosed()
+        again.close()
+
+    def test_rename_keeps_the_layout(self, session, tmp_path, monkeypatch):
+        from thzdaq_gui.main_window import MainWindow
+
+        settings = str(tmp_path / "layout.ini")
+        window = MainWindow(
+            session, settings, restore_layout=False, check_updates=False, mode="pro"
+        )
+        window.show()
+        answers = iter(["Noise", "Tn", "Default"])
+        monkeypatch.setattr(
+            "thzdaq_gui.perspectives.QInputDialog.getText",
+            lambda *a, **k: (next(answers), True),
+        )
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+        window.docks["graph:Tn-V"].toggleView(True)
+        window.perspectives.create()
+        window.perspectives.rename()
+        assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        assert window.perspectives.combo.currentText() == "Tn"
+        window.perspectives.rename()  # to a name in use: refused
+        assert warnings == ["'Default' exists"]
+        assert set(window.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        window.docks["graph:Tn-V"].toggleView(False)
+        window.perspectives.open("Tn")  # the layout saved as Noise
+        assert not window.docks["graph:Tn-V"].isClosed()
+        window.close()
+        again = MainWindow(session, settings, check_updates=False)
+        assert set(again.dock_manager.perspectiveNames()) == {"Default", "Tn"}
+        assert again.perspectives.combo.currentText() == "Tn"
         again.close()
 
     def test_switching_keeps_widths_and_holds_only_open_contents(self, window, app):
@@ -599,7 +767,7 @@ class TestPerspectives:
         window.dock_manager.addPerspective("Wide")
         wide = widths()
         for name, expected in (("Narrow", narrow), ("Wide", wide), ("Narrow", narrow)):
-            window.open_perspective(name)
+            window.perspectives.open(name)
             settle()
             assert widths() == expected, name
         # Closed device and measurement docks carry no content (fast switching)
@@ -682,7 +850,11 @@ def test_no_stray_windows_flash(app, session, tmp_path):
     app.installEventFilter(spy)
     try:
         window = MainWindow(
-            session, str(tmp_path / "s.ini"), restore_layout=False, check_updates=False
+            session,
+            str(tmp_path / "s.ini"),
+            restore_layout=False,
+            check_updates=False,
+            mode="pro",
         )
         window.show()
         config = copy.deepcopy(session.station.config)
@@ -697,7 +869,7 @@ def test_no_stray_windows_flash(app, session, tmp_path):
         dock.toggleView(False)
         window.dock_manager.addPerspective("P")
         dock.toggleView(True)
-        window.open_perspective("P")
+        window.perspectives.open("P")
         app.processEvents()
     finally:
         app.removeEventFilter(spy)
@@ -709,11 +881,11 @@ class TestHangs:
     def test_watchdog_returns_the_dock_to_idle(self, window):
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.on_running(True)  # the dock thinks it runs, the thread is gone
-        assert not box.btnStart.isEnabled()
+        assert not box.controls.btnStart.isEnabled()
         box.check_thread()  # the end signal may still be queued: wait one more look
-        assert not box.btnStart.isEnabled()
+        assert not box.controls.btnStart.isEnabled()
         box.check_thread()
-        assert box.btnStart.isEnabled() and box.state.text() == "Idle"
+        assert box.controls.btnStart.isEnabled() and box.status().state == "Idle"
 
     def test_device_that_does_not_answer_is_named_once(
         self, window, monkeypatch, caplog
@@ -723,8 +895,8 @@ class TestHangs:
         monkeypatch.setattr(type(worker), "started_at", property(lambda s: 1.0))
         monkeypatch.setattr(worker, "busy_for", lambda: 12.0)
         with caplog.at_level("WARNING"):
-            window.check_device_worker()
-            window.check_device_worker()
+            window.hangWatch.check()
+            window.hangWatch.check()
         named = [r for r in caplog.records if "Rigol 1 does not answer" in r.message]
         assert len(named) == 1
         assert "Rigol 1" in window.statusBar().currentMessage()
@@ -732,9 +904,9 @@ class TestHangs:
     def test_abort_is_offered_only_while_starting_or_stopping(self, window):
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.on_running(True)
-        box.state.setText("Running")
+        box.update_status(state="Running")
         box.offer_abort()  # a timer of an earlier start or stop
-        assert box.btnAbort.isHidden()
+        assert box.controls.btnAbort.isHidden()
         box.stop()
         assert box.stuck.isActive()
         box.on_running(False)
@@ -748,13 +920,14 @@ class TestHangs:
         )
         box.on_running(True)
         box.stop()
-        assert box.state.text() == "Stopping..." and box.btnAbort.isHidden()
+        abort = box.controls.btnAbort
+        assert box.status().state == "Stopping..." and abort.isHidden()
         box.offer_abort()  # STUCK_AFTER_MS later, still running
-        assert not box.btnAbort.isHidden() and "Abort" in box.state.text()
+        assert not abort.isHidden() and "Abort" in box.controls.state.text()
         box.abort()
         assert aborted and "sis_bias" in aborted[0][0]
         box.on_running(False)
-        assert box.btnAbort.isHidden()
+        assert abort.isHidden()
 
     def test_start_while_running_warns(self, window, monkeypatch):
         box = window.docks["measure:sis.iv_curve"].widget().box
@@ -790,3 +963,353 @@ class TestHangs:
         group.reset(next(iter(group.rows)))
         wait(lambda: state.text() == "connected")
         station.close()
+
+
+class TestFolding:
+    def test_controls_stay_below_the_scrolling_setup(self, window):
+        box = window.docks["measure:two_sb.tn"].widget().box
+        setup = box.scroll.widget()
+        assert (
+            box.devices_box.parent() is setup and box.parameters_box.parent() is setup
+        )
+        assert not setup.isAncestorOf(box.controls)
+        assert box.footer.isAncestorOf(box.controls)
+
+    def test_folded_devices_say_which_are_chosen(self, window, session):
+        box = window.docks["measure:sis.pv_curve"].widget().box
+        box.devices_box.set_expanded(False)
+        summary = box.devices_box.summary
+        assert summary.isVisibleTo(box) and "SIS1" in summary.text()
+        assert not box.devices_box.body.isVisibleTo(box)
+        # Remembered for the next dock of this procedure
+        again = type(box)(session, window.hub, box.procedure_class)
+        assert not again.devices_box.expanded()
+        box.devices_box.set_expanded(True)
+
+    def test_a_missing_device_unfolds_the_devices(self, window, monkeypatch):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.devices_box.set_expanded(False)
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+        box.devices.combos["bias"].setCurrentIndex(-1)
+        box.start()
+        assert box.devices_box.expanded()
+
+    def test_device_scans_are_folded_and_tell_how_they_run(self, window, wait):
+        from thzdaq_gui.collapsible import Collapsible
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_1"].widget()
+        section = next(
+            s for s in widget.findChildren(Collapsible) if s.title() == "I-V scan"
+        )
+        assert not section.expanded()
+        box = section.findChildren(ProcedureBox)[0]
+        box.form.set_values(FAST_IV)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()
+        wait(lambda: finished and not box.status().running)
+        assert section.summary.text() == f"completed #{finished[0].id}"
+        # The folded log shows its last line
+        assert box.log_box.summary.text().startswith("saved ")
+
+
+class TestRunGraphs:
+    @staticmethod
+    def corner(window, dock):
+        return dock.dockAreaWidget().mapTo(
+            window, dock.dockAreaWidget().rect().topLeft()
+        )
+
+    def test_four_graphs_of_a_run_make_a_grid(self, window, app):
+        window.resize(1500, 900)
+        titles = ["P-V", "I-V", "Y-V", "Tn-V"]
+        window.hub.show_run(titles)
+        app.processEvents()
+        docks = [window.docks[f"graph:{t}"] for t in titles]
+        areas = [d.dockAreaWidget() for d in docks]
+        assert len(set(areas)) == 4
+        assert all(d.isCurrentTab() and not d.isClosed() for d in docks)
+        # 2 x 2: P-V | I-V over Y-V | Tn-V
+        (x0, y0), (x1, y1), (x2, y2), (x3, y3) = [
+            (p.x(), p.y()) for p in (self.corner(window, d) for d in docks)
+        ]
+        assert y0 == y1 and x0 == x2 and y2 == y3 and x1 == x3
+        assert x1 > x0 and y2 > y0
+
+    def test_groups_of_the_user_are_reused(self, window, app):
+        import PySide6QtAds as QtAds
+
+        iv, pv = window.docks["graph:I-V"], window.docks["graph:P-V"]
+        window.dock_manager.addDockWidget(
+            QtAds.RightDockWidgetArea, pv, iv.dockAreaWidget()
+        )
+        iv.dockAreaWidget().setCurrentDockWidget(window.docks["graph:Y-V"])
+        before = len(window.docks.areas_of("graph"))
+        window.hub.show_run(["P-V", "I-V"])
+        app.processEvents()
+        # Nothing moves: each is in front of the group it was in
+        assert len(window.docks.areas_of("graph")) == before
+        assert pv.isCurrentTab() and iv.isCurrentTab()
+        assert pv.dockAreaWidget() is not iv.dockAreaWidget()
+
+    def test_past_four_groups_graphs_wait_behind_tabs(self, window, app):
+        titles = ["P-V", "I-V", "Y-V", "Tn-V", "P-IF"]
+        window.hub.show_run(titles)
+        app.processEvents()
+        assert len(window.docks.areas_of("graph")) == 4
+        assert not window.docks["graph:P-IF"].isClosed()
+        assert all(window.docks[f"graph:{t}"].isCurrentTab() for t in titles[:4])
+
+    def test_graphs_and_devices_take_their_columns(self, lite, app):
+        """Everything closed but the measurement: its graphs come left of it
+        at full height and share the rest evenly; a device goes left of them."""
+        for name, dock in lite.docks.items():
+            if name != "measurement" and not dock.isAutoHide():
+                dock.toggleView(False)
+        app.processEvents()
+        lite.hub.show_run(["V-t", "I-t"])
+        app.processEvents()
+        measurement = lite.docks["measurement"].dockAreaWidget()
+        v_t, i_t = (lite.docks[f"graph:{t}"] for t in ("V-t", "I-t"))
+        for graph in (v_t, i_t):
+            assert graph.dockAreaWidget().height() == measurement.height()
+            assert self.corner(lite, graph).x() < measurement.x()
+        assert abs(v_t.dockAreaWidget().width() - i_t.dockAreaWidget().width()) <= 2
+        width = measurement.width()
+        assert v_t.dockAreaWidget().width() + i_t.dockAreaWidget().width() > width
+        lite.show_dock("device:power_meter_1")
+        app.processEvents()
+        device = lite.docks["device:power_meter_1"]
+        assert self.corner(lite, device).x() < self.corner(lite, v_t).x()
+        assert device.dockAreaWidget().height() == measurement.height()
+        assert measurement.width() == width  # the columns keep their widths
+
+    def test_pv_without_loads_opens_two_graphs_at_start(self, window, monkeypatch):
+        box = window.docks["measure:sis.pv_curve"].widget().box
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
+        monkeypatch.setattr(box.runner, "start", lambda *a, **k: None)
+        box.start()
+        assert shown == [["P-V", "I-V"]]
+
+
+class TestProcesses:
+    def test_a_measurement_runs_in_processes_until_stopped(self, window, wait):
+        processes = window.session.processes
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        box.start()
+        wait(lambda: processes.items and processes.items[0].progress)
+        (process,) = processes.items
+        assert process.title == "SIS I-V curve"
+        assert process.dock == "measure:sis.iv_curve"
+        assert process.progress[1] == 2000 and not process.can_abort
+        assert window.docks["processes"].windowTitle() == "Processes (1)"
+        assert window.processesWidget.tree.topLevelItemCount() == 1
+        process.stop()
+        wait(lambda: not processes.items and not box.status().running)
+        assert window.docks["processes"].windowTitle() == "Processes"
+        assert window.processesWidget.tree.topLevelItemCount() == 0
+
+    def test_a_scan_shows_its_device_dock_unfolded(self, window, wait):
+        from thzdaq_gui.collapsible import Collapsible
+        from thzdaq_gui.docks.measure import ProcedureBox
+
+        widget = window.docks["device:sis_bias_2"].widget()
+        section = next(
+            s for s in widget.findChildren(Collapsible) if s.title() == "I-V scan"
+        )
+        box = section.findChildren(ProcedureBox)[0]
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        box.start()
+        processes = window.session.processes
+        wait(lambda: processes.items)
+        (process,) = processes.items
+        assert process.title == "SIS I-V curve · SIS2"
+        assert process.dock == "device:sis_bias_2"
+        window.docks["device:sis_bias_2"].toggleView(False)
+        assert not section.expanded()
+        window.processesWidget.show_process(process)
+        assert window.dock_state("device:sis_bias_2") == "front"
+        assert section.expanded()
+        processes.stop_all()
+        wait(lambda: not processes.items and not box.status().running)
+        section.set_expanded(False)
+
+    def test_polling_in_a_device_dock_is_a_process(self, window):
+        processes = window.session.processes
+        panel = window.docks["device:power_meter_1"].widget().panels[0]
+        panel.interval.setValue(0.5)
+        panel.monitor.setChecked(True)
+        (process,) = processes.items
+        assert process.title == "Monitor · R&S NRX"
+        assert process.status == "every 0.5 s" and process.progress is None
+        panel.interval.setValue(2)
+        assert process.status == "every 2 s"
+        process.stop()
+        assert not panel.monitor.isChecked() and processes.items == []
+
+    def test_chopper_rotation_follows_the_chopper(self, window, wait):
+        from thzdaq_gui.docks.devices import ChopperGroup
+
+        group = window.docks["device:chopper_1"].widget().findChildren(ChopperGroup)[0]
+        processes = window.session.processes
+        group.frequency.setValue(7.5)  # the last one is remembered across tests
+        group.start()
+        wait(lambda: processes.items)
+        (process,) = processes.items
+        assert process.title == "Rotation · Chopper" and process.status == "7.5 Hz"
+        process.stop()
+        wait(lambda: not processes.items)
+        assert not window.session.station.instrument("chopper_1").is_running()
+
+    def test_a_layout_saved_before_processes_still_opens_it(
+        self, window, session, tmp_path
+    ):
+        from thzdaq_gui.main_window import MainWindow
+
+        window.docks.remove("processes")  # as a layout saved by an older version
+        window.save_state()
+        again = MainWindow(session, window.settings.fileName(), check_updates=False)
+        again.confirm_exit = False
+        again.show()
+        again.show_dock("processes")
+        dock = again.docks["processes"]
+        # Back on its side bar, not floating
+        assert dock.isAutoHide() and not dock.isFloating()
+        assert again.dock_state("processes") == "front"
+        again.close()
+
+
+@pytest.fixture
+def lite(session, tmp_path):
+    from thzdaq_gui.main_window import MainWindow
+
+    window = MainWindow(
+        session, str(tmp_path / "lite.ini"), restore_layout=False, check_updates=False
+    )
+    window.resize(1500, 900)
+    window.show()
+    yield window
+    if window.isVisible():
+        window.close()
+
+
+class TestLite:
+    def test_lite_is_the_default_with_the_bar_on_top(self, lite, app):
+        app.processEvents()
+        assert lite.mode.key == "lite" and lite.modeActions["lite"].isChecked()
+        assert lite.runBar.isVisible() and not lite.perspectives.combo.isVisible()
+        measurement = lite.docks["measurement"]
+        assert not measurement.isClosed() and measurement.tabWidget().isVisible()
+        assert measurement.windowTitle() == "SIS I-V curve"
+        assert lite.runBar.chosen_name() == "sis.iv_curve"
+        assert all(
+            dock.isClosed()
+            for n, dock in lite.docks.items()
+            if n.startswith("measure:")
+        )
+        # The dock keeps the setup, the bar has the controls
+        box = lite.runBar.controls.run
+        assert box.parameters_box.isVisibleTo(lite) and not box.controls.isVisibleTo(
+            lite
+        )
+        # Sized for its content once the window is shown
+        assert (
+            measurement.dockAreaWidget().width()
+            >= 0.9 * measurement.widget().sizeHint().width()
+        )
+
+    def test_every_dock_of_the_default_layout_shows_its_tab(self, lite):
+        hidden = [
+            name
+            for name, dock in lite.docks.items()
+            if not dock.isClosed() and not dock.isAutoHide()
+            and not dock.tabWidget().isVisible()
+        ]  # fmt: skip
+        assert hidden == []
+
+    def test_the_bar_runs_the_chosen_measurement(self, lite, wait):
+        processes = lite.session.processes
+        bar = lite.runBar
+        bar.chosen.emit("sis.iv_curve")
+        iv = bar.controls.run
+        iv.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        bar.controls.comment.setText("from the bar")
+        bar.controls.comment.textEdited.emit("from the bar")
+        bar.controls.btnStart.click()
+        wait(lambda: iv.measurement is not None and bar.controls.btnStop.isEnabled())
+        assert iv.measurement.comment == "from the bar"
+        assert (
+            not bar.controls.btnStart.isEnabled()
+            and "Running" in bar.controls.progress.format()
+        )
+        # Another measurement chosen: the first goes on
+        bar.chosen.emit("sis.pv_curve")
+        assert bar.controls.run is not iv and bar.controls.btnStart.isEnabled()
+        assert lite.docks["measurement"].windowTitle() == "SIS P-V curve"
+        assert iv.status().running and [p.title for p in processes.items] == [
+            "SIS I-V curve"
+        ]
+        bar.chosen.emit("sis.iv_curve")
+        assert bar.controls.run is iv and bar.controls.btnStop.isEnabled()
+        bar.controls.btnStop.click()
+        wait(lambda: not iv.status().running)
+        assert (
+            bar.controls.btnStart.isEnabled()
+            and bar.controls.progress.format().startswith("cancelled")
+        )
+
+    def test_menus_and_find_choose_a_measurement(self, lite):
+        assert lite.dock_state("measure:sis.pv_curve") == "closed"
+        lite.show_dock("measure:sis.pv_curve")
+        assert lite.runBar.chosen_name() == "sis.pv_curve"
+        assert lite.docks["measure:sis.pv_curve"].isClosed()  # no Pro dock in Lite
+        assert lite.dock_state("measure:sis.pv_curve") == "front"
+        assert lite.dock_state("measure:sis.iv_curve") == "closed"
+
+    def test_modes_keep_their_layouts_and_running_measurements(
+        self, lite, session, wait, app
+    ):
+        from thzdaq_gui.main_window import MainWindow
+
+        box = lite.runBar.controls.run
+        box.form.set_values(
+            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+        )
+        lite.runBar.controls.btnStart.click()
+        wait(lambda: box.status().running)
+        lite.show_dock("device:power_supply_1")  # Lite's own layout
+        lite.set_mode("pro")
+        app.processEvents()  # the toolbar shows its widgets on its next layout
+        assert lite.perspectives.combo.isVisible() and not lite.runBar.isVisible()
+        assert lite.docks["measurement"].isClosed()
+        assert lite.docks["device:power_supply_1"].isClosed()  # Pro's default
+        # The running box is back in its Pro dock with its own controls
+        pro_dock = lite.docks["measure:sis.iv_curve"]
+        assert not pro_dock.isClosed() and pro_dock.widget().isAncestorOf(box)
+        assert box.controls.isVisibleTo(pro_dock) and box.status().running
+        lite.set_mode("lite")
+        assert lite.runBar.controls.run is box and lite.measurementHost.isAncestorOf(
+            box
+        )
+        assert not lite.docks["device:power_supply_1"].isClosed()
+        box.stop()
+        wait(lambda: not box.status().running)
+        lite.save_state()  # as on exit, without shutting the session down
+        again = MainWindow(session, lite.settings.fileName(), check_updates=False)
+        assert (
+            again.mode.key == "lite"
+            and not again.docks["device:power_supply_1"].isClosed()
+        )
+        again.confirm_exit = False
+        again.close()

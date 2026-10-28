@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 from thzdaq_gui import updater, updates
+from thzdaq_gui.settings import settings
+from thzdaq_gui.update_dialog import PRERELEASES_KEY
 from thzdaq_gui.updates import Release, UpdateError
 
 
@@ -80,6 +82,10 @@ class TestVersions:
         assert updates.is_newer("v0.3.0", "0.2.0")
         assert not updates.is_newer("v0.3.0-rc.1", "0.3.0")
         assert not updates.is_newer("nightly", "0.2.0")
+        assert updates.is_newer("v0.3.0-beta.10", "0.3.0-beta.2")
+        assert updates.is_newer("v0.3.0", "0.3.0-beta.2")
+        assert updates.is_prerelease("v0.0.6-beta.1")
+        assert not updates.is_prerelease("v0.0.6")
         with pytest.raises(ValueError):
             updates.parse_version("new103b1")
 
@@ -250,6 +256,12 @@ class TestUpdater:
 
 
 class TestDialog:
+    @pytest.fixture(autouse=True)
+    def no_choice_of_betas(self, app):
+        settings().remove(PRERELEASES_KEY)
+        yield
+        settings().remove(PRERELEASES_KEY)
+
     def test_lists_releases(self, app, monkeypatch):
         from thzdaq_gui.update_dialog import UpdateDialog
 
@@ -259,6 +271,7 @@ class TestDialog:
             updates.release_from_json(release_json("v9.0.0"), "Windows_x64"),
             updates.release_from_json(release_json("v0.1.0", assets=[]), "Windows_x64"),
         ]
+        settings().setValue(PRERELEASES_KEY, False)
         dialog = UpdateDialog(quit_app=lambda: None)
         dialog.set_releases(releases)
         assert "v9.0.0" in dialog.status.text()
@@ -268,6 +281,33 @@ class TestDialog:
         assert not dialog.btnInstall.isEnabled()  # running from sources
         dialog.prereleases.setChecked(True)
         assert dialog.list.count() == 3
+
+    def test_betas_are_offered_to_who_runs_or_wants_them(self, app, monkeypatch):
+        from PySide6.QtWidgets import QMainWindow, QPushButton
+        from thzdaq_gui.update_dialog import UpdateDialog, Updates, wants_prereleases
+
+        settings().remove(PRERELEASES_KEY)
+        assert wants_prereleases("0.0.6-beta.1") and not wants_prereleases("0.0.5")
+        box = UpdateDialog(quit_app=lambda: None).prereleases
+        box.setChecked(not box.isChecked())  # it starts as this build is
+        box.setChecked(True)  # kept: betas from now on
+        assert wants_prereleases("0.0.5")
+        box.setChecked(False)
+        assert not wants_prereleases("0.0.6-beta.1")
+
+        window = QMainWindow()
+        offered = Updates(window, busy=lambda: False)
+        beta = Release("v9.0.0-beta.2", "", "", True, "", "https://x/a.zip")
+
+        def buttons():
+            return [b.text() for b in window.statusBar().findChildren(QPushButton)]
+
+        offered.offer([beta])
+        assert buttons() == []
+        settings().setValue(PRERELEASES_KEY, True)
+        offered.offer([beta])
+        assert buttons() == ["Update to v9.0.0-beta.2"]
+        window.close()
 
     def test_background_job(self, app, wait):
         from thzdaq_gui.update_dialog import Background
@@ -286,10 +326,10 @@ class TestDialog:
         monkeypatch.setattr(updates, "fetch_releases", lambda: [])
         titles = [a.text() for a in window.menuBar().actions()]
         assert "&Help" in titles and window.windowTitle().startswith("ThzDAQ ")
-        window.show_updates()
-        assert window.updateDialog.isVisible()
-        wait(lambda: "latest version" in window.updateDialog.status.text())
-        window.updateDialog.close()
+        window.updates.show()
+        assert window.updates.dialog.isVisible()
+        wait(lambda: "latest version" in window.updates.dialog.status.text())
+        window.updates.dialog.close()
 
 
 class TestCleanup:
@@ -377,11 +417,11 @@ def test_update_installs_when_the_window_really_closes(
     from PySide6.QtWidgets import QDialog, QMessageBox
 
     launched, told = [], []
-    monkeypatch.setattr("thzdaq_gui.main_window.launch_updater", launched.append)
+    monkeypatch.setattr("thzdaq_gui.updates.launch_updater", launched.append)
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: told.append(a[2]))
     build = Path("/tmp/thzdaq_update_x/unpacked/ThzDAQ")
     exit_answer["result"] = QDialog.Rejected  # "not now" in the exit question
-    window.quit_for_update(build)
+    window.updates.quit_for(build)
     assert window.isVisible() and launched == [] and "when you close" in told[0]
     exit_answer["result"] = QDialog.Accepted
     window.close()

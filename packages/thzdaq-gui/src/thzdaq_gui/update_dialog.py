@@ -1,4 +1,10 @@
-"""Help → Check for updates: list GitHub releases, download one and restart into it."""
+"""Help → Check for updates: list GitHub releases, download one and restart into it.
+
+Updates of the main window: a button in its status bar when a newer release is
+out, the dialog, and a downloaded build installed when the window closes.
+Pre-releases (betas) are offered, in the dialog and at start, once "Show
+pre-releases" is ticked; until it is ever changed, to who runs a pre-release.
+"""
 
 import logging
 import shutil
@@ -16,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMainWindow,
     QMessageBox,
     QProgressDialog,
     QPushButton,
@@ -23,11 +30,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from thzdaq_gui import updates
+from thzdaq_gui import theme, updates
+from thzdaq_gui.settings import settings
 from thzdaq_gui.version import REPO_SLUG, __version__
 
 logger = logging.getLogger(__name__)
 RELEASES_PAGE = f"https://github.com/{REPO_SLUG}/releases"
+PRERELEASES_KEY = "updates/prereleases"
+
+
+def wants_prereleases(current: str = __version__) -> bool:
+    return settings().value(PRERELEASES_KEY, updates.is_prerelease(current), type=bool)
 
 
 class Background(QObject):
@@ -112,6 +125,11 @@ class UpdateDialog(QDialog):
         self.notes.setReadOnly(True)
         layout.addWidget(self.notes, 1)
         self.prereleases = QCheckBox("Show pre-releases")
+        self.prereleases.setToolTip("Betas too: here and in the check at start")
+        self.prereleases.setChecked(wants_prereleases())
+        self.prereleases.toggled.connect(
+            lambda on: settings().setValue(PRERELEASES_KEY, on)
+        )
         self.prereleases.toggled.connect(self.populate)
         layout.addWidget(self.prereleases)
 
@@ -137,7 +155,9 @@ class UpdateDialog(QDialog):
 
     def set_releases(self, releases: List[updates.Release]) -> None:
         self.releases = releases
-        newest = updates.latest_update(releases)
+        newest = updates.latest_update(
+            releases, prereleases=self.prereleases.isChecked()
+        )
         if newest is not None:
             text = f"Version <b>{newest.tag}</b> is available."
         else:
@@ -231,3 +251,62 @@ class UpdateDialog(QDialog):
         self.downloader.done.connect(on_done)
         progress.canceled.connect(self.downloader.cancelled.set)
         self.downloader.start()
+
+
+class Updates(QObject):
+    def __init__(self, window: QMainWindow, busy: Callable[[], bool]):
+        super().__init__(window)
+        self.window = window
+        self.busy = busy  # measurements run: an update waits for them
+        self.dialog: Optional[UpdateDialog] = None
+        self.pending: Optional[Path] = None  # a downloaded build to install
+
+    def check_in_background(self) -> None:
+        """A button in the status bar if a newer release is out."""
+        if not updates.can_self_update():
+            return
+        self.checker = Background(fetch_job, self)
+        self.checker.done.connect(self.offer)
+        self.checker.start()
+
+    def offer(self, releases) -> None:
+        release = updates.latest_update(releases, prereleases=wants_prereleases())
+        if release is None:
+            return
+        button = QPushButton(theme.icon("update"), f"Update to {release.tag}")
+        button.setFlat(True)
+        button.clicked.connect(self.show)
+        self.window.statusBar().addPermanentWidget(button)
+
+    def show(self) -> None:
+        if self.dialog is None:
+            self.dialog = UpdateDialog(
+                quit_app=self.quit_for, busy=self.busy, parent=self.window
+            )
+        self.dialog.check()
+        self.dialog.show()
+        self.dialog.raise_()
+
+    def quit_for(self, build: Path) -> None:
+        """Close and install the downloaded build; if closing is cancelled, the
+        build stays ready and installs when the window is closed later."""
+        self.pending = build
+        if not self.window.close():
+            QMessageBox.information(
+                self.window,
+                "Update",
+                "The update is downloaded: it installs when you close ThzDAQ.",
+            )
+
+    def install_pending(self) -> None:
+        """The last step of closing: the updater waits for this process to
+        end, then replaces the files."""
+        if self.pending is None:
+            return
+        try:
+            updates.launch_updater(self.pending)
+        except Exception as e:
+            logger.error(f"Update not started: {e}")
+            QMessageBox.critical(
+                self.window, "Update", f"The update did not start: {e}"
+            )

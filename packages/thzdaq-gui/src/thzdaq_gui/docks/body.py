@@ -50,6 +50,12 @@ class DockBody(QWidget):
             self.layout().removeWidget(content)
             content.setParent(None)
 
+    def lend(self) -> QWidget:
+        """The content, out of this dock to be shown elsewhere (Lite); it
+        comes back on the next set_open(True)."""
+        self.set_open(False)
+        return self.content()
+
     def replace(self, factory: Factory) -> None:
         """New content (an edited device), shown in place of the old one."""
         attached = self.attached

@@ -182,6 +182,20 @@ DEVICE_ICONS = {
 }
 
 
+# Icons of procedures by group (sis.iv_curve -> sis)
+PROCEDURE_ICONS = {
+    "sis": "alpha-s-box-outline",
+    "if": "waveform",
+    "two_sb": "chart-bell-curve-cumulative",
+    "monitor": "monitor-eye",
+    "grid": "rotate-3d-variant",
+}
+
+
+def procedure_icon_name(procedure: str) -> str:
+    return PROCEDURE_ICONS.get(procedure.split(".")[0], "play-circle-outline")
+
+
 def device_icon(kind: str, instrument_id: str = "") -> QIcon:
     name = DEVICE_ICONS.get(kind)
     if name is None:

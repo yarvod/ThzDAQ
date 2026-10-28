@@ -1,4 +1,16 @@
-from typing import Any, ClassVar, Dict, List, Mapping, Optional, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from thzdaq_core.data.measurement import Column
 from thzdaq_core.errors import ProcedureError
@@ -117,6 +129,14 @@ class Procedure:
     def estimate_steps(self) -> Optional[int]:
         """Total steps for progress, None if unknown."""
         return None
+
+    def active_plots(
+        self, quantities: Optional[Callable[[str], Iterable[Any]]] = None
+    ) -> Tuple[PlotSpec, ...]:
+        """Plots this run fills, known before it starts (a viewer puts them on
+        screen at Start); quantities(slot) lists what the device in a slot
+        reads. Override when parameters or devices leave plots empty."""
+        return self.plots
 
     def plot_window(self) -> Optional[float]:
         """Seconds of x the live graphs keep (a long monitor), None: everything."""
