@@ -11,6 +11,17 @@ ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/archi
 
 Dependencies point one way: gui → core → instruments. Tests check that core and instruments never import Qt.
 
+## Architecture Rules — Required
+
+Fix the design, not the symptom. A change that only works with a hack is not done: restructure, or stop and ask.
+
+- **One-way dependencies, no cycles.** Between packages gui → core → instruments; inside the GUI the entry point (`app.py`) → the window (`main_window.py`, it only assembles) → its parts (`docking.py`, `graph_docks.py`, `device_docks.py`, `perspectives.py`, `modes.py`, `runbar.py`) → docks (`docks/`) → widgets and view models (`forms.py`, `run_controls.py`, `collapsible.py`) → `theme.py`, `settings.py`, `dock_names.py`. A lower module never imports a higher one; it tells through Qt signals or callbacks it is given.
+- **One owner per responsibility.** New behaviour goes into the object that owns the concept, not into `MainWindow` or into a widget that happens to be near. A concept lives in one place (dock names in `dock_names.py`, dialog folders in `folders.py`, a run's state in `RunStatus`); never parse or rebuild it elsewhere.
+- **Polymorphism over branching.** What differs by mode, kind or device is an object asked for its answer (`Mode.dock_of`, capability interfaces), not `if mode == …` / `isinstance` chains spread over callers.
+- **State in models, widgets are views.** Widgets show a model and call its methods; they never read another widget's labels, buttons or progress bars to learn state.
+- **No hacks.** No flags that silence a path for one caller, no sleeps or timers to "let it settle", no retries, no `getattr(self, "_x", default)` for attributes that may not exist, no catch-all `except` to hide a failure, no dead code left behind. If a third-party library (Qt, ADS, pyqtgraph) needs a workaround, it lives in the module that wraps that library (ADS: `docking.py`), runs once at the point where the library's behaviour causes the problem, and its comment names that behaviour.
+- **Prove it.** A bug fix reproduces the bug first (a test, or a script on simulators) and checks the fix against it.
+
 ## Build, Test, and Development Commands
 
 - `uv sync` creates or updates `.venv`; `uv lock` after changing any `pyproject.toml`.
