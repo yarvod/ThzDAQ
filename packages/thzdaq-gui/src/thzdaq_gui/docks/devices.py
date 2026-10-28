@@ -569,7 +569,7 @@ class TraceGroup(QGroupBox):
         self.graph.setLabel("left", "|S|, dB" if vna else "Power, dBm")
         self.graph.showGrid(x=True, y=True, alpha=0.25)
         self.graph.setMinimumHeight(220)
-        self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=2))
+        self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=1))
         layout.addWidget(self.graph)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.read)

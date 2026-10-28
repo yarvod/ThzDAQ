@@ -15,7 +15,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.graphicsItems.GraphicsWidgetAnchor import GraphicsWidgetAnchor
 from PySide6 import QtGui
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -34,6 +34,13 @@ from thzdaq_core.measurements.procedures.monitor import plot_for
 from thzdaq_core.measurements.registry import list_procedures
 
 from thzdaq_gui import theme
+
+# Live curves are drawn at most this often, however fast records come: a
+# redraw per record (50 a second in a simulated P-V) kept the GUI thread
+# painting, and zoom or pan waited
+REDRAW_MS = 50
+# An antialiased pen wider than 1 px costs ~70 times more per paint
+CURVE_PEN_WIDTH = 1
 
 # Units shown with an SI prefix chosen by pyqtgraph (mV, uA, GHz)
 SI_UNITS = {"V", "A", "Hz", "s", "W", "Pa", "Ohm"}
@@ -142,6 +149,11 @@ class GraphWidget(QWidget):
         self.points: Dict[object, List[Tuple[float, float]]] = {}
         self.items: Dict[object, pg.PlotDataItem] = {}
         self.names: Dict[object, str] = {}
+        self.dirty = set()  # curves with points not drawn yet
+        self.draw_timer = QTimer(self)
+        self.draw_timer.setSingleShot(True)
+        self.draw_timer.setInterval(REDRAW_MS)
+        self.draw_timer.timeout.connect(self.flush)
         self.analysis = None
         if analysis == "iv":
             from thzdaq_gui.iv_analysis import IVAnalysisBar
@@ -202,15 +214,26 @@ class GraphWidget(QWidget):
         if item is None:
             color = theme.COLORS[len(self.items) % len(theme.COLORS)]
             item = self.plot.plot(
-                [], [], pen=pg.mkPen(color, width=2), symbol="o", symbolSize=5,
+                [], [], pen=pg.mkPen(color, width=CURVE_PEN_WIDTH), symbol="o", symbolSize=5,
                 symbolBrush=color, symbolPen=None, name=name,
             )  # fmt: skip
             self.items[key] = item
             self.names[key] = name
             self.curves_changed.emit()
-        xs, ys = zip(*self.points[key])
-        item.setData(np.asarray(xs), np.asarray(ys))
+        self.dirty.add(key)
+        if not self.draw_timer.isActive():
+            self.draw_timer.start()
         return True
+
+    def flush(self) -> None:
+        """Draw the points the curves got since the last drawing."""
+        self.draw_timer.stop()
+        for key in self.dirty:
+            item, points = self.items.get(key), self.points.get(key)
+            if item is not None and points:
+                xs, ys = zip(*points)
+                item.setData(np.asarray(xs), np.asarray(ys))
+        self.dirty.clear()
 
     def add_columns(
         self,
@@ -240,6 +263,7 @@ class GraphWidget(QWidget):
                 keys.add(key)
                 self.points.pop(key, None)
             self.append(key, curve_name(measurement, group), row.get(x), row.get(y))
+        self.flush()  # a whole measurement: drawn at once
         return len(keys)
 
     def remove(self, key) -> None:
@@ -248,6 +272,7 @@ class GraphWidget(QWidget):
             self.plot.removeItem(item)
         self.points.pop(key, None)
         self.names.pop(key, None)
+        self.dirty.discard(key)
         self.curves_changed.emit()
 
     def remove_hidden(self) -> None:

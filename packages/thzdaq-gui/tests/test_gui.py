@@ -248,10 +248,30 @@ class TestGraphs:
         graph = hub.graph("P-IF")
         assert len(graph.items) == 2
         hot = next(k for k in graph.items if k[-1] == ("hot",))
+        graph.flush()  # live points are drawn on a timer
         xs, ys = graph.items[hot].getData()
         assert list(xs) == [4.0, 5.0] and list(ys) == [-30.0, -30.0]
         assert graph.curve_label(hot) == "#7 IF noise hot"
         assert hub.graph("Tn-IF").items == {}  # NaN is not drawn
+
+    def test_live_points_are_drawn_on_a_timer_not_per_record(self, hub, wait):
+        """A redraw per record (50 a second, a thick antialiased pen) kept the
+        GUI thread painting: zoom and pan waited for the measurement."""
+        from thzdaq_gui.graphs import CURVE_PEN_WIDTH
+
+        run = Measurement("sis.pv_curve", title="SIS P-V curve", id=3)
+        graph = hub.graph("P-V")
+        record = {"voltage": 1e-3, "current": 1e-5, "power": -30.0}
+        hub.feed(run, PVCurve.plots, "pv", record)
+        (item,) = graph.items.values()
+        drawn = []
+        item.setData = lambda *a, **k: drawn.append(len(a[0]))
+        for i in range(2, 101):
+            hub.feed(run, PVCurve.plots, "pv", {**record, "voltage": i * 1e-3})
+        assert drawn == []  # nothing per record...
+        wait(lambda: drawn)
+        assert drawn == [100]  # ... all points at once
+        assert item.opts["pen"].width() == CURVE_PEN_WIDTH == 1
 
     def test_map_graph_grid(self, hub):
         run = Measurement("two_sb.optimization")
