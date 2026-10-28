@@ -90,7 +90,7 @@ class DeviceDocks:
                     DockBody(factory),
                     "Devices",
                     icon,
-                    QtAds.BottomDockWidgetArea,
+                    QtAds.LeftDockWidgetArea,
                     group=group,
                     hint=hint,
                 )

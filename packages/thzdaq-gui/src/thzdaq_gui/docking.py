@@ -2,8 +2,9 @@
 
 DockSpace holds every ADS dock of the window under its name (dock_names) and
 places it: a closed dock opens with its kind (graphs with graphs, devices
-with devices) or on its home side, a base dock on its side bar. DockBody
-contents exist only while their docks are open (sync_bodies).
+with devices) or, the first of its kind, in its column: devices on the left,
+measurements on the right, graphs between them; a base dock on its side bar.
+DockBody contents exist only while their docks are open (sync_bodies).
 """
 
 from collections import Counter
@@ -32,13 +33,13 @@ from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
 
 SECTIONS = ("Base", "Devices", "Measures", "Graphs")  # of the menus, in order
 AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
-FIT_SHARE = 0.4  # a dock opened on its side takes at most this part of the window
-# Where a dock of each kind opens when no dock of its kind is on screen
-HOME_AREAS = {
-    GRAPH: QtAds.CenterDockWidgetArea,
+FIT_SHARE = 0.4  # a column takes at most this part of the window
+# The side of the window where the first open dock of a kind makes its column;
+# graphs go between the columns (open_center)
+SIDES = {
+    DEVICE: QtAds.LeftDockWidgetArea,
     MEASURE: QtAds.RightDockWidgetArea,
     MEASUREMENT: QtAds.RightDockWidgetArea,
-    DEVICE: QtAds.BottomDockWidgetArea,
 }
 
 
@@ -63,6 +64,54 @@ def configure_docking() -> None:
         (QtAds.AutoHideIcon, "pin-outline"),
     ):
         provider.registerCustomIcon(which, theme.icon(name))
+
+
+def shows_something(widget) -> bool:
+    """Hides the splitters inside that show nothing; True: it shows a dock."""
+    if not isinstance(widget, QSplitter):
+        return not widget.isHidden()
+    shown = [shows_something(widget.widget(i)) for i in range(widget.count())]
+    if widget.isHidden() == any(shown):
+        widget.setVisible(any(shown))
+    return any(shown)
+
+
+def part_of(splitter: QSplitter, widget) -> Optional[int]:
+    """Index of the part of a splitter that holds the widget; None: none does."""
+    while widget is not None and widget.parentWidget() is not splitter:
+        widget = widget.parentWidget()
+    return splitter.indexOf(widget) if widget is not None else None
+
+
+def even_out(areas) -> None:
+    """Groups side by side (and splitters made only of them) share their
+    space equally: ADS gives a group split off from another less."""
+
+    def only_ours(widget) -> bool:
+        if widget in areas:
+            return True
+        return (
+            isinstance(widget, QSplitter)
+            and widget.count() > 0
+            and all(only_ours(widget.widget(i)) for i in range(widget.count()))
+        )
+
+    splitters = []
+    for area in areas:
+        parent = area.parentWidget()
+        while isinstance(parent, QSplitter):
+            if parent not in splitters:
+                splitters.append(parent)
+            parent = parent.parentWidget()
+    for splitter in splitters:
+        sizes = splitter.sizes()
+        ours = [i for i in range(splitter.count()) if only_ours(splitter.widget(i))]
+        if len(ours) < 2:
+            continue
+        share = sum(sizes[i] for i in ours) // len(ours)
+        for i in ours:
+            sizes[i] = share
+        splitter.setSizes(sizes)
 
 
 @contextmanager
@@ -235,9 +284,11 @@ class DockSpace(Mapping):
                 area = self.open_area_of(kind, dock)
                 if area is not None:
                     self.manager.addDockWidgetTabToArea(dock, area)
-                elif kind in HOME_AREAS:
-                    area = self.manager.addDockWidget(HOME_AREAS[kind], dock)
-                    self.fit(area, dock)
+                elif kind in SIDES:
+                    self.manager.addDockWidget(SIDES[kind], dock)
+                    self.fit_columns()
+                elif kind == GRAPH:
+                    self.open_center(dock)
             activate = True  # a dock just opened is the one to see
         if activate:
             dock.setAsCurrentTab()
@@ -246,11 +297,45 @@ class DockSpace(Mapping):
                 dock.autoHideDockContainer().collapseView(False)
         self.sync_bodies()
 
+    def open_center(self, dock) -> None:
+        """The first graph between the columns: left of the measurements,
+        else right of the devices, else all of the window. ADS puts a dock
+        added to the centre of a window that has docks below them."""
+        right = self.open_area_of(MEASURE)
+        if right is None:
+            right = self.open_area_of(MEASUREMENT)
+        left = self.open_area_of(DEVICE)
+        if right is not None:
+            self.manager.addDockWidget(QtAds.LeftDockWidgetArea, dock, right)
+        elif left is not None:
+            self.manager.addDockWidget(QtAds.RightDockWidgetArea, dock, left)
+        else:
+            self.manager.addDockWidget(QtAds.CenterDockWidgetArea, dock)
+        self.fit_columns()
+
+    def fit_columns(self) -> None:
+        """The device and measurement columns as wide as their docks want,
+        the graphs the rest."""
+        for kind in (DEVICE, MEASURE, MEASUREMENT):
+            area = self.open_area_of(kind)
+            if area is not None:
+                self.fit(area, area.currentDockWidget())
+
+    def hide_empty_splitters(self) -> None:
+        """For a layout made or restored before the window is shown: ADS
+        hides a splitter whose docks all closed only in a shown window, so
+        one left visible would keep its space next to the docks opened later."""
+        root = self.manager.rootSplitter()
+        for i in range(root.count()):
+            shows_something(root.widget(i))
+
     def fit(self, area, dock) -> None:
-        """A new area on a side as wide (or tall) as its dock wants, up to
-        FIT_SHARE of the window: ADS sizes it before the content exists."""
+        """A column as wide (or a row as tall) as its dock wants, up to
+        FIT_SHARE of the window: ADS sizes it before the content exists.
+        The graphs in the same splitter give or take the difference, each in
+        proportion to its size (by default the largest other part)."""
         splitter = area.parentWidget() if area is not None else None
-        if not isinstance(splitter, QSplitter):
+        if dock is None or not isinstance(splitter, QSplitter):
             return
         index, sizes = splitter.indexOf(area), splitter.sizes()
         if index < 0 or len(sizes) < 2:
@@ -260,12 +345,19 @@ class DockSpace(Mapping):
         wanted = (
             hint.width() if horizontal else hint.height()
         ) + dock.style().pixelMetric(QStyle.PM_ScrollBarExtent)
-        wanted = min(wanted, int(sum(sizes) * FIT_SHARE))
-        if sizes[index] >= wanted:
+        # Of the window: ADS nests a column in new splitters as others open
+        extent = self.manager.width() if horizontal else self.manager.height()
+        wanted = min(wanted, int((extent or sum(sizes)) * FIT_SHARE))
+        if sizes[index] == wanted:
             return
-        # Taken from the largest neighbour (the graphs)
-        other = max((i for i in range(len(sizes)) if i != index), key=sizes.__getitem__)
-        sizes[other] -= wanted - sizes[index]
+        graphs = {part_of(splitter, a) for a in self.areas_of(GRAPH)} - {None, index}
+        others = sorted(graphs) or [
+            max((i for i in range(len(sizes)) if i != index), key=sizes.__getitem__)
+        ]
+        spare, total = sizes[index] - wanted, sum(sizes[i] for i in others)
+        for i in others:
+            share = sizes[i] / total if total else 1 / len(others)
+            sizes[i] = max(0, sizes[i] + round(spare * share))
         sizes[index] = wanted
         splitter.setSizes(sizes)
 

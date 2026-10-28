@@ -1061,6 +1061,30 @@ class TestRunGraphs:
         assert not window.docks["graph:P-IF"].isClosed()
         assert all(window.docks[f"graph:{t}"].isCurrentTab() for t in titles[:4])
 
+    def test_graphs_and_devices_take_their_columns(self, lite, app):
+        """Everything closed but the measurement: its graphs come left of it
+        at full height and share the rest evenly; a device goes left of them."""
+        for name, dock in lite.docks.items():
+            if name != "measurement" and not dock.isAutoHide():
+                dock.toggleView(False)
+        app.processEvents()
+        lite.hub.show_run(["V-t", "I-t"])
+        app.processEvents()
+        measurement = lite.docks["measurement"].dockAreaWidget()
+        v_t, i_t = (lite.docks[f"graph:{t}"] for t in ("V-t", "I-t"))
+        for graph in (v_t, i_t):
+            assert graph.dockAreaWidget().height() == measurement.height()
+            assert self.corner(lite, graph).x() < measurement.x()
+        assert abs(v_t.dockAreaWidget().width() - i_t.dockAreaWidget().width()) <= 2
+        width = measurement.width()
+        assert v_t.dockAreaWidget().width() + i_t.dockAreaWidget().width() > width
+        lite.show_dock("device:power_meter_1")
+        app.processEvents()
+        device = lite.docks["device:power_meter_1"]
+        assert self.corner(lite, device).x() < self.corner(lite, v_t).x()
+        assert device.dockAreaWidget().height() == measurement.height()
+        assert measurement.width() == width  # the columns keep their widths
+
     def test_pv_without_loads_opens_two_graphs_at_start(self, window, monkeypatch):
         box = window.docks["measure:sis.pv_curve"].widget().box
         shown = []

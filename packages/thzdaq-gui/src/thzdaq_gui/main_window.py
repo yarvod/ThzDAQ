@@ -142,6 +142,7 @@ class MainWindow(QMainWindow):
         restored = restore_layout and self.restore_state()
         if not restored:
             self.apply_default_layout()
+        self.docks.hide_empty_splitters()  # the window is not shown yet
         self.docks.building = False
         self.apply_mode()
         self.enter_mode()
@@ -325,16 +326,12 @@ class MainWindow(QMainWindow):
             self.docks.toggle(name)
 
     def apply_default_layout(self) -> None:
-        """Graphs in the centre, measurements on the right (Lite: the chosen
-        one), devices below."""
+        """Devices on the left, graphs in the centre, measurements on the
+        right (Lite: the chosen one)."""
         self.docks.close_kinds(GRAPH, MEASURE, DEVICE, MEASUREMENT)
-        center = self.docks.tab_group(
-            QtAds.CenterDockWidgetArea, self.graphs.default_docks()
-        )
+        self.docks.tab_group(QtAds.CenterDockWidgetArea, self.graphs.default_docks())
         self.docks.tab_group(QtAds.RightDockWidgetArea, self.mode.measure_column)
-        self.docks.tab_group(
-            QtAds.BottomDockWidgetArea, self.devices.default_docks(), center
-        )
+        self.docks.tab_group(QtAds.LeftDockWidgetArea, self.devices.default_docks())
         if self.mode.perspectives:
             self.perspectives.add_default()
 
@@ -401,16 +398,13 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if self._fit_on_show:
             self._fit_on_show = False
-            QTimer.singleShot(0, self.fit_measurements)
+            QTimer.singleShot(0, self.fit_columns)
 
-    def fit_measurements(self) -> None:
-        """After a default layout: the measurement column as wide as its dock
-        wants; the layout was made before the dock had its content."""
-        dock = self.docks.get(self.mode.measure_column[0])
-        area = dock.dockAreaWidget() if dock is not None else None
-        if area is None or dock.isClosed():
-            return
-        self.docks.fit(area, area.currentDockWidget() or dock)
+    def fit_columns(self) -> None:
+        """After a default layout: the device and measurement columns as wide
+        as their docks want, the graphs the rest; the layout was made before
+        the docks had their content."""
+        self.docks.fit_columns()
 
     def set_mode(self, key: str) -> None:
         """Switch modes, each with its own layout; running measurements go on."""
@@ -429,7 +423,7 @@ class MainWindow(QMainWindow):
                 self.apply_default_layout()
             self.enter_mode()
             if not restored:
-                self.fit_measurements()
+                self.fit_columns()
         self.perspectives.refresh()
 
     # State: geometry, the layout of each mode, perspectives

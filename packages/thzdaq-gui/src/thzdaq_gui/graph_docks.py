@@ -16,7 +16,7 @@ from thzdaq_core.measurements.registry import get_procedure
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
-from thzdaq_gui.docking import DockSpace
+from thzdaq_gui.docking import DockSpace, even_out
 from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget
 
 DEFAULT_GRAPHS = ("I-V", "P-V", "Y-V", "P-IF")  # the centre of a default layout
@@ -96,6 +96,7 @@ class GraphDocks:
         towards a 2 x 2 grid. Past four groups the rest wait behind tabs."""
         manager = self.docks.manager
         used, placed = [], []
+        split = not self.docks.areas_of(GRAPH)  # the graphs come on screen now
         for widget in widgets:
             name = graph_dock(widget)
             dock = self.docks.get(name)
@@ -114,6 +115,7 @@ class GraphDocks:
                 elif len(used) in GRID_SPLITS:
                     side, index = GRID_SPLITS[len(used)]
                     manager.addDockWidget(side, dock, used[index])
+                    split = True
                 else:
                     continue  # stays behind a tab of a group in use
                 area = dock.dockAreaWidget()
@@ -122,6 +124,9 @@ class GraphDocks:
         # Last: a graph opened into a group and moved on leaves another in front
         for dock in placed:
             dock.setAsCurrentTab()
+        if split:  # a layout the user sized keeps its sizes
+            self.docks.fit_columns()
+            even_out(used)
         self.docks.sync_bodies()
 
     def rename(self, widget) -> None:
