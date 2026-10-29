@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Channel, Instrument
@@ -17,6 +17,8 @@ class SimSupplyChannel(Channel):
         self._voltage = 0.0
         self._current = instrument.max_current
         self.load_resistance = instrument.load_resistances.get(key, 100.0)  # Ohm
+        # Over-voltage and over-current protection levels (V, A), None: off
+        self.protection: Tuple[Optional[float], Optional[float]] = (None, None)
 
     def set_output(self, value: bool) -> None:
         self._output = bool(value)
@@ -24,12 +26,23 @@ class SimSupplyChannel(Channel):
     def get_output(self) -> bool:
         return self._output
 
+    def set_protection(
+        self, voltage: Optional[float], current: Optional[float]
+    ) -> None:
+        if voltage is not None:
+            self.protection = (voltage, self.protection[1])
+        if current is not None:
+            self.protection = (self.protection[0], current)
+
     def set_voltage(self, voltage: float) -> None:
         if not 0 <= voltage <= self.instrument.max_voltage:
             raise InstrumentResponseError(
                 f"{self.name}: voltage {voltage} V out of range"
             )
         self._voltage = voltage
+        ovp = self.protection[0]
+        if ovp is not None and voltage > ovp:
+            self._output = False  # the protection trips
 
     def get_voltage(self) -> float:
         return self._voltage

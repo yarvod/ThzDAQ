@@ -1,4 +1,6 @@
 from thzdaq_instruments.drivers.power_supply import ScpiPowerSupply
+from thzdaq_instruments.limits import Limit
+from thzdaq_instruments.quantities import CURRENT_SET, VOLTAGE_SET
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec
 
@@ -14,6 +16,7 @@ class RohdeSchwarzHMP2030(ScpiPowerSupply):
     device_type = "power_supply"
 
     channel_keys = (1, 2, 3)
+    limits = {VOLTAGE_SET.key: Limit(0.0, 32.0), CURRENT_SET.key: Limit(0.0, 5.0)}
 
     @staticmethod
     def connection(host: str = "169.254.0.30", port: int = 5025) -> ConnectionSpec:

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Hashable, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, Hashable, Mapping, Optional, Tuple, Type
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
+from thzdaq_instruments.limits import Limit
 from thzdaq_instruments.transport.base import Transport
 
 
@@ -47,6 +48,15 @@ class Instrument:
     channel_class: ClassVar[Optional[Type[Channel]]] = None
     channel_keys: ClassVar[Tuple[Hashable, ...]] = ()
     subdevices: ClassVar[Dict[str, SubdeviceType]] = {}
+    # The passport: what the instrument accepts at all, by quantity key, of
+    # itself or of every channel; channel_limits for channels that differ
+    limits: ClassVar[Mapping[str, Limit]] = {}
+    channel_limits: ClassVar[Mapping[Hashable, Mapping[str, Limit]]] = {}
+
+    @classmethod
+    def passport(cls, channel: Optional[Hashable] = None) -> Mapping[str, Limit]:
+        """Limits of the instrument (None), or of one channel or sub-device."""
+        return cls.channel_limits.get(channel, cls.limits)
 
     @classmethod
     def fixed_channels(cls) -> Tuple[Hashable, ...]:

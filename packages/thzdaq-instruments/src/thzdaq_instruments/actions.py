@@ -28,13 +28,7 @@ class Argument:
     choices: Tuple[Any, ...] = ()
 
     def parse(self, value: Any) -> Any:
-        parsed = parse_as(self, value)
-        if self.kind in ("float", "int"):
-            if self.minimum is not None and parsed < self.minimum:
-                raise ValueError(f"{self.key}: {parsed} is below {self.minimum}")
-            if self.maximum is not None and parsed > self.maximum:
-                raise ValueError(f"{self.key}: {parsed} is above {self.maximum}")
-        return parsed
+        return parse_as(self, value)
 
 
 @dataclass(frozen=True)

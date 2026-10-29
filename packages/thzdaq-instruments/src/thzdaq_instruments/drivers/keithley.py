@@ -1,4 +1,6 @@
 from thzdaq_instruments.drivers.power_supply import ScpiPowerSupply
+from thzdaq_instruments.limits import Limit
+from thzdaq_instruments.quantities import CURRENT_SET, VOLTAGE_SET
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
@@ -10,6 +12,7 @@ class Keithley2200(ScpiPowerSupply):
     device_type = "power_supply"
 
     channel_keys = (1,)
+    limits = {VOLTAGE_SET.key: Limit(0.0, 30.0), CURRENT_SET.key: Limit(0.0, 5.0)}
 
     @staticmethod
     def connection(host: str = PROLOGIX_HOST, gpib: int = 22) -> ConnectionSpec:

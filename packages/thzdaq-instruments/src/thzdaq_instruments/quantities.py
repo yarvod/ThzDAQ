@@ -7,10 +7,12 @@ working UI by implementing capabilities; drivers add their own quantities
 (e.g. the short circuit of a SIS bias) with the ``quantities`` class attribute.
 
 Several quantities may come from one call (voltage and current from
-measure()): they share a ``source`` and read_values() calls it once.
+measure()): they share a ``source`` and read_values() calls it once. A
+setpoint names the methods that set it (``setters``), so a guarded device
+checks and ramps every call that changes it, whoever makes it.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import (
     Any,
     Callable,
@@ -42,7 +44,7 @@ BOOL_WORDS = {
 
 def parse_as(spec: Any, value: Any) -> Any:
     """A value as given, as a quantity or an action argument takes it: spec has
-    key, kind, unit and choices."""
+    key, kind, unit, choices, minimum and maximum."""
     if spec.kind == "bool":
         if isinstance(value, str):
             word = value.strip().lower()
@@ -58,7 +60,12 @@ def parse_as(spec: Any, value: Any) -> Any:
     number = parse_value(value, spec.unit) if isinstance(value, str) else value
     if isinstance(number, bool) or not isinstance(number, (int, float)):
         raise ValueError(f"{spec.key}: {value!r} is not a number")
-    return int(number) if spec.kind == "int" else float(number)
+    number = int(number) if spec.kind == "int" else float(number)
+    if spec.minimum is not None and number < spec.minimum:
+        raise ValueError(f"{spec.key}: {number} is below {spec.minimum}")
+    if spec.maximum is not None and number > spec.maximum:
+        raise ValueError(f"{spec.key}: {number} is above {spec.maximum}")
+    return number
 
 
 @dataclass(frozen=True)
@@ -78,6 +85,10 @@ class Quantity:
     # Configuration of the instrument (a multiplier, an OEM head) rather than a
     # setpoint: kept in the station profile, never written on connect
     persistent: bool = False
+    # Methods of the part that set it, the plain one first (it takes the value
+    # alone, write() calls it); used instead of set
+    setters: Tuple[str, ...] = ()
+    danger: str = ""  # what may go wrong when it is set, asked first; empty when safe
 
     @property
     def readable(self) -> bool:
@@ -85,7 +96,7 @@ class Quantity:
 
     @property
     def settable(self) -> bool:
-        return self.set is not None
+        return self.set is not None or bool(self.setters)
 
     @property
     def label(self) -> str:
@@ -104,6 +115,8 @@ class Quantity:
         return self.get(target)
 
     def write(self, target: Any, value: Any) -> Any:
+        if self.setters:
+            return getattr(target, self.setters[0])(self.parse(value))
         if self.set is None:
             raise AttributeError(f"{self.key} is read-only")
         return self.set(target, value)
@@ -128,46 +141,61 @@ def _pressures(target):
     return target.read_pressures()
 
 
+# Setpoints of capabilities, named: drivers, limits and procedures refer to them
+OUTPUT = Quantity(
+    "output",
+    "Output",
+    kind="bool",
+    get=lambda t: t.get_output(),
+    setters=("set_output",),
+)
+VOLTAGE_SET = Quantity(
+    "voltage_set",
+    "Voltage setpoint",
+    "V",
+    get=lambda t: t.get_voltage(),
+    setters=("set_voltage",),
+)
+CURRENT_SET = Quantity(
+    "current_set",
+    "Current setpoint",
+    "A",
+    get=lambda t: t.get_current(),
+    setters=("set_current",),
+)
+FREQUENCY = Quantity(
+    "frequency",
+    "Frequency",
+    "Hz",
+    get=lambda t: t.get_frequency(),
+    setters=("set_frequency",),
+)
+POWER_LEVEL = Quantity(
+    "power_level",
+    "Power level",
+    "dBm",
+    get=lambda t: t.get_power(),
+    setters=("set_power",),
+)
+ANGLE = Quantity(
+    "angle", "Angle", "deg", get=lambda t: t.get_angle(), setters=("rotate_to",)
+)
+
 CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
-    caps.Switchable: (
-        Quantity(
-            "output", "Output", kind="bool",
-            get=lambda t: t.get_output(), set=lambda t, v: t.set_output(bool(v)),
-        ),
-    ),
-    caps.VoltageSource: (
-        Quantity(
-            "voltage_set", "Voltage setpoint", "V",
-            get=lambda t: t.get_voltage(), set=lambda t, v: t.set_voltage(float(v)),
-        ),
-    ),
-    caps.CurrentSource: (
-        Quantity(
-            "current_set", "Current setpoint", "A",
-            get=lambda t: t.get_current(), set=lambda t, v: t.set_current(float(v)),
-        ),
-    ),
+    caps.Switchable: (OUTPUT,),
+    caps.VoltageSource: (VOLTAGE_SET,),
+    caps.CurrentSource: (CURRENT_SET,),
     caps.VoltageCurrentMeter: (
         Quantity("voltage", "Voltage", "V", source=_measure, field="voltage"),
         Quantity("current", "Current", "A", source=_measure, field="current"),
     ),
-    caps.FrequencySource: (
-        Quantity(
-            "frequency", "Frequency", "Hz",
-            get=lambda t: t.get_frequency(), set=lambda t, v: t.set_frequency(float(v)),
-        ),
-    ),
-    caps.PowerLevel: (
-        Quantity(
-            "power_level", "Power level", "dBm",
-            get=lambda t: t.get_power(), set=lambda t, v: t.set_power(float(v)),
-        ),
-    ),
+    caps.FrequencySource: (FREQUENCY,),
+    caps.PowerLevel: (POWER_LEVEL,),
     caps.PowerDetector: (
         Quantity("power", "Power", "dBm", get=lambda t: t.read_power()),
     ),
     caps.TunableFilter: (
-        Quantity("frequency", "Frequency", "Hz", set=lambda t, v: t.tune(float(v))),
+        Quantity("frequency", "Frequency", "Hz", setters=("tune",)),
     ),
     caps.Thermometer: (
         Quantity("temperature", "Temperature", "K", get=lambda t: t.read_temperature()),
@@ -182,13 +210,12 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
         Quantity("temperature_3", "Water in temperature", "K", source=_temperatures, field=2),
         Quantity("pressure_1", "Return pressure", "Pa", source=_pressures, field=0),
     ),
-    caps.Rotator: (
-        Quantity(
-            "angle", "Angle", "deg",
-            get=lambda t: t.get_angle(), set=lambda t, v: t.rotate_to(float(v)),
-        ),
-    ),
+    caps.Rotator: (ANGLE,),
 }  # fmt: skip
+
+
+# The bias of a SIS block also takes a voltage corrected by readback
+SIS_VOLTAGE_SET = replace(VOLTAGE_SET, setters=("set_voltage", "set_voltage_precise"))
 
 
 # Coil current the SIS block reports (the setpoint field is what was asked)
@@ -199,6 +226,7 @@ COIL_CURRENT = Quantity("coil_current", "Current", "A", get=lambda t: t.read_cur
 SHORT = Quantity(
     "active", "Active", kind="bool",
     get=lambda t: not t.get_short(), set=lambda t, v: t.set_short(not v),
+    danger="Shorts or opens the output: a step on a biased junction may damage it",
 )  # fmt: skip
 
 

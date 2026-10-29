@@ -2,7 +2,8 @@ from typing import Literal
 
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
-from thzdaq_instruments.quantities import GENERATOR_QUANTITIES
+from thzdaq_instruments.limits import Limit
+from thzdaq_instruments.quantities import GENERATOR_QUANTITIES, POWER_LEVEL
 from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
 OemState = Literal["ON", "OFF", "NONE", "REAR", "FRONT"]
@@ -21,6 +22,8 @@ class AgilentE8247C(ScpiInstrument):
     quantities = GENERATOR_QUANTITIES
     ATTENUATOR_STEPS = (0, 10, 20, 30, 40, 50, 60, 70, 80, 90)  # dB
     MAX_AMPLITUDE = 25.0  # dBm
+    # Frequencies include the multiplier set on the instrument, so only the power
+    limits = {POWER_LEVEL.key: Limit(maximum=MAX_AMPLITUDE)}
 
     @staticmethod
     def connection(host: str = PROLOGIX_HOST, gpib: int = 19) -> ConnectionSpec:

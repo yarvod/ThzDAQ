@@ -10,7 +10,7 @@ Examples:
     signal generator      -> FrequencySource, PowerLevel, Switchable
 """
 
-from typing import List, Protocol, Tuple, runtime_checkable
+from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
 from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
 
@@ -46,6 +46,17 @@ class CurrentSource(Protocol):
 
     def get_current(self) -> float:
         """Programmed current, A"""
+
+
+@runtime_checkable
+class OutputProtection(Protocol):
+    """A supply output that switches itself off above a voltage or a current
+    (OVP, OCP), whatever the program does."""
+
+    def set_protection(
+        self, voltage: Optional[float], current: Optional[float]
+    ) -> None:
+        """V, A; None leaves that protection as it is."""
 
 
 @runtime_checkable
@@ -177,6 +188,7 @@ ALL_CAPABILITIES: tuple[type, ...] = (
     Switchable,
     VoltageSource,
     CurrentSource,
+    OutputProtection,
     VoltageCurrentMeter,
     FrequencySource,
     PowerLevel,

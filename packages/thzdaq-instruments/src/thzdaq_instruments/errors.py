@@ -20,3 +20,8 @@ class ConfigurationError(InstrumentError):
 
 class UnknownDriverError(ConfigurationError):
     """Driver key is not registered."""
+
+
+class LimitError(ConfigurationError):
+    """A value outside what a device accepts (its passport or the bench limits);
+    nothing was sent to the instrument."""

@@ -40,6 +40,7 @@ class SupplyState:
         self.voltage = 0.0
         self.current = 1.0
         self.load = load
+        self.protection = {}  # OVP / OCP: (level, on)
 
     def reading(self) -> Tuple[float, float]:
         if not self.output:
@@ -70,6 +71,16 @@ class RigolEmulator(ScpiEmulator):
         )
         self.route(r":SOURce(\d):CURRent\?", lambda c: f"{ch[int(c)].current:.4f}")
         self.route(r":MEAS:ALL\? CH(\d)", self._measure)
+        self.route(r":OUTP:(OVP|OCP):VAL CH(\d),(\S+)", self._protection_level)
+        self.route(r":OUTP:(OVP|OCP) CH(\d),(ON|OFF)", self._protection_state)
+
+    def _protection_level(self, kind, channel, level):
+        protection = self.channels[int(channel)].protection
+        protection[kind] = (float(level), protection.get(kind, (None, False))[1])
+
+    def _protection_state(self, kind, channel, state):
+        protection = self.channels[int(channel)].protection
+        protection[kind] = (protection.get(kind, (None, False))[0], state == "ON")
 
     def _measure(self, channel):
         voltage, current = self.channels[int(channel)].reading()

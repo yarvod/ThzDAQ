@@ -9,7 +9,7 @@ from thzdaq_instruments.errors import (
     InstrumentResponseError,
 )
 from thzdaq_instruments.instrument import Channel, ScpiInstrument
-from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
+from thzdaq_instruments.quantities import COIL_CURRENT, SHORT, SIS_VOLTAGE_SET
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments import sis_block
 from thzdaq_instruments.sis_block import DEVICES
@@ -26,7 +26,7 @@ class SisBiasChannel(Channel):
     """
 
     instrument: "ScontelSisBlock"
-    quantities = (SHORT,)
+    quantities = (SIS_VOLTAGE_SET, SHORT)
 
     def __init__(self, instrument: "ScontelSisBlock", key: str):
         super().__init__(instrument, key)

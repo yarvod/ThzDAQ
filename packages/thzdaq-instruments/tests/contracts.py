@@ -28,6 +28,7 @@ from thzdaq_instruments.capabilities import (
     Identifiable,
     LoadSwitch,
     NetworkAnalyzer,
+    OutputProtection,
     PowerDetector,
     PowerLevel,
     Rotator,
@@ -177,6 +178,13 @@ def check_current_source(device):
     assert math.isclose(device.get_current(), 0.5, rel_tol=1e-6)
 
 
+def check_output_protection(device):
+    device.set_protection(12.0, 0.5)
+    device.set_protection(None, None)  # leaves both as they are
+    device.set_voltage(5.0)  # below the protection: the output stays as it is
+    assert device.get_voltage() == 5.0
+
+
 def check_voltage_current_meter(device):
     reading = device.measure()
     assert isinstance(reading, ChannelReading)
@@ -306,6 +314,13 @@ CONTRACTS = {
             **SUPPLY_CHANNELS,
             "sim sis ctrl": lambda: SimSisBlock().ctrl("DEV3"),
             "sis ctrl": lambda: sis().ctrl("DEV3"),
+        },
+    ),
+    OutputProtection: (
+        check_output_protection,
+        {
+            "sim supply channel": lambda: SimPowerSupply().channel(1),
+            "rigol channel": lambda: rigol().channel(2),
         },
     ),
     VoltageCurrentMeter: (
