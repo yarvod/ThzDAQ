@@ -83,7 +83,7 @@ class ProcedureBox(QWidget):
         self.compact = compact
         self.process = None  # in the session's Processes while running
         self.reveal = None  # shows this box once its dock is in front (a folded scan)
-        self.runner = session.runner()
+        self.runner = session.run_model()
         self.measurement = None
         self.window = None  # seconds of the live curves to show
         self.raised = False
@@ -301,11 +301,7 @@ class ProcedureBox(QWidget):
         )
         self.stuck.start()
         self.runner.start(
-            self.session.station,
-            self.session.store,
-            procedure,
-            self.mapping(),
-            self.comment,
+            procedure.name, procedure.to_json(), self.mapping(), self.comment
         )
 
     def stop(self) -> None:
@@ -325,9 +321,7 @@ class ProcedureBox(QWidget):
                 self.process.update(can_abort=True)
 
     def abort(self) -> None:
-        self.runner.cancel()
-        if self.session.station is not None:
-            self.session.station.abort(self.mapping().values())
+        self.runner.abort()
         self.note("aborted: connections of the devices were broken")
 
     def check_thread(self) -> None:

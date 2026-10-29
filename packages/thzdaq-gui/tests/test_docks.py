@@ -959,17 +959,15 @@ class TestHangs:
     def test_stop_without_answer_offers_abort(self, window, session, monkeypatch):
         box = window.docks["measure:sis.iv_curve"].widget().box
         aborted = []
-        monkeypatch.setattr(
-            session.station, "abort", lambda refs: aborted.append(list(refs))
-        )
+        monkeypatch.setattr(box.runner, "abort", lambda: aborted.append(True))
         box.on_running(True)
         box.stop()
         abort = box.controls.btnAbort
         assert box.status().state == "Stopping..." and abort.isHidden()
         box.offer_abort()  # STUCK_AFTER_MS later, still running
         assert not abort.isHidden() and "Abort" in box.controls.state.text()
-        box.abort()
-        assert aborted and "sis_bias" in aborted[0][0]
+        box.abort()  # the lab breaks the connections of the run's devices
+        assert aborted
         box.on_running(False)
         assert abort.isHidden()
 
@@ -979,7 +977,7 @@ class TestHangs:
         monkeypatch.setattr(
             QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
         )
-        monkeypatch.setattr(type(box.runner), "running", property(lambda self: True))
+        monkeypatch.setattr(box.runner, "running", True)
         box.start()
         assert warnings and "still running" in warnings[0]
 

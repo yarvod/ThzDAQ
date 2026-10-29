@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         store_state, dump = True, False
         if self.confirm_exit:
-            running = sum(runner.running for runner in self.session.runners)
+            running = sum(run.running for run in self.session.runs)
             dialog = ExitDialog(running, self.session.measurements.rowCount(), self)
             if dialog.exec() != QDialog.Accepted:
                 event.ignore()

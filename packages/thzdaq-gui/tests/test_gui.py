@@ -3,6 +3,7 @@ import threading
 
 import numpy as np
 import pytest
+from thzdaq_api.procedures import IV_CURVE
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, Measurement
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import Sweep
@@ -22,7 +23,7 @@ from thzdaq_gui.graphs import (
     GraphWidget,
     MapGraphWidget,
 )
-from thzdaq_gui.workers import DeviceWorker, QtRunner
+from thzdaq_gui.workers import DeviceWorker
 from thzdaq_instruments.capabilities import (
     PowerDetector,
     VoltageCurrentMeter,
@@ -173,38 +174,37 @@ class TestWorkers:
         assert "ZeroDivisionError" in messages[0]
         worker.stop()
 
-    def test_qt_runner_streams_records_and_saves_json(self, session, wait):
-        runner = QtRunner()
+    def test_a_run_streams_records_and_saves_json(self, session, wait):
+        runner = session.run_model()
         records, finished = [], []
         runner.record.connect(lambda table, record: records.append(table))
         runner.finished.connect(finished.append)
-        runner.start(
-            session.station, session.store, IVCurve(**FAST_IV), {"bias": "sis_bias_1"}
-        )
+        runner.start(IV_CURVE, IVCurve(**FAST_IV).to_json(), {"bias": "sis_bias_1"})
         wait(lambda: finished)
         measurement = finished[0]
         assert measurement.status == COMPLETED and records == ["iv"] * 6
         assert measurement.metadata["path"].endswith(".json")
         assert os.path.exists(measurement.metadata["path"])
         assert measurement.devices["bias"].title == "SIS1"
+        assert not runner.running
 
-    def test_qt_runner_reports_a_missing_device(self, session, wait):
-        runner = QtRunner()
+    def test_a_run_reports_a_missing_device(self, session, wait):
+        runner = session.run_model()
         failures = []
         runner.failed.connect(failures.append)
-        runner.start(session.station, None, IVCurve(**FAST_IV))
+        runner.start(IV_CURVE, IVCurve(**FAST_IV).to_json(), {"bias": "nowhere"})
         wait(lambda: failures)
-        assert "no device 'bias'" in failures[0]
+        assert "nowhere" in failures[0] and not runner.running
 
-    def test_qt_runner_cancel(self, session, wait):
-        runner = QtRunner()
+    def test_a_run_is_cancelled(self, session, wait):
+        runner = session.run_model()
         finished = []
         runner.finished.connect(finished.append)
         slow = IVCurve(
             voltage=Sweep(0, 5e-3, 1000), settle_time=0.05, first_point_delay=0
         )
-        runner.start(session.station, None, slow, {"bias": "sis_bias_1"})
-        wait(lambda: runner.running)
+        runner.start(IV_CURVE, slow.to_json(), {"bias": "sis_bias_1"})
+        wait(lambda: runner.run is not None)
         runner.cancel()
         wait(lambda: finished)
         assert finished[0].status == CANCELLED
@@ -428,3 +428,21 @@ class TestDockBody:
         assert len(made) == 2 and body.attached and body.content() is made[1]
         body.dispose()
         assert not body.built
+
+
+def test_the_session_calls_its_lab_and_hears_its_events_in_the_gui_thread(
+    session, wait
+):
+    import threading
+
+    from thzdaq_api.devices import SetQuantity
+
+    heard = []
+    session.bridge.quantity_set.connect(
+        lambda body: heard.append((body, threading.current_thread()))
+    )
+    session.lab.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1 mV"))
+    wait(lambda: heard)
+    (body, thread), *_ = heard
+    assert (body.ref, body.origin) == ("sis_bias_1", "gui")
+    assert thread is threading.main_thread()
