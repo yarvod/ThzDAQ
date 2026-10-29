@@ -23,6 +23,7 @@ class Rights(str, Enum):
     SET = "set"  # changes a device
     RUN = "run"  # starts or stops measurements
     STATION = "station"  # changes the profile
+    DAEMON = "daemon"  # stops or restarts the daemon
 
 
 class Operation(

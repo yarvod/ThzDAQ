@@ -15,6 +15,9 @@ class ErrorCode(str, Enum):
     OUT_OF_LIMITS = "out_of_limits"
     CONFLICT = "conflict"  # a device in exclusive use: repeat with share to go on
     INTERNAL = "internal"  # a fault of the daemon: its log has the details
+    UNREACHABLE = "unreachable"  # no daemon answers: not running, or gone
+    UNAUTHORIZED = "unauthorized"  # the token is not this daemon's (a stale host file)
+    WRONG_VERSION = "wrong_version"  # the daemon speaks another version of the contract
 
 
 class Failure(msgspec.Struct, frozen=True):
