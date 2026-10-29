@@ -53,6 +53,12 @@ class QuantityValue(msgspec.Struct, frozen=True):
     value: Value
 
 
+class Poll(msgspec.Struct, frozen=True):
+    id: int  # to cancel it
+    ref: str
+    interval: float
+
+
 class ListDevices(Operation[Tuple[DeviceInfo, ...]]):
     """Every device of the bench: its instruments, their fixed channels and the
     devices configured on them (a SIS bias on a SIS block)."""
@@ -82,3 +88,19 @@ class SetQuantity(Operation[QuantityValue]):
     ref: str
     key: str
     value: Union[bool, int, float, str]
+
+
+class SubscribePoll(Operation[Poll]):
+    """Read a device every `interval` seconds (all readable quantities, or the
+    listed keys); readings come as values events. The daemon polls a device
+    once, at the shortest interval its subscribers ask for."""
+
+    ref: str
+    interval: float
+    keys: Optional[Tuple[str, ...]] = None
+
+
+class CancelPoll(Operation[None]):
+    """Stop a poll started by subscribe_poll."""
+
+    id: int

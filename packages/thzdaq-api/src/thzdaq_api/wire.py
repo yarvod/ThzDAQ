@@ -7,6 +7,7 @@ import msgspec
 
 from thzdaq_api import catalog
 from thzdaq_api.errors import ErrorCode, Failure, LabError
+from thzdaq_api.events import Event
 from thzdaq_api.operation import Operation
 
 
@@ -24,6 +25,10 @@ def decode_arguments(name: str, data: bytes) -> Operation:
 
 def decode_result(op: Type[Operation], data: bytes) -> Any:
     return msgspec.json.decode(data, type=op.result_type())
+
+
+def decode_event(data: bytes) -> Event:
+    return msgspec.json.decode(data, type=Event)
 
 
 def decode_failure(data: bytes) -> LabError:
