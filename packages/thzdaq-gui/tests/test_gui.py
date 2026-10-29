@@ -219,7 +219,7 @@ def iv_measurement(number=1) -> Measurement:
 
 @pytest.fixture
 def hub(app, session):
-    hub = GraphHub(session.procedures())
+    hub = GraphHub(session.procedures(), session.call)
     yield hub
     hub.close()
     app.processEvents()

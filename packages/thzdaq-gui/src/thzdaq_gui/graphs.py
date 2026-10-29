@@ -9,7 +9,7 @@ titles and units taken from the measurement's column descriptions.
 import bisect
 import math
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pyqtgraph as pg
@@ -99,8 +99,10 @@ class GraphWidget(QWidget):
         analysis=None,
         key: Optional[str] = None,
         custom: bool = False,
+        call: Optional[Callable[[Any], Any]] = None,
         parent=None,
     ):
+        """call: how the graph asks the lab (an analysis it offers)."""
         super().__init__(parent)
         self.title = title
         self.key = key or title
@@ -157,7 +159,7 @@ class GraphWidget(QWidget):
         if analysis == "iv":
             from thzdaq_gui.iv_analysis import IVAnalysisBar
 
-            self.analysis = IVAnalysisBar(self)
+            self.analysis = IVAnalysisBar(self, call)
             layout.addWidget(self.analysis)
 
     def _tool(self, icon_name: str, tip: str, slot) -> QToolButton:
@@ -400,7 +402,7 @@ def close_plots() -> None:
     pg.ViewBox.NamedViews.clear()
 
 
-def graph_for_spec(spec: PlotInfo):
+def graph_for_spec(spec: PlotInfo, call: Callable[[Any], Any]):
     if spec.kind == "map":
         return MapGraphWidget(spec)
     return GraphWidget(
@@ -408,6 +410,7 @@ def graph_for_spec(spec: PlotInfo):
         Axis(spec.x_label, scale=spec.x_scale),
         Axis(spec.y_label, scale=spec.y_scale),
         analysis=spec.analysis,
+        call=call,
     )
 
 
@@ -426,9 +429,16 @@ class GraphHub(QObject):
     graph_removed = Signal(object)  # a custom graph to delete
     custom_changed = Signal()  # the custom graphs to remember
 
-    def __init__(self, procedures: Iterable[ProcedureSummary] = (), parent=None):
-        """procedures: the catalog (list_procedures): their plots are the graphs."""
+    def __init__(
+        self,
+        procedures: Iterable[ProcedureSummary],
+        call: Callable[[Any], Any],
+        parent=None,
+    ):
+        """procedures: the catalog (list_procedures): their plots are the graphs;
+        call: the lab's, for what graphs ask (an analysis)."""
         super().__init__(parent)
+        self.call = call
         self.graphs: Dict[str, QWidget] = {}
         self.specs: Dict[str, PlotInfo] = {}
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
@@ -449,7 +459,7 @@ class GraphHub(QObject):
         if title not in self.graphs:
             spec = self.specs.get(title)
             if spec is not None:
-                widget = graph_for_spec(spec)
+                widget = graph_for_spec(spec, self.call)
             else:
                 widget = GraphWidget(title, Axis(), Axis())
             self._add(widget)

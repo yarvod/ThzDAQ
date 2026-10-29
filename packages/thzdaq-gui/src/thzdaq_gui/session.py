@@ -1,10 +1,11 @@
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_api.lab import Lab
+from thzdaq_api.operation import Operation
 from thzdaq_api.measurements import ListProcedures, ProcedureSummary
 from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station, save_station
@@ -24,6 +25,7 @@ from thzdaq_gui.models.run import RunModel
 from thzdaq_gui.workers import DeviceWorker
 
 logger = logging.getLogger(__name__)
+R = TypeVar("R")
 
 # A TCP connection unused this long is closed (reopened on the next command):
 # an R&S instrument stays in remote with a client connected
@@ -81,6 +83,10 @@ class Session(QObject):
         run.finished.connect(self.measurements.refresh_item)
         self.runs.append(run)
         return run
+
+    def call(self, operation: Operation[R]) -> R:
+        """An operation of the lab now (another profile replaces the lab)."""
+        return self.lab.call(operation)
 
     def procedures(self) -> Tuple[ProcedureSummary, ...]:
         """The procedures the bench runs, with their plots; asked once, they

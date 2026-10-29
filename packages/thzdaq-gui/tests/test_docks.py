@@ -546,7 +546,7 @@ class TestDeviceDocks:
         assert bar.curve.count() == 1
         assert bar.curve.currentData()[0] == finished[0].id
         result = bar.analyze()
-        assert result is not None and result.rn_ohm > 0, bar.label.text()
+        assert result is not None and result.rn.resistance > 0, bar.label.text()
         window.hub.graph("I-V").clear()
         assert bar.curve.count() == 0 and not bar.overlay.items
 
