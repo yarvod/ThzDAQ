@@ -2,7 +2,6 @@
 after a restart, ended by a stop, an idle timeout or a kill."""
 
 import json
-import shutil
 import subprocess
 import sys
 import threading
@@ -10,7 +9,6 @@ import time
 
 import msgspec
 import pytest
-from conftest import PROFILE
 from lab_helpers import wait_for
 from thzdaq_api.daemon import (
     API_VERSION,
@@ -38,17 +36,6 @@ from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.procedures import MONITOR_TIME
 
 FOREVER = {"watch": ["power_meter_1/power"], "interval": 0.05, "duration": 0.0}
-
-
-@pytest.fixture
-def home(tmp_path, monkeypatch):
-    """The daemon's folder and its files, apart from any daemon of the machine."""
-    monkeypatch.setenv("THZDAQ_DAEMON_DIR", str(tmp_path))
-    monkeypatch.delenv(NO_AUTOSTART_ENV, raising=False)
-    shutil.copy(PROFILE, tmp_path / "bench.yaml")
-    yield tmp_path
-    for simulate in (True, False):
-        kill(simulate)
 
 
 def start(home, simulate=True, idle=60.0, origin="test"):

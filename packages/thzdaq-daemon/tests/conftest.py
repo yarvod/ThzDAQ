@@ -94,3 +94,17 @@ def lab(served):
     remote = ServedLab()
     yield remote
     remote.close()
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    """A daemon's folder with the example profile; its files live there too,
+    apart from any daemon of the machine, and its daemons end with the test."""
+    from thzdaq_api.host import NO_AUTOSTART_ENV, kill
+
+    monkeypatch.setenv("THZDAQ_DAEMON_DIR", str(tmp_path))
+    monkeypatch.delenv(NO_AUTOSTART_ENV, raising=False)
+    shutil.copy(PROFILE, tmp_path / "bench.yaml")
+    yield tmp_path
+    for simulate in (True, False):
+        kill(simulate)
