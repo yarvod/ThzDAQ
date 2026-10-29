@@ -5,14 +5,13 @@ the emitting thread differs from the receivers' thread.
 """
 
 import logging
-import queue
 import threading
-import time
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_core.application.lanes import Lanes
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver
 
 logger = logging.getLogger(__name__)
@@ -20,68 +19,18 @@ logger = logging.getLogger(__name__)
 Callback = Optional[Callable[[Any], None]]
 
 
-class _Lane:
-    """One thread with its queue: the jobs of one instrument, in order."""
-
-    def __init__(self, worker: "DeviceWorker", key: str):
-        self.worker = worker
-        self.queue: "queue.Queue" = queue.Queue()
-        self.started: Optional[float] = None
-        self.label: Optional[str] = None
-        name = f"DeviceWorker {key}" if key else "DeviceWorker"
-        self.thread = threading.Thread(target=self.loop, name=name, daemon=True)
-        self.thread.start()
-
-    def loop(self) -> None:
-        while True:
-            item = self.queue.get()
-            if item is None:
-                return
-            job, on_result, on_error, label = item
-            self.label = label
-            self.started = time.monotonic()
-            try:
-                result = job()
-            except Exception as e:
-                logger.exception(f"Device job failed{f' ({label})' if label else ''}")
-                self.worker._done.emit(on_error, None, e)
-            else:
-                self.worker._done.emit(on_result, result, None)
-            finally:
-                self.started = None
-                self.label = None
-            # Callbacks hold widgets: their last reference must die in the GUI
-            # thread (after delivery), never here, or Qt deletes a widget from
-            # this thread and crashes
-            del item, job, on_result, on_error
-            result = None
-
-
 class DeviceWorker(QObject):
-    """Manual control and polling of instruments, one queue per instrument.
-
-    Jobs of one instrument run in order in its own thread; instruments do not
-    wait for each other, so a slow or hung power meter does not hold the SIS
-    monitor. Instruments sharing a connection (a Prologix) still take turns
-    on its lock.
-    """
+    """Manual control and polling of instruments in their lanes (one queue and
+    thread per instrument, thzdaq_core.application.lanes); results come back
+    as Qt signals in the GUI thread."""
 
     _done = Signal(object, object, object)  # callback, result, error
     error = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, lanes: Optional[Lanes] = None):
         super().__init__(parent)
-        self._lanes: Dict[str, _Lane] = {}
-        self._lock = threading.Lock()
+        self.lanes = lanes or Lanes()
         self._done.connect(self._deliver)
-        self._lane("")  # jobs without an instrument
-
-    def _lane(self, key: str) -> _Lane:
-        with self._lock:
-            lane = self._lanes.get(key)
-            if lane is None:
-                lane = self._lanes[key] = _Lane(self, key)
-            return lane
 
     def submit(
         self,
@@ -92,36 +41,29 @@ class DeviceWorker(QObject):
         key: Optional[str] = None,
     ):
         """label: the device the job talks to, named when it does not answer;
-        key: its instrument, whose queue the job joins."""
-        self._lane(key or "").queue.put((job, on_result, on_error, label))
+        key: its instrument, whose lane the job joins."""
+
+        def deliver(result, error, on_result=on_result, on_error=on_error):
+            # The signal keeps the callbacks: their last reference (they hold
+            # widgets) dies in the GUI thread after delivery, never in a lane
+            self._done.emit(on_result if error is None else on_error, result, error)
+
+        self.lanes.submit(key or "", job, deliver, label)
 
     @property
     def pending(self) -> int:
-        return sum(lane.queue.qsize() for lane in list(self._lanes.values()))
-
-    def _slowest(self) -> Tuple[Optional[float], Optional[str]]:
-        """(start, label) of the longest job in progress; lanes change meanwhile."""
-        busy = []
-        for lane in list(self._lanes.values()):
-            started, label = lane.started, lane.label
-            if started is not None:
-                busy.append((started, label))
-        return min(busy, key=lambda item: item[0], default=(None, None))
+        return self.lanes.pending
 
     def busy_for(self) -> float:
-        """Seconds the longest job in progress has been running (0 when idle)."""
-        started, _ = self._slowest()
-        return 0.0 if started is None else time.monotonic() - started
+        return self.lanes.busy_for()
 
     @property
     def current(self) -> Optional[str]:
-        """Label of the longest job in progress."""
-        return self._slowest()[1]
+        return self.lanes.current
 
     @property
     def started_at(self) -> Optional[float]:
-        """When the longest job in progress started (monotonic), None when idle."""
-        return self._slowest()[0]
+        return self.lanes.started_at
 
     def _deliver(self, callback, result, error):
         if error is not None:
@@ -133,12 +75,7 @@ class DeviceWorker(QObject):
             callback(result)
 
     def stop(self, timeout: float = 2.0):
-        lanes = list(self._lanes.values())
-        for lane in lanes:
-            lane.queue.put(None)
-        deadline = time.monotonic() + timeout
-        for lane in lanes:
-            lane.thread.join(max(0.0, deadline - time.monotonic()))
+        self.lanes.stop(timeout)
 
 
 class HangWatch(QObject):

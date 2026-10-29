@@ -133,7 +133,7 @@ class TestWorkers:
         worker.submit(lambda: threading.current_thread().name, results.append)
         worker.submit(lambda: 1 / 0, None, errors.append)
         wait(lambda: results and errors)
-        assert results == ["DeviceWorker"] and isinstance(errors[0], ZeroDivisionError)
+        assert results == ["lane"] and isinstance(errors[0], ZeroDivisionError)
         worker.stop()
 
     def test_instruments_do_not_wait_for_each_other(self, app, wait):
