@@ -7,7 +7,13 @@ from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
 from thzdaq_core.application.events import EventBus
-from thzdaq_core.application.handlers import devices, measurements, state, station
+from thzdaq_core.application.handlers import (
+    analysis,
+    devices,
+    measurements,
+    state,
+    station,
+)
 from thzdaq_core.application.polling import Polling
 from thzdaq_core.application.ports import MeasurementRepository, ProfileRepository
 from thzdaq_core.application.runs import Runs
@@ -48,6 +54,7 @@ def assemble(
             state.CancelPoll(polling),
             state.GetSnapshot(events, known),
             state.ListLeases(runs),
+            analysis.AnalyzeIv(),
             measurements.ListProcedures(),
             measurements.DescribeProcedure(),
             measurements.StartMeasurement(runs),
