@@ -42,6 +42,7 @@ thzdaq-instruments = { workspace = true }
 # tests/ checks the whole repository (architecture rules)
 testpaths = [
     "tests",
+    "packages/thzdaq-api/tests",
     "packages/thzdaq-instruments/tests",
     "packages/thzdaq-core/tests",
     "packages/thzdaq-gui/tests",
