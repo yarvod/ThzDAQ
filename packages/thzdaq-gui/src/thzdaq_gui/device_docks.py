@@ -18,7 +18,7 @@ from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.graphs import GraphHub
-from thzdaq_gui.navigator import instrument_type, type_title
+from thzdaq_gui.device_types import id_type, type_title
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +104,7 @@ class DeviceDocks:
     def group(self, info):
         """Branch of the menu (the type: SIS bias, Power supply) and words to search."""
         spec = self.session.station.config.instruments[info.instrument]
-        key = (
-            info.kind if info.kind != "instrument" else instrument_type(info.instrument)
-        )
+        key = info.kind if info.kind != "instrument" else id_type(info.instrument)
         return type_title(key), f"{info.ref} {info.instrument} {spec.driver}"
 
     def widget(self, ref: str) -> QWidget:

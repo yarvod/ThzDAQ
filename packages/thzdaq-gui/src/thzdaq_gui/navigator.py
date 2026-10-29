@@ -7,7 +7,6 @@ five power supplies) share a branch; a type with one dock stays a plain row.
 """
 
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
@@ -33,22 +32,6 @@ NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
 MAX_ROWS = 20
 FLASH_MS = 700
-
-# Words of type keys written in capitals ("sis_bias" -> "SIS bias")
-ACRONYMS = {"sis", "vna", "yig", "if", "lo", "rf", "nrx", "pid", "2sb"}
-
-
-def type_title(key: str) -> str:
-    words = [w.upper() if w in ACRONYMS else w for w in key.split("_") if w]
-    if not words:
-        return key
-    first = words[0]
-    return " ".join([first[:1].upper() + first[1:], *words[1:]])
-
-
-def instrument_type(instrument_id: str) -> str:
-    """power_supply_3 -> power_supply: profile ids name the kind of device."""
-    return re.sub(r"_\d+$", "", instrument_id)
 
 
 @dataclass

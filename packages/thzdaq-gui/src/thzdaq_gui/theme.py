@@ -11,6 +11,8 @@ import pyqtgraph as pg
 from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
+from thzdaq_gui.device_types import id_type
+
 ACCENT = "#f39c12"
 ACCENT_DARK = "#c77c02"
 WINDOW = "#2b2b2b"
@@ -182,10 +184,7 @@ DEVICE_ICONS = {
 }
 
 
-# Icons of procedures by group (sis.iv_curve -> sis)
 def device_icon(kind: str, instrument_id: str = "") -> QIcon:
-    name = DEVICE_ICONS.get(kind)
-    if name is None:
-        prefix = instrument_id.rsplit("_", 1)[0]
-        name = DEVICE_ICONS.get(prefix, "chip")
+    """By the device's kind, an instrument by the type its id names."""
+    name = DEVICE_ICONS.get(kind) or DEVICE_ICONS.get(id_type(instrument_id), "chip")
     return icon(name)
