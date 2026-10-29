@@ -1,6 +1,6 @@
 """Procedures and the measurements running in the daemon."""
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import msgspec
 
@@ -34,8 +34,17 @@ class SlotInfo(msgspec.Struct, frozen=True):
     kind: Optional[str] = None  # the device kind preferred: sis_bias
 
 
+GroupKey = Tuple[Any, ...]
+
+
 class PlotInfo(msgspec.Struct, frozen=True):
-    """A plot of the records of one table; values / scale give display units."""
+    """A plot of the records of one table, independent of any plotting library.
+
+    Values in records are SI; x_scale / y_scale convert them for display
+    (value / scale), e.g. x_scale=1e9 shows Hz as GHz. Records with different
+    values of the group_by keys form separate curves; kind="map" draws z over
+    x and y. A procedure declares its plots so; a viewer draws them so.
+    """
 
     key: str
     title: str
@@ -52,7 +61,44 @@ class PlotInfo(msgspec.Struct, frozen=True):
     z_label: str = ""
     z_scale: float = 1.0
     analysis: Optional[str] = None  # an analysis a viewer may offer: iv
-    where: Tuple[Tuple[str, Any], ...] = ()  # only records with these values
+    # Only records with these values: (("plot", "P-t"),) in a monitor table
+    where: Tuple[Tuple[str, Any], ...] = ()
+
+    def accepts(self, record: Mapping[str, Any]) -> bool:
+        return all(record.get(key) == value for key, value in self.where)
+
+    def group_key(self, record: Mapping[str, Any]) -> GroupKey:
+        return tuple(record.get(key) for key in self.group_by)
+
+    def label(self, group: GroupKey) -> str:
+        return " ".join(f"{value}" for value in group if value is not None)
+
+    def point(self, record: Mapping[str, Any]) -> Optional[Tuple[float, ...]]:
+        """Display coordinates of a record, None when a value is missing."""
+        if not self.accepts(record):
+            return None
+        keys = (self.x, self.y) + ((self.z,) if self.kind == "map" else ())
+        scales = (self.x_scale, self.y_scale) + (
+            (self.z_scale,) if self.kind == "map" else ()
+        )
+        values = []
+        for key, scale in zip(keys, scales):
+            value = record.get(key)
+            if value is None:
+                return None
+            values.append(value / scale)
+        return tuple(values)
+
+    def curves(
+        self, records: Iterable[Mapping[str, Any]]
+    ) -> Dict[GroupKey, List[Tuple[float, ...]]]:
+        """Points per group in record order."""
+        result: Dict[GroupKey, List[Tuple[float, ...]]] = {}
+        for record in records:
+            point = self.point(record)
+            if point is not None:
+                result.setdefault(self.group_key(record), []).append(point)
+        return result
 
 
 class ProcedureSummary(msgspec.Struct, frozen=True):

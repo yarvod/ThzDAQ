@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
 )
-from thzdaq_core.domain.data.measurement import Measurement
-from thzdaq_core.adapters.json_store import dumps
+from thzdaq_api.measurement_file import Measurement
+from thzdaq_api.measurement_file import dumps
 
 from thzdaq_gui import theme
 

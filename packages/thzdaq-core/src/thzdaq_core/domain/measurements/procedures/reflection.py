@@ -13,7 +13,7 @@ from thzdaq_core.domain.parameters import (
     MultiChoiceParameter,
     SweepParameter,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
@@ -34,7 +34,7 @@ class SisReflection(Procedure):
     description = "S-parameters of the SIS IF port over a bias sweep."
     requires = {"bias": BIAS, "vna": (NetworkAnalyzer, PowerLevel)}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "magnitude", "|S| (band mean) - V", "summary", "voltage", "magnitude_db",
             x_label=VOLTAGE_MV, y_label=S_DB, x_scale=MV, group_by=("parameter",),
         ),

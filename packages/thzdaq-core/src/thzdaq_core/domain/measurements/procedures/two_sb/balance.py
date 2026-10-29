@@ -19,7 +19,7 @@ from thzdaq_core.domain.parameters import (
     FloatParameter,
     SweepParameter,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
     FREQUENCY_GHZ,
@@ -52,7 +52,7 @@ class IfBalance(IfSwitchProcedure):
         "IF power of both channels over the IF band for every SIS1 x SIS2 bias pair."
     )
     plots = (
-        PlotSpec(
+        PlotInfo(
             "power", "P-IF", "power", "frequency", "power",
             x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ,
             group_by=("channel", "bias"),
@@ -131,12 +131,12 @@ class PumpBalance(TwoSbProcedure):
         "SIS1/SIS2 bias points."
     )
     plots = (
-        PlotSpec(
+        PlotInfo(
             "sis1", "SIS1 I-F", "pump", "frequency", "sis1_current",
             x_label=FREQUENCY_GHZ, y_label=CURRENT_UA, x_scale=GHZ, y_scale=UA,
             group_by=("bias",),
         ),
-        PlotSpec(
+        PlotInfo(
             "sis2", "SIS2 I-F", "pump", "frequency", "sis2_current",
             x_label=FREQUENCY_GHZ, y_label=CURRENT_UA, x_scale=GHZ, y_scale=UA,
             group_by=("bias",),

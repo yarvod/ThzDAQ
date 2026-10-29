@@ -11,7 +11,7 @@ from typing import Protocol, Tuple
 
 from thzdaq_api.daemon import ClientInfo, ProcessInfo
 
-from thzdaq_core.domain.data.measurement import Measurement
+from thzdaq_api.measurement_file import Measurement
 from thzdaq_core.domain.station.config import StationConfig
 
 

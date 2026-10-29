@@ -12,7 +12,7 @@ from thzdaq_analysis.shot_noise import (
     shot_noise_temperature,
 )
 from thzdaq_core.domain.parameters import FloatParameter, IntParameter
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
@@ -34,11 +34,11 @@ class ShotNoise(Procedure):
     )
     requires = {"bias": BIAS, "detector": PowerDetector, "if_filter": TunableFilter}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "power", "P-IF", "power", "frequency", "power",
             x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("point",),
         ),
-        PlotSpec(
+        PlotInfo(
             "ta", "Ta-IF", "noise", "frequency", "amplifier_temperature",
             x_label=IF_GHZ, y_label="Ta, K", x_scale=GHZ,
         ),

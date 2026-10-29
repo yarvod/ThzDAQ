@@ -13,10 +13,10 @@ from typing import (
 )
 
 from thzdaq_api.leases import SHARED
-from thzdaq_core.domain.data.measurement import Column
+from thzdaq_api.measurement_file import Column
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import Parameter
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 
 Capabilities = Union[Type, Tuple[Type, ...]]
 
@@ -48,7 +48,7 @@ class Procedure:
     # How a slot uses its device while the run lasts (thzdaq_api.leases): read,
     # exclusive (it sweeps the device) or, unlisted, shared
     slot_modes: ClassVar[Mapping[str, str]] = {}
-    plots: ClassVar[Tuple[PlotSpec, ...]] = ()
+    plots: ClassVar[Tuple[PlotInfo, ...]] = ()
     # Record tables: titles, and columns whose title/unit differ from KNOWN_COLUMNS
     table_titles: ClassVar[Mapping[str, str]] = {}
     columns: ClassVar[Mapping[str, Column]] = {}
@@ -150,7 +150,7 @@ class Procedure:
 
     def active_plots(
         self, quantities: Optional[Callable[[str], Iterable[Any]]] = None
-    ) -> Tuple[PlotSpec, ...]:
+    ) -> Tuple[PlotInfo, ...]:
         """Plots this run fills, known before it starts (a viewer puts them on
         screen at Start); quantities(slot) lists what the device in a slot
         reads. Override when parameters or devices leave plots empty."""

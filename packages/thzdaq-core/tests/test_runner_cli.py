@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 from thzdaq_analysis.noise import noise_temperature
 from thzdaq_core.cli.measure import main
-from thzdaq_core.domain.data.measurement import CANCELLED, COMPLETED, FAILED, DeviceUse
-from thzdaq_core.adapters.json_store import MeasurementStore, read_json
+from thzdaq_api.measurement_file import CANCELLED, COMPLETED, FAILED, DeviceUse
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_api.measurement_file import read_measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.parameters import FloatParameter
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver
@@ -102,7 +103,7 @@ class TestRunner:
         assert dataset.devices["bias"].ref == "sis_bias_1"
         assert dataset.devices["bias"].kind == "sis_bias"
         assert dataset.station["identities"] == {"sis": "THZDAQ,SimSisBlock,0,1.0"}
-        saved = read_json(dataset.metadata["path"])
+        saved = read_measurement(dataset.metadata["path"])
         assert saved.status == COMPLETED and saved.records("iv") == dataset.records(
             "iv"
         )
@@ -117,7 +118,7 @@ class TestRunner:
         dataset = runner.run(procedure, devices={"bias": "sis_bias_1"})
         assert dataset.status == CANCELLED and len(dataset.records("iv")) == 3
         assert station["sis_bias_1"].get_voltage() == 0.0
-        assert read_json(dataset.metadata["path"]).status == CANCELLED
+        assert read_measurement(dataset.metadata["path"]).status == CANCELLED
 
     def test_failure_is_recorded_and_cleanup_still_runs(self, tmp_path):
         cleaned = []
@@ -147,7 +148,7 @@ class TestRunner:
         assert dataset.status == FAILED and "detector exploded" in dataset.error
         assert cleaned == ["first"]
         assert dataset.metadata["cleanup_errors"] == ["cleanup: division by zero"]
-        saved = read_json(dataset.metadata["path"])
+        saved = read_measurement(dataset.metadata["path"])
         assert saved.status == FAILED and "traceback" in saved.metadata
 
     def test_missing_device_fails_before_any_file(self, tmp_path):

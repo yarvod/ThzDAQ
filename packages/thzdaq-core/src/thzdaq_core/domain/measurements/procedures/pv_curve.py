@@ -8,7 +8,7 @@ from thzdaq_core.domain.parameters import (
     BoolParameter,
     IntParameter,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
@@ -42,21 +42,21 @@ class PVCurve(Procedure):
     )
     requires = {"bias": BIAS, "detector": PowerDetector}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "pv", "P-V", "pv", "voltage", "power",
             x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV,
             group_by=("angle", "load"),
         ),
-        PlotSpec(
+        PlotInfo(
             "iv", "I-V", "pv", "voltage", "current",
             x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
             group_by=("angle", "load"), analysis="iv",
         ),
-        PlotSpec(
+        PlotInfo(
             "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
             x_label=VOLTAGE_MV, y_label=Y_DB, x_scale=MV, group_by=("angle",),
         ),
-        PlotSpec(
+        PlotInfo(
             "tn", "Tn-V", "y_factor", "voltage", "noise_temperature",
             x_label=VOLTAGE_MV, y_label=TN_K, x_scale=MV, group_by=("angle",),
         ),

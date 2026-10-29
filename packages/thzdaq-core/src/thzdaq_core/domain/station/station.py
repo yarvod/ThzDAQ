@@ -33,7 +33,7 @@ from thzdaq_instruments.quantities import (
 from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_instruments.transport.pool import TransportPool, default_pool
 
-from thzdaq_core.domain.data.measurement import DeviceUse
+from thzdaq_api.measurement_file import DeviceUse
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.config import (
     CHANNEL_SEPARATOR,

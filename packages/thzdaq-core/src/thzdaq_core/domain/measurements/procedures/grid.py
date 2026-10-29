@@ -3,7 +3,7 @@ from thzdaq_api.procedures import GRID_CURRENT_ANGLE
 from thzdaq_instruments.capabilities import Rotator, VoltageCurrentMeter
 from thzdaq_instruments.units import UA
 
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
@@ -21,7 +21,7 @@ class GridCurrentAngle(Procedure):
     description = "Rotate the wire grid and read the pumped SIS current (I-A curve)."
     requires = {"grid": Rotator, "bias": VoltageCurrentMeter}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "ia", "I-A", "ia", "angle", "current",
             x_label="Angle, deg", y_label=CURRENT_UA, y_scale=UA,
         ),

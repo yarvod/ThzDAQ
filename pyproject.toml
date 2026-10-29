@@ -144,7 +144,6 @@ notebooks may import thzdaq_analysis themselves).
 ignore_imports = [
     "thzdaq_gui.app -> thzdaq_instruments",
     "thzdaq_gui.device_docks -> thzdaq_instruments",
-    "thzdaq_gui.docks.data -> thzdaq_core.**",
     "thzdaq_gui.docks.devices -> thzdaq_core.**",
     "thzdaq_gui.docks.devices -> thzdaq_instruments.**",
     "thzdaq_gui.docks.measure -> thzdaq_core.**",
@@ -152,7 +151,6 @@ ignore_imports = [
     "thzdaq_gui.docks.setup -> thzdaq_core.**",
     "thzdaq_gui.docks.setup -> thzdaq_instruments",
     "thzdaq_gui.docks.setup -> thzdaq_instruments.**",
-    "thzdaq_gui.exit_dialog -> thzdaq_core.**",
     "thzdaq_gui.fields -> thzdaq_instruments.**",
     "thzdaq_gui.forms -> thzdaq_core.**",
     "thzdaq_gui.graph_docks -> thzdaq_core.**",

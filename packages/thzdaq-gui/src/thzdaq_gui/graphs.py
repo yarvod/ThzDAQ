@@ -28,8 +28,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.domain.data.measurement import Column, Measurement
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurement_file import Column, Measurement
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.monitor import plot_for
 from thzdaq_core.domain.measurements.catalog import list_procedures
 
@@ -296,7 +296,7 @@ class GraphWidget(QWidget):
 class MapGraphWidget(QWidget):
     """z over an x/y grid (2SB bias optimization)."""
 
-    def __init__(self, spec: PlotSpec, parent=None):
+    def __init__(self, spec: PlotInfo, parent=None):
         super().__init__(parent)
         self.title = spec.title
         self.spec = spec
@@ -401,7 +401,7 @@ def close_plots() -> None:
     pg.ViewBox.NamedViews.clear()
 
 
-def graph_for_spec(spec: PlotSpec):
+def graph_for_spec(spec: PlotInfo):
     if spec.kind == "map":
         return MapGraphWidget(spec)
     return GraphWidget(
@@ -430,7 +430,7 @@ class GraphHub(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.graphs: Dict[str, QWidget] = {}
-        self.specs: Dict[str, PlotSpec] = {}
+        self.specs: Dict[str, PlotInfo] = {}
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
         for cls in list_procedures():
             for spec in cls.plots:

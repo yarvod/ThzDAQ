@@ -4,7 +4,7 @@ from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFi
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_analysis.noise import noise_temperature, y_factor_db
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     IF_GHZ,
@@ -37,7 +37,7 @@ class IFNoise(Procedure):
         "load": LoadSwitch,
     }
     plots = (
-        PlotSpec(
+        PlotInfo(
             key="power",
             title="P-IF",
             table="power",
@@ -48,7 +48,7 @@ class IFNoise(Procedure):
             x_scale=GHZ,
             group_by=("load",),
         ),
-        PlotSpec(
+        PlotInfo(
             key="y_factor",
             title="Y-IF",
             table="noise",
@@ -58,7 +58,7 @@ class IFNoise(Procedure):
             y_label=Y_DB,
             x_scale=GHZ,
         ),
-        PlotSpec(
+        PlotInfo(
             key="tn",
             title="Tn-IF",
             table="noise",

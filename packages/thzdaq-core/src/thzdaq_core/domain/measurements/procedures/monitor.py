@@ -22,7 +22,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
 )
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import FloatParameter, StringListParameter
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 KEY_SEPARATOR = "/"
@@ -69,8 +69,8 @@ def split_entry(entry: str) -> Tuple[str, Optional[str]]:
     return ref, key or None
 
 
-def _time_plot(title, y_label, y_scale=1.0) -> PlotSpec:
-    return PlotSpec(
+def _time_plot(title, y_label, y_scale=1.0) -> PlotInfo:
+    return PlotInfo(
         title, title, "samples", "time", "value", x_label="Time, s",
         y_label=y_label, y_scale=y_scale, group_by=("device", "quantity"),
         where=(("plot", title),),

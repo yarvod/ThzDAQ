@@ -9,7 +9,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
 )
 from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.sis.demagnetization import demagnetization_currents
 
@@ -24,7 +24,7 @@ class Demagnetize(Procedure):
     )
     requires = {"coil": CurrentSource}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "coil", "Coil current", "coil", "step", "current",
             x_label="Step", y_label="Current, mA", y_scale=MA,
         ),
@@ -86,7 +86,7 @@ class CLCurve(Procedure):
     )
     requires = {"coil": CurrentSource, "bias": VoltageCurrentMeter}
     plots = (
-        PlotSpec(
+        PlotInfo(
             "cl", "I-CL", "cl", "coil_current", "current",
             x_label=COIL_CURRENT_MA, y_label=CURRENT_UA,
             x_scale=MA, y_scale=UA,

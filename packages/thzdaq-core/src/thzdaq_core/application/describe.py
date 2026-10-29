@@ -1,6 +1,5 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
-from dataclasses import asdict
 from typing import Any, Type
 
 from thzdaq_api import devices as api
@@ -11,7 +10,6 @@ from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.registry import DriverInfo as Driver
 
-from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import Parameter
 from thzdaq_core.domain.station.kinds import instrument_type, kinds_for
@@ -107,10 +105,6 @@ def parameter_info(parameter: Parameter) -> measurements.ParameterInfo:
     return measurements.ParameterInfo(**parameter.describe())
 
 
-def plot_info(spec: PlotSpec) -> measurements.PlotInfo:
-    return measurements.PlotInfo(**asdict(spec))
-
-
 def procedure_summary(cls: Type[Procedure]) -> measurements.ProcedureSummary:
     return measurements.ProcedureSummary(cls.name, cls.title, cls.description)
 
@@ -134,7 +128,7 @@ def procedure_info(procedure: Procedure) -> measurements.ProcedureInfo:
         description=procedure.description,
         parameters=tuple(parameter_info(p) for p in procedure.parameters().values()),
         slots=slots,
-        plots=tuple(plot_info(spec) for spec in procedure.plots),
+        plots=tuple(procedure.plots),
     )
 
 

@@ -16,7 +16,7 @@ from typing import (
     Tuple,
 )
 
-from thzdaq_core.domain.data.measurement import (
+from thzdaq_api.measurement_file import (
     CANCELLED,
     COMPLETED,
     FAILED,

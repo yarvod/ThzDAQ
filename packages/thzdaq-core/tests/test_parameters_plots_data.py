@@ -2,9 +2,10 @@ import json
 import math
 
 import pytest
-from thzdaq_core.domain.data.measurement import INTERRUPTED, Column, Measurement, Table
-from thzdaq_core.adapters.json_store import MeasurementStore, export_csv, read_json
-from thzdaq_core.adapters.json_store import dumps, loads
+from thzdaq_api.measurement_file import INTERRUPTED, Column, Measurement, Table
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_api.measurement_file import export_csv, read_measurement
+from thzdaq_api.measurement_file import dumps, loads
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import (
     BoolParameter,
@@ -15,7 +16,7 @@ from thzdaq_core.domain.parameters import (
     Sweep,
     SweepParameter,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_instruments.units import GHZ, MV
 
@@ -113,7 +114,7 @@ class TestParameters:
 
 class TestPlotSpec:
     def test_curves_grouped_and_scaled(self):
-        spec = PlotSpec(
+        spec = PlotInfo(
             "p", "P-IF", "power", "frequency", "power", x_scale=GHZ, group_by=("load",)
         )
         records = [
@@ -128,7 +129,7 @@ class TestPlotSpec:
         assert spec.label(("cold",)) == "cold"
 
     def test_map_points(self):
-        spec = PlotSpec(
+        spec = PlotInfo(
             "m", "Tn", "grid", "v1", "v2", kind="map", z="tn", x_scale=MV, y_scale=MV
         )
         assert spec.point({"v1": 2e-3, "v2": 3e-3, "tn": 50}) == pytest.approx(
@@ -159,7 +160,7 @@ class TestDataStore:
         path = store.save(measurement)
         assert path.parent.name == measurement.started[:10]
         assert "sis_iv_curve" in path.name and path.suffix == ".json"
-        loaded = read_json(path)
+        loaded = read_measurement(path)
         assert loaded.to_dict() == measurement.to_dict()
         assert [m.id for m in store] == [measurement.id]
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -181,11 +182,11 @@ class TestDataStore:
         assert MeasurementStore(tmp_path).next_id() == 42
         assert store.next_id() == 42
         assert {m.id for m in store} == {1, 41, "20261023-022400-ab12"}
-        loaded = read_json(store.path_for(first))
+        loaded = read_measurement(store.path_for(first))
         assert len(loaded.started) == len("2026-10-23T03:08:22.123")  # ms
 
     def test_runner_numbers_measurements(self, tmp_path):
-        from thzdaq_core.domain.data.measurement import DeviceUse
+        from thzdaq_api.measurement_file import DeviceUse
         from thzdaq_core.application.runner import MeasurementRunner
 
         class Nothing(Procedure):
@@ -213,7 +214,7 @@ class TestDataStore:
         measurement = Measurement("demo", started=STARTED)
         measurement.append("iv", {"voltage": 1.0})
         path = MeasurementStore(tmp_path).save(measurement)
-        loaded = read_json(path)
+        loaded = read_measurement(path)
         assert loaded.status == INTERRUPTED
         assert loaded.records("iv") == [{"voltage": 1.0}]
         assert not list(tmp_path.rglob("*.tmp"))

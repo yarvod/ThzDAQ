@@ -1,37 +1,27 @@
-"""Measurements on disk: one JSON file each, <root>/<YYYY-MM-DD>/<id>_<procedure>.json
+"""Measurements on disk, as the daemon writes them: one JSON file each,
+<root>/<YYYY-MM-DD>/<id>_<procedure>.json (thzdaq_api.measurement_file).
 
 Ids are numbers counted per data folder: the next one is one more than the
 largest in the file names, so they keep growing across runs of the program.
 Start and end times (to the millisecond) are in every file as well.
 
 The runner saves at the start, every few seconds while records come and at
-the end. Values are encoded as thzdaq_api.data says (complex numbers, NaN).
-Writes go to a temporary file first, so a crash leaves the previous
+the end. Writes go to a temporary file first, so a crash leaves the previous
 complete version; a file still marked running reads back as interrupted.
 """
 
-import csv
-import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Union
+from typing import Optional
 
-from thzdaq_api.data import decode_values, encode_values
-
-from thzdaq_core.domain.data.measurement import INTERRUPTED, RUNNING, Measurement
-
-PathLike = Union[str, Path]
-
-
-def dumps(value: Any, indent: Optional[int] = None) -> str:
-    return json.dumps(
-        encode_values(value), ensure_ascii=False, allow_nan=False, indent=indent
-    )
-
-
-def loads(text: str) -> Any:
-    return decode_values(json.loads(text))
+from thzdaq_api.measurement_file import (
+    Measurement,
+    MeasurementFolder,
+    PathLike,
+    dumps,
+    file_id,
+)
 
 
 def write_json(measurement: Measurement, path: PathLike) -> Path:
@@ -43,42 +33,11 @@ def write_json(measurement: Measurement, path: PathLike) -> Path:
     return path
 
 
-def read_json(path: PathLike) -> Measurement:
-    try:
-        data = loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        raise ValueError(f"{path}: {e}") from e
-    measurement = Measurement.from_dict(data)
-    if measurement.status == RUNNING:
-        measurement.status = INTERRUPTED
-    measurement.metadata["path"] = str(path)
-    return measurement
-
-
-def export_csv(measurement: Measurement, table: str, path: PathLike) -> Path:
-    """One table as CSV; the header row carries titles with units."""
-    data = measurement.tables[table]
-    path = Path(path)
-    with open(path, "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow([c.label for c in data.columns])
-        keys = [c.key for c in data.columns]
-        for row in data.rows():
-            writer.writerow([row.get(key) for key in keys])
-    return path
-
-
-def file_id(path: Path) -> Optional[int]:
-    """000042_sis_iv_curve.json -> 42; None for files named otherwise."""
-    head = path.name.split("_", 1)[0]
-    return int(head) if head.isdigit() else None
-
-
-class MeasurementStore:
-    """Folder of measurement JSON files."""
+class MeasurementStore(MeasurementFolder):
+    """A folder of measurement files the daemon numbers and writes."""
 
     def __init__(self, root: PathLike):
-        self.root = Path(root)
+        super().__init__(root)
         self._last = 0
         self._lock = threading.Lock()
 
@@ -105,16 +64,3 @@ class MeasurementStore:
         path = write_json(measurement, path or self.path_for(measurement))
         measurement.metadata["path"] = str(path)
         return path
-
-    def load(self, path: PathLike) -> Measurement:
-        return read_json(path)
-
-    def paths(self) -> List[Path]:
-        return sorted(self.root.glob("*/*.json"))
-
-    def __iter__(self) -> Iterator[Measurement]:
-        for path in self.paths():
-            try:
-                yield read_json(path)
-            except ValueError:
-                continue

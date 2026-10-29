@@ -1,4 +1,6 @@
-"""Measurement DTOs: what a run produced, as plain dicts that go to JSON.
+"""The measurement file (thzdaq-measurement v1): what a run produced, as plain
+dicts that go to JSON. The daemon writes it; anyone reads it (read_measurement,
+MeasurementFolder) and exports a table (export_csv).
 
 A Measurement holds tables; a table keeps its data column-wise, like the old
 store did ({"voltage": [...], "current": [...]}), and describes every column
@@ -17,8 +19,15 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
     }
 """
 
+import csv
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
+
+from thzdaq_api.data import decode_values, encode_values
+
+PathLike = Union[str, Path]
 
 FORMAT = "thzdaq-measurement"
 FORMAT_VERSION = 1
@@ -269,3 +278,66 @@ class Measurement:
             station=dict(data.get("station") or {}),
             metadata=dict(data.get("metadata") or {}),
         )
+
+
+def dumps(value: Any, indent: Optional[int] = None) -> str:
+    return json.dumps(
+        encode_values(value), ensure_ascii=False, allow_nan=False, indent=indent
+    )
+
+
+def loads(text: str) -> Any:
+    return decode_values(json.loads(text))
+
+
+def read_measurement(path: PathLike) -> Measurement:
+    """A measurement file; one still marked running reads as interrupted (its
+    writer is gone or has not finished). ValueError when it is not one."""
+    try:
+        data = loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"{path}: {e}") from e
+    measurement = Measurement.from_dict(data)
+    if measurement.status == RUNNING:
+        measurement.status = INTERRUPTED
+    measurement.metadata["path"] = str(path)
+    return measurement
+
+
+def export_csv(measurement: Measurement, table: str, path: PathLike) -> Path:
+    """One table as CSV; the header row carries titles with units."""
+    data = measurement.tables[table]
+    path = Path(path)
+    with open(path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow([c.label for c in data.columns])
+        keys = [c.key for c in data.columns]
+        for row in data.rows():
+            writer.writerow([row.get(key) for key in keys])
+    return path
+
+
+def file_id(path: Path) -> Optional[int]:
+    """000042_sis_iv_curve.json -> 42; None for files named otherwise."""
+    head = path.name.split("_", 1)[0]
+    return int(head) if head.isdigit() else None
+
+
+class MeasurementFolder:
+    """A data folder of measurement files: <root>/<YYYY-MM-DD>/<id>_<procedure>.json"""
+
+    def __init__(self, root: PathLike):
+        self.root = Path(root)
+
+    def paths(self) -> List[Path]:
+        return sorted(self.root.glob("*/*.json"))
+
+    def load(self, path: PathLike) -> Measurement:
+        return read_measurement(path)
+
+    def __iter__(self) -> Iterator[Measurement]:
+        for path in self.paths():
+            try:
+                yield read_measurement(path)
+            except ValueError:
+                continue

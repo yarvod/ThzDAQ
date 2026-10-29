@@ -10,7 +10,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     FirstPointDelay,
     SettleTime,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 
@@ -21,7 +21,7 @@ class IVCurve(Procedure):
     description = "Sweep the bias voltage and read voltage and current."
     requires = {"bias": (VoltageSource, VoltageCurrentMeter)}
     plots = (
-        PlotSpec(
+        PlotInfo(
             key="iv",
             title="I-V",
             table="iv",

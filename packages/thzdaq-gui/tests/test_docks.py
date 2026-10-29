@@ -5,8 +5,8 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
-from thzdaq_core.domain.data.measurement import COMPLETED
-from thzdaq_core.adapters.json_store import read_json
+from thzdaq_api.measurement_file import COMPLETED
+from thzdaq_api.measurement_file import read_measurement
 from thzdaq_core.domain.parameters import Sweep
 from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_core.adapters.yaml_profiles import load_station
@@ -586,11 +586,11 @@ class TestMeasureAndData:
         assert graph.curve_label(key).startswith("#1 SIS2")
         model = session.measurements
         assert model.rowCount() == 1 and model.data(model.index(0, 5)) == COMPLETED
-        saved = read_json(measurement.metadata["path"])
+        saved = read_measurement(measurement.metadata["path"])
         assert saved.tables["iv"].data["voltage"][0] == 0.0
         # Comments edited in the table go to the file at once
         model.setData(model.index(0, 2), "edited")
-        assert read_json(measurement.metadata["path"]).comment == "edited"
+        assert read_measurement(measurement.metadata["path"]).comment == "edited"
         # The next start remembers the devices and parameters
         again = type(box)(session, window.hub, box.procedure_class)
         assert again.devices.mapping()["bias"] == "sis_bias_2"
@@ -599,7 +599,7 @@ class TestMeasureAndData:
     def test_data_dock_opens_plots_and_exports(
         self, window, session, wait, tmp_path, monkeypatch
     ):
-        from thzdaq_core.domain.data.measurement import Measurement
+        from thzdaq_api.measurement_file import Measurement
         from thzdaq_core.adapters.json_store import MeasurementStore
 
         measurement = Measurement(
@@ -635,7 +635,7 @@ class TestMeasureAndData:
         import shutil
         from pathlib import Path
 
-        from thzdaq_core.domain.data.measurement import Measurement
+        from thzdaq_api.measurement_file import Measurement
         from thzdaq_gui.folders import MEASUREMENTS, Folders
         from thzdaq_gui.settings import settings
 
@@ -826,7 +826,7 @@ class TestPerspectives:
 
 
 def test_measurement_json_is_plain(tmp_path):
-    from thzdaq_core.domain.data.measurement import Measurement
+    from thzdaq_api.measurement_file import Measurement
     from thzdaq_core.adapters.json_store import MeasurementStore
 
     measurement = Measurement("demo", started="2026-10-29T12:00:00.000")

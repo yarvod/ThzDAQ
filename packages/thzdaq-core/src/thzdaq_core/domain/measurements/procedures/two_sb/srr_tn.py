@@ -21,7 +21,7 @@ from thzdaq_core.domain.parameters import (
     ChoiceParameter,
     IntParameter,
 )
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SIDE_BAND_CHOICES,
     SOURCE,
@@ -35,15 +35,15 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
 )
 
 NOISE_PLOTS = (
-    PlotSpec(
+    PlotInfo(
         "noise_power", "P-IF hot/cold", "power", "frequency", "power",
         x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("channel", "load"),
     ),
-    PlotSpec(
+    PlotInfo(
         "y_factor", "Y-IF", "noise", "frequency", "y_factor",
         x_label=IF_GHZ, y_label=Y_DB, x_scale=GHZ, group_by=("channel",),
     ),
-    PlotSpec(
+    PlotInfo(
         "tn", "Tn-IF", "noise", "frequency", "noise_temperature",
         x_label=IF_GHZ, y_label=TN_K, x_scale=GHZ, group_by=("channel",),
     ),
@@ -60,11 +60,11 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
         "image (dB) over the IF band; optionally Y-factor and Tn afterwards."
     )
     plots = (
-        PlotSpec(
+        PlotInfo(
             "tone", "Test tone P-IF", "tone", "frequency", "power",
             x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("tone", "channel"),
         ),
-        PlotSpec(
+        PlotInfo(
             "ratio", "SRR-IF", "ratio", "frequency", "power_difference",
             x_label=IF_GHZ, y_label="P wanted - P image, dB", x_scale=GHZ, group_by=("tone",),
         ),

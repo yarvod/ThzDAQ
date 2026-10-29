@@ -34,12 +34,11 @@ from thzdaq_api.measurements import RunInfo
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
-from thzdaq_core.application.describe import plot_info
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.application.values import KnownValues
 from thzdaq_core.application.workspaces import Workspaces
-from thzdaq_core.domain.data.measurement import RUNNING, Measurement
+from thzdaq_api.measurement_file import RUNNING, Measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -123,9 +122,7 @@ class _Run(RunObserver):
         refs = {slot: use.ref for slot, use in measurement.devices.items()}
         plots = self.procedure.active_plots(lambda slot: station.quantities(refs[slot]))
         self.started = self.info()
-        self.events.publish(
-            MeasurementStarted(self.started, tuple(plot_info(p) for p in plots))
-        )
+        self.events.publish(MeasurementStarted(self.started, tuple(plots)))
         self.ready.set()
 
     def on_record(self, table: str, record: Dict[str, Any]) -> None:

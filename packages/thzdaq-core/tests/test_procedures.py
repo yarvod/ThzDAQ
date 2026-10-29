@@ -4,7 +4,7 @@ import math
 import pytest
 from thzdaq_analysis.noise import noise_temperature
 from thzdaq_analysis.two_sb import sideband_rejection
-from thzdaq_core.domain.data.measurement import COMPLETED, DeviceUse
+from thzdaq_api.measurement_file import COMPLETED, DeviceUse
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.application.runner import MeasurementRunner
 from thzdaq_core.domain.measurements.catalog import get_procedure

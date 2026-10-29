@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
-from thzdaq_core.domain.data.measurement import (
+from thzdaq_api.measurement_file import (
     CANCELLED,
     COMPLETED,
     FAILED,
@@ -12,7 +12,8 @@ from thzdaq_core.domain.data.measurement import (
     RUNNING,
     Measurement,
 )
-from thzdaq_core.adapters.json_store import MeasurementStore, read_json
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_api.measurement_file import read_measurement
 
 from thzdaq_gui import theme
 
@@ -126,7 +127,7 @@ class MeasurementsModel(QAbstractTableModel):
         for item in self.items:
             if item.metadata.get("path") == path:
                 return item
-        measurement = read_json(path)
+        measurement = read_measurement(path)
         self.add(measurement)
         return measurement
 

@@ -8,8 +8,9 @@ from typing import List, Optional
 
 from thzdaq_instruments import InstrumentError
 
-from thzdaq_core.domain.data.measurement import COMPLETED, Measurement
-from thzdaq_core.adapters.json_store import MeasurementStore, read_json
+from thzdaq_api.measurement_file import COMPLETED, Measurement
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_api.measurement_file import read_measurement
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.catalog import get_procedure, list_procedures
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver
@@ -135,7 +136,7 @@ def cmd_run(args) -> int:
 
 
 def cmd_show(args) -> int:
-    measurement = read_json(args.path)
+    measurement = read_measurement(args.path)
     print(
         f"{measurement.id} {measurement.title or measurement.procedure} "
         f"{measurement.started}"

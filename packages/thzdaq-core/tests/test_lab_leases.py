@@ -8,7 +8,7 @@ from thzdaq_api.events import LeasesChanged
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, ListLeases
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement, WaitMeasurement
 from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
-from thzdaq_core.adapters.json_store import read_json
+from thzdaq_api.measurement_file import read_measurement
 from thzdaq_core.domain.leases import conflicts
 
 # Long enough to be running while the test acts on its devices
@@ -65,8 +65,8 @@ def test_a_swept_device_needs_share_and_both_note_it(lab):
     assert caught.value.code == ErrorCode.CONFLICT
     lab.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV", share=True))
     second = lab.call(iv(share=True))
-    first_file = read_json(finish(lab, first.id).path)
-    second_file = read_json(finish(lab, second.id).path)
+    first_file = read_measurement(finish(lab, first.id).path)
+    second_file = read_measurement(finish(lab, second.id).path)
     by_first = first_file.metadata["conflicts"]
     assert [entry["by"] for entry in by_first] == ["test", "test"]  # the set, the run
     assert by_first[0]["key"] == "voltage_set" and by_first[1]["run"] == first.id
@@ -92,5 +92,5 @@ def test_reading_conflicts_with_nothing_and_notes_what_others_change(lab):
     value = settable.minimum if settable.minimum is not None else 1.0
     lab.call(SetQuantity(ref="power_meter_1", key=settable.key, value=value))
     finish(lab, sweep.id)
-    noted = read_json(finish(lab, monitor.id).path).metadata["interactions"]
+    noted = read_measurement(finish(lab, monitor.id).path).metadata["interactions"]
     assert noted[0]["key"] == settable.key and noted[0]["by"] == "test"

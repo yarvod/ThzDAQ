@@ -8,9 +8,9 @@ from thzdaq_analysis.two_sb import (
     sideband_rejection,
     test_tone_frequency,
 )
-from thzdaq_core.domain.data.measurement import KNOWN_COLUMNS
+from thzdaq_api.measurement_file import KNOWN_COLUMNS
 from thzdaq_core.domain.parameters import FloatParameter
-from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.common import IFFrequency, set_bias
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SOURCE,
@@ -21,10 +21,10 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
 )
 
 
-def _map(column: str) -> PlotSpec:
+def _map(column: str) -> PlotInfo:
     """A map over the bias grid of a column, titled as the column."""
     known = KNOWN_COLUMNS[column]
-    return PlotSpec(
+    return PlotInfo(
         column, known.title, "map", "sis1_voltage_set", "sis2_voltage_set",
         x_label="SIS1, mV", y_label="SIS2, mV", x_scale=MV, y_scale=MV,
         kind="map", z=column, z_label=known.unit,

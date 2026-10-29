@@ -3,7 +3,7 @@ import threading
 
 import numpy as np
 import pytest
-from thzdaq_core.domain.data.measurement import CANCELLED, COMPLETED, Measurement
+from thzdaq_api.measurement_file import CANCELLED, COMPLETED, Measurement
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import Sweep
 from thzdaq_core.domain.measurements.procedures import (
