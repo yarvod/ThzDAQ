@@ -31,7 +31,7 @@ from thzdaq_core.domain.sis.calibration import (
 )
 from thzdaq_core.domain.station.config import DeviceConfig, StationConfig
 from thzdaq_core.domain.station.profile import station_from_dict, station_to_dict
-from thzdaq_core.domain.station.station import Station
+from thzdaq_core.domain.station.station import Station, touched
 from thzdaq_instruments.capabilities import Identifiable, capabilities_of
 
 
@@ -77,6 +77,7 @@ class StationService:
             config = station_from_dict(data).validate()
         except StationError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        self._refuse_disturbing(config)
         if self.bench.path is not None:
             self.profiles.save(config, self.bench.path)
         self.bench.station.reconfigure(config)
@@ -142,6 +143,24 @@ class StationService:
 
     def reset_connection(self, key: Tuple) -> bool:
         return self.bench.station.reset_connection(tuple(key))
+
+    def _refuse_disturbing(self, config: StationConfig) -> None:
+        """An edit that reopens, removes or sets up anew what a running
+        measurement uses (or changes its limits) waits for it."""
+        station = self.bench.station
+        changed = touched(station.config, config)
+        users: Dict[int, str] = {}
+        for lease in self.runs.leases.all():
+            ids = {lease.device, station.info(lease.device).instrument}
+            if ids & changed:
+                users[lease.owner] = f"#{lease.owner} {lease.title} ({lease.device})"
+        if users:
+            raise LabError(
+                ErrorCode.NOT_ALLOWED,
+                f"Running measurements use what the edit changes: "
+                f"{', '.join(users.values())}",
+                "stop them first, or change what they do not use",
+            )
 
     def _refuse_while_running(self) -> None:
         running = self.runs.active()

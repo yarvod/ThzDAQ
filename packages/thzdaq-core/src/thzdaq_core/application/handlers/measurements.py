@@ -60,7 +60,13 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
     def handle(self, args, origin):
         procedure = build(args.procedure, args.parameters)
         return self.runs.start(
-            procedure, args.devices, args.comment, origin, args.share, args.workspace
+            procedure,
+            args.devices,
+            args.comment,
+            origin,
+            args.share,
+            args.workspace,
+            args.dry_run,
         )
 
 

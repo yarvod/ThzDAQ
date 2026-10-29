@@ -30,7 +30,7 @@ from thzdaq_api.events import (
     MeasurementStarted,
 )
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
-from thzdaq_api.measurements import RunInfo
+from thzdaq_api.measurements import PLANNED, RunInfo
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
@@ -38,7 +38,7 @@ from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.application.values import KnownValues
 from thzdaq_core.application.workspaces import Workspaces
-from thzdaq_api.measurement_file import RUNNING, Measurement
+from thzdaq_api.measurement_file import CONFLICTS, RUNNING, Measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -99,6 +99,7 @@ class _Run(RunObserver):
             error=m.error,
             path=m.metadata.get("path"),
             workspace=str(self.workspace),
+            conflicts=tuple(m.metadata.get(CONFLICTS, ())),
         )
 
     def execute(self, bench: Bench, comment: str, devices: Mapping[str, str]) -> None:
@@ -117,7 +118,7 @@ class _Run(RunObserver):
     def on_started(self, measurement: Measurement) -> None:
         self.measurement = measurement
         for lease in self.accepted:
-            self.note("conflicts", conflict(lease, self.origin))
+            self.note(CONFLICTS, conflict(lease, self.origin))
         station = self.runner.station
         refs = {slot: use.ref for slot, use in measurement.devices.items()}
         plots = self.procedure.active_plots(lambda slot: station.quantities(refs[slot]))
@@ -178,6 +179,14 @@ class _Run(RunObserver):
             )
 
 
+def conflicting(error: LeaseConflict) -> LabError:
+    return LabError(
+        ErrorCode.CONFLICT,
+        str(error),
+        "start with share to go on: both measurements note it",
+    )
+
+
 def conflict(lease: Lease, by: str) -> Dict[str, Any]:
     """A conflict accepted with share, as both measurements note it."""
     return {
@@ -215,9 +224,11 @@ class Runs:
         origin: str,
         share: bool = False,
         workspace: Optional[str] = None,
+        dry_run: bool = False,
     ) -> RunInfo:
+        """dry_run: check all a start checks, open and write nothing, and
+        return the run it would be (planned, number 0)."""
         folder = self.workspaces.folder(workspace)
-        store = self.workspaces.store(folder)
         try:
             procedure.validate()
             refs = slot_devices(procedure, devices)
@@ -227,19 +238,18 @@ class Runs:
         for slot, device in refs.items():
             mode = procedure.slot_mode(slot)
             modes[device] = max(modes.get(device, READ), mode, key=STRENGTH.index)
+        if dry_run:
+            return self._plan(procedure, refs, modes, comment, origin, share, folder)
+        store = self.workspaces.store(folder)
         with self._lock:
             run_id = self._last_id = max(store.next_id(), self._last_id + 1)
         try:
             accepted = self.leases.acquire(run_id, procedure.title, modes, share)
         except LeaseConflict as e:
-            raise LabError(
-                ErrorCode.CONFLICT,
-                str(e),
-                "start with share to go on: both measurements note it",
-            ) from None
+            raise conflicting(e) from None
         self._leases_changed()
         for lease in accepted:
-            self.note(lease.owner, "conflicts", conflict(lease, origin))
+            self.note(lease.owner, CONFLICTS, conflict(lease, origin))
         run = _Run(
             run_id, procedure, origin, self.events, self.known, accepted,
             self._ended, folder,
@@ -258,6 +268,36 @@ class Runs:
             self._runs[run.measurement.id] = run
             self._forget_old()
         return run.started
+
+    def _plan(
+        self,
+        procedure: Procedure,
+        refs: Mapping[str, str],
+        modes: Mapping[str, str],
+        comment: str,
+        origin: str,
+        share: bool,
+        folder: Path,
+    ) -> RunInfo:
+        """The run a start would make, checked without opening anything."""
+        try:
+            self.bench.station.check(refs, procedure.slots(), procedure.planned())
+        except StationError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        clashes = self.leases.clashes(0, modes)
+        if clashes and not share:
+            raise conflicting(LeaseConflict(clashes))
+        return RunInfo(
+            id=0,
+            procedure=procedure.name,
+            title=procedure.title,
+            status=PLANNED,
+            devices=dict(refs),
+            origin=origin,
+            comment=comment,
+            total=procedure.estimate_steps(),
+            workspace=str(folder),
+        )
 
     def note(self, run_id: int, key: str, entry: Dict[str, Any]) -> None:
         """Note in a running measurement's metadata (what others did to its

@@ -14,6 +14,7 @@ from thzdaq_api.devices import SafeValue
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ActionDone, QuantitySet
 from thzdaq_api.leases import EXCLUSIVE
+from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS
 from thzdaq_instruments.actions import Action
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.quantities import Quantity, read_values
@@ -175,5 +176,5 @@ class DeviceAccess:
         """Who changed what, into the runs using the device."""
         change = {"at": wall_time(), "by": origin, "device": ref, **what}
         for lease in users:
-            kind = "conflicts" if lease.mode == EXCLUSIVE else "interactions"
+            kind = CONFLICTS if lease.mode == EXCLUSIVE else INTERACTIONS
             self.note(lease.owner, kind, change)

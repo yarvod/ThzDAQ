@@ -48,18 +48,27 @@ class Leases:
         """Take the devices (device -> mode) for a measurement; returns the
         conflicts accepted with share, raises LeaseConflict without it."""
         with self._lock:
-            clashes = tuple(
-                lease
-                for device, mode in modes.items()
-                for lease in self._of(device)
-                if lease.owner != owner and conflicts(mode, lease.mode)
-            )
+            clashes = self._clashes(owner, modes)
             if clashes and not share:
                 raise LeaseConflict(clashes)
             self._leases[owner] = tuple(
                 Lease(device, mode, owner, title) for device, mode in modes.items()
             )
             return clashes
+
+    def clashes(self, owner: int, modes: Mapping[str, str]) -> Tuple[Lease, ...]:
+        """Leases of other measurements these devices (device -> mode) would
+        conflict with."""
+        with self._lock:
+            return self._clashes(owner, modes)
+
+    def _clashes(self, owner: int, modes: Mapping[str, str]) -> Tuple[Lease, ...]:
+        return tuple(
+            lease
+            for device, mode in modes.items()
+            for lease in self._of(device)
+            if lease.owner != owner and conflicts(mode, lease.mode)
+        )
 
     def release(self, owner: int) -> bool:
         with self._lock:

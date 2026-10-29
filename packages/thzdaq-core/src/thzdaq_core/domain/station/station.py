@@ -12,6 +12,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
     Union,
@@ -496,6 +497,44 @@ class Station:
             settings=dict(found[1].settings) if found else {},
         )
 
+    def check(
+        self,
+        devices: Mapping[str, str],
+        requirements: Requirements,
+        planned: Iterable[Planned] = (),
+    ) -> None:
+        """Whether a run can take these devices, known without opening
+        anything: a device for every slot, with the capabilities it needs, and
+        the values the run sets them to within their limits; StationError
+        names every problem at once."""
+        problems = []
+        suitable = set()
+        for slot, capabilities in requirements.items():
+            ref = devices.get(slot)
+            if not ref:
+                problems.append(f"no device chosen for {slot!r}")
+                continue
+            try:
+                info = self.info(ref)
+            except StationError as e:
+                problems.append(f"{slot}: {e}")
+                continue
+            missing = [
+                c.__name__
+                for c in _as_tuple(capabilities)
+                if c is not object and c not in info.capabilities
+            ]
+            if missing:
+                problems.append(f"{slot}: {self.title(ref)} lacks {', '.join(missing)}")
+                continue
+            suitable.add(slot)
+        for slot, key, values in planned:
+            if slot in suitable:
+                for problem in self.limit_problems(devices[slot], key, values):
+                    problems.append(f"{slot}: {problem}")
+        if problems:
+            raise StationError(f"{self.name}: " + "; ".join(problems))
+
     def require(
         self,
         devices: Mapping[str, str],
@@ -504,33 +543,16 @@ class Station:
         planned: Iterable[Planned] = (),
         told: Optional[Callable[[str, str, float], None]] = None,
     ) -> Dict[str, GuardedPort]:
-        """Devices for measurement slots: capabilities checked, and the values
-        the run sets them to checked against their limits; every problem at
-        once. Their ramps wait with pause (a run's, which a cancel stops);
+        """Devices for measurement slots, checked (check) and then opened.
+        Their ramps wait with pause (a run's, which a cancel stops);
         told(ref, key, value) hears what they set."""
-        problems = []
-        found = {}
-        for slot, capabilities in requirements.items():
-            ref = devices.get(slot)
-            if not ref:
-                problems.append(f"no device chosen for {slot!r}")
-                continue
+        self.check(devices, requirements, planned)
+        found, problems = {}, []
+        for slot in requirements:
             try:
-                device = self.device(ref)
+                found[slot] = self.device(devices[slot])
             except (InstrumentError, StationError) as e:
                 problems.append(f"{slot}: {e}")
-                continue
-            missing = [
-                c.__name__ for c in _as_tuple(capabilities) if not isinstance(device, c)
-            ]
-            if missing:
-                problems.append(f"{slot}: {self.title(ref)} lacks {', '.join(missing)}")
-                continue
-            found[slot] = device
-        for slot, key, values in planned:
-            if slot in found:
-                for problem in self.limit_problems(devices[slot], key, values):
-                    problems.append(f"{slot}: {problem}")
         if problems:
             raise StationError(f"{self.name}: " + "; ".join(problems))
         return {
@@ -639,3 +661,22 @@ def channel_title(instrument_title: str, key: Hashable) -> str:
 def _opening_changed(old: InstrumentConfig, new: InstrumentConfig) -> bool:
     keys = ("driver", "connection", "options", "simulate", "sim_options")
     return any(getattr(old, k) != getattr(new, k) for k in keys)
+
+
+def touched(old: StationConfig, new: StationConfig) -> Set[str]:
+    """What an edit of the profile disturbs, by id: instruments that reopen or
+    go, configured devices set up anew or gone, devices whose bench limits
+    change. A new device, or a safe state, disturbs nothing."""
+    found = set()
+    for instrument_id, before in old.instruments.items():
+        after = new.instruments.get(instrument_id)
+        if after is None or _opening_changed(before, after):
+            found.add(instrument_id)
+        for device_id, device in before.devices.items():
+            if after is None or after.devices.get(device_id) != device:
+                found.add(device_id)
+    limits, edited = old.safety.limits, new.safety.limits
+    found.update(
+        ref for ref in {*limits, *edited} if limits.get(ref) != edited.get(ref)
+    )
+    return found

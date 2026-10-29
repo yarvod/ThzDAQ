@@ -94,3 +94,92 @@ def test_reading_conflicts_with_nothing_and_notes_what_others_change(lab):
     finish(lab, sweep.id)
     noted = read_measurement(finish(lab, monitor.id).path).metadata["interactions"]
     assert noted[0]["key"] == settable.key and noted[0]["by"] == "test"
+
+
+def test_a_dry_run_checks_like_a_start_and_starts_nothing(lab, tmp_path):
+    from thzdaq_api.measurements import PLANNED, ListRuns
+
+    planned = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE,
+            parameters=SLOW_IV,
+            devices={"bias": "sis_bias_1"},
+            dry_run=True,
+        )
+    )
+    assert (planned.id, planned.status, planned.total) == (0, PLANNED, 2000)
+    assert planned.devices == {"bias": "sis_bias_1"}
+    assert lab.call(ListRuns()) == () and lab.call(ListLeases()) == ()
+    assert not list((tmp_path / "data").glob("*.json"))
+    # What a start refuses, a dry run refuses: a device that does not suit
+    with pytest.raises(LabError) as caught:
+        lab.call(
+            StartMeasurement(
+                procedure=IV_CURVE,
+                parameters=SLOW_IV,
+                devices={"bias": "power_meter_1"},
+                dry_run=True,
+            )
+        )
+    assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert "lacks VoltageSource" in str(caught.value)
+    # ... and a device another measurement sweeps, unless shared
+    first = lab.call(iv())
+    with pytest.raises(LabError) as caught:
+        lab.call(
+            StartMeasurement(
+                procedure=IV_CURVE,
+                parameters=SLOW_IV,
+                devices={"bias": "sis_bias_1"},
+                dry_run=True,
+            )
+        )
+    assert caught.value.code == ErrorCode.CONFLICT
+    shared = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE,
+            parameters=SLOW_IV,
+            devices={"bias": "sis_bias_1"},
+            dry_run=True,
+            share=True,
+        )
+    )
+    assert shared.status == PLANNED
+    assert [lease.run for lease in lab.call(ListLeases())] == [first.id]
+    finish(lab, first.id)
+
+
+def test_a_run_tells_the_conflicts_it_accepted(lab):
+    first = lab.call(iv())
+    second = lab.call(iv(share=True))
+    (noted,) = second.conflicts
+    assert (noted["device"], noted["run"], noted["mode"]) == (
+        "sis_bias_1",
+        first.id,
+        EXCLUSIVE,
+    )
+    assert finish(lab, first.id).conflicts  # the swept one notes it too
+    finish(lab, second.id)
+
+
+def test_a_profile_edit_waits_for_the_measurements_it_disturbs(lab):
+    import copy
+
+    from thzdaq_api.station import GetStation, UpdateStation
+
+    run = lab.call(iv())
+    profile = copy.deepcopy(lab.call(GetStation()).profile)
+    sis = profile["instruments"]["sis_block_1"]["devices"]["sis_bias_1"]
+    sis["settings"] = {"offset_voltage": 1e-4, "offset_current": 0.0}
+    with pytest.raises(LabError) as caught:
+        lab.call(UpdateStation(profile=profile))
+    assert caught.value.code == ErrorCode.NOT_ALLOWED
+    assert f"#{run.id}" in str(caught.value) and "sis_bias_1" in str(caught.value)
+    # What the measurement does not use changes at once
+    edited = copy.deepcopy(lab.call(GetStation()).profile)
+    edited["instruments"]["power_meter_1"]["title"] = "IF detector"
+    meter = edited["instruments"]["power_meter_1"]
+    meter["connection"] = {"kind": "socket", "host": "10.0.0.9", "port": 5025}
+    lab.call(UpdateStation(profile=edited))
+    finish(lab, run.id)
+    lab.call(UpdateStation(profile=profile))  # and the rest once it ended
