@@ -22,6 +22,7 @@ class Rights(str, Enum):
     READ = "read"  # looks, changes nothing
     SET = "set"  # changes a device
     RUN = "run"  # starts or stops measurements
+    STATION = "station"  # changes the profile
 
 
 class Operation(

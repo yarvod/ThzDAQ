@@ -69,6 +69,13 @@ class MeasurementFinished(msgspec.Struct, tag="measurement_finished", frozen=Tru
     run: RunInfo
 
 
+class StationChanged(msgspec.Struct, tag="station_changed", frozen=True):
+    """The profile changed (edited, or another loaded): devices may differ."""
+
+    name: str
+    path: Union[str, None]
+
+
 class Resync(msgspec.Struct, tag="resync", frozen=True):
     """Events were lost: take a new snapshot."""
 
@@ -82,6 +89,7 @@ Body = Union[
     MeasurementProgress,
     MeasurementLog,
     MeasurementFinished,
+    StationChanged,
     Resync,
 ]
 
