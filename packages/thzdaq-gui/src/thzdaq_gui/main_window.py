@@ -60,6 +60,7 @@ from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements, stop_by_defaul
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
+from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
@@ -170,6 +171,7 @@ class MainWindow(QMainWindow):
         # A default layout gets its widths once the window has a size
         self._fit_on_show = not restored
         self.perspectives.refresh()
+        self.runGraphs = RunGraphs(session, self.hub, self)
         if check_updates:
             self.updates.check_in_background()
 

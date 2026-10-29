@@ -443,6 +443,7 @@ class GraphHub(QObject):
         self.specs: Dict[str, PlotInfo] = {}
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
         self.plots: Dict[str, Tuple[PlotInfo, ...]] = {}
+        self._map_runs = {}  # title -> measurement id shown in this map
         for procedure in procedures:
             self.plots[procedure.name] = procedure.plots
             for spec in procedure.plots:
@@ -451,6 +452,22 @@ class GraphHub(QObject):
     def plots_of(self, procedure: str) -> Tuple[PlotInfo, ...]:
         """The plots of a procedure; none for one this bench does not know."""
         return self.plots.get(procedure, ())
+
+    def register_plots(self, specs) -> None:
+        """A run may declare plots not present in the procedure catalog."""
+        for spec in specs:
+            self.specs.setdefault(spec.title, spec)
+
+    def clear_measurement(self, measurement: Measurement) -> None:
+        """Replace a run from a snapshot without appending its points twice."""
+        for widget in self.graphs.values():
+            if isinstance(widget, MapGraphWidget):
+                if self._map_runs.get(widget.title) == measurement.id:
+                    widget.clear()
+            else:
+                for key in list(widget.points):
+                    if key[0] == measurement.id:
+                        widget.remove(key)
 
     def titles(self) -> List[str]:
         return list(self.specs) + [t for t in self.graphs if t not in self.specs]
@@ -570,6 +587,7 @@ class GraphHub(QObject):
                 continue
             widget = self.graph(spec.title)
             if isinstance(widget, MapGraphWidget):
+                self._map_runs[spec.title] = measurement.id
                 widget.add_record(record)
                 reached.append(spec.title)
                 continue
@@ -590,6 +608,7 @@ class GraphHub(QObject):
                 continue
             widget = self.graph(spec.title)
             if isinstance(widget, MapGraphWidget):
+                self._map_runs[spec.title] = measurement.id
                 widget.clear()
                 for record in measurement.records(spec.table):
                     widget.add_record(record)

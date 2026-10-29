@@ -39,6 +39,7 @@ from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.processes import Processes
 from thzdaq_gui.settings import stations_dir
 from thzdaq_gui.models.run import RunModel
+from thzdaq_gui.models.runs import RunEvents
 from thzdaq_gui.workers import DeviceWorker
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,10 @@ class Session(QObject):
         self.lab: Optional[Lab] = None
         self.simulate = False
         self.bridge = Bridge(self)
+        self.run_events = RunEvents(self)
+        self.values = {}
+        self.bridge.values.connect(self._values_heard)
+        self.bridge.quantity_set.connect(self._quantity_heard)
         self.bridge.station_changed.connect(self._profile_changed)
         self.bridge.resync.connect(self._resynced)
         self.bridge.leases_changed.connect(self._leases_heard)
@@ -97,14 +102,19 @@ class Session(QObject):
         LabError when it cannot be reached."""
         lab = self.lab_of(simulate)
         self.bridge.stop()
+        if self.lab is not None and simulate != self.simulate:
+            self.run_events.detach()
         self.lab, self.simulate = lab, simulate
         # Events from the snapshot on: nothing between them is missed
-        self.bridge.listen(lab, lab.call(GetSnapshot()).seq)
+        snapshot = lab.call(GetSnapshot())
+        self.values = snapshot.values
         self._forget_devices()
         self._leases = None
         self._path = self.profile().path
         logger.info(f"Working with {self._path} (simulate={simulate})")
         self.station_changed.emit()
+        self.run_events.refresh()
+        self.bridge.listen(lab, snapshot.seq)
 
     def run_model(self) -> RunModel:
         """The runs of one procedure box; Data lists what they measure."""
@@ -199,7 +209,17 @@ class Session(QObject):
         self._forget_devices()
         self._leases = None
         self._path = self.profile().path
+        snapshot = self.call(GetSnapshot())
+        self.values = snapshot.values
         self.station_changed.emit()
+        self.run_events.refresh()
+        self.bridge.listen(self.lab, snapshot.seq)
+
+    def _values_heard(self, body) -> None:
+        self.values.setdefault(body.ref, {}).update(body.values)
+
+    def _quantity_heard(self, body) -> None:
+        self.values.setdefault(body.ref, {})[body.key] = body.value
 
     def running(self) -> List[RunInfo]:
         """Measurements running in the lab, whoever started them."""

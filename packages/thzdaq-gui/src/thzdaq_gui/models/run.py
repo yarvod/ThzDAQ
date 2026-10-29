@@ -1,28 +1,32 @@
-"""A measurement as a procedure box runs it: started through the lab, followed by
-its events, its records gathered into a measurement as they come.
+"""A measurement started here or observed in the lab, followed by events.
 
-The start is an operation in the background (it opens the instruments); the
-events of the run may come before its answer, so they wait until the run's
-number is known. A start refused because a device it needs is swept by another
+RunEvents routes events after the run's number is known; this model gathers
+records and exposes the same state for local and external starts.
+A start refused because a device it needs is swept by another
 measurement is a conflict: whoever drives the run asks, and share() goes on.
 """
 
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 import msgspec
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api import events
 from thzdaq_api.data import decode_values
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.measurement_file import CONFLICTS, RUNNING, DeviceUse, Measurement
+from thzdaq_api.measurement_file import (
+    CONFLICTS,
+    INTERRUPTED,
+    RUNNING,
+    DeviceUse,
+    Measurement,
+)
 from thzdaq_api.measurements import (
     AbortMeasurement,
     CancelMeasurement,
     RunInfo,
+    RunSnapshot,
     StartMeasurement,
 )
-
-Body = Any  # a measurement event's body
 
 
 class RunModel(QObject):
@@ -34,6 +38,7 @@ class RunModel(QObject):
     failed = Signal(str)  # could not start: missing device, bad parameters
     conflict = Signal(str)  # could not start: another measurement sweeps a device
     running_changed = Signal(bool)
+    resetting = Signal(object)  # Measurement: its records will be replaced
 
     def __init__(self, session, title_of: Callable[[str], str], parent=None):
         """title_of(ref): how a device is named in the curves of the run."""
@@ -44,8 +49,8 @@ class RunModel(QObject):
         self._asked: Optional[StartMeasurement] = None  # the last start
         self.measurement: Optional[Measurement] = None
         self.running = False
-        self._early: List[Body] = []  # events heard before the run's number
-        bridge = session.bridge
+        self.plots = ()
+        self.seq = 0
         self._handlers = {
             events.MeasurementStarted: self._on_started,
             events.MeasurementRecords: self._on_records,
@@ -53,14 +58,6 @@ class RunModel(QObject):
             events.MeasurementLog: self._on_log,
             events.MeasurementFinished: self._on_finished,
         }
-        for signal in (
-            bridge.measurement_started,
-            bridge.measurement_records,
-            bridge.measurement_progress,
-            bridge.measurement_log,
-            bridge.measurement_finished,
-        ):
-            signal.connect(self._heard)
 
     def start(
         self,
@@ -102,7 +99,7 @@ class RunModel(QObject):
     def _start(self, operation: StartMeasurement) -> None:
         if self.running:
             raise RuntimeError("A measurement is already running")
-        self.run, self.measurement, self._early = None, None, []
+        self.run, self.measurement, self.seq = None, None, 0
         self._asked = operation
         self._set_running(True)
         lab = self.session.lab
@@ -125,27 +122,57 @@ class RunModel(QObject):
 
     def _accepted(self, run: RunInfo) -> None:
         self.run = run
-        early, self._early = self._early, []
-        for body in early:
-            self._heard(body)
+        self.session.run_events.claim(self)
 
     def _refused(self, error: BaseException) -> None:
         self._set_running(False)
+        self.session.run_events.release()
         if isinstance(error, LabError) and error.code == ErrorCode.CONFLICT:
             self.conflict.emit(str(error))
         else:
             self.failed.emit(str(error))
 
-    def _heard(self, body: Body) -> None:
-        if self.run is None:
-            if self.running:
-                self._early.append(body)
-            return
-        if events.run_id(body) == self.run.id:
-            self._handlers[type(body)](body)
+    def hear(self, event: events.Event) -> None:
+        if event.seq > self.seq:
+            self.seq = event.seq
+            self._handlers[type(event.body)](event.body)
+
+    def restore(self, snapshot: RunSnapshot) -> None:
+        """Replace with a coherent snapshot, then accept only newer events."""
+        self.seq = snapshot.seq
+        self.run = snapshot.run
+        if self.measurement is None:
+            self._on_started(events.MeasurementStarted(snapshot.run, snapshot.plots))
+        else:
+            self.resetting.emit(self.measurement)
+            self.measurement.tables.clear()
+            self.plots = snapshot.plots
+        for table, rows in snapshot.rows.items():
+            self._on_records(events.MeasurementRecords(snapshot.run.id, table, rows))
+        self._on_progress(
+            events.MeasurementProgress(
+                snapshot.run.id, snapshot.run.done, snapshot.run.total
+            )
+        )
+        if snapshot.run.status != RUNNING:
+            self._on_finished(events.MeasurementFinished(snapshot.run))
+
+    def detach(self) -> None:
+        """Stop following this lab; its measurement keeps running there."""
+        self.run = None
+        self._set_running(False)
+
+    def lost(self) -> None:
+        """The reconnected daemon no longer has the run we were following."""
+        if self.running and self.measurement is not None:
+            run = msgspec.structs.replace(self.run, status=INTERRUPTED)
+            self._on_finished(events.MeasurementFinished(run))
 
     def _on_started(self, body: events.MeasurementStarted) -> None:
         run = body.run
+        self.run = run
+        self.plots = body.plots
+        self._set_running(True)
         self.measurement = Measurement(
             procedure=run.procedure,
             title=run.title,
@@ -176,6 +203,7 @@ class RunModel(QObject):
 
     def _on_finished(self, body: events.MeasurementFinished) -> None:
         run = body.run
+        self.run = run
         measurement = self.measurement
         measurement.finish(run.status, run.finished or "", run.error)
         if run.path:

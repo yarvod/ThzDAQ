@@ -33,6 +33,7 @@ def _keys(keys: Optional[Sequence[str]]) -> Optional[Tuple[str, ...]]:
 
 class DeviceModel(QObject):
     values = Signal(object)  # Dict[str, Value]: a reading, asked for or polled
+    observed = Signal(object)  # values set by any client, without a local command
     read_failed = Signal(str)
     set_done = Signal(str, object)  # key, the value set (SI)
     set_failed = Signal(str, object, str)  # key, the value asked, why not
@@ -50,6 +51,15 @@ class DeviceModel(QObject):
         self._polls = 0  # counts changes: an answer to an earlier poll is let go
         session.bridge.values.connect(self._heard)
         session.bridge.read_failed.connect(self._poll_failed)
+        session.bridge.quantity_set.connect(self._quantity_set)
+
+    @property
+    def known_values(self):
+        return self.session.values.get(self.ref, {})
+
+    def _quantity_set(self, body: events.QuantitySet) -> None:
+        if body.ref == self.ref:
+            self.observed.emit({body.key: body.value})
 
     def read(self, keys: Optional[Sequence[str]] = None) -> None:
         """Every readable quantity, or the keys given."""

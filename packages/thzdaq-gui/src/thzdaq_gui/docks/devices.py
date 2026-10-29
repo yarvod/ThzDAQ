@@ -244,9 +244,12 @@ class QuantityPanel(QWidget):
         self.interval.valueChanged.connect(self.show_process_status)
         self.plot.toggled.connect(self.plot_toggled)
         model.values.connect(self.show_values)
+        model.observed.connect(self.show_observed)
         model.read_failed.connect(self.failed)
         model.set_done.connect(self.was_set)
         model.set_failed.connect(self.set_failed)
+        if model.known_values:
+            self.show_observed(model.known_values)
 
     # Where values are remembered: a configuration in the profile, a setpoint here
     def kept(self) -> Dict[str, Any]:
@@ -331,6 +334,14 @@ class QuantityPanel(QWidget):
     def show_process_status(self, *_) -> None:
         if self.process is not None:
             self.process.update(status=f"every {self.interval.value():g} s")
+
+    def show_observed(self, values) -> None:
+        """Known setpoints update idle fields, without writing profile settings."""
+        for key, value in values.items():
+            field = self.fields.get(key)
+            if field is not None and not field.pending and not self.config:
+                field.set_value(value)
+        self.show_values(values)
 
     def show_values(self, values) -> None:
         """A reading of the device: what it holds of this panel's values."""

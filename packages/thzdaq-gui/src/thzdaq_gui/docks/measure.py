@@ -150,6 +150,7 @@ class ProcedureBox(QWidget):
             layout.addWidget(scroll, 1)
             layout.addWidget(self.footer)
         self.runner.started.connect(self.on_started)
+        self.runner.resetting.connect(self.hub.clear_measurement)
         self.runner.record.connect(self.on_record)
         self.runner.progress.connect(self.on_progress)
         self.runner.log.connect(self.note)
@@ -385,6 +386,8 @@ class ProcedureBox(QWidget):
 
     def on_started(self, measurement) -> None:
         self.measurement = measurement
+        self.plots = self.runner.plots
+        self.hub.register_plots(self.plots)
         self.update_status(state=RUNNING)
         self.note(f"started #{measurement.id}")
 
