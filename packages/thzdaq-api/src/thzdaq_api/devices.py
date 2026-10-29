@@ -37,9 +37,45 @@ class DeviceInfo(msgspec.Struct, frozen=True):
     configured: bool = False
 
 
+class ArgumentInfo(msgspec.Struct, frozen=True):
+    """An argument of an action, in SI units; without a default it is required."""
+
+    key: str
+    title: str
+    unit: str = ""
+    kind: str = "float"  # float, int, bool or text
+    default: Value = None
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    choices: Tuple[str, ...] = ()
+
+
+class ActionInfo(msgspec.Struct, frozen=True):
+    """What a device does on request beyond setting a quantity (turn to the hot
+    load, read a trace)."""
+
+    key: str
+    title: str
+    arguments: Tuple[ArgumentInfo, ...] = ()
+    danger: str = ""  # what may go wrong, shown before it runs; empty when safe
+    changes: bool = True  # false for a read: a running measurement is not disturbed
+    help: str = ""
+
+
 class DeviceDescription(msgspec.Struct, frozen=True):
     device: DeviceInfo
     quantities: Tuple[QuantityInfo, ...]
+    actions: Tuple[ActionInfo, ...] = ()
+
+
+class Trace(msgspec.Struct, frozen=True):
+    """A trace versus frequency (Hz): the power (dBm) of a spectrum analyzer, or
+    the complex S-parameter of a network analyzer as real and imaginary parts."""
+
+    frequency: Tuple[float, ...]
+    values: Tuple[float, ...]  # dBm, or the real part
+    imaginary: Optional[Tuple[float, ...]] = None
+    parameter: str = ""  # S21
 
 
 class Reading(msgspec.Struct, frozen=True):
@@ -51,6 +87,12 @@ class QuantityValue(msgspec.Struct, frozen=True):
     ref: str
     key: str
     value: Value
+
+
+class ActionResult(msgspec.Struct, frozen=True):
+    ref: str
+    action: str
+    result: Union[Value, Trace] = None
 
 
 class Poll(msgspec.Struct, frozen=True):
@@ -90,6 +132,23 @@ class SetQuantity(Operation[QuantityValue]):
     ref: str
     key: str
     value: Union[bool, int, float, str]
+    share: bool = False
+
+
+class CallAction(Operation[ActionResult]):
+    """Make a device do something beyond setting a quantity: turn the load to
+    hot or cold, start or stop the chopper rotation, set up an analyzer and read
+    its trace. describe_device lists the actions of a device with their
+    arguments; numbers are in SI units, a text may carry its unit ("12 Hz"). A
+    device a running measurement sweeps is refused (conflict) unless share is
+    true, except for reads; the measurements using it record the call."""
+
+    rights = Rights.SET
+    ref: str
+    action: str
+    arguments: Dict[str, Union[bool, int, float, str]] = msgspec.field(
+        default_factory=dict
+    )
     share: bool = False
 
 

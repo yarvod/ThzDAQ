@@ -55,3 +55,20 @@ def test_measurement_values_travel_with_complex_and_nan():
     again = decode_values(msgspec.json.decode(wire.encode(encode_values(record))))
     assert again["s11"] == complex(0.1, -0.2) and math.isnan(again["tn"])
     assert again["f"] == [1.0, math.inf]
+
+
+def test_action_results_travel_as_values_or_traces():
+    from thzdaq_api.devices import ActionResult, CallAction, Trace
+
+    op = CallAction(
+        ref="chopper_1", action="start_rotation", arguments={"frequency": "12 Hz"}
+    )
+    assert wire.decode_arguments(op.name, wire.encode(op)) == op
+    assert (
+        wire.decode_arguments(op.name, b'{"ref": "a", "action": "to_hot"}').arguments
+        == {}
+    )
+    trace = Trace((1e9, 2e9), (0.1, 0.2), imaginary=(-0.1, 0.0), parameter="S21")
+    for result in (None, 12.0, "OK", trace):
+        done = ActionResult("a", "x", result)
+        assert wire.decode_result(op, wire.encode(done)) == done

@@ -25,6 +25,15 @@ class QuantitySet(msgspec.Struct, tag="quantity_set", frozen=True):
     origin: str = ""
 
 
+class ActionDone(msgspec.Struct, tag="action_done", frozen=True):
+    """A device did an action (turned to the hot load): by whom, with what."""
+
+    ref: str
+    action: str
+    arguments: Dict[str, Value]
+    origin: str = ""
+
+
 class Values(msgspec.Struct, tag="values", frozen=True):
     """Readings of a polled device."""
 
@@ -89,6 +98,7 @@ class Resync(msgspec.Struct, tag="resync", frozen=True):
 
 Body = Union[
     QuantitySet,
+    ActionDone,
     Values,
     ReadFailed,
     MeasurementStarted,
