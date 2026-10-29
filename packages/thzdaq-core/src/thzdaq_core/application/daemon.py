@@ -99,13 +99,8 @@ class DaemonService:
     def reset_lane(self, instrument: str) -> bool:
         """Break the commands of an instrument that hangs and give it a new
         lane; the calls waiting in the old one fail."""
+        self.bench.instrument(instrument)  # an unknown one is NOT_FOUND
         station = self.bench.station
-        if instrument not in station.config.instruments:
-            raise LabError(
-                ErrorCode.NOT_FOUND,
-                f"No instrument {instrument!r}",
-                "get_station lists them",
-            )
         station.abort([d.ref for d in station.devices() if d.instrument == instrument])
         return self.bench.lanes.reset(instrument)
 

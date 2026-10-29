@@ -93,13 +93,7 @@ class StationService:
     def connect(self, instrument_id: str) -> str:
         """Open an instrument in its lane and ask who it is."""
         station = self.bench.station
-        spec = station.config.instruments.get(instrument_id)
-        if spec is None:
-            raise LabError(
-                ErrorCode.NOT_FOUND,
-                f"No instrument {instrument_id!r}",
-                "get_station lists them",
-            )
+        spec = self.bench.instrument(instrument_id)
 
         def identify() -> str:
             instrument = station.instrument(instrument_id)

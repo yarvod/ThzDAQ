@@ -7,6 +7,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 
 from thzdaq_api.lanes import Deliver, Lanes
 from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.station.config import InstrumentConfig
 from thzdaq_core.domain.station.station import DeviceInfo, Station
 
 
@@ -28,6 +29,17 @@ class Bench:
             raise LabError(
                 ErrorCode.NOT_FOUND, f"No device {ref!r}", "list_devices names them"
             ) from None
+
+    def instrument(self, instrument_id: str) -> InstrumentConfig:
+        """An instrument of the profile; an unknown one is NOT_FOUND."""
+        spec = self.station.config.instruments.get(instrument_id)
+        if spec is None:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No instrument {instrument_id!r}",
+                "get_station lists them",
+            )
+        return spec
 
     def run(self, ref: str, job: Callable[[Any], Any]) -> Any:
         """job(device), in the lane of the device's instrument; waits for it."""
