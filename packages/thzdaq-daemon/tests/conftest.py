@@ -26,6 +26,7 @@ class Served:
         from thzdaq_core.application.bench import Bench
         from thzdaq_core.application.lanes import Lanes
         from thzdaq_core.application.local import LocalControl
+        from thzdaq_core.application.workspaces import DATA, Workspaces
         from thzdaq_core.domain.station.station import Station
         from thzdaq_daemon.server import Clients, Server
 
@@ -43,7 +44,7 @@ class Served:
         self.bench = Bench(station, self.lanes, str(profile))
         self.assembled = assemble(
             self.bench,
-            MeasurementStore(tmp_path / "data"),
+            Workspaces(tmp_path, tmp_path / DATA, MeasurementStore),
             YamlProfiles(),
             ServedControl(True),
         )

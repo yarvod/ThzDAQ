@@ -146,3 +146,30 @@ def test_what_a_sweep_sets_is_told_a_few_times_a_second(lab):
     # on_exit puts the bias back: the last value told, known in the snapshot
     assert sets[-1].value == 0.0
     assert lab.call(GetSnapshot()).values["sis_bias_1"]["voltage_set"] == 0.0
+
+
+def test_a_measurement_goes_to_the_workspace_its_client_names(lab, tmp_path):
+    first, second = tmp_path / "A", tmp_path / "B"
+    first.mkdir()
+    second.mkdir()
+
+    def run(workspace=None):
+        started = lab.call(
+            StartMeasurement(
+                procedure=IV_CURVE,
+                parameters=FAST_IV,
+                devices={"bias": "sis_bias_1"},
+                workspace=workspace and str(workspace),
+            )
+        )
+        return ended(lab, started.id)
+
+    runs = [run(first), run(second), run()]
+    for info, folder in zip(runs, (first, second, tmp_path)):
+        assert info.workspace == str(folder.resolve())
+        assert Path(info.path).parent.parent == folder.resolve() / "data"
+    # One number names one measurement of the daemon, in whichever folder
+    assert [info.id for info in runs] == sorted({info.id for info in runs})
+    with pytest.raises(LabError) as caught:
+        run(tmp_path / "nowhere")
+    assert caught.value.code == ErrorCode.INVALID_ARGUMENTS

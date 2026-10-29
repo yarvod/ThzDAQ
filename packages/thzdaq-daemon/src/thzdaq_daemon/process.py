@@ -31,6 +31,7 @@ from thzdaq_api.host import (
 from thzdaq_api.lock import FileLock
 from thzdaq_api.transport import HEARTBEAT_S
 from thzdaq_core.application.clock import wall_time
+from thzdaq_core.application.workspaces import DATA
 
 from thzdaq_daemon.compose import Composed, compose
 from thzdaq_daemon.server import Clients, Server
@@ -126,12 +127,14 @@ class Daemon:
     def _serve(self) -> None:
         options = self.options
         station = options.station or self.settings.station
-        data = options.data or options.home / "data"
+        data = options.data or options.home / DATA
         logger.info(
             f"Starting (pid {os.getpid()}, station {station}, data {data}"
             f"{' on simulators' if options.simulate else ''})"
         )
-        self.composed = compose(station, data, options.simulate, self, options.lively)
+        self.composed = compose(
+            station, options.home, data, options.simulate, self, options.lively
+        )
         if station:
             self.settings.station = station
             self.settings.save(options.settings_path)

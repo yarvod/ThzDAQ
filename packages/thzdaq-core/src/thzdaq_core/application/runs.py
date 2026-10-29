@@ -15,6 +15,7 @@ the snapshot knows it too.
 import threading
 import time
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from thzdaq_api.data import encode_values
@@ -35,9 +36,9 @@ from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.describe import plot_info
 from thzdaq_core.application.events import EventBus
-from thzdaq_core.application.ports import MeasurementRepository
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.data.measurement import RUNNING, Measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
@@ -59,10 +60,12 @@ class _Run(RunObserver):
         known: KnownValues,
         accepted: Tuple[Lease, ...],
         ended: Callable[["_Run"], None],
+        workspace: Path,
     ):
         self.id = run_id
         self.procedure = procedure
         self.origin = origin
+        self.workspace = workspace
         self.events = events
         self.known = known
         self.accepted = accepted  # conflicts started with (share)
@@ -96,6 +99,7 @@ class _Run(RunObserver):
             finished=m.finished,
             error=m.error,
             path=m.metadata.get("path"),
+            workspace=str(self.workspace),
         )
 
     def execute(self, bench: Bench, comment: str, devices: Mapping[str, str]) -> None:
@@ -192,13 +196,13 @@ class Runs:
     def __init__(
         self,
         bench: Bench,
-        store: MeasurementRepository,
+        workspaces: Workspaces,
         events: EventBus,
         leases: Leases,
         known: KnownValues,
     ):
         self.bench = bench
-        self.store = store
+        self.workspaces = workspaces
         self.events = events
         self.leases = leases
         self.known = known
@@ -213,7 +217,10 @@ class Runs:
         comment: str,
         origin: str,
         share: bool = False,
+        workspace: Optional[str] = None,
     ) -> RunInfo:
+        folder = self.workspaces.folder(workspace)
+        store = self.workspaces.store(folder)
         try:
             procedure.validate()
             refs = slot_devices(procedure, devices)
@@ -224,7 +231,7 @@ class Runs:
             mode = procedure.slot_mode(slot)
             modes[device] = max(modes.get(device, READ), mode, key=STRENGTH.index)
         with self._lock:
-            run_id = self._last_id = max(self.store.next_id(), self._last_id + 1)
+            run_id = self._last_id = max(store.next_id(), self._last_id + 1)
         try:
             accepted = self.leases.acquire(run_id, procedure.title, modes, share)
         except LeaseConflict as e:
@@ -237,9 +244,10 @@ class Runs:
         for lease in accepted:
             self.note(lease.owner, "conflicts", conflict(lease, origin))
         run = _Run(
-            run_id, procedure, origin, self.events, self.known, accepted, self._ended
-        )
-        run.runner = MeasurementRunner(self.bench.station, self.store, [run])
+            run_id, procedure, origin, self.events, self.known, accepted,
+            self._ended, folder,
+        )  # fmt: skip
+        run.runner = MeasurementRunner(self.bench.station, store, [run])
         threading.Thread(
             target=run.execute,
             args=(self.bench, comment, dict(devices)),

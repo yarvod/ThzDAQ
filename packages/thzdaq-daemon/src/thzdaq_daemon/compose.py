@@ -1,6 +1,6 @@
 """The daemon's composition root: the station of a profile on the clock of this
-process, the lanes of its instruments, the measurement store, and the use
-cases with the daemon's process as their DaemonControl."""
+process, the lanes of its instruments, the workspaces with a measurement store
+each, and the use cases with the daemon's process as their DaemonControl."""
 
 import time
 from dataclasses import dataclass
@@ -13,6 +13,7 @@ from thzdaq_core.application.assembly import Assembled, assemble
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.lanes import Lanes
 from thzdaq_core.application.ports import DaemonControl
+from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.station.config import StationConfig
 from thzdaq_core.domain.station.station import Station
 
@@ -33,18 +34,20 @@ class Composed:
 
 def compose(
     station: Optional[str],
+    home: Path,
     data: Path,
     simulate: bool,
     control: DaemonControl,
     lively: bool = True,
 ) -> Composed:
-    """lively: simulators drift and get noisy as a bench does (tests keep exact
-    values)."""
+    """home: the daemon's own workspace, its measurements in data; lively:
+    simulators drift and get noisy as a bench does (tests keep exact values)."""
     config = load_station(station) if station else StationConfig(UNNAMED)
     bench_station = Station(
         config, pause=time.sleep, simulate=simulate, lively=simulate and lively
     )
     lanes = Lanes()
     bench = Bench(bench_station, lanes, station)
-    assembled = assemble(bench, MeasurementStore(data), YamlProfiles(), control)
+    workspaces = Workspaces(home, data, MeasurementStore)
+    assembled = assemble(bench, workspaces, YamlProfiles(), control)
     return Composed(bench, lanes, assembled)

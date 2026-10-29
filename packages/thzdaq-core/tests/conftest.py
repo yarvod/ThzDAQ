@@ -20,6 +20,7 @@ def lab(tmp_path):
     from thzdaq_core.application.bench import Bench
     from thzdaq_core.application.lanes import Lanes
     from thzdaq_core.application.local import LocalControl, LocalLab
+    from thzdaq_core.application.workspaces import DATA, Workspaces
     from thzdaq_core.domain.station.station import Station
 
     profile = tmp_path / "bench.yaml"
@@ -27,9 +28,8 @@ def lab(tmp_path):
     station = Station(load_station(profile), pause=time.sleep, simulate=True)
     lanes = Lanes()
     bench = Bench(station, lanes, str(profile))
-    assembled = assemble(
-        bench, MeasurementStore(tmp_path / "data"), YamlProfiles(), LocalControl(True)
-    )
+    workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
+    assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
     yield LocalLab(assembled, origin="test")
     assembled.close()
     lanes.stop()

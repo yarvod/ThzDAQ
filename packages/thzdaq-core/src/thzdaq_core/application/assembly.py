@@ -17,14 +17,11 @@ from thzdaq_core.application.handlers import (
     station,
 )
 from thzdaq_core.application.polling import Polling
-from thzdaq_core.application.ports import (
-    DaemonControl,
-    MeasurementRepository,
-    ProfileRepository,
-)
+from thzdaq_core.application.ports import DaemonControl, ProfileRepository
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.leases import Leases
 
 
@@ -43,13 +40,13 @@ class Assembled:
 
 def assemble(
     bench: Bench,
-    store: MeasurementRepository,
+    workspaces: Workspaces,
     profiles: ProfileRepository,
     control: DaemonControl,
 ) -> Assembled:
     events = EventBus()
     known = KnownValues()
-    runs = Runs(bench, store, events, Leases(), known)
+    runs = Runs(bench, workspaces, events, Leases(), known)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
