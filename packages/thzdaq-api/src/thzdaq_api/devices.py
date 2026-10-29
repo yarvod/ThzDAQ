@@ -82,12 +82,15 @@ class ReadDevice(Operation[Reading]):
 class SetQuantity(Operation[QuantityValue]):
     """Set a quantity of a device. A number is in SI units; a text may carry
     its unit ("2.3mV", "223 GHz"); switches take true or false. Returns the
-    value set, in SI units."""
+    value set, in SI units. A device a running measurement sweeps is refused
+    (conflict) unless share is true; the measurements using it record the
+    change."""
 
     rights = Rights.SET
     ref: str
     key: str
     value: Union[bool, int, float, str]
+    share: bool = False
 
 
 class SubscribePoll(Operation[Poll]):

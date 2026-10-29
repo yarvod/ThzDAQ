@@ -104,13 +104,16 @@ class DescribeProcedure(Operation[ProcedureInfo]):
 class StartMeasurement(Operation[RunInfo]):
     """Start a procedure. parameters in SI units as describe_procedure lists
     them (a sweep: {"start", "stop", "points"}); devices maps slots to device
-    refs. Returns at once; wait_measurement follows it."""
+    refs. Returns at once; wait_measurement follows it. A device another
+    measurement sweeps (or one this one sweeps that another uses) is a
+    conflict unless share is true; both measurements record it."""
 
     rights = Rights.RUN
     procedure: str
     parameters: Dict[str, Any] = {}
     devices: Dict[str, str] = {}
     comment: str = ""
+    share: bool = False
 
 
 class ListRuns(Operation[Tuple[RunInfo, ...]]):

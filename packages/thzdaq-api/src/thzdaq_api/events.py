@@ -10,6 +10,7 @@ from typing import Any, Dict, Tuple, Union
 import msgspec
 
 from thzdaq_api.devices import Value
+from thzdaq_api.leases import LeaseInfo
 from thzdaq_api.measurements import PlotInfo, RunInfo
 from thzdaq_api.operation import Operation
 
@@ -76,6 +77,12 @@ class StationChanged(msgspec.Struct, tag="station_changed", frozen=True):
     path: Union[str, None]
 
 
+class LeasesChanged(msgspec.Struct, tag="leases_changed", frozen=True):
+    """A measurement took or gave back its devices: every lease now."""
+
+    leases: Tuple[LeaseInfo, ...]
+
+
 class Resync(msgspec.Struct, tag="resync", frozen=True):
     """Events were lost: take a new snapshot."""
 
@@ -90,6 +97,7 @@ Body = Union[
     MeasurementLog,
     MeasurementFinished,
     StationChanged,
+    LeasesChanged,
     Resync,
 ]
 
