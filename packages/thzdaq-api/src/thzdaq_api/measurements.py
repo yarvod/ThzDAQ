@@ -9,6 +9,7 @@ from thzdaq_api.devices import DeviceInfo
 from thzdaq_api.operation import Operation, Rights
 
 DATA = "data"  # the folder of a workspace that holds its measurements
+PLANNED = "planned"  # a run as a dry run of start_measurement says it would go
 
 # Items of a list parameter typed as text: "4, 6; 8"
 LIST_SEPARATORS = re.compile(r"[,;\s]+")
@@ -153,7 +154,7 @@ class RunInfo(msgspec.Struct, frozen=True):
     id: int
     procedure: str
     title: str
-    status: str  # running, completed, cancelled, failed
+    status: str  # running, completed, cancelled, failed; planned for a dry run
     devices: Dict[str, str]  # slot -> device
     origin: str  # who started it
     comment: str = ""
@@ -164,6 +165,8 @@ class RunInfo(msgspec.Struct, frozen=True):
     error: Optional[str] = None
     path: Optional[str] = None  # the file it is saved in
     workspace: Optional[str] = None  # the folder whose data/ holds it
+    # Conflicts accepted with share, as the measurement notes them
+    conflicts: Tuple[Dict[str, Any], ...] = ()
 
 
 class ListProcedures(Operation[Tuple[ProcedureSummary, ...]]):
@@ -188,7 +191,10 @@ class StartMeasurement(Operation[RunInfo]):
     measurement sweeps (or one this one sweeps that another uses) is a
     conflict unless share is true; both measurements record it. workspace is
     the folder of the experiment: the file goes to its data/ (the daemon's own
-    folder when not given)."""
+    folder when not given). dry_run checks all a start checks (parameters,
+    devices, the limits of what it sets, conflicts) without opening an
+    instrument or writing a file, and returns the run it would be, planned,
+    with number 0."""
 
     rights = Rights.RUN
     procedure: str
@@ -197,6 +203,7 @@ class StartMeasurement(Operation[RunInfo]):
     comment: str = ""
     share: bool = False
     workspace: Optional[str] = None
+    dry_run: bool = False
 
 
 class ListRuns(Operation[Tuple[RunInfo, ...]]):

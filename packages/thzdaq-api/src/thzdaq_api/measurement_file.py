@@ -40,6 +40,11 @@ FAILED = "failed"
 INTERRUPTED = "interrupted"  # saved as running, but the process is gone
 STATUSES = (RUNNING, COMPLETED, CANCELLED, FAILED, INTERRUPTED)
 
+# Metadata of what others did to its devices: a change of a device it sweeps,
+# accepted with share (conflicts), and changes to the devices it only uses
+CONFLICTS = "conflicts"
+INTERACTIONS = "interactions"
+
 
 # Numbers given by the store (1, 2, 3, ... per data folder); 0 until numbered.
 # Files of older versions keep their text ids ("20261023-022400-ab12").
