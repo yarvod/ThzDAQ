@@ -1,0 +1,30 @@
+[project]
+name = "thzdaq"
+version = "0.1.0"
+description = "ThzDAQ: SIS mixer bench control and measurements (command, client library, extras)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "thzdaq-api",
+    "thzdaq-cli",
+]
+
+[project.optional-dependencies]
+analysis = ["thzdaq-core"]
+daemon = ["thzdaq-daemon"]
+gui = ["thzdaq-gui"]
+all = ["thzdaq-core", "thzdaq-daemon", "thzdaq-gui"]
+
+[tool.uv.sources]
+thzdaq-api = { workspace = true }
+thzdaq-cli = { workspace = true }
+thzdaq-core = { workspace = true }
+thzdaq-daemon = { workspace = true }
+thzdaq-gui = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq"]

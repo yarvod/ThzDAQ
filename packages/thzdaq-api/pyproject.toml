@@ -1,0 +1,16 @@
+[project]
+name = "thzdaq-api"
+version = "0.1.0"
+description = "ThzDAQ contract and client: operations, data types and events of the bench daemon"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "msgspec>=0.19",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq_api"]

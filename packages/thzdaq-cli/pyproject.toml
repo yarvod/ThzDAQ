@@ -1,0 +1,19 @@
+[project]
+name = "thzdaq-cli"
+version = "0.1.0"
+description = "ThzDAQ command line: a client of the bench daemon"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "thzdaq-api",
+]
+
+[tool.uv.sources]
+thzdaq-api = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq_cli"]

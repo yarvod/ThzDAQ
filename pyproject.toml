@@ -1,12 +1,16 @@
 [project]
-name = "thzdaq"
+name = "thzdaq-workspace"
 version = "0.2.0"
-description = "Desktop application for SIS mixer control and measurements"
+description = "ThzDAQ workspace: SIS mixer control and measurements"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "thzdaq-gui",
+    "thzdaq",
+    "thzdaq-api",
+    "thzdaq-cli",
     "thzdaq-core",
+    "thzdaq-daemon",
+    "thzdaq-gui",
     "thzdaq-instruments",
 ]
 
@@ -24,8 +28,12 @@ package = false
 members = ["packages/*"]
 
 [tool.uv.sources]
-thzdaq-gui = { workspace = true }
+thzdaq = { workspace = true }
+thzdaq-api = { workspace = true }
+thzdaq-cli = { workspace = true }
 thzdaq-core = { workspace = true }
+thzdaq-daemon = { workspace = true }
+thzdaq-gui = { workspace = true }
 thzdaq-instruments = { workspace = true }
 
 [tool.pytest.ini_options]
@@ -36,3 +44,4 @@ testpaths = [
     "packages/thzdaq-gui/tests",
 ]
 addopts = "--import-mode=importlib"
+
