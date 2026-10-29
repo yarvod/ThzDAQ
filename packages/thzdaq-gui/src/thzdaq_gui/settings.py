@@ -52,6 +52,50 @@ def location() -> str:
     return settings().fileName()
 
 
+# Every key of the settings, in one place; keys made of parts are functions
+STATION_PATH = "station/path"  # the last station profile
+WINDOW_GEOMETRY = "window/geometry"
+MODE = "ui/mode"  # Lite or Pro
+CHOSEN_MEASUREMENT = "ui/measurement"  # the one the Lite run bar shows
+PRO_LAYOUT = "window/docks"  # also the layout saved before the modes
+LITE_LAYOUT = "window/docks_lite"
+PERSPECTIVES = "Perspectives"  # the array ADS writes and reads
+PERSPECTIVE = "perspective"  # the one in use
+CUSTOM_GRAPHS = "graphs/custom"
+NAVIGATOR_EXPANDED = "navigator/expanded"
+IV_ANALYSIS = "iv_analysis"
+PRERELEASES = "updates/prereleases"
+
+
+def procedure_key(procedure: str) -> str:
+    """Last parameters and devices of a procedure's dock."""
+    return f"procedures/{procedure}"
+
+
+def sections_path(procedure: str, scan: bool = False) -> str:
+    """Folded sections of a procedure: in its dock, or of its scan in a device dock."""
+    return f"scan/{procedure}" if scan else procedure
+
+
+def section_key(path: str) -> str:
+    return f"sections/{path}"
+
+
+def unit_key(ref: str, quantity: str) -> str:
+    """The SI prefix a field shows its value in."""
+    return f"units/{ref}/{quantity}"
+
+
+def setpoint_key(ref: str, key: str) -> str:
+    """The last value set from a device dock."""
+    return f"setpoints/{ref}/{key}"
+
+
+def folder_key(kind: str) -> str:
+    """The folder the file dialogs of a kind of file start in."""
+    return f"folders/{kind}"
+
+
 def app_dir() -> Path:
     """Folder of the program: next to the .exe when built, the working folder from sources.
 

@@ -18,9 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme
-from thzdaq_gui.settings import settings
-
-KEY = "sections/{}"
+from thzdaq_gui.settings import section_key, settings
 
 
 class Collapsible(QWidget):
@@ -34,7 +32,7 @@ class Collapsible(QWidget):
         parent=None,
     ):
         super().__init__(parent)
-        self.key = KEY.format(key) if key else None
+        self.key = section_key(key) if key else None
         if self.key is not None:
             saved = settings().value(self.key)
             if saved is not None:

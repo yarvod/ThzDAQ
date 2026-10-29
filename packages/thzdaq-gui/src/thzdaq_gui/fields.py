@@ -22,7 +22,7 @@ from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import prefix_factor, prefixes_for
 
 from thzdaq_gui.forms import CompactDoubleSpinBox
-from thzdaq_gui.settings import settings
+from thzdaq_gui.settings import settings, unit_key
 
 LIMIT = 1e15
 
@@ -92,7 +92,7 @@ class QuantityField(QWidget):
     def __init__(self, quantity: Quantity, ref: str, kind: str, parent=None):
         super().__init__(parent)
         self.quantity = quantity
-        self.unit_key = f"units/{ref}/{quantity.key}"
+        self.unit_key = unit_key(ref, quantity.key)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.choice: Optional[QComboBox] = None

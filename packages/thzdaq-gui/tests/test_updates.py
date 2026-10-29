@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from thzdaq_gui import updater, updates
 from thzdaq_gui.settings import settings
-from thzdaq_gui.update_dialog import PRERELEASES_KEY
+from thzdaq_gui.settings import PRERELEASES
 from thzdaq_gui.updates import Release, UpdateError
 
 
@@ -258,9 +258,9 @@ class TestUpdater:
 class TestDialog:
     @pytest.fixture(autouse=True)
     def no_choice_of_betas(self, app):
-        settings().remove(PRERELEASES_KEY)
+        settings().remove(PRERELEASES)
         yield
-        settings().remove(PRERELEASES_KEY)
+        settings().remove(PRERELEASES)
 
     def test_lists_releases(self, app, monkeypatch):
         from thzdaq_gui.update_dialog import UpdateDialog
@@ -271,7 +271,7 @@ class TestDialog:
             updates.release_from_json(release_json("v9.0.0"), "Windows_x64"),
             updates.release_from_json(release_json("v0.1.0", assets=[]), "Windows_x64"),
         ]
-        settings().setValue(PRERELEASES_KEY, False)
+        settings().setValue(PRERELEASES, False)
         dialog = UpdateDialog(quit_app=lambda: None)
         dialog.set_releases(releases)
         assert "v9.0.0" in dialog.status.text()
@@ -286,7 +286,7 @@ class TestDialog:
         from PySide6.QtWidgets import QMainWindow, QPushButton
         from thzdaq_gui.update_dialog import UpdateDialog, Updates, wants_prereleases
 
-        settings().remove(PRERELEASES_KEY)
+        settings().remove(PRERELEASES)
         assert wants_prereleases("0.0.6-beta.1") and not wants_prereleases("0.0.5")
         box = UpdateDialog(quit_app=lambda: None).prereleases
         box.setChecked(not box.isChecked())  # it starts as this build is
@@ -304,7 +304,7 @@ class TestDialog:
 
         offered.offer([beta])
         assert buttons() == []
-        settings().setValue(PRERELEASES_KEY, True)
+        settings().setValue(PRERELEASES, True)
         offered.offer([beta])
         assert buttons() == ["Update to v9.0.0-beta.2"]
         window.close()

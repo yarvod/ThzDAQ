@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
 
 from thzdaq_gui import theme
 from thzdaq_gui.docking import DockSpace, one_repaint
+from thzdaq_gui.settings import PERSPECTIVE, PERSPECTIVES
 
 DEFAULT = "Default"
-SAVED = "Perspectives"  # the settings array ADS writes
-CURRENT_KEY = "perspective"
+NAME, STATE = "Name", "State"  # the fields of a perspective in that array
 
 
 class Perspectives:
@@ -117,18 +117,18 @@ class Perspectives:
             return
         # ADS cannot rename: the saved list is read back with the new name
         self.save()
-        count = self.settings.beginReadArray(SAVED)
+        count = self.settings.beginReadArray(PERSPECTIVES)
         saved = []
         for i in range(count):
             self.settings.setArrayIndex(i)
-            saved.append((self.settings.value("Name"), self.settings.value("State")))
+            saved.append((self.settings.value(NAME), self.settings.value(STATE)))
         self.settings.endArray()
-        self.settings.remove(SAVED)
-        self.settings.beginWriteArray(SAVED, len(saved))
+        self.settings.remove(PERSPECTIVES)
+        self.settings.beginWriteArray(PERSPECTIVES, len(saved))
         for i, (key, state) in enumerate(saved):
             self.settings.setArrayIndex(i)
-            self.settings.setValue("Name", name if key == old else key)
-            self.settings.setValue("State", state)
+            self.settings.setValue(NAME, name if key == old else key)
+            self.settings.setValue(STATE, state)
         self.settings.endArray()
         self.settings.sync()
         self.manager.loadPerspectives(self.settings)
@@ -143,10 +143,10 @@ class Perspectives:
 
     def load(self) -> None:
         self.manager.loadPerspectives(self.settings)
-        self.current = self.settings.value(CURRENT_KEY) or None
+        self.current = self.settings.value(PERSPECTIVE) or None
 
     def save(self) -> None:
-        self.settings.remove(SAVED)
+        self.settings.remove(PERSPECTIVES)
         self.manager.savePerspectives(self.settings)
-        self.settings.setValue(CURRENT_KEY, self.current or "")
+        self.settings.setValue(PERSPECTIVE, self.current or "")
         self.settings.sync()

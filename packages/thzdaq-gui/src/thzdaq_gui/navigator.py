@@ -26,9 +26,9 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme
+from thzdaq_gui.settings import NAVIGATOR_EXPANDED
 
 FRONT, BEHIND, CLOSED = "front", "behind", "closed"
-EXPANDED_KEY = "navigator/expanded"
 NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
 MAX_ROWS = 20
@@ -302,14 +302,16 @@ class DockNavigator(QWidget):
             return
         (self.expanded.add if expanded else self.expanded.discard)(key)
         if self.settings is not None:
-            self.settings.setValue(EXPANDED_KEY, json.dumps(sorted(self.expanded)))
+            self.settings.setValue(
+                NAVIGATOR_EXPANDED, json.dumps(sorted(self.expanded))
+            )
         self.fit()
 
     def _load_expanded(self) -> List[str]:
         if self.settings is None:
             return []
         try:
-            return list(json.loads(self.settings.value(EXPANDED_KEY) or "[]"))
+            return list(json.loads(self.settings.value(NAVIGATOR_EXPANDED) or "[]"))
         except (TypeError, ValueError):
             return []
 

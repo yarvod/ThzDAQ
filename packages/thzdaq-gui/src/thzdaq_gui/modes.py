@@ -13,9 +13,8 @@ from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME, PV_CURVE
 
 from thzdaq_gui.dock_names import MEASURE, MEASUREMENT, dock_name, key_of
 from thzdaq_gui.runbar import MeasurementHost, RunBar
+from thzdaq_gui.settings import CHOSEN_MEASUREMENT, LITE_LAYOUT, PRO_LAYOUT
 
-MODE_KEY = "ui/mode"
-CHOSEN_KEY = "ui/measurement"
 DEFAULT_MEASUREMENT = IV_CURVE
 
 
@@ -46,7 +45,7 @@ class Mode:
 class Pro(Mode):
     key, title = "pro", "Pro"
     tip = "Perspectives and a dock per measurement"
-    state_key = "window/docks"  # also the layouts saved before the modes
+    state_key = PRO_LAYOUT
     perspectives = True
     measure_column = tuple(
         dock_name(MEASURE, procedure)
@@ -61,7 +60,7 @@ class Lite(Mode):
 
     key, title = "lite", "Lite"
     tip = "One layout; measurements run from the bar on top"
-    state_key = "window/docks_lite"
+    state_key = LITE_LAYOUT
     run_bar = True
     measure_column = (MEASUREMENT,)
 
@@ -83,7 +82,7 @@ class Lite(Mode):
         for name, dock in self.docks.items():
             if key_of(name, MEASURE) and not dock.isClosed():
                 dock.toggleView(False)
-        chosen = self.settings.value(CHOSEN_KEY) or DEFAULT_MEASUREMENT
+        chosen = self.settings.value(CHOSEN_MEASUREMENT) or DEFAULT_MEASUREMENT
         if dock_name(MEASURE, chosen) not in self.docks:
             chosen = DEFAULT_MEASUREMENT
         self.choose(chosen)
@@ -104,7 +103,7 @@ class Lite(Mode):
         dock.setWindowTitle(pro.windowTitle())
         dock.setIcon(pro.icon())
         self.chosen = procedure
-        self.settings.setValue(CHOSEN_KEY, procedure)
+        self.settings.setValue(CHOSEN_MEASUREMENT, procedure)
 
     def dock_of(self, name: str) -> Optional[str]:
         procedure = key_of(name, MEASURE)

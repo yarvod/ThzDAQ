@@ -9,6 +9,12 @@ from thzdaq_core.adapters.json_store import read_json
 from thzdaq_core.domain.parameters import Sweep
 from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_core.adapters.yaml_profiles import load_station
+from thzdaq_gui.settings import (
+    PRO_LAYOUT,
+    STATION_PATH,
+    procedure_key,
+    setpoint_key,
+)
 from thzdaq_gui.docks.setup import DeviceDialog, InstrumentDialog
 from thzdaq_instruments.transport.base import PROLOGIX
 
@@ -312,7 +318,9 @@ class TestDeviceDocks:
         # The setpoint is remembered for the next start, not written on it
         from thzdaq_gui.settings import settings
 
-        assert float(settings().value("setpoints/sis_bias_1/voltage_set")) == 2.5e-3
+        assert (
+            float(settings().value(setpoint_key("sis_bias_1", "voltage_set"))) == 2.5e-3
+        )
         # Active is the opposite of the block's short: off shorts the output
         active = next(q for q in panel.quantities if q.key == "active")
         panel.write(active, True)
@@ -520,7 +528,7 @@ class TestMeasureAndData:
 
         cls = get_procedure("two_sb.pump_balance")
         saved = {"bias_delay": 0.7, "upper_when_on": False}  # no longer a parameter
-        key = f"procedures/{cls.name}"
+        key = procedure_key(cls.name)
         settings().setValue(key, json.dumps({"parameters": saved, "devices": {}}))
         try:
             box = ProcedureBox(session, window.hub, cls)
@@ -783,7 +791,7 @@ class TestPerspectives:
 
     def test_settings_keep_the_station_path(self, window, session, tmp_path):
         window.on_station_changed(session.station)
-        assert window.settings.value("station/path") == str(session.path)
+        assert window.settings.value(STATION_PATH) == str(session.path)
 
 
 def test_measurement_json_is_plain(tmp_path):
@@ -822,7 +830,7 @@ class TestExit:
         data = json.loads(dump.read_text(encoding="utf-8"))
         assert [m["procedure"] for m in data] == ["sis.iv_curve"]
         assert data[0]["tables"]["iv"]["data"]["voltage"][0] == 0.0
-        assert window.settings.value("window/docks") is None  # layout not stored
+        assert window.settings.value(PRO_LAYOUT) is None  # layout not stored
 
     def test_dialog_defaults(self, app):
         from thzdaq_gui.exit_dialog import ExitDialog

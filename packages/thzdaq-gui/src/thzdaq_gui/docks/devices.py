@@ -56,7 +56,7 @@ from thzdaq_gui.fields import (
     default_prefix,
     format_number,
 )
-from thzdaq_gui.settings import settings
+from thzdaq_gui.settings import sections_path, setpoint_key, settings
 
 
 def format_value(value, quantity: Quantity, factor: float = 1.0, symbol=None) -> str:
@@ -219,11 +219,11 @@ class QuantityPanel(QWidget):
         if self.config:
             spec = self.instrument_spec()
             return spec.settings.get(key) if spec is not None else None
-        return settings().value(f"setpoints/{self.ref}/{key}")
+        return settings().value(setpoint_key(self.ref, key))
 
     def remember(self, quantity: Quantity, value) -> None:
         if not self.config:
-            settings().setValue(f"setpoints/{self.ref}/{quantity.key}", value)
+            settings().setValue(setpoint_key(self.ref, quantity.key), value)
             return
         spec = self.instrument_spec()
         if spec is None or spec.settings.get(quantity.key) == value:
@@ -439,6 +439,9 @@ class ActionsGroup(QGroupBox):
         )
 
 
+CHOPPER_FREQUENCY = "chopper_frequency"  # the last rotation frequency, as a setpoint
+
+
 class ChopperGroup(QGroupBox):
     """Hot / Cold and continuous rotation.
 
@@ -467,7 +470,7 @@ class ChopperGroup(QGroupBox):
         self.frequency.setDecimals(2)
         self.frequency.setSingleStep(0.1)
         self.frequency.setSuffix(" Hz")
-        saved = settings().value(f"setpoints/{panel.ref}/chopper_frequency")
+        saved = settings().value(setpoint_key(panel.ref, CHOPPER_FREQUENCY))
         self.frequency.setValue(float(saved) if saved is not None else 10.0)
         self.btnStart = QPushButton(
             theme.icon("rotate-3d-variant"), "Continuous rotation"
@@ -486,7 +489,7 @@ class ChopperGroup(QGroupBox):
 
     def start(self) -> None:
         frequency = self.frequency.value()
-        settings().setValue(f"setpoints/{self.panel.ref}/chopper_frequency", frequency)
+        settings().setValue(setpoint_key(self.panel.ref, CHOPPER_FREQUENCY), frequency)
         self.run(lambda d: d.start_rotation(frequency))
 
     def stop(self) -> None:
@@ -788,7 +791,7 @@ class SisBiasGroup(QGroupBox):
 def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
     """A quick measurement of this device, folded by default: the measurement
     docks run the same; folded, the title line shows how it runs."""
-    section = Collapsible(title, f"scan/{procedure}", expanded=False)
+    section = Collapsible(title, sections_path(procedure, scan=True), expanded=False)
     box = ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
     box.reveal = lambda: section.set_expanded(True)
     box.status_changed.connect(section.set_summary)

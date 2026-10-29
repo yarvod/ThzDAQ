@@ -18,9 +18,9 @@ from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
 from thzdaq_gui.docking import DockSpace, even_out
 from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget
+from thzdaq_gui.settings import CUSTOM_GRAPHS
 
 DEFAULT_GRAPHS = ("I-V", "P-V", "Y-V", "P-IF")  # the centre of a default layout
-CUSTOM_GRAPHS = "graphs/custom"
 # Splits that grow the graph groups of a run to 2 x 2, by groups in use:
 # right of the first, below the first, below the second
 GRID_SPLITS = {

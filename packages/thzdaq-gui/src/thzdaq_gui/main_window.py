@@ -56,11 +56,11 @@ from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
-from thzdaq_gui.modes import MODE_KEY, Lite, Pro
+from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
 from thzdaq_gui.perspectives import Perspectives
 from thzdaq_gui.runbar import MeasurementHost, RunBar
-from thzdaq_gui.settings import location
+from thzdaq_gui.settings import MODE, STATION_PATH, WINDOW_GEOMETRY, location
 from thzdaq_gui.settings import settings as app_settings
 from thzdaq_gui.update_dialog import Updates
 from thzdaq_gui.version import __version__
@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         self.measurementHost = MeasurementHost()
         lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
         self.modes = {m.key: m for m in (lite, Pro())}
-        self.mode = self.modes.get(mode or self.settings.value(MODE_KEY), lite)
+        self.mode = self.modes.get(mode or self.settings.value(MODE), lite)
         self.hub = GraphHub(self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
     def on_station_changed(self, station) -> None:
         self.show_station()
         if self.session.path is not None:
-            self.settings.setValue("station/path", str(self.session.path))
+            self.settings.setValue(STATION_PATH, str(self.session.path))
 
     def open_profile(self) -> None:
         path = self.session.folders.open_path(
@@ -414,7 +414,7 @@ class MainWindow(QMainWindow):
         self.save_layout()
         self.mode.leave()
         self.mode = mode
-        self.settings.setValue(MODE_KEY, mode.key)
+        self.settings.setValue(MODE, mode.key)
         self.apply_mode()
         with one_repaint(self):
             restored = self.load_layout()
@@ -441,7 +441,7 @@ class MainWindow(QMainWindow):
     def restore_state(self) -> bool:
         try:
             self.perspectives.load()
-            geometry = self.settings.value("window/geometry")
+            geometry = self.settings.value(WINDOW_GEOMETRY)
             if geometry is not None:
                 self.restoreGeometry(geometry)
             return self.load_layout()
@@ -449,9 +449,9 @@ class MainWindow(QMainWindow):
             self.docks.sync_bodies()
 
     def save_state(self) -> None:
-        self.settings.setValue("window/geometry", self.saveGeometry())
+        self.settings.setValue(WINDOW_GEOMETRY, self.saveGeometry())
         self.save_layout()
-        self.settings.setValue(MODE_KEY, self.mode.key)
+        self.settings.setValue(MODE, self.mode.key)
         self.perspectives.save()
 
     # Closing

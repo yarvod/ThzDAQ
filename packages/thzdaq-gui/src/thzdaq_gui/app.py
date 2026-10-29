@@ -11,7 +11,13 @@ from thzdaq_instruments import InstrumentError
 from thzdaq_gui import theme
 from thzdaq_gui.main_window import MainWindow
 from thzdaq_gui.session import Session
-from thzdaq_gui.settings import data_dir, settings, stations_dir, use_file
+from thzdaq_gui.settings import (
+    STATION_PATH,
+    data_dir,
+    settings,
+    stations_dir,
+    use_file,
+)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -56,7 +62,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     clean_leftovers()
     session = Session(args.data or str(data_dir()))
     # The station comes first: its devices get docks the saved layout restores
-    profile = args.station or settings().value("station/path")
+    profile = args.station or settings().value(STATION_PATH)
     if profile and not Path(profile).exists():
         profile = None
     default = stations_dir() / "lab.yaml"

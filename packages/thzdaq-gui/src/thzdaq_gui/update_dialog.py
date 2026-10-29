@@ -31,16 +31,15 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme, updates
-from thzdaq_gui.settings import settings
+from thzdaq_gui.settings import PRERELEASES, settings
 from thzdaq_gui.version import REPO_SLUG, __version__
 
 logger = logging.getLogger(__name__)
 RELEASES_PAGE = f"https://github.com/{REPO_SLUG}/releases"
-PRERELEASES_KEY = "updates/prereleases"
 
 
 def wants_prereleases(current: str = __version__) -> bool:
-    return settings().value(PRERELEASES_KEY, updates.is_prerelease(current), type=bool)
+    return settings().value(PRERELEASES, updates.is_prerelease(current), type=bool)
 
 
 class Background(QObject):
@@ -128,7 +127,7 @@ class UpdateDialog(QDialog):
         self.prereleases.setToolTip("Betas too: here and in the check at start")
         self.prereleases.setChecked(wants_prereleases())
         self.prereleases.toggled.connect(
-            lambda on: settings().setValue(PRERELEASES_KEY, on)
+            lambda on: settings().setValue(PRERELEASES, on)
         )
         self.prereleases.toggled.connect(self.populate)
         layout.addWidget(self.prereleases)

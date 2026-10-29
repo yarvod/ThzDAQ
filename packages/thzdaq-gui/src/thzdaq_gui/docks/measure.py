@@ -46,7 +46,7 @@ from thzdaq_gui.run_controls import (
     RunControls,
     RunStatus,
 )
-from thzdaq_gui.settings import settings
+from thzdaq_gui.settings import procedure_key, sections_path, settings
 
 # A start or a stop that takes this long is treated as a hung device
 STUCK_AFTER_MS = 5000
@@ -90,9 +90,9 @@ class ProcedureBox(QWidget):
         self.expected: List[str] = []  # graphs put on screen at Start
         self.run_status = RunStatus()
         self.comment = ""  # of the next run
-        self.settings_key = f"procedures/{procedure_class.name}"
+        self.settings_key = procedure_key(procedure_class.name)
         # Folded sections are remembered apart for scans in device docks
-        sections = f"{'scan/' if compact else ''}{procedure_class.name}"
+        sections = sections_path(procedure_class.name, scan=compact)
         self.devices_box = Collapsible("Devices", f"{sections}/devices")
         self.devices = DeviceSlotsForm()
         self.devices.changed.connect(self.show_devices_summary)

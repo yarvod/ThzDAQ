@@ -13,7 +13,7 @@ from typing import Callable, Dict, List, Optional
 
 from PySide6.QtWidgets import QFileDialog
 
-from thzdaq_gui.settings import settings
+from thzdaq_gui.settings import folder_key, settings
 
 MEASUREMENTS = "measurements"
 PROFILES = "profiles"
@@ -24,7 +24,7 @@ class Folders:
         self.defaults = defaults  # kind -> its folder until one is chosen
 
     def folder(self, kind: str) -> Path:
-        remembered = settings().value(f"folders/{kind}")
+        remembered = settings().value(folder_key(kind))
         if remembered and Path(remembered).is_dir():
             return Path(remembered)
         default = Path(self.defaults[kind]())
@@ -33,7 +33,7 @@ class Folders:
         return default
 
     def remember(self, kind: str, path) -> None:
-        settings().setValue(f"folders/{kind}", str(Path(path).resolve().parent))
+        settings().setValue(folder_key(kind), str(Path(path).resolve().parent))
 
     # Dialogs that start in the folder of the kind and remember the choice
     def save_path(
