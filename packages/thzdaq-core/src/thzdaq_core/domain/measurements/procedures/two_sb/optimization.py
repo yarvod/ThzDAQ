@@ -7,6 +7,7 @@ from thzdaq_core.domain.analysis.two_sb import (
     sideband_rejection,
     test_tone_frequency,
 )
+from thzdaq_core.domain.data.measurement import KNOWN_COLUMNS
 from thzdaq_core.domain.parameters import FloatParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedures.common import IFFrequency, set_bias
@@ -19,11 +20,13 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
 )
 
 
-def _map(key: str, title: str, z: str, z_label: str) -> PlotSpec:
+def _map(column: str) -> PlotSpec:
+    """A map over the bias grid of a column, titled as the column."""
+    known = KNOWN_COLUMNS[column]
     return PlotSpec(
-        key, title, "map", "sis1_voltage_set", "sis2_voltage_set",
+        column, known.title, "map", "sis1_voltage_set", "sis2_voltage_set",
         x_label="SIS1, mV", y_label="SIS2, mV", x_scale=MV, y_scale=MV,
-        kind="map", z=z, z_label=z_label,
+        kind="map", z=column, z_label=known.unit,
     )  # fmt: skip
 
 
@@ -35,10 +38,10 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
         "and hot/cold in both channels give SRR and Tn maps."
     )
     plots = (
-        _map("tn_upper", "Tn upper", "tn_upper", "K"),
-        _map("tn_lower", "Tn lower", "tn_lower", "K"),
-        _map("srr_upper", "SRR upper", "srr_upper", "dB"),
-        _map("srr_lower", "SRR lower", "srr_lower", "dB"),
+        _map("tn_upper"),
+        _map("tn_lower"),
+        _map("srr_upper"),
+        _map("srr_lower"),
     )
 
     if_frequency = IFFrequency(5 * GHZ)

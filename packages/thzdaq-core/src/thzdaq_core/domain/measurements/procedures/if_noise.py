@@ -13,6 +13,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     ColdLoad,
     HotLoad,
     IFSweep,
+    load_problems,
     LoadDelay,
     PointDelay,
     warn_without_contrast,
@@ -74,9 +75,7 @@ class IFNoise(Procedure):
     point_delay = PointDelay(0.01)
 
     def check(self):
-        if self.t_hot <= self.t_cold:
-            return ["hot load must be warmer than the cold one"]
-        return []
+        return load_problems(self.t_hot, self.t_cold)
 
     def estimate_steps(self) -> int:
         return len(LOADS) * self.frequency.points

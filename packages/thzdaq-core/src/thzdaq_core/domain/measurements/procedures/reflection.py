@@ -15,6 +15,7 @@ from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
+    S_DB,
     VOLTAGE_MV,
     BiasVoltage,
     FirstPointDelay,
@@ -32,7 +33,7 @@ class SisReflection(Procedure):
     plots = (
         PlotSpec(
             "magnitude", "|S| (band mean) - V", "summary", "voltage", "magnitude_db",
-            x_label=VOLTAGE_MV, y_label="|S|, dB", x_scale=MV, group_by=("parameter",),
+            x_label=VOLTAGE_MV, y_label=S_DB, x_scale=MV, group_by=("parameter",),
         ),
     )  # fmt: skip
 

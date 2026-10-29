@@ -2,7 +2,7 @@
 labels of plots, bias handling, state restore, hot/cold checks."""
 
 import math
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.units import GHZ, MV
@@ -20,6 +20,7 @@ IF_GHZ = "IF, GHz"
 FREQUENCY_GHZ = "Frequency, GHz"
 Y_DB = "Y, dB"
 TN_K = "Tn, K"
+S_DB = "|S|, dB"
 
 Range = Tuple[float, float, int]
 
@@ -131,6 +132,11 @@ def restore_bias_on_exit(ctx, port) -> None:
 def restore_angle_on_exit(ctx, rotator) -> None:
     initial = rotator.get_angle()
     ctx.on_exit(lambda: rotator.rotate_to(initial))
+
+
+def load_problems(t_hot: float, t_cold: float) -> List[str]:
+    """What is wrong with the hot/cold load temperatures, for Procedure.check()."""
+    return [] if t_hot > t_cold else ["hot load must be warmer than the cold one"]
 
 
 def warn_without_contrast(ctx, temperatures: Iterable[float], where: str) -> None:

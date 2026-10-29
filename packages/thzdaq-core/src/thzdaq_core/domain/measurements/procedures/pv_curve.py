@@ -22,6 +22,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     GridAngle,
     GridSpeed,
     HotLoad,
+    load_problems,
     LoadDelay,
     restore_angle_on_exit,
     restore_bias_on_exit,
@@ -88,9 +89,7 @@ class PVCurve(Procedure):
         return slots
 
     def check(self):
-        if self.hot_cold and self.t_hot <= self.t_cold:
-            return ["hot load must be warmer than the cold one"]
-        return []
+        return load_problems(self.t_hot, self.t_cold) if self.hot_cold else []
 
     def _angles(self):
         return self.angle.values() if self.use_grid else [None]

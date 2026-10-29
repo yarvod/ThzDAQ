@@ -89,6 +89,8 @@ KNOWN_COLUMNS: Dict[str, Column] = {
         Column("sis2_voltage_set", "SIS2 voltage setpoint", "V"),
         Column("tn_upper", "Tn upper", "K"),
         Column("tn_lower", "Tn lower", "K"),
+        Column("srr_upper", "SRR upper", "dB"),
+        Column("srr_lower", "SRR lower", "dB"),
     )
 }
 

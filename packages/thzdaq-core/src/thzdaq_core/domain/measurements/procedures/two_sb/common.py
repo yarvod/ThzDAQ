@@ -40,6 +40,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
     ColdLoad,
     HotLoad,
+    load_problems,
     LoadDelay,
     PointDelay,
     restore_bias_on_exit,
@@ -187,11 +188,7 @@ class HotColdMixin:
         }
 
     def hot_cold_problems(self):
-        return (
-            ["hot load must be warmer than the cold one"]
-            if self.t_hot <= self.t_cold
-            else []
-        )
+        return load_problems(self.t_hot, self.t_cold)
 
     def measure_hot_cold(self, ctx, frequencies, side_bands, switch_delay) -> None:
         load, detector, if_filter = ctx["load"], ctx["detector"], ctx["if_filter"]
