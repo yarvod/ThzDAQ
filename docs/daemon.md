@@ -1523,6 +1523,8 @@ MCP лишь передаёт этот список чужой программ�
      идущего измерения), копии — `write_measurement`; без `MeasurementStore`;
    - [x] графики без core: каталог графиков из `list_procedures`, правила монитора
      (`plot_for`, `default_quantities`) — в `thzdaq_api.procedures`;
+   - [x] анализ I-V — операцией `analyze_iv` (панель под графиком I-V, параметры
+     `IVOptions`, «Auto» — умолчание анализа);
    - [ ] формы и слоты из `ProcedureInfo` (параметры, шаги, окно графиков), устройства из
      `list_devices`;
    - [ ] доки приборов на операциях: `describe/read/set/call_action`, опрос по подписке;
