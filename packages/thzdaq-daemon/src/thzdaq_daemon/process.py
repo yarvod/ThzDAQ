@@ -18,11 +18,19 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import msgspec
-from thzdaq_api.daemon import API_VERSION, ClientInfo, Health, HostInfo, ProcessInfo
+from thzdaq_api.daemon import (
+    API_VERSION,
+    ClientInfo,
+    DaemonSettings,
+    Health,
+    HostInfo,
+    ProcessInfo,
+)
 from thzdaq_api.events import StationChanged
 from thzdaq_api.host import (
     DaemonFiles,
     app_version,
+    log_tail,
     remove_host,
     spawn,
     start_command,
@@ -96,7 +104,7 @@ class Daemon:
 
     def __init__(self, options: Options):
         self.options = options
-        self.settings = Settings.load(options.settings_path)
+        self.saved = Settings.load(options.settings_path)
         self.started = wall_time()
         self.listening = Clients()
         self.server: Optional[Server] = None
@@ -107,7 +115,7 @@ class Daemon:
     @property
     def idle_timeout(self) -> float:
         given = self.options.idle_timeout
-        return self.settings.idle_timeout if given is None else given
+        return self.saved.idle_timeout if given is None else given
 
     def run(self) -> int:
         files = self.options.files
@@ -126,7 +134,7 @@ class Daemon:
 
     def _serve(self) -> None:
         options = self.options
-        station = options.station or self.settings.station
+        station = options.station or self.saved.station
         data = options.data or options.home / DATA
         logger.info(
             f"Starting (pid {os.getpid()}, station {station}, data {data}"
@@ -136,8 +144,8 @@ class Daemon:
             station, options.home, data, options.simulate, self, options.lively
         )
         if station:
-            self.settings.station = station
-            self.settings.save(options.settings_path)
+            self.saved.station = station
+            self.saved.save(options.settings_path)
         assembled = self.composed.assembled
         assembled.events.subscribe(self._remember)
         self.server = Server(
@@ -207,8 +215,8 @@ class Daemon:
     def _remember(self, event) -> None:
         """The profile worked with last is where the next start begins."""
         if isinstance(event.body, StationChanged) and event.body.path:
-            self.settings.station = event.body.path
-            self.settings.save(self.options.settings_path)
+            self.saved.station = event.body.path
+            self.saved.save(self.options.settings_path)
 
     # DaemonControl
     def process(self) -> ProcessInfo:
@@ -223,3 +231,14 @@ class Daemon:
     def stop(self, restart: bool) -> None:
         self.restart = restart
         self._stopping.set()
+
+    def settings(self) -> DaemonSettings:
+        return DaemonSettings(idle_timeout=self.idle_timeout)
+
+    def change(self, settings: DaemonSettings) -> None:
+        self.saved.idle_timeout = settings.idle_timeout
+        self.saved.save(self.options.settings_path)
+        self.options.idle_timeout = None  # what it was started with gives way
+
+    def log(self, lines: int) -> Tuple[str, ...]:
+        return tuple(log_tail(self.options.files, lines).splitlines())
