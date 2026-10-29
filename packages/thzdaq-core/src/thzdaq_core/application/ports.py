@@ -1,12 +1,15 @@
 """Ports: what the application needs from the outside, as protocols.
 
 Adapters implement them (json_store.MeasurementStore: MeasurementRepository,
-yaml_profiles.YamlProfiles: ProfileRepository); the composition root (a CLI,
-the GUI session, the daemon) passes them in.
+yaml_profiles.YamlProfiles: ProfileRepository; the daemon's process:
+DaemonControl); the composition root (a CLI, the GUI session, the daemon)
+passes them in.
 """
 
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Tuple
+
+from thzdaq_api.daemon import ClientInfo, ProcessInfo
 
 from thzdaq_core.domain.data.measurement import Measurement
 from thzdaq_core.domain.station.config import StationConfig
@@ -30,3 +33,17 @@ class ProfileRepository(Protocol):
 
     def save(self, config: StationConfig, path: str) -> None:
         ...
+
+
+class DaemonControl(Protocol):
+    """The process the use cases run in: what it is, who listens, its end."""
+
+    def process(self) -> ProcessInfo:
+        ...
+
+    def clients(self) -> Tuple[ClientInfo, ...]:
+        ...
+
+    def stop(self, restart: bool) -> None:
+        """End the process once the current operation has answered; restart:
+        start it again with the same profile."""

@@ -4,18 +4,24 @@ explicitly, and the services that run on their own (polling) to stop at the end.
 from dataclasses import dataclass
 
 from thzdaq_core.application.bench import Bench
+from thzdaq_core.application.daemon import DaemonService
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.handlers import (
     analysis,
+    daemon,
     devices,
     measurements,
     state,
     station,
 )
 from thzdaq_core.application.polling import Polling
-from thzdaq_core.application.ports import MeasurementRepository, ProfileRepository
+from thzdaq_core.application.ports import (
+    DaemonControl,
+    MeasurementRepository,
+    ProfileRepository,
+)
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
@@ -28,6 +34,7 @@ class Assembled:
     events: EventBus
     polling: Polling
     runs: Runs
+    daemon: DaemonService
 
     def close(self) -> None:
         self.runs.stop()
@@ -35,14 +42,18 @@ class Assembled:
 
 
 def assemble(
-    bench: Bench, store: MeasurementRepository, profiles: ProfileRepository
+    bench: Bench,
+    store: MeasurementRepository,
+    profiles: ProfileRepository,
+    control: DaemonControl,
 ) -> Assembled:
     events = EventBus()
     known = KnownValues()
-    runs = Runs(bench, store, events, Leases())
+    runs = Runs(bench, store, events, Leases(), known)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
+    service = DaemonService(bench, runs, polling, events, access, control)
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -70,6 +81,9 @@ def assemble(
             station.ListDrivers(profile),
             station.ListConnections(profile),
             station.ResetConnection(profile),
+            daemon.GetDaemonStatus(service),
+            daemon.StopDaemon(service),
+            daemon.RestartDaemon(service),
         )
     )
-    return Assembled(dispatcher, events, polling, runs)
+    return Assembled(dispatcher, events, polling, runs, service)

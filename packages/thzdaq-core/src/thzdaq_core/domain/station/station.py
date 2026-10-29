@@ -1,8 +1,10 @@
+import functools
 import logging
 import threading
 from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     Dict,
     Hashable,
     Iterable,
@@ -489,10 +491,12 @@ class Station:
         requirements: Requirements,
         pause: Pause,
         planned: Iterable[Planned] = (),
+        told: Optional[Callable[[str, str, float], None]] = None,
     ) -> Dict[str, GuardedPort]:
         """Devices for measurement slots: capabilities checked, and the values
         the run sets them to checked against their limits; every problem at
-        once. Their ramps wait with pause (a run's, which a cancel stops)."""
+        once. Their ramps wait with pause (a run's, which a cancel stops);
+        told(ref, key, value) hears what they set."""
         problems = []
         found = {}
         for slot, capabilities in requirements.items():
@@ -518,7 +522,10 @@ class Station:
                     problems.append(f"{slot}: {problem}")
         if problems:
             raise StationError(f"{self.name}: " + "; ".join(problems))
-        return {slot: device.pausing(pause) for slot, device in found.items()}
+        return {
+            slot: device.for_run(pause, told and functools.partial(told, devices[slot]))
+            for slot, device in found.items()
+        }
 
     # Lifecycle and metadata
     def _check_safety(self) -> None:

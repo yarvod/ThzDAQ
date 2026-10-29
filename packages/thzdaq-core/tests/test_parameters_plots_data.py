@@ -198,7 +198,7 @@ class TestDataStore:
             def device_use(self, ref):
                 return DeviceUse(ref)
 
-            def require(self, devices, requirements, pause, planned=()):
+            def require(self, devices, requirements, pause, planned=(), told=None):
                 return {}
 
             def snapshot(self, refs=None):

@@ -72,7 +72,7 @@ class CoupledStation:
             "load": self.chopper,
         }
 
-    def require(self, devices, requirements, pause, planned=()):
+    def require(self, devices, requirements, pause, planned=(), told=None):
         return {slot: self.ports[slot] for slot in requirements}
 
     def device_use(self, ref):
@@ -133,7 +133,7 @@ class TestRunner:
                 raise RuntimeError("detector exploded")
 
         class AnyStation(CoupledStation):
-            def require(self, devices, requirements, pause, planned=()):
+            def require(self, devices, requirements, pause, planned=(), told=None):
                 return {"bias": SimChopper()}
 
         class BadObserver(RunObserver):

@@ -1,13 +1,19 @@
 """LocalLab: the bench's use cases called in this process, through the same JSON a
 remote call travels as, so it behaves as RemoteLab does (contract tests use both)."""
 
-from typing import Callable, Optional, TypeVar
+import os
+import sys
+import threading
+from typing import Callable, Optional, Tuple, TypeVar
 
 from thzdaq_api import wire
+from thzdaq_api.daemon import API_VERSION, ClientInfo, ProcessInfo
 from thzdaq_api.events import Event
+from thzdaq_api.host import app_version
 from thzdaq_api.operation import Operation
 
 from thzdaq_core.application.assembly import Assembled
+from thzdaq_core.application.clock import wall_time
 
 R = TypeVar("R")
 
@@ -31,3 +37,27 @@ class LocalLab:
         return self.events.subscribe(
             lambda event: listener(wire.decode_event(wire.encode(event))), since
         )
+
+
+class LocalControl:
+    """The process of a LocalLab is this one: it has no clients of its own, and
+    a stop is only noted (the owner of the bench ends it)."""
+
+    def __init__(self, simulate: bool = False):
+        self.simulate = simulate
+        self.started = wall_time()
+        self.stopped = threading.Event()
+        self.restart = False
+
+    def process(self) -> ProcessInfo:
+        return ProcessInfo(
+            os.getpid(), API_VERSION, app_version(), sys.executable, self.started, 0,
+            self.simulate,
+        )  # fmt: skip
+
+    def clients(self) -> Tuple[ClientInfo, ...]:
+        return ()
+
+    def stop(self, restart: bool) -> None:
+        self.restart = restart
+        self.stopped.set()

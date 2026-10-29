@@ -167,7 +167,7 @@ class TestGuard:
         cancel = threading.Event()
         pause = RampPause(cancel)
         station = Station(bench(), pause=Waits())
-        supply = station["supply:1"].pausing(pause)
+        supply = station["supply:1"].for_run(pause)
         values = written(supply.target)
         cancel.set()
         with pytest.raises(Cancelled):

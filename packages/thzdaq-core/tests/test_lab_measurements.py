@@ -120,3 +120,29 @@ def test_what_cannot_run_is_refused(lab, start, code):
     with pytest.raises(LabError) as caught:
         lab.call(start)
     assert caught.value.code == code
+
+
+def test_what_a_sweep_sets_is_told_a_few_times_a_second(lab):
+    from thzdaq_api.events import GetSnapshot, QuantitySet
+
+    heard = []
+    lab.subscribe(heard.append)
+    sweep = {
+        "voltage": {"start": 0.0, "stop": 2e-3, "points": 41},
+        "settle_time": 0.01,
+        "first_point_delay": 0.0,
+    }
+    run = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE, parameters=sweep, devices={"bias": "sis_bias_1"}
+        )
+    )
+    ended(lab, run.id)
+    told = [e for e in heard if isinstance(e.body, QuantitySet)]
+    sets = [e.body for e in told if e.body.origin == f"#{run.id}"]
+    # 41 points in about half a second: a few events along the sweep
+    assert 3 <= len(sets) <= 10
+    assert any(0 < s.value <= 2e-3 for s in sets)
+    # on_exit puts the bias back: the last value told, known in the snapshot
+    assert sets[-1].value == 0.0
+    assert lab.call(GetSnapshot()).values["sis_bias_1"]["voltage_set"] == 0.0

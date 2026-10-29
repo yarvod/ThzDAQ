@@ -3,7 +3,8 @@
 Listeners hear each event in the thread that publishes it (a lane, the poll
 scheduler), so they hand it on and return. A client that reconnects names the
 last event it has and hears what it missed, or Resync when that is no longer
-in the buffer.
+in the buffer. A stream to a client keeps only its place in the buffer and
+waits for what comes after it (wait): the bus never waits for a client.
 """
 
 import threading
@@ -22,7 +23,9 @@ class EventBus:
         self._buffer: Deque[Event] = deque(maxlen=capacity)
         self._listeners: List[Listener] = []
         self._lock = threading.Lock()
+        self._published = threading.Condition(self._lock)
         self._seq = 0
+        self._woken = 0
 
     @property
     def seq(self) -> int:
@@ -35,6 +38,7 @@ class EventBus:
             event = Event(self._seq, wall_time(), body)
             self._buffer.append(event)
             listeners = list(self._listeners)
+            self._published.notify_all()
         for listener in listeners:
             listener(event)
         return event
@@ -48,6 +52,22 @@ class EventBus:
         for event in missed:
             listener(event)
         return lambda: self._unsubscribe(listener)
+
+    def wait(self, since: int, timeout: float) -> List[Event]:
+        """The events after since, waiting up to timeout for one; Resync when
+        since is no longer in the buffer."""
+        with self._published:
+            woken = self._woken
+            self._published.wait_for(
+                lambda: self._seq > since or self._woken != woken, timeout
+            )
+            return self._after(since)
+
+    def wake(self) -> None:
+        """Every wait returns at once (a server stops its streams)."""
+        with self._published:
+            self._woken += 1
+            self._published.notify_all()
 
     def _after(self, since: int) -> List[Event]:
         if since >= self._seq:

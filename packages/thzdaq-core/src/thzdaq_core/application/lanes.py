@@ -9,7 +9,7 @@ import logging
 import queue
 import threading
 import time
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,19 @@ class Lanes:
         if error is not None:
             raise error
         return result
+
+    def status(self) -> List[Tuple[str, int, Optional[str], float]]:
+        """Each instrument's lane: (instrument, jobs waiting, the device the
+        running job talks to, seconds it has run)."""
+        now = time.monotonic()
+        found = []
+        for key, lane in list(self._lanes.items()):
+            if not key:
+                continue  # jobs of no instrument
+            started, label = lane.started, lane.label  # the lane changes meanwhile
+            busy = 0.0 if started is None else now - started
+            found.append((key, lane.queue.qsize(), label, busy))
+        return found
 
     @property
     def pending(self) -> int:

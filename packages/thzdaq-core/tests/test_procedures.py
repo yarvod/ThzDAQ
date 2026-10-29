@@ -100,7 +100,7 @@ class Bench:
         ...
 
     # StationLike
-    def require(self, devices, requirements, pause, planned=()):
+    def require(self, devices, requirements, pause, planned=(), told=None):
         return {slot: self.ports[slot] for slot in requirements}
 
     def device_use(self, ref):

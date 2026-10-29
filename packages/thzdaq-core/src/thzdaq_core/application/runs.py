@@ -5,7 +5,11 @@ side; its id is the measurement's number, given before it starts. It takes
 leases on its devices first (thzdaq_core.domain.leases): a conflict without
 share refuses the start, one accepted is noted in both measurements. Clients
 follow a run by events (started with the plots it fills, records a few at a
-time, progress, log, finished) or by waiting on its id.
+time, progress, log, finished) or by waiting on its id. What a run sets its
+devices to is told as quantity_set, at most SET_EVERY_S apart per quantity
+(a value held back goes with the next progress or record, the last ones when
+the run ends), so a sweep of thousands of points stays a few events a second;
+the snapshot knows it too.
 """
 
 import threading
@@ -17,6 +21,7 @@ from thzdaq_api.data import encode_values
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import (
     LeasesChanged,
+    QuantitySet,
     MeasurementFinished,
     MeasurementLog,
     MeasurementProgress,
@@ -32,12 +37,14 @@ from thzdaq_core.application.describe import plot_info
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.ports import MeasurementRepository
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
+from thzdaq_core.application.values import KnownValues
 from thzdaq_core.domain.data.measurement import RUNNING, Measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 BATCH_S = 0.05  # records travel in batches of about this long
+SET_EVERY_S = 0.1  # what a run sets is told at most this often per quantity
 KEPT = 100  # runs that ended, remembered for ListRuns and wait
 STRENGTH = (READ, SHARED, EXCLUSIVE)  # a device in two slots: the stronger use
 
@@ -49,6 +56,7 @@ class _Run(RunObserver):
         procedure: Procedure,
         origin: str,
         events: EventBus,
+        known: KnownValues,
         accepted: Tuple[Lease, ...],
         ended: Callable[["_Run"], None],
     ):
@@ -56,6 +64,7 @@ class _Run(RunObserver):
         self.procedure = procedure
         self.origin = origin
         self.events = events
+        self.known = known
         self.accepted = accepted  # conflicts started with (share)
         self._ended = ended
         self.runner: Optional[MeasurementRunner] = None
@@ -67,6 +76,9 @@ class _Run(RunObserver):
         self.done, self.total = 0, procedure.estimate_steps()
         self._batch: Dict[str, List[Dict[str, Any]]] = {}
         self._flushed = time.monotonic()
+        # What the run set and has not told yet, and when each was last told
+        self._unset: Dict[Tuple[str, str], float] = {}
+        self._told: Dict[Tuple[str, str], float] = {}
 
     def info(self) -> RunInfo:
         m = self.measurement
@@ -117,6 +129,24 @@ class _Run(RunObserver):
         if time.monotonic() - self._flushed >= BATCH_S:
             self._flush()
 
+    def on_set(self, ref: str, key: str, value: float) -> None:
+        self._unset[ref, key] = value
+        self._tell_due()
+
+    def _tell_due(self) -> None:
+        """What was set and not told yet, where the last telling is long enough ago."""
+        now = time.monotonic()
+        for quantity in list(self._unset):
+            if now - self._told.get(quantity, 0.0) >= SET_EVERY_S:
+                self._tell(quantity)
+
+    def _tell(self, quantity: Tuple[str, str]) -> None:
+        ref, key = quantity
+        value = self._unset.pop(quantity)
+        self._told[quantity] = time.monotonic()
+        self.known.update(ref, {key: value})
+        self.events.publish(QuantitySet(ref, key, value, origin=f"#{self.id}"))
+
     def on_progress(self, done: int, total: Optional[int]) -> None:
         self._flush()
         self.done, self.total = done, total
@@ -127,6 +157,8 @@ class _Run(RunObserver):
         self.events.publish(MeasurementLog(self.measurement.id, message))
 
     def on_finished(self, measurement: Measurement) -> None:
+        for quantity in list(self._unset):
+            self._tell(quantity)  # the last values, however recent
         self._flush()
         self.events.publish(MeasurementFinished(self.info()))
 
@@ -136,6 +168,7 @@ class _Run(RunObserver):
             self.measurement.metadata.setdefault(key, []).append(entry)
 
     def _flush(self) -> None:
+        self._tell_due()
         batch, self._batch = self._batch, {}
         self._flushed = time.monotonic()
         for table, rows in batch.items():
@@ -162,11 +195,13 @@ class Runs:
         store: MeasurementRepository,
         events: EventBus,
         leases: Leases,
+        known: KnownValues,
     ):
         self.bench = bench
         self.store = store
         self.events = events
         self.leases = leases
+        self.known = known
         self._runs: "OrderedDict[int, _Run]" = OrderedDict()
         self._lock = threading.Lock()
         self._last_id = 0
@@ -201,7 +236,9 @@ class Runs:
         self._leases_changed()
         for lease in accepted:
             self.note(lease.owner, "conflicts", conflict(lease, origin))
-        run = _Run(run_id, procedure, origin, self.events, accepted, self._ended)
+        run = _Run(
+            run_id, procedure, origin, self.events, self.known, accepted, self._ended
+        )
         run.runner = MeasurementRunner(self.bench.station, self.store, [run])
         threading.Thread(
             target=run.execute,

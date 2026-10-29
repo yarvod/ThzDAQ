@@ -48,6 +48,7 @@ class StationLike(Protocol):
         requirements: Mapping[str, Capabilities],
         pause: Callable[[float], None],
         planned: Iterable[Tuple[str, str, Sequence[float]]] = (),
+        told: Optional[Callable[[str, str, float], None]] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -82,6 +83,9 @@ class RunObserver:
 
     def on_record(self, table: str, record: Dict[str, Any]) -> None:
         ...
+
+    def on_set(self, ref: str, key: str, value: float) -> None:
+        """The run set a quantity of a device (a point of its sweep)."""
 
     def on_progress(self, done: int, total: Optional[int]) -> None:
         ...
@@ -221,6 +225,9 @@ class MeasurementRunner:
                 # A broken plot must not stop the measurement
                 logger.exception(f"Observer {observer!r}.{method} failed")
 
+    def _told(self, ref: str, key: str, value: float) -> None:
+        self._emit("on_set", ref, key, value)
+
     def cancel(self) -> None:
         self._cancel.set()
 
@@ -262,7 +269,9 @@ class MeasurementRunner:
         ramps = RampPause(self._cancel)
         # Fails before any file exists when a device is missing or unsuitable,
         # or the run would set it beyond its limits
-        found = self.station.require(refs, required, ramps, procedure.planned())
+        found = self.station.require(
+            refs, required, ramps, procedure.planned(), self._told
+        )
         measurement = Measurement(
             procedure=procedure.name,
             title=procedure.title,

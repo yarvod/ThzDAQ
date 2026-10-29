@@ -12,6 +12,7 @@ from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.safety import Guard
 
 Pause = Callable[[float], None]  # waits so many seconds
+Told = Callable[[str, float], None]  # hears a quantity key and the value set
 
 
 class PortAdapter:
@@ -79,7 +80,7 @@ class GuardedPort(PortAdapter):
     The value before a change is the setpoint last written through the device
     (read once when there is none yet), so a sweep costs no extra query. The
     ports of one device share it; each waits with its own pause (a run's stops
-    on cancel).
+    on cancel), and a run's port tells the values it sets.
     """
 
     def __init__(
@@ -89,20 +90,25 @@ class GuardedPort(PortAdapter):
         quantities: Iterable[Quantity],
         pause: Pause,
         setpoints: Optional[Dict[str, float]] = None,
+        told: Optional[Told] = None,
     ):
         super().__init__(target)
         self.guard = guard
         self.setters = {name: q for q in quantities for name in q.setters}
         self.pause = pause
         self.setpoints: Dict[str, float] = {} if setpoints is None else setpoints
+        self.told = told
 
-    def pausing(self, pause: Pause) -> "GuardedPort":
-        """The same device, its ramps waiting with another pause."""
+    def for_run(self, pause: Pause, told: Optional[Told] = None) -> "GuardedPort":
+        """The same device for a run: its ramps wait with the run's pause, and
+        told hears the values it sets."""
         quantities = set(self.setters.values())
-        return GuardedPort(self.target, self.guard, quantities, pause, self.setpoints)
+        return GuardedPort(
+            self.target, self.guard, quantities, pause, self.setpoints, told
+        )
 
     def __getattr__(self, name: str) -> Any:
-        if name in ("target", "guard", "setters", "pause", "setpoints"):
+        if name in ("target", "guard", "setters", "pause", "setpoints", "told"):
             raise AttributeError(name)
         value = getattr(self.target, name)
         quantity = self.setters.get(name)
@@ -134,6 +140,8 @@ class GuardedPort(PortAdapter):
             last = step
         result = method(value, *args, **kwargs)
         self.setpoints[key] = value
+        if self.told is not None:
+            self.told(key, value)
         return result
 
     def _before(self, quantity: Quantity) -> Optional[float]:
