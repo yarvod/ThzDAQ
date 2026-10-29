@@ -73,7 +73,8 @@ packages/
   thzdaq-core/src/thzdaq_core/   # слои: cli → adapters → application → domain (import-linter)
     domain/              # без файлов, часов и своих потоков
       parameters.py      # декларативные параметры процедур и настроек устройств
-      station/           # config, kinds (подустройства), ports (AttributePort), station,
+      station/           # config, kinds (подустройства), ports (AttributePort, GuardedPort),
+                         # safety (пределы стенда, безопасное состояние, Guard), station,
                          # profile (формат профиля: словари, миграции)
       measurements/      # procedure, plots (PlotSpec), catalog (процедуры по имени),
                          # procedures/ (встроенные, список BUILTIN)
@@ -273,9 +274,14 @@ instruments:
 - `Station`:
   - `devices()` — список `DeviceInfo` (ссылка, название, вид, возможности) без открытия
     приборов: по нему строятся меню, доки и списки выбора в измерениях; `quantities(ref)`;
-  - приборы открываются лениво, устройства кэшируются; `device(ref)` / `station[ref]`;
-  - `require(devices, requirements)` строит устройства для слотов измерения и проверяет
-    возможности, сообщая обо всех проблемах сразу;
+  - приборы открываются лениво, устройства кэшируются; `device(ref)` / `station[ref]`
+    отдаёт устройство в `GuardedPort`: вызов, задающий уставку, проверяется по паспорту
+    драйвера и разделу `safety` профиля до отправки команды, большое изменение идёт
+    лесенкой (`docs/daemon.md` → «Защита приборов и образцов»); станция получает `pause`,
+    которой ждут ступени;
+  - `require(devices, requirements, pause, planned)` строит устройства для слотов измерения
+    и проверяет возможности и значения, которые задаст прогон, сообщая обо всех проблемах
+    сразу; ступени этих устройств ждут паузой прогона, её прерывает отмена;
   - `reconfigure(config)` принимает изменённый профиль и закрывает только приборы с новой связью;
   - `snapshot()` и `device_use(ref)` — метаданные для измерения;
   - `simulate=True` (или `simulate: true` у прибора) подставляет симулятор с `sim_options`;
