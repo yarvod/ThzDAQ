@@ -48,6 +48,7 @@ testpaths = [
     "packages/thzdaq-api/tests",
     "packages/thzdaq-instruments/tests",
     "packages/thzdaq-core/tests",
+    "packages/thzdaq-daemon/tests",
     "packages/thzdaq-gui/tests",
 ]
 addopts = "--import-mode=importlib"

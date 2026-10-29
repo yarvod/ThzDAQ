@@ -9,6 +9,9 @@ dependencies = [
     "thzdaq-core",
 ]
 
+[project.scripts]
+thzdaq-daemon = "thzdaq_daemon.__main__:main"
+
 [tool.uv.sources]
 thzdaq-api = { workspace = true }
 thzdaq-core = { workspace = true }

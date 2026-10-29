@@ -27,6 +27,12 @@ ALLOWED = {
     "I-CL sweep parameter",
 }
 
+# Identifiers two packages that may not import each other both need
+ALLOWED_IDENTIFIERS = {
+    "application/json": "the JSON media type: instruments speak HTTP to devices, "
+    "the contract to its clients, and neither may import the other",
+}
+
 IDENTIFIER = re.compile(r"[A-Za-z][\w.\-]*[./][\w.\-/]*\w")
 
 
@@ -94,10 +100,13 @@ def test_no_phrase_is_written_in_two_modules():
 
 
 def test_no_identifier_is_written_in_two_modules():
-    found = repeated(IDENTIFIERS)
+    found = {
+        k: v for k, v in repeated(IDENTIFIERS).items() if k not in ALLOWED_IDENTIFIERS
+    }
     assert not found, f"same identifier in several modules: {found}"
 
 
 def test_allowed_phrases_still_repeat():
     stale = [text for text in ALLOWED if text not in repeated(PHRASES)]
+    stale += [text for text in ALLOWED_IDENTIFIERS if text not in repeated(IDENTIFIERS)]
     assert not stale, f"no longer repeated, remove from ALLOWED: {stale}"

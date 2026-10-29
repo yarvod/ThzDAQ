@@ -11,5 +11,8 @@ dist
 *.ipynb
 .env
 /data/
+# What a daemon run from sources keeps between runs
+/daemon.json
+/daemon-sim.json
 # Window layout and perspectives of a local run
 /settings.ini
