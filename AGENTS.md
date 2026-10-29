@@ -32,7 +32,7 @@ New code follows these boundaries now; existing code moves there during mileston
 - **Use cases.** One operation = one Struct of arguments in `thzdaq_api.ops` and one stateless handler in `application/handlers/<area>/`, registered by an explicit list in the daemon's composition root. Every call from outside goes through the dispatcher: arguments → policy → handler → journal and event. A lease check and the write it guards run as one job in the device's lane. Procedures inside the daemon write through `GuardedPort` directly, not through the dispatcher.
 - **Contract types.** DTO, operation arguments and events are `msgspec` Structs in `thzdaq-api`; JSON schemas are generated from them, never written by hand. Values with units travel as strings and are parsed once, by the daemon.
 - **GUI.** View models in `thzdaq_gui/models/` are QObjects on QtCore that call `Lab`; they never import QtWidgets. Widgets show a view model and call its methods. One bridge turns `RemoteLab` events into Qt signals. Forms come from `ProcedureInfo` schemas, graphs from `PlotInfo`, analysis from daemon operations.
-- **Vocabulary.** Quantity keys and units live in instruments, a procedure's name, slots and plots on its class, shared procedure parameters and axis labels in `domain/measurements/procedures/common.py`, operation names, event types and error codes in api, GUI settings keys in one GUI module. Use them by import; the duplicate test fails on repeated literals and function bodies across modules.
+- **Vocabulary.** Quantity keys and units live in instruments, a procedure's name, slots and plots on its class, shared procedure parameters and axis labels in `domain/measurements/procedures/common.py`, operation names, event types and error codes in api, GUI settings keys in one GUI module. Use them by import; `tests/test_architecture.py` fails on a function body, a phrase shown to people or a dotted/slashed identifier written in two modules (a phrase that only looks the same goes into its `ALLOWED` with the reason).
 - **Enforcement.** import-linter contracts in the root `pyproject.toml` run in pre-commit and CI next to the duplicate test; a broken boundary fails the build.
 
 ## Build, Test, and Development Commands
@@ -71,7 +71,7 @@ Python with 4-space indentation, formatted by Black; autoflake removes unused im
 
 ## Testing Guidelines
 
-Tests live next to each package (`packages/*/tests`, `test_*.py`, pytest). Drivers are tested against protocol emulators on `FakeLink` and the shared capability contracts in `packages/thzdaq-instruments/tests/contracts.py`; procedures run on simulators; GUI tests run offscreen. Hardware is never needed for tests. For changes that need real instruments, document the bench and steps used.
+Tests live next to each package (`packages/*/tests`, `test_*.py`, pytest); `tests/` at the root checks the whole repository (architecture rules). Drivers are tested against protocol emulators on `FakeLink` and the shared capability contracts in `packages/thzdaq-instruments/tests/contracts.py`; procedures run on simulators; GUI tests run offscreen. Hardware is never needed for tests. For changes that need real instruments, document the bench and steps used.
 
 ## Commit & Pull Request Guidelines
 

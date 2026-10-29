@@ -38,8 +38,10 @@ thzdaq-gui = { workspace = true }
 thzdaq-instruments = { workspace = true }
 
 [tool.pytest.ini_options]
-# Each package keeps its own tests; conftest files put helpers on sys.path
+# Each package keeps its own tests; conftest files put helpers on sys.path.
+# tests/ checks the whole repository (architecture rules)
 testpaths = [
+    "tests",
     "packages/thzdaq-instruments/tests",
     "packages/thzdaq-core/tests",
     "packages/thzdaq-gui/tests",

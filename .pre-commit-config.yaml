@@ -24,3 +24,9 @@ repos:
         language: system
         pass_filenames: false
         types_or: [python, toml]
+    -   id: no-duplicates
+        name: each concept written once (tests/test_architecture.py)
+        entry: uv run pytest -q tests/test_architecture.py
+        language: system
+        pass_filenames: false
+        types: [python]
