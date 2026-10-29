@@ -26,6 +26,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     measurements.WaitMeasurement,
     measurements.CancelMeasurement,
     measurements.AbortMeasurement,
+    measurements.SetComment,
     station.GetStation,
     station.LoadStation,
     station.NewStation,

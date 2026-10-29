@@ -71,6 +71,7 @@ def assemble(
             measurements.WaitMeasurement(runs),
             measurements.CancelMeasurement(runs),
             measurements.AbortMeasurement(runs),
+            measurements.SetComment(runs),
             station.GetStation(profile),
             station.LoadStation(profile),
             station.NewStation(profile),

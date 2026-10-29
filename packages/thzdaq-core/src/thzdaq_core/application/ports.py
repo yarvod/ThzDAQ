@@ -7,7 +7,7 @@ passes them in.
 """
 
 from pathlib import Path
-from typing import Protocol, Tuple
+from typing import Optional, Protocol, Tuple
 
 from thzdaq_api.daemon import ClientInfo, ProcessInfo
 
@@ -21,8 +21,11 @@ class MeasurementRepository(Protocol):
     def next_id(self) -> int:
         ...
 
-    def save(self, measurement: Measurement) -> Path:
-        ...
+    def save(self, measurement: Measurement, path: Optional[str] = None) -> Path:
+        """To its file (path_for), or to path."""
+
+    def load(self, path: str) -> Measurement:
+        """ValueError when it is no measurement file."""
 
 
 class ProfileRepository(Protocol):

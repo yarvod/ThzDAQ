@@ -54,6 +54,16 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
         )
 
 
+class SetComment(Handler[api.SetComment, None]):
+    operation = api.SetComment
+
+    def __init__(self, runs: Runs):
+        self.runs = runs
+
+    def handle(self, args, origin):
+        self.runs.set_comment(args.path, args.comment)
+
+
 class ListRuns(Handler[api.ListRuns, Tuple[api.RunInfo, ...]]):
     operation = api.ListRuns
 

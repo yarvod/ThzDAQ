@@ -267,6 +267,27 @@ class Runs:
         if run is not None:
             run.note(key, entry)
 
+    def set_comment(self, path: str, comment: str) -> None:
+        """A running measurement keeps it and saves it with its data; the file
+        of one that ended is written with it."""
+        with self._lock:
+            running = [
+                run
+                for run in self._runs.values()
+                if not run.ended.is_set()
+                and run.measurement.metadata.get("path") == path
+            ]
+        if running:
+            running[0].measurement.comment = comment
+            return
+        store = self.workspaces.store(self.workspaces.home)
+        try:
+            measurement = store.load(path)
+        except ValueError as e:
+            raise LabError(ErrorCode.NOT_FOUND, str(e)) from None
+        measurement.comment = comment
+        store.save(measurement, path)
+
     def leases_now(self) -> Tuple[LeaseInfo, ...]:
         return tuple(
             LeaseInfo(lease.device, lease.mode, lease.owner, lease.title)

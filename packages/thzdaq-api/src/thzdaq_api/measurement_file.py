@@ -21,6 +21,7 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
 
 import csv
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
@@ -288,6 +289,16 @@ def dumps(value: Any, indent: Optional[int] = None) -> str:
 
 def loads(text: str) -> Any:
     return decode_values(json.loads(text))
+
+
+def write_measurement(measurement: Measurement, path: PathLike) -> Path:
+    """Through a temporary file: a crash leaves the previous complete version."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(dumps(measurement.to_dict(), indent=1), encoding="utf-8")
+    os.replace(temporary, path)
+    return path
 
 
 def read_measurement(path: PathLike) -> Measurement:

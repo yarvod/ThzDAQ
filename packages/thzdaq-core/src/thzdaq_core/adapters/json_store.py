@@ -10,7 +10,6 @@ the end. Writes go to a temporary file first, so a crash leaves the previous
 complete version; a file still marked running reads back as interrupted.
 """
 
-import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -19,18 +18,9 @@ from thzdaq_api.measurement_file import (
     Measurement,
     MeasurementFolder,
     PathLike,
-    dumps,
     file_id,
+    write_measurement,
 )
-
-
-def write_json(measurement: Measurement, path: PathLike) -> Path:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(dumps(measurement.to_dict(), indent=1), encoding="utf-8")
-    os.replace(temporary, path)
-    return path
 
 
 class MeasurementStore(MeasurementFolder):
@@ -61,6 +51,6 @@ class MeasurementStore(MeasurementFolder):
         return self.root / day / f"{name}_{procedure}.json"
 
     def save(self, measurement: Measurement, path: Optional[PathLike] = None) -> Path:
-        path = write_json(measurement, path or self.path_for(measurement))
+        path = write_measurement(measurement, path or self.path_for(measurement))
         measurement.metadata["path"] = str(path)
         return path

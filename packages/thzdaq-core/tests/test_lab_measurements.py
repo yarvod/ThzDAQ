@@ -173,3 +173,25 @@ def test_a_measurement_goes_to_the_workspace_its_client_names(lab, tmp_path):
     with pytest.raises(LabError) as caught:
         run(tmp_path / "nowhere")
     assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
+
+
+def test_a_comment_goes_into_the_file_of_a_measurement(lab, tmp_path):
+    from thzdaq_api.measurement_file import read_measurement
+    from thzdaq_api.measurements import SetComment
+
+    done = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+        )
+    )
+    done = ended(lab, done.id)
+    lab.call(SetComment(path=done.path, comment="after the warm-up"))
+    assert read_measurement(done.path).comment == "after the warm-up"
+    # A running one keeps it and saves it with its data
+    running = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR))
+    lab.call(SetComment(path=running.path, comment="overnight"))
+    lab.call(CancelMeasurement(id=running.id))
+    assert read_measurement(ended(lab, running.id).path).comment == "overnight"
+    with pytest.raises(LabError) as caught:
+        lab.call(SetComment(path=str(tmp_path / "nothing.json"), comment="x"))
+    assert caught.value.code == ErrorCode.NOT_FOUND

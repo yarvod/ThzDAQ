@@ -188,6 +188,15 @@ class CancelMeasurement(Operation[RunInfo]):
     id: int
 
 
+class SetComment(Operation[None]):
+    """The comment of a measurement, by its file: a running one keeps it and
+    saves it with its data; a file that ended is written with it."""
+
+    rights = Rights.RUN
+    path: str
+    comment: str
+
+
 class AbortMeasurement(Operation[RunInfo]):
     """Stop a measurement that waits for a device that does not answer: breaks
     the connections of its devices (they reconnect on the next command)."""
