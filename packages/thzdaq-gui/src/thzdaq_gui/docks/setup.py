@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.domain.errors import ProcedureError, StationError
+from thzdaq_core.application.describe import parameter_info
+from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.config import (
     DeviceConfig,
     InstrumentConfig,
@@ -362,7 +363,7 @@ class DeviceDialog(QDialog):
             self.channel.addItem(str(channel), channel)
         self.channel.setVisible(bool(kind.keys))
         self.channel_label.setVisible(bool(kind.keys))
-        self.settings.set_parameters({p.name: p for p in kind.settings})
+        self.settings.set_parameters(parameter_info(p) for p in kind.settings)
         self.settings_box.setVisible(bool(kind.settings))
         if self.device_id is None:
             self.ident.setText(self.station.config.next_id(key))
@@ -370,7 +371,7 @@ class DeviceDialog(QDialog):
     def accept_values(self) -> None:
         try:
             self.settings.values()
-        except ProcedureError as e:
+        except ValueError as e:
             QMessageBox.warning(self, "Device settings", str(e))
             return
         self.accept()

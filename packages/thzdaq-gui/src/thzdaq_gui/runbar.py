@@ -7,10 +7,11 @@ run started in one mode goes on in the other and choosing another
 measurement leaves a running one running.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Iterable, List, Optional
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QToolButton, QVBoxLayout, QWidget
+from thzdaq_api.measurements import ProcedureSummary
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.docks.body import DockBody
@@ -22,7 +23,7 @@ class RunBar(QWidget):
     chosen = Signal(str)  # procedure name
     parameters_requested = Signal()
 
-    def __init__(self, procedures, parent=None):
+    def __init__(self, procedures: Iterable[ProcedureSummary], parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -30,17 +31,20 @@ class RunBar(QWidget):
         self.combo = QComboBox()
         self.combo.setToolTip("Measurement to run")
         self.combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        groups: Dict[str, list] = {}
-        for cls in sorted(procedures, key=lambda c: procedure_groups.rank(c.name)):
-            groups.setdefault(procedure_groups.group(cls.name).key, []).append(cls)
+        groups: Dict[str, List[ProcedureSummary]] = {}
+        for procedure in sorted(
+            procedures, key=lambda p: procedure_groups.rank(p.name)
+        ):
+            group = procedure_groups.group(procedure.name).key
+            groups.setdefault(group, []).append(procedure)
         for group in groups:
             if self.combo.count():
                 self.combo.insertSeparator(self.combo.count())
-            for cls in groups[group]:
+            for procedure in groups[group]:
                 self.combo.addItem(
-                    theme.icon(procedure_groups.group(cls.name).icon),
-                    cls.title or cls.name,
-                    cls.name,
+                    theme.icon(procedure_groups.group(procedure.name).icon),
+                    procedure.title or procedure.name,
+                    procedure.name,
                 )
         self.combo.activated.connect(
             lambda index: self.chosen.emit(self.combo.itemData(index))

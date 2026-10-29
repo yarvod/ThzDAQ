@@ -1,10 +1,12 @@
-"""Forms built from parameters (procedures, device settings) and device slots.
+"""Forms built from descriptions of the contract: parameters (ParameterInfo of a
+procedure or of a device kind's settings) and device slots (SlotInfo).
 
-Editors show display units (GHz, mV); values() returns SI values ready for
-Procedure(**values).
+Editors show display units (GHz, mV); values() returns SI values as JSON
+carries them (a sweep is {start, stop, points}). The daemon checks them: a form
+only turns what is typed into numbers.
 """
 
-from typing import Any, Callable, Dict, List, Mapping, Optional, Type
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -19,9 +21,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QWidget,
 )
-from thzdaq_core.domain.errors import ProcedureError
-from thzdaq_core.domain.parameters import Parameter, Sweep
-from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_api.devices import DeviceInfo
+from thzdaq_api.measurements import ParameterInfo, SlotInfo, split_list
 
 LIMIT = 1e15
 
@@ -126,12 +127,19 @@ def to_si(value: float, scale: float) -> float:
     return float(f"{value * scale:.12g}")
 
 
-def _double_spin(parameter: Parameter) -> QDoubleSpinBox:
+def _numbers(text: str, scale: float) -> List[float]:
+    """Numbers typed in display units -> SI."""
+    try:
+        return [to_si(float(item), scale) for item in split_list(text)]
+    except ValueError:
+        raise ValueError(f"expected numbers, got {text!r}") from None
+
+
+def _double_spin(parameter: ParameterInfo) -> QDoubleSpinBox:
     spin = CompactDoubleSpinBox()
     spin.setDecimals(4)
     scale = parameter.display_scale
-    minimum = getattr(parameter, "minimum", None)
-    maximum = getattr(parameter, "maximum", None)
+    minimum, maximum = parameter.minimum, parameter.maximum
     spin.setRange(
         -LIMIT if minimum is None else minimum / scale,
         LIMIT if maximum is None else maximum / scale,
@@ -143,7 +151,7 @@ def _double_spin(parameter: Parameter) -> QDoubleSpinBox:
 
 
 class Editor:
-    """Widget + getter/setter for one parameter, values in SI."""
+    """Widget + getter/setter for one parameter, values in SI as JSON has them."""
 
     def __init__(
         self, widget: QWidget, get: Callable[[], Any], set_: Callable[[Any], None]
@@ -153,7 +161,7 @@ class Editor:
         self.set = set_
 
 
-def make_editor(parameter: Parameter) -> Editor:
+def make_editor(parameter: ParameterInfo) -> Editor:
     kind = parameter.kind
     scale = parameter.display_scale
     if kind == "float":
@@ -163,8 +171,7 @@ def make_editor(parameter: Parameter) -> Editor:
         )
     if kind == "int":
         spin = CompactSpinBox()
-        minimum = getattr(parameter, "minimum", None)
-        maximum = getattr(parameter, "maximum", None)
+        minimum, maximum = parameter.minimum, parameter.maximum
         spin.setRange(
             -(2**31) if minimum is None else int(minimum),
             2**31 - 1 if maximum is None else int(maximum),
@@ -192,7 +199,7 @@ def make_editor(parameter: Parameter) -> Editor:
         row.addStretch()
 
         def get_multi():
-            return tuple(choice for choice, check in checks if check.isChecked())
+            return [choice for choice, check in checks if check.isChecked()]
 
         def set_multi(values):
             for choice, check in checks:
@@ -204,7 +211,7 @@ def make_editor(parameter: Parameter) -> Editor:
         line.setPlaceholderText("comma separated")
         return Editor(
             line,
-            lambda: parameter.parse(line.text()),
+            lambda: split_list(line.text()),
             lambda v: line.setText(", ".join(v)),
         )
     if kind == "float_list":
@@ -212,7 +219,7 @@ def make_editor(parameter: Parameter) -> Editor:
         line.setPlaceholderText(f"comma separated, {parameter.display_unit}")
         return Editor(
             line,
-            lambda: parameter.parse(line.text()),
+            lambda: _numbers(line.text(), scale),
             lambda v: line.setText(", ".join(f"{x / scale:g}" for x in v)),
         )
     if kind == "sweep":
@@ -221,26 +228,26 @@ def make_editor(parameter: Parameter) -> Editor:
         row.setContentsMargins(0, 0, 0, 0)
         start, stop = _double_spin(parameter), _double_spin(parameter)
         points = CompactSpinBox()
-        points.setRange(1, getattr(parameter, "max_points", 100001))
+        points.setRange(1, parameter.max_points or 2**31 - 1)
         points.setSuffix(" pts")
         for widget in (start, stop, points):
             row.addWidget(widget)
 
         def get_sweep():
-            return Sweep(
-                to_si(start.value(), scale), to_si(stop.value(), scale), points.value()
-            )
+            return {
+                "start": to_si(start.value(), scale),
+                "stop": to_si(stop.value(), scale),
+                "points": points.value(),
+            }
 
-        def set_sweep(value: Sweep):
-            start.setValue(value.start / scale)
-            stop.setValue(value.stop / scale)
-            points.setValue(value.points)
+        def set_sweep(value: Mapping[str, Any]):
+            start.setValue(value["start"] / scale)
+            stop.setValue(value["stop"] / scale)
+            points.setValue(value["points"])
 
         return Editor(box, get_sweep, set_sweep)
     line = QLineEdit()
-    return Editor(
-        line, lambda: parameter.parse(line.text()), lambda v: line.setText(str(v))
-    )
+    return Editor(line, line.text, lambda v: line.setText(str(v)))
 
 
 class ParameterForm(QWidget):
@@ -253,25 +260,17 @@ class ParameterForm(QWidget):
         self.layout_ = QFormLayout(self)
         # Fields as wide as they need, not as the dock: no stretched number boxes
         self.layout_.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        self.procedure_class: Optional[Type[Procedure]] = None
-        self.parameters: Dict[str, Parameter] = {}
+        self.parameters: Dict[str, ParameterInfo] = {}
         self.editors: Dict[str, Editor] = {}
 
-    def set_procedure(self, procedure_class: Type[Procedure]) -> None:
-        self.procedure_class = procedure_class
-        self.set_parameters(procedure_class.parameters())
-
-    def set_parameters(self, parameters: Mapping[str, Parameter]) -> None:
+    def set_parameters(self, parameters: Iterable[ParameterInfo]) -> None:
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.editors.clear()
-        self.parameters = dict(parameters)
+        self.parameters = {parameter.name: parameter for parameter in parameters}
         for name, parameter in self.parameters.items():
             editor = make_editor(parameter)
-            if (
-                parameter.default is not None
-                and parameter.describe()["required"] is False
-            ):
+            if parameter.default is not None and not parameter.required:
                 editor.set(parameter.default)
             if parameter.help:
                 editor.widget.setToolTip(parameter.help)
@@ -291,16 +290,16 @@ class ParameterForm(QWidget):
                 child.editingFinished.connect(self.changed)
 
     def values(self) -> Dict[str, Any]:
-        """SI values; raises ProcedureError listing every invalid field."""
+        """SI values as JSON; raises ValueError naming every field whose text
+        is not numbers."""
         values, problems = {}, []
         for name, editor in self.editors.items():
-            parameter = self.parameters[name]
             try:
-                values[name] = parameter.validate(editor.get())
-            except ProcedureError as e:
-                problems.append(f"{parameter.label}: {e}")
+                values[name] = editor.get()
+            except ValueError as e:
+                problems.append(f"{self.parameters[name].label}: {e}")
         if problems:
-            raise ProcedureError("; ".join(problems))
+            raise ValueError("; ".join(problems))
         return values
 
     def set_values(self, values: Mapping[str, Any]) -> None:
@@ -308,22 +307,12 @@ class ParameterForm(QWidget):
             if name in self.editors:
                 try:
                     self.editors[name].set(value)
-                except (TypeError, ValueError, AttributeError):
-                    pass
-
-    def procedure(self) -> Procedure:
-        procedure = self.procedure_class(**self.values())
-        procedure.validate()
-        return procedure
-
-
-def capability_text(capabilities) -> str:
-    caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
-    return " + ".join(c.__name__ for c in caps if c is not object) or "any device"
+                except (TypeError, ValueError, AttributeError, KeyError):
+                    pass  # a value saved by an older version: the editor keeps its own
 
 
 class DeviceSlotsForm(QWidget):
-    """Which station device plays each procedure slot; only suitable devices are listed."""
+    """Which device of the bench plays each procedure slot; only suitable devices are listed."""
 
     changed = Signal()
 
@@ -331,36 +320,27 @@ class DeviceSlotsForm(QWidget):
         super().__init__(parent)
         self.layout_ = QFormLayout(self)
         self.combos: Dict[str, QComboBox] = {}
-        self.titles: Callable[[str], str] = lambda slot: slot
+        self.slots: Dict[str, SlotInfo] = {}
 
     def set_slots(
         self,
-        slots: Mapping[str, Any],
-        station,
-        titles: Callable[[str], str] = lambda slot: slot,
+        slots: Sequence[SlotInfo],
+        devices: Sequence[DeviceInfo],
         preferred: Optional[Mapping[str, str]] = None,
-        kinds: Optional[Mapping[str, str]] = None,
     ) -> None:
         current = {**(preferred or {}), **self.mapping()}
-        self.titles = titles
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.combos.clear()
+        self.slots = {slot.name: slot for slot in slots}
         # Devices chosen before are kept; free slots take the next unused device
-        taken = {current[slot] for slot in slots if current.get(slot)}
-        for slot, capabilities in slots.items():
+        taken = {current[name] for name in self.slots if current.get(name)}
+        for slot in slots:
             combo = compact_combo(QComboBox(), 14)
-            caps = capabilities if isinstance(capabilities, tuple) else (capabilities,)
-            caps = tuple(c for c in caps if c is not object)
-            devices = station.find(caps) if station is not None else []
-            kind = (kinds or {}).get(slot)
-            if kind and any(info.kind == kind for info in devices):
-                # A SIS bias slot lists SIS biases, not every supply channel
-                devices = [info for info in devices if info.kind == kind]
-            for info in devices:
+            for info in slot.candidates(devices):
                 combo.addItem(info.title, info.ref)
                 combo.setItemData(combo.count() - 1, info.ref, Qt.ToolTipRole)
-            wanted = current.get(slot, slot)
+            wanted = current.get(slot.name, slot.name)
             index = combo.findData(wanted)
             if index < 0:
                 # First suitable device not used by another slot yet
@@ -371,10 +351,10 @@ class DeviceSlotsForm(QWidget):
             combo.setCurrentIndex(index)
             if combo.currentData():
                 taken.add(combo.currentData())
-            combo.setToolTip(capability_text(capabilities))
+            combo.setToolTip(" + ".join(slot.capabilities) or "any device")
             combo.currentIndexChanged.connect(self.changed)
-            self.layout_.addRow(titles(slot), combo)
-            self.combos[slot] = combo
+            self.layout_.addRow(slot.title, combo)
+            self.combos[slot.name] = combo
         self.changed.emit()
 
     def mapping(self) -> Dict[str, str]:
@@ -384,12 +364,16 @@ class DeviceSlotsForm(QWidget):
             if combo.currentData()
         }
 
-    def unmapped(self) -> List[str]:
-        return [slot for slot, combo in self.combos.items() if not combo.currentData()]
+    def unmapped(self) -> List[SlotInfo]:
+        return [
+            self.slots[name]
+            for name, combo in self.combos.items()
+            if not combo.currentData()
+        ]
 
     def summary(self) -> str:
         """One line for the folded group: SIS bias: SIS1 · Detector: R&S NRX."""
         return " · ".join(
-            f"{self.titles(slot)}: {combo.currentText() or '—'}"
-            for slot, combo in self.combos.items()
+            f"{self.slots[name].title}: {combo.currentText() or '—'}"
+            for name, combo in self.combos.items()
         )

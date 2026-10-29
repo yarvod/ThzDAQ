@@ -5,10 +5,12 @@ import numpy as np
 import pytest
 from thzdaq_api.procedures import IV_CURVE
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, Measurement
-from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_api.measurements import SlotInfo
+from thzdaq_core.application.describe import procedure_info
 from thzdaq_core.domain.parameters import Sweep
 from thzdaq_core.domain.measurements.procedures import (
     IFNoise,
+    IfBalance,
     IVCurve,
     PVCurve,
     SidebandRatio,
@@ -24,31 +26,41 @@ from thzdaq_gui.graphs import (
     MapGraphWidget,
 )
 from thzdaq_gui.workers import DeviceWorker
-from thzdaq_instruments.capabilities import (
-    PowerDetector,
-    VoltageCurrentMeter,
-    VoltageSource,
-)
 
 FAST_IV = {"voltage": Sweep(0, 5e-3, 6), "settle_time": 0.0, "first_point_delay": 0.0}
-BIAS = (VoltageSource, VoltageCurrentMeter)
+BIAS = ("VoltageSource", "VoltageCurrentMeter")
+
+
+def form_of(procedure_class) -> ParameterForm:
+    """A form of the parameters as the lab describes them."""
+    form = ParameterForm()
+    form.set_parameters(procedure_info(procedure_class()).parameters)
+    return form
 
 
 class TestForms:
     def test_defaults_roundtrip_through_widgets(self, app):
-        form = ParameterForm()
-        form.set_procedure(SidebandRatio)
-        assert SidebandRatio(**form.values()).to_json() == SidebandRatio().to_json()
+        form = form_of(SidebandRatio)
+        assert (
+            SidebandRatio.from_json(form.values()).to_json()
+            == SidebandRatio().to_json()
+        )
 
     def test_edit_in_display_units(self, app):
-        form = ParameterForm()
-        form.set_procedure(SidebandRatio)
-        form.set_values({"frequency": Sweep(4e9, 6e9, 5), "detector": "spectrum"})
+        form = form_of(SidebandRatio)
+        form.set_values(
+            {
+                "frequency": {"start": 4e9, "stop": 6e9, "points": 5},
+                "detector": "spectrum",
+            }
+        )
         start = form.editors["frequency"].widget.layout().itemAt(0).widget()
         assert start.value() == pytest.approx(4.0) and start.suffix() == " GHz"
-        procedure = form.procedure()
+        procedure = SidebandRatio.from_json(form.values())
         assert procedure.frequency == Sweep(4e9, 6e9, 5)
         assert "spectrum" in procedure.slots()
+        points = form.editors["frequency"].widget.layout().itemAt(2).widget()
+        assert points.maximum() == SidebandRatio.frequency.max_points
 
     def test_arrows_change_the_digit_at_the_cursor(self, app):
         from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
@@ -91,18 +103,22 @@ class TestForms:
         whole.stepBy(1)
         assert whole.value() == 451
 
-    def test_multi_choice_and_errors(self, app):
-        form = ParameterForm()
-        form.set_procedure(SisReflection)
-        form.set_values({"s_parameters": ("S21", "S12")})
-        assert form.values()["s_parameters"] == ("S21", "S12")
-        form.set_values({"s_parameters": ()})
-        with pytest.raises(ProcedureError, match="S-parameters"):
+    def test_multi_choice_and_lists_typed(self, app):
+        form = form_of(SisReflection)
+        form.set_values({"s_parameters": ["S21", "S12"]})
+        assert form.values()["s_parameters"] == ["S21", "S12"]
+        form = form_of(IfBalance)
+        line = form.editors["sis1_voltages"].widget
+        assert line.text() == "5, 6"  # mV
+        line.setText("4.5; 6 7")
+        assert form.values()["sis1_voltages"] == [4.5e-3, 6e-3, 7e-3]
+        # Only numbers are checked here; the lab checks the rest
+        line.setText("4.5, x")
+        with pytest.raises(ValueError, match="SIS1 voltages"):
             form.values()
 
     def test_changes_are_signalled(self, app):
-        form = ParameterForm()
-        form.set_procedure(PVCurve)
+        form = form_of(PVCurve)
         changed = []
         form.changed.connect(lambda: changed.append(1))
         form.editors["hot_cold"].widget.setChecked(True)
@@ -111,10 +127,13 @@ class TestForms:
     def test_device_slots_offer_only_suitable_devices(self, session):
         slots = DeviceSlotsForm()
         slots.set_slots(
-            {"sis1": BIAS, "sis2": BIAS, "detector": PowerDetector},
-            session.station,
+            [
+                SlotInfo("sis1", "SIS 1", BIAS, "sis_bias"),
+                SlotInfo("sis2", "SIS 2", BIAS, "sis_bias"),
+                SlotInfo("detector", "Detector", ("PowerDetector",)),
+            ],
+            session.devices(),
             preferred={"sis2": "sis_bias_1"},
-            kinds={"sis1": "sis_bias", "sis2": "sis_bias"},
         )
         combo = slots.combos["sis1"]
         assert [combo.itemData(i) for i in range(combo.count())] == [

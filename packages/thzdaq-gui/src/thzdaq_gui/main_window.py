@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
-from thzdaq_core.domain.measurements.catalog import list_procedures
+from thzdaq_api.measurements import ProcedureSummary
 from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import procedure_groups, theme
@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
         self.updates = Updates(self, session.busy)
         # Lite runs the chosen measurement from the bar on top, its widget
         # borrowed into the Measurement dock
-        self.runBar = RunBar(list_procedures())
+        self.runBar = RunBar(session.procedures())
         self.runBar.parameters_requested.connect(lambda: self.show_dock(MEASUREMENT))
         self.measurementHost = MeasurementHost()
         lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
@@ -126,8 +126,8 @@ class MainWindow(QMainWindow):
         self.hangWatch.message.connect(lambda m: self.statusBar().showMessage(m, 2500))
 
         self.add_base_docks()
-        for cls in list_procedures():
-            self.add_measure_dock(cls)
+        for procedure in session.procedures():
+            self.add_measure_dock(procedure)
         self.docks.add(
             MEASUREMENT, "Measurement", self.measurementHost, "Measures",
             theme.icon("play-circle-outline"), QtAds.RightDockWidgetArea,
@@ -301,15 +301,16 @@ class MainWindow(QMainWindow):
         """How many run, on the Processes tab and toolbar button."""
         self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
-    def add_measure_dock(self, cls) -> None:
-        group = procedure_groups.group(cls.name)
+    def add_measure_dock(self, procedure: ProcedureSummary) -> None:
+        name = procedure.name
+        group = procedure_groups.group(name)
         icon = theme.icon(group.icon)
         # Built when the dock is first opened (DockBody)
-        body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
+        body = DockBody(lambda: measure_widget(self.session, self.hub, name))
         self.docks.add(
-            dock_name(MEASURE, cls.name), cls.title or cls.name, body, "Measures",
+            dock_name(MEASURE, name), procedure.title or name, body, "Measures",
             icon, QtAds.RightDockWidgetArea,
-            group=group.title, hint=cls.name,
+            group=group.title, hint=name,
         )  # fmt: skip
 
     # Docks as the mode shows them (menus, Ctrl+K, Processes)

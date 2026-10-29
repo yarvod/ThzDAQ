@@ -1,15 +1,16 @@
 """Measurement docks: a procedure configured and run from one widget.
 
-Devices are chosen per slot from the station, only those with the needed
-capabilities are offered. The same ProcedureBox runs quick scans inside
-device docks with the device fixed (I-V of this SIS bias). In a dock only the
-devices and parameters scroll: comment, Start/Stop, state and progress stay
-at the bottom, so they never scroll out of sight.
+What a procedure takes and needs is its description by the lab
+(describe_procedure). Devices are chosen per slot from the bench, only those
+with the needed capabilities are offered. The same ProcedureBox runs quick
+scans inside device docks with the device fixed (I-V of this SIS bias). In a
+dock only the devices and parameters scroll: comment, Start/Stop, state and
+progress stay at the bottom, so they never scroll out of sight.
 """
 
 import json
 from dataclasses import replace
-from typing import Dict, List, Mapping, Optional, Type
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -23,16 +24,16 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.procedures import MONITOR_TIME
-from thzdaq_core.domain.errors import ProcedureError, StationError
-from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_api.devices import DeviceInfo, QuantityInfo
+from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.measurements import DescribeProcedure, ProcedureInfo
 from thzdaq_api.procedures import (
     KEY_SEPARATOR,
+    MONITOR_TIME,
     default_quantities,
     monitor_quantities,
     split_entry,
 )
-from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.collapsible import Collapsible
@@ -69,7 +70,7 @@ class ProcedureBox(QWidget):
         self,
         session,
         hub,
-        procedure_class: Type[Procedure],
+        procedure: str,
         fixed: Optional[Mapping[str, str]] = None,
         compact: bool = False,
         header: Optional[QWidget] = None,
@@ -78,7 +79,11 @@ class ProcedureBox(QWidget):
         super().__init__(parent)
         self.session = session
         self.hub = hub
-        self.procedure_class = procedure_class
+        self.procedure = procedure  # its name
+        # Records of a run go to every plot the procedure may fill
+        self.plots = session.procedure(procedure).plots
+        # As the parameters in the form describe it: their slots
+        self.info: ProcedureInfo = session.call(DescribeProcedure(procedure=procedure))
         self.fixed = dict(fixed or {})
         self.compact = compact
         self.process = None  # in the session's Processes while running
@@ -91,16 +96,16 @@ class ProcedureBox(QWidget):
         self.expected: List[str] = []  # graphs put on screen at Start
         self.run_status = RunStatus()
         self.comment = ""  # of the next run
-        self.settings_key = procedure_key(procedure_class.name)
+        self.settings_key = procedure_key(procedure)
         # Folded sections are remembered apart for scans in device docks
-        sections = sections_path(procedure_class.name, scan=compact)
+        sections = sections_path(procedure, scan=compact)
         self.devices_box = Collapsible("Devices", f"{sections}/devices")
-        self.devices = DeviceSlotsForm()
+        self.devices = self.make_devices()
         self.devices.changed.connect(self.show_devices_summary)
         self.devices_box.addWidget(self.devices)
         self.parameters_box = Collapsible("Parameters", f"{sections}/parameters")
         self.form = ParameterForm()
-        self.form.set_procedure(procedure_class)
+        self.form.set_parameters(self.info.parameters)
         self.parameters_box.addWidget(self.form)
         setup = QWidget()
         setup_layout = QVBoxLayout(setup)
@@ -171,42 +176,43 @@ class ProcedureBox(QWidget):
         self.refresh_devices()
 
     # Devices
-    def slots(self) -> Dict[str, object]:
-        """Slots for the parameters in the form (a hot/cold P-V also needs a load)."""
-        try:
-            slots = self.procedure_class(**self.form.values()).slots()
-        except ProcedureError:
-            slots = dict(self.procedure_class.requires)
-        return {s: c for s, c in slots.items() if s not in self.fixed}
+    def make_devices(self) -> DeviceSlotsForm:
+        return DeviceSlotsForm()
 
     def refresh_devices(self, *_) -> None:
-        slots = self.slots()
-        self.devices.set_slots(
-            slots,
-            self.session.station,
-            self.procedure_class.slot_title,
-            self.saved_devices,
-            self.procedure_class.slot_kinds,
-        )
+        """Slots of the parameters in the form (a hot/cold P-V also needs a
+        load); while some are invalid, those of the last valid ones."""
+        try:
+            parameters = self.form.values()
+            self.info = self.session.call(
+                DescribeProcedure(procedure=self.procedure, parameters=parameters)
+            )
+        except ValueError:
+            pass  # typed text that is not numbers
+        except LabError as e:
+            if e.code != ErrorCode.INVALID_ARGUMENTS:
+                raise
+        slots = [slot for slot in self.info.slots if slot.name not in self.fixed]
+        self.devices.set_slots(slots, self.session.devices(), self.saved_devices)
         self.devices_box.setVisible(bool(slots))
         self.show_devices_summary()
 
-    def devices_summary(self) -> str:
-        return self.devices.summary()
-
     def show_devices_summary(self, *_) -> None:
-        self.devices_box.set_summary(self.devices_summary())
+        self.devices_box.set_summary(self.devices.summary())
 
     def mapping(self) -> Dict[str, str]:
         return {**self.devices.mapping(), **self.fixed}
 
-    def slot_quantities(self, slot: str):
-        """What the device chosen for a slot reads (a monitor's graphs by unit)."""
-        ref = self.mapping().get(slot)
-        try:
-            return self.session.station.quantities(ref) if ref else []
-        except (StationError, InstrumentError):
-            return []
+    def devices_problem(self) -> Optional[str]:
+        """Why the devices chosen cannot run it; None when they can."""
+        missing = self.devices.unmapped()
+        if missing:
+            return f"Choose devices for: {', '.join(slot.title for slot in missing)}"
+        return None
+
+    def chosen_devices(self) -> Dict[str, str]:
+        """The choice of devices as it is remembered for the next start."""
+        return self.devices.mapping()
 
     # Status for the folded log and for whoever shows this run elsewhere
     def note(self, text: str) -> None:
@@ -214,17 +220,17 @@ class ProcedureBox(QWidget):
         self.log_box.set_summary(text.splitlines()[-1] if text else "")
 
     def process_title(self) -> str:
-        title = self.procedure_class.title or self.procedure_class.name
-        if self.compact and self.fixed and self.session.station is not None:
+        title = self.info.title or self.procedure
+        if self.compact and self.fixed:
             ref = next(iter(self.fixed.values()))
-            return f"{title} · {self.session.station.title(ref)}"
+            return f"{title} · {self.session.title_of(ref)}"
         return title
 
     def dock_name(self) -> str:
         """The dock that shows this box: a scan is in its device's dock."""
         if self.compact and self.fixed:
             return dock_name(DEVICE, next(iter(self.fixed.values())))
-        return dock_name(MEASURE, self.procedure_class.name)
+        return dock_name(MEASURE, self.procedure)
 
     def show_process_status(self, text: str) -> None:
         if self.process is not None:
@@ -252,20 +258,24 @@ class ProcedureBox(QWidget):
         try:
             data = json.loads(raw)
             # A parameter dropped in a newer version must not lose the others
-            known = self.procedure_class.parameters()
-            saved = {k: v for k, v in data.get("parameters", {}).items() if k in known}
-            procedure = self.procedure_class.from_json(saved)
-            self.form.set_values(procedure.values())
+            saved = data.get("parameters", {})
+            self.form.set_values(
+                {k: v for k, v in saved.items() if k in self.form.editors}
+            )
             self.saved_devices = dict(data.get("devices", {}))
-        except (ValueError, ProcedureError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError):
             pass
 
-    def remember(self, procedure: Procedure) -> None:
-        data = {"parameters": procedure.to_json(), "devices": self.devices.mapping()}
+    def remember(self, parameters: Mapping[str, Any]) -> None:
+        self.saved_devices = self.chosen_devices()
+        data = {"parameters": dict(parameters), "devices": self.saved_devices}
         settings().setValue(self.settings_key, json.dumps(data))
-        self.saved_devices = data["devices"]
 
     # Running
+    def parameters(self) -> Dict[str, Any]:
+        """Of the next run, SI as JSON carries them."""
+        return self.form.values()
+
     def start(self) -> None:
         if self.runner.running:
             QMessageBox.warning(
@@ -274,35 +284,34 @@ class ProcedureBox(QWidget):
                 "It is still running: Stop it, or Abort if it hangs",
             )
             return
-        if self.session.station is None:
-            QMessageBox.warning(self, "Measurement", "Open a station profile first")
-            return
-        missing = self.devices.unmapped()
-        if missing:
+        problem = self.devices_problem()
+        if problem:
             self.devices_box.set_expanded(True)
-            titles = ", ".join(self.procedure_class.slot_title(s) for s in missing)
-            QMessageBox.warning(self, "Measurement", f"Choose devices for: {titles}")
+            QMessageBox.warning(self, "Measurement", problem)
             return
         try:
-            procedure = self.form.procedure()
-        except ProcedureError as e:
+            parameters = self.parameters()
+            run = self.session.call(
+                DescribeProcedure(
+                    procedure=self.procedure,
+                    parameters=parameters,
+                    devices=self.mapping(),
+                )
+            )
+        except (ValueError, LabError) as e:
             QMessageBox.warning(self, INVALID_PARAMETERS, str(e))
             return
-        self.remember(procedure)
-        self.window = procedure.plot_window()
+        self.remember(parameters)
+        self.window = run.plot_window
         self.raised = False
         self.reached = []
-        self.expected = [p.title for p in procedure.active_plots(self.slot_quantities)]
+        self.expected = [plot.title for plot in run.plots]
         self.hub.show_run(self.expected)
         self.log.clear()
         self.log_box.set_summary("")
-        self.update_status(
-            state=CONNECTING, done=0, total=procedure.estimate_steps() or None
-        )
+        self.update_status(state=CONNECTING, done=0, total=run.steps or None)
         self.stuck.start()
-        self.runner.start(
-            procedure.name, procedure.to_json(), self.mapping(), self.comment
-        )
+        self.runner.start(self.procedure, parameters, self.mapping(), self.comment)
 
     def stop(self) -> None:
         self.runner.cancel()
@@ -343,7 +352,7 @@ class ProcedureBox(QWidget):
         if self.measurement is None:
             return
         reached = self.hub.feed(
-            self.measurement, self.procedure_class.plots, table, record, self.window
+            self.measurement, self.plots, table, record, self.window
         )
         if not self.raised:
             self.reached.extend(t for t in reached if t not in self.reached)
@@ -367,7 +376,7 @@ class ProcedureBox(QWidget):
     def on_failed(self, message: str) -> None:
         self.note(message)
         self.update_status(outcome="failed to start")
-        QMessageBox.warning(self, self.procedure_class.title, message)
+        QMessageBox.warning(self, self.info.title, message)
 
     def on_finished(self, measurement) -> None:
         self.raise_graph()
@@ -387,7 +396,7 @@ class ProcedureBox(QWidget):
         if running and self.process is None:
             self.process = self.session.processes.start(
                 self.process_title(),
-                procedure_groups.group(self.procedure_class.name).icon,
+                procedure_groups.group(self.procedure).icon,
                 self.dock_name(),
                 stop=self.stop,
                 abort=self.abort,
@@ -413,85 +422,78 @@ class ProcedureBox(QWidget):
 class MeasureWidget(QWidget):
     """Dock content: the procedure box with title and description on top."""
 
-    def __init__(self, session, hub, procedure_class: Type[Procedure], parent=None):
+    def __init__(self, session, hub, procedure: str, parent=None):
         super().__init__(parent)
+        about = session.procedure(procedure)
         header = QWidget()
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        title = QLabel(procedure_class.title or procedure_class.name)
+        title = QLabel(about.title or about.name)
         title.setProperty("role", "title")
         header_layout.addWidget(title)
-        if procedure_class.description:
-            text = QLabel(procedure_class.description)
+        if about.description:
+            text = QLabel(about.description)
             text.setWordWrap(True)
             text.setProperty("role", "muted")
             header_layout.addWidget(text)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.box = self.make_box(session, hub, procedure_class, header)
+        self.box = self.make_box(session, hub, procedure, header)
         layout.addWidget(self.box)
 
-    def make_box(self, session, hub, procedure_class, header):
-        return ProcedureBox(session, hub, procedure_class, header=header)
+    def make_box(self, session, hub, procedure, header):
+        return ProcedureBox(session, hub, procedure, header=header)
 
     def show_controls(self, on: bool) -> None:
         """Off in Lite: the bar on top runs the chosen measurement."""
         self.box.controls.setVisible(on)
 
 
-class MonitorBox(ProcedureBox):
-    """Monitor over time: devices are ticked in a tree, each with the values to read.
+# The monitor's parameter of what it watches: "<ref>" or "<ref>/<quantity key>"
+WATCH = "watch"
+
+
+class WatchTree(QTreeWidget):
+    """Devices ticked to watch, each with the values to read.
 
     A device expands to its readable values; the measured ones are ticked when
     the device is ticked (power, voltage and current), setpoints can be added.
     """
 
-    def __init__(self, session, hub, procedure_class, header=None, parent=None):
-        super().__init__(session, hub, procedure_class, header=header, parent=parent)
-        self.watch = QTreeWidget()
-        self.watch.setHeaderHidden(True)
-        self.watch.setMinimumHeight(160)
-        self.watch.itemChanged.connect(self.show_devices_summary)
-        self.devices_box.setTitle("Devices to watch")
-        self.devices_box.addWidget(self.watch)
-        self.devices.hide()
-        editor = self.form.editors.get("watch")
-        if editor is not None:
-            self.form.layout_.setRowVisible(editor.widget, False)
-        self.refresh_devices()
+    changed = Signal()
 
-    def device_items(self):
-        return [
-            self.watch.topLevelItem(i) for i in range(self.watch.topLevelItemCount())
-        ]
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setHeaderHidden(True)
+        self.setMinimumHeight(160)
+        self.itemChanged.connect(self.changed)
+        self.defaults: Dict[str, List[str]] = {}  # ticked with the device
 
-    def refresh_devices(self, *_) -> None:
-        if not hasattr(self, "watch"):
-            return
-        station = self.session.station
-        entries = self.entries() or [
-            e for e in self.saved_devices.get("watch", "").split(",") if e
-        ]
+    def set_devices(
+        self,
+        devices: Iterable[Tuple[DeviceInfo, Sequence[QuantityInfo]]],
+        entries: Iterable[str],
+    ) -> None:
         chosen: Dict[str, set] = {}
         for entry in entries:
             ref, key = split_entry(entry)
             chosen.setdefault(ref, set())
             if key:
                 chosen[ref].add(key)
-        self.watch.clear()
-        if station is None:
-            return
-        for info in station.devices():
-            quantities = monitor_quantities(station.quantities(info.ref))
+        self.clear()
+        self.defaults = {}
+        for info, described in devices:
+            quantities = monitor_quantities(described)
             if not quantities:
                 continue
+            self.defaults[info.ref] = [q.key for q in default_quantities(quantities)]
             item = QTreeWidgetItem([info.title])
             item.setIcon(0, theme.device_icon(info.kind, info.instrument))
             item.setData(0, Qt.UserRole, info.ref)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
             keys = chosen.get(info.ref)
             if keys is not None and not keys:  # the device without a choice
-                keys = {q.key for q in default_quantities(quantities)}
+                keys = set(self.defaults[info.ref])
             for quantity in quantities:
                 child = QTreeWidgetItem([quantity.label])
                 child.setData(0, Qt.UserRole, quantity.key)
@@ -499,42 +501,24 @@ class MonitorBox(ProcedureBox):
                 ticked = keys is not None and quantity.key in keys
                 child.setCheckState(0, Qt.Checked if ticked else Qt.Unchecked)
                 item.addChild(child)
-            self.watch.addTopLevelItem(item)
-        self.devices_box.setVisible(True)
-        self.show_devices_summary()
+            self.addTopLevelItem(item)
+        self.changed.emit()
 
-    def devices_summary(self) -> str:
-        if not hasattr(self, "watch"):
-            return ""
-        values = len(self.entries())
-        titles = [
-            item.text(0)
-            for item in self.device_items()
-            if item.data(0, Qt.UserRole) in self.checked()
-        ]
-        return f"{values} values: {', '.join(titles)}" if values else "nothing ticked"
+    def device_items(self) -> List[QTreeWidgetItem]:
+        return [self.topLevelItem(i) for i in range(self.topLevelItemCount())]
 
     def set_device(self, ref: str, checked: bool) -> None:
         """Tick a device with its measured values (or untick all of it)."""
         for item in self.device_items():
             if item.data(0, Qt.UserRole) != ref:
                 continue
-            quantities = [
-                item.child(i).data(0, Qt.UserRole) for i in range(item.childCount())
-            ]
-            station = self.session.station
-            defaults = {
-                q.key
-                for q in default_quantities(monitor_quantities(station.quantities(ref)))
-            }
-            for i, key in enumerate(quantities):
-                on = checked and key in defaults
-                item.child(i).setCheckState(0, Qt.Checked if on else Qt.Unchecked)
+            for i in range(item.childCount()):
+                child = item.child(i)
+                on = checked and child.data(0, Qt.UserRole) in self.defaults[ref]
+                child.setCheckState(0, Qt.Checked if on else Qt.Unchecked)
 
-    def entries(self):
+    def entries(self) -> List[str]:
         """ref/key of every ticked value."""
-        if not hasattr(self, "watch"):
-            return []
         found = []
         for item in self.device_items():
             ref = item.data(0, Qt.UserRole)
@@ -544,42 +528,66 @@ class MonitorBox(ProcedureBox):
                     found.append(f"{ref}{KEY_SEPARATOR}{child.data(0, Qt.UserRole)}")
         return found
 
-    def checked(self):
-        refs = []
-        for entry in self.entries():
-            ref, _ = split_entry(entry)
-            if ref not in refs:
-                refs.append(ref)
-        return refs
+    def refs(self) -> List[str]:
+        return list(dict.fromkeys(split_entry(entry)[0] for entry in self.entries()))
 
     def mapping(self) -> Dict[str, str]:
-        return {ref: ref for ref in self.checked()}
+        """A monitor's slots are the devices it watches."""
+        return {ref: ref for ref in self.refs()}
 
-    def start(self) -> None:
-        entries = self.entries()
-        if not entries:
-            QMessageBox.warning(self, "Monitor", "Tick the values to watch")
-            return
-        self.form.editors["watch"].set(tuple(entries))
-        self.devices.combos.clear()
-        super().start()
+    def summary(self) -> str:
+        values = len(self.entries())
+        refs = self.refs()
+        titles = [
+            item.text(0)
+            for item in self.device_items()
+            if item.data(0, Qt.UserRole) in refs
+        ]
+        return f"{values} values: {', '.join(titles)}" if values else "nothing ticked"
 
-    def remember(self, procedure) -> None:
-        super().remember(procedure)
-        self.saved_devices = {"watch": ",".join(self.entries())}
-        data = {"parameters": procedure.to_json(), "devices": self.saved_devices}
-        settings().setValue(self.settings_key, json.dumps(data))
+
+class MonitorBox(ProcedureBox):
+    """Monitor over time: devices are ticked in a tree, each with the values to read."""
+
+    def __init__(self, session, hub, procedure, header=None, parent=None):
+        super().__init__(session, hub, procedure, header=header, parent=parent)
+        self.devices_box.setTitle("Devices to watch")
+        self.form.layout_.setRowVisible(self.form.editors[WATCH].widget, False)
+
+    def make_devices(self) -> WatchTree:
+        return WatchTree()
+
+    def refresh_devices(self, *_) -> None:
+        session = self.session
+        saved = [e for e in self.saved_devices.get(WATCH, "").split(",") if e]
+        self.devices.set_devices(
+            (
+                (info, session.description(info.ref).quantities)
+                for info in session.devices()
+            ),
+            self.devices.entries() or saved,
+        )
+        self.devices_box.setVisible(True)
+        self.show_devices_summary()
+
+    def devices_problem(self) -> Optional[str]:
+        return None if self.devices.entries() else "Tick the values to watch"
+
+    def chosen_devices(self) -> Dict[str, str]:
+        return {WATCH: ",".join(self.devices.entries())}
+
+    def parameters(self) -> Dict[str, Any]:
+        return {**super().parameters(), WATCH: self.devices.entries()}
 
 
 class MonitorWidget(MeasureWidget):
-    def make_box(self, session, hub, procedure_class, header):
-        return MonitorBox(session, hub, procedure_class, header=header)
+    def make_box(self, session, hub, procedure, header):
+        return MonitorBox(session, hub, procedure, header=header)
 
 
 # Docks with their own widget class by procedure name
 SPECIAL = {MONITOR_TIME: MonitorWidget}
 
 
-def measure_widget(session, hub, procedure_class) -> MeasureWidget:
-    cls = SPECIAL.get(procedure_class.name, MeasureWidget)
-    return cls(session, hub, procedure_class)
+def measure_widget(session, hub, procedure: str) -> MeasureWidget:
+    return SPECIAL.get(procedure, MeasureWidget)(session, hub, procedure)

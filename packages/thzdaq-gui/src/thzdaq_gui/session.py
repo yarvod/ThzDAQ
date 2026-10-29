@@ -1,9 +1,15 @@
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple, TypeVar
+from typing import Dict, List, Optional, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, QTimer, Signal
+from thzdaq_api.devices import (
+    DescribeDevice,
+    DeviceDescription,
+    DeviceInfo,
+    ListDevices,
+)
 from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
 from thzdaq_api.measurements import ListProcedures, ProcedureSummary
@@ -95,11 +101,30 @@ class Session(QObject):
             self._procedures = self.lab.call(ListProcedures())
         return self._procedures
 
+    def procedure(self, name: str) -> ProcedureSummary:
+        return next(p for p in self.procedures() if p.name == name)
+
+    # What the profile gives: asked once per profile
+    def devices(self) -> Tuple[DeviceInfo, ...]:
+        if self._devices is None:
+            self._devices = self.lab.call(ListDevices())
+        return self._devices
+
+    def description(self, ref: str) -> DeviceDescription:
+        """What a device reads, takes and does."""
+        if ref not in self._descriptions:
+            self._descriptions[ref] = self.lab.call(DescribeDevice(ref=ref))
+        return self._descriptions[ref]
+
+    def _forget_devices(self) -> None:
+        self._devices: Optional[Tuple[DeviceInfo, ...]] = None
+        self._descriptions: Dict[str, DeviceDescription] = {}
+
     def busy(self) -> bool:
         return any(run.running for run in self.runs)
 
     def title_of(self, ref: str) -> str:
-        return self.station.title(ref) if self.station is not None else ref
+        return next((d.title for d in self.devices() if d.ref == ref), ref)
 
     def load_station(self, path, simulate: bool = False) -> Station:
         station = Station(
@@ -132,6 +157,7 @@ class Session(QObject):
             save_station(config, self.path)
         # Only closes instruments whose connection changed; they reopen on next use
         self.station.reconfigure(config)
+        self._forget_devices()
         self.config_changed.emit(self.station)
 
     def _open_lab(self, station: Station, simulate: bool) -> None:
@@ -145,6 +171,7 @@ class Session(QObject):
             bench, workspaces, YamlProfiles(), LocalControl(simulate)
         )
         self.lab = LocalLab(self._assembled, origin="gui")
+        self._forget_devices()
         self.bridge.listen(self.lab)
 
     def _close_station(self) -> None:

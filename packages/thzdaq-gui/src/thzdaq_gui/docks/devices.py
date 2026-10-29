@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
 )
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
 from thzdaq_api.procedures import default_quantities
-from thzdaq_core.domain.measurements.catalog import get_procedure
 from thzdaq_core.domain.measurements.procedures.common import POWER_DBM, S_DB
 from thzdaq_core.domain.sis.calibration import (
     CALIBRATION_KEY,
@@ -836,7 +835,7 @@ def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
     """A quick measurement of this device, folded by default: the measurement
     docks run the same; folded, the title line shows how it runs."""
     section = Collapsible(title, sections_path(procedure, scan=True), expanded=False)
-    box = ProcedureBox(session, hub, get_procedure(procedure), fixed, compact=True)
+    box = ProcedureBox(session, hub, procedure, fixed, compact=True)
     box.reveal = lambda: section.set_expanded(True)
     box.status_changed.connect(section.set_summary)
     section.addWidget(box)

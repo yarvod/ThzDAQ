@@ -7,7 +7,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_api.measurement_file import COMPLETED
 from thzdaq_api.measurement_file import read_measurement
-from thzdaq_core.domain.parameters import Sweep
 from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_core.adapters.yaml_profiles import load_station
 from thzdaq_gui.settings import (
@@ -19,7 +18,15 @@ from thzdaq_gui.settings import (
 from thzdaq_gui.docks.setup import DeviceDialog, InstrumentDialog
 from thzdaq_instruments.transport.base import PROLOGIX
 
-FAST_IV = {"voltage": Sweep(0, 5e-3, 6), "settle_time": 0.0, "first_point_delay": 0.0}
+FAST_IV = {
+    "voltage": {"start": 0.0, "stop": 5e-3, "points": 6},
+    "settle_time": 0.0,
+    "first_point_delay": 0.0,
+}
+
+
+def sweep(start, stop, points):
+    return {"start": start, "stop": stop, "points": points}
 
 
 class TestWindow:
@@ -536,7 +543,7 @@ class TestDeviceDocks:
 
         widget = window.docks["device:sis_bias_1"].widget()
         box = widget.findChildren(ProcedureBox)[0]
-        box.form.set_values({**FAST_IV, "voltage": Sweep(0, 7e-3, 141)})
+        box.form.set_values({**FAST_IV, "voltage": sweep(0, 7e-3, 141)})
         finished = []
         box.runner.finished.connect(finished.append)
         box.start()
@@ -553,19 +560,39 @@ class TestDeviceDocks:
 
 class TestMeasureAndData:
     def test_saved_parameters_survive_a_dropped_one(self, window, session):
-        from thzdaq_core.domain.measurements.catalog import get_procedure
+        from thzdaq_api.procedures import TWO_SB_PUMP_BALANCE
         from thzdaq_gui.docks.measure import ProcedureBox
         from thzdaq_gui.settings import settings
 
-        cls = get_procedure("two_sb.pump_balance")
         saved = {"bias_delay": 0.7, "upper_when_on": False}  # no longer a parameter
-        key = procedure_key(cls.name)
+        key = procedure_key(TWO_SB_PUMP_BALANCE)
         settings().setValue(key, json.dumps({"parameters": saved, "devices": {}}))
         try:
-            box = ProcedureBox(session, window.hub, cls)
+            box = ProcedureBox(session, window.hub, TWO_SB_PUMP_BALANCE)
             assert box.form.values()["bias_delay"] == pytest.approx(0.7)
         finally:
             settings().remove(key)
+
+    def test_slots_follow_the_parameters(self, window):
+        box = window.docks["measure:sis.pv_curve"].widget().box
+        assert "load" not in box.devices.combos
+        box.form.editors["hot_cold"].widget.setChecked(True)
+        assert box.devices.combos["load"].currentData()
+        assert "Load" in box.devices_box.summary.text()
+
+    def test_invalid_parameters_are_named_before_a_start(self, window, monkeypatch):
+        from thzdaq_gui.wording import INVALID_PARAMETERS
+
+        box = window.docks["measure:two_sb.if_balance"].widget().box
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[1:3])
+        )
+        box.form.editors["sis1_voltages"].widget.setText("")
+        box.start()
+        ((title, text),) = warnings
+        assert title == INVALID_PARAMETERS and "SIS1 voltages" in text
+        assert not box.runner.running and not box.status().running
 
     def test_measurement_dock_flow(self, window, session, wait, tmp_path):
         box = window.docks["measure:sis.iv_curve"].widget().box
@@ -592,7 +619,7 @@ class TestMeasureAndData:
         model.setData(model.index(0, 2), "edited")
         wait(lambda: read_measurement(measurement.metadata["path"]).comment == "edited")
         # The next start remembers the devices and parameters
-        again = type(box)(session, window.hub, box.procedure_class)
+        again = type(box)(session, window.hub, box.procedure)
         assert again.devices.mapping()["bias"] == "sis_bias_2"
         assert again.form.values()["voltage"] == FAST_IV["voltage"]
 
@@ -668,16 +695,17 @@ class TestMeasureAndData:
 
     def test_monitor_dock_watches_ticked_values(self, window, session, wait):
         box = window.docks["measure:monitor.time"].widget().box
-        box.set_device("power_meter_1", True)
-        box.set_device("sis_bias_1", True)
-        assert sorted(box.entries()) == [
+        tree = box.devices
+        tree.set_device("power_meter_1", True)
+        tree.set_device("sis_bias_1", True)
+        assert sorted(tree.entries()) == [
             "power_meter_1/power",
             "sis_bias_1/current",
             "sis_bias_1/voltage",
         ]
         # Expand the SIS bias and keep only the voltage
         bias = next(
-            i for i in box.device_items() if i.data(0, Qt.UserRole) == "sis_bias_1"
+            i for i in tree.device_items() if i.data(0, Qt.UserRole) == "sis_bias_1"
         )
         current = next(
             bias.child(i)
@@ -714,7 +742,17 @@ class TestMeasureAndData:
         assert isinstance(finished[0].id, int)
         # The choice is remembered
         box.refresh_devices()
-        assert sorted(box.entries()) == ["power_meter_1/power", "sis_bias_1/voltage"]
+        assert sorted(tree.entries()) == ["power_meter_1/power", "sis_bias_1/voltage"]
+
+
+def restarted(session, tmp_path):
+    """The session of the program started again on the same profile (closing
+    the window ends the session)."""
+    from thzdaq_gui.session import Session
+
+    again = Session(str(tmp_path / "data"))
+    again.load_station(session.path, simulate=True)
+    return again
 
 
 class TestPerspectives:
@@ -739,7 +777,7 @@ class TestPerspectives:
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
 
-        again = MainWindow(session, settings, check_updates=False)
+        again = MainWindow(restarted(session, tmp_path), settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) >= {"Default", "Noise"}
         assert not again.docks["graph:Tn-V"].isClosed()
         again.close()
@@ -773,7 +811,7 @@ class TestPerspectives:
         window.perspectives.open("Tn")  # the layout saved as Noise
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
-        again = MainWindow(session, settings, check_updates=False)
+        again = MainWindow(restarted(session, tmp_path), settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) == {"Default", "Tn"}
         assert again.perspectives.combo.currentText() == "Tn"
         again.close()
@@ -1025,7 +1063,7 @@ class TestFolding:
         assert summary.isVisibleTo(box) and "SIS1" in summary.text()
         assert not box.devices_box.body.isVisibleTo(box)
         # Remembered for the next dock of this procedure
-        again = type(box)(session, window.hub, box.procedure_class)
+        again = type(box)(session, window.hub, box.procedure)
         assert not again.devices_box.expanded()
         box.devices_box.set_expanded(True)
 
@@ -1144,7 +1182,7 @@ class TestProcesses:
         processes = window.session.processes
         box = window.docks["measure:sis.iv_curve"].widget().box
         box.form.set_values(
-            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+            {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
         box.start()
         wait(lambda: processes.items and processes.items[0].progress)
@@ -1169,7 +1207,7 @@ class TestProcesses:
         )
         box = section.findChildren(ProcedureBox)[0]
         box.form.set_values(
-            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+            {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
         box.start()
         processes = window.session.processes
@@ -1285,7 +1323,7 @@ class TestLite:
         bar.chosen.emit("sis.iv_curve")
         iv = bar.controls.run
         iv.form.set_values(
-            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+            {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
         bar.controls.comment.setText("from the bar")
         bar.controls.comment.textEdited.emit("from the bar")
@@ -1327,7 +1365,7 @@ class TestLite:
 
         box = lite.runBar.controls.run
         box.form.set_values(
-            {**FAST_IV, "voltage": Sweep(0, 5e-3, 2000), "settle_time": 0.005}
+            {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
         lite.runBar.controls.btnStart.click()
         wait(lambda: box.status().running)
