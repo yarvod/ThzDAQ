@@ -465,6 +465,7 @@ def test_the_app_works_with_a_daemon_it_starts(app, tmp_path, profile, monkeypat
     from thzdaq_gui.app import main
 
     monkeypatch.setenv(host.DIR_ENV, str(tmp_path / "daemon"))
+    monkeypatch.chdir(tmp_path)  # the daemon's home: its daemon.json goes there
     files = host.DaemonFiles.of(simulate=True)
     try:
         code = main(

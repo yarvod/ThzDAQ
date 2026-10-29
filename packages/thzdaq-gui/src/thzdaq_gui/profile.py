@@ -6,25 +6,27 @@ update_station, which checks, saves and applies it.
 import copy
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from thzdaq_api.station import free_id
+from thzdaq_api.station import (  # noqa: F401 (the format's keys, for its users)
+    CHANNEL,
+    CONNECTION,
+    DEVICES,
+    DRIVER,
+    HARDWARE_PROTECTION,
+    INSTRUMENTS,
+    KIND,
+    LIMITS,
+    METADATA,
+    SAFE_STATE,
+    SAFETY,
+    SETTINGS,
+    SIMULATE,
+    TITLE,
+    free_id,
+)
 
 Profile = Dict[str, Any]
 Entry = Dict[str, Any]  # an instrument or a device of the profile
 
-INSTRUMENTS = "instruments"
-DEVICES = "devices"
-SETTINGS = "settings"
-METADATA = "metadata"
-DRIVER = "driver"
-TITLE = "title"
-CONNECTION = "connection"
-SIMULATE = "simulate"
-KIND = "kind"  # of a device (sis_bias), and of a connection (socket)
-CHANNEL = "channel"
-SAFETY = "safety"
-LIMITS = "limits"
-SAFE_STATE = "safe_state"
-HARDWARE_PROTECTION = "hardware_protection"
 # A limit of a quantity: its keys and how a table heads them
 LIMIT_KEYS = {
     "min": "Min",

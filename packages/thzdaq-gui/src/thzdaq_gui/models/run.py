@@ -25,12 +25,6 @@ from thzdaq_api.measurements import (
 Body = Any  # a measurement event's body
 
 
-def run_of(body: Body) -> int:
-    """The number of the run an event tells about."""
-    run = getattr(body, "run", None)
-    return run.id if run is not None else body.id
-
-
 class RunModel(QObject):
     started = Signal(object)  # Measurement, filled as records come
     record = Signal(str, object)  # table, record
@@ -147,7 +141,7 @@ class RunModel(QObject):
             if self.running:
                 self._early.append(body)
             return
-        if run_of(body) == self.run.id:
+        if events.run_id(body) == self.run.id:
             self._handlers[type(body)](body)
 
     def _on_started(self, body: events.MeasurementStarted) -> None:
