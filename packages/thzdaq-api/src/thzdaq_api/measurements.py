@@ -105,6 +105,7 @@ class ProcedureSummary(msgspec.Struct, frozen=True):
     name: str
     title: str
     description: str
+    plots: Tuple[PlotInfo, ...] = ()  # every plot it may fill
 
 
 class ProcedureInfo(msgspec.Struct, frozen=True):

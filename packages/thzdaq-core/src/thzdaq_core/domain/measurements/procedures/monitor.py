@@ -6,10 +6,19 @@ them. Every value is a row of the samples table (time, device, quantity,
 value) and goes to the graph of its unit: dBm to P-t, K to T-t, V to V-t, ...
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence
 
 from thzdaq_api.leases import READ
-from thzdaq_api.procedures import MONITOR_TIME
+from thzdaq_api.procedures import (
+    COIL_PLOT,
+    MONITOR_TIME,
+    OTHER_PLOT,
+    UNIT_PLOTS,
+    default_quantities,
+    monitor_quantities,
+    plot_for,
+    split_entry,
+)
 from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
 from thzdaq_instruments.units import GHZ, MA, MV, UA
 
@@ -24,49 +33,6 @@ from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import FloatParameter, StringListParameter
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
-
-KEY_SEPARATOR = "/"
-
-
-def monitor_quantities(quantities: Iterable[Quantity]) -> List[Quantity]:
-    """Quantities worth watching: numeric readings, not configuration."""
-    return [
-        q
-        for q in quantities
-        if q.readable and q.kind in ("float", "int") and not q.persistent
-    ]
-
-
-def default_quantities(quantities: Iterable[Quantity]) -> List[Quantity]:
-    """Read when a device is watched without a choice: measured values with a
-    unit, or the readable setpoints when nothing is measured (a SIS coil
-    current). A value without a unit (the NRX reading in its display unit) can
-    be chosen by hand."""
-    candidates = [q for q in monitor_quantities(quantities) if q.unit]
-    return [q for q in candidates if not q.settable] or candidates
-
-
-def plot_for(quantity: Quantity) -> str:
-    """The time graph of a quantity, by its unit."""
-    if quantity.unit == "A" and quantity.key in ("current_set", "coil_current"):
-        return "Coil-t"  # mA of a coil, not the µA of a SIS on I-t
-    return UNIT_PLOTS.get(quantity.unit, "Value-t")
-
-
-UNIT_PLOTS = {
-    "dBm": "P-t",
-    "K": "T-t",
-    "V": "V-t",
-    "A": "I-t",
-    "Pa": "p-t",
-    "Hz": "f-t",
-}
-
-
-def split_entry(entry: str) -> Tuple[str, Optional[str]]:
-    """ "sis_bias_1/voltage" -> ("sis_bias_1", "voltage"); "power_meter_1" -> (ref, None)."""
-    ref, _, key = entry.partition(KEY_SEPARATOR)
-    return ref, key or None
 
 
 def _time_plot(title, y_label, y_scale=1.0) -> PlotInfo:
@@ -85,14 +51,14 @@ class Monitor(Procedure):
         "compressor) at a fixed interval until stopped or the duration ends."
     )
     plots = (
-        _time_plot("P-t", POWER_DBM),
-        _time_plot("T-t", "Temperature, K"),
-        _time_plot("V-t", VOLTAGE_MV, MV),
-        _time_plot("I-t", CURRENT_UA, UA),
-        _time_plot("Coil-t", COIL_CURRENT_MA, MA),
-        _time_plot("p-t", "Pressure, Pa"),
-        _time_plot("f-t", FREQUENCY_GHZ, GHZ),
-        _time_plot("Value-t", "Value"),
+        _time_plot(UNIT_PLOTS["dBm"], POWER_DBM),
+        _time_plot(UNIT_PLOTS["K"], "Temperature, K"),
+        _time_plot(UNIT_PLOTS["V"], VOLTAGE_MV, MV),
+        _time_plot(UNIT_PLOTS["A"], CURRENT_UA, UA),
+        _time_plot(COIL_PLOT, COIL_CURRENT_MA, MA),
+        _time_plot(UNIT_PLOTS["Pa"], "Pressure, Pa"),
+        _time_plot(UNIT_PLOTS["Hz"], FREQUENCY_GHZ, GHZ),
+        _time_plot(OTHER_PLOT, "Value"),
     )
 
     watch = StringListParameter(

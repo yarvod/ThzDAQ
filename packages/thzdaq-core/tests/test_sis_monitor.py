@@ -4,7 +4,7 @@ from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.application.runner import MeasurementRunner
 from thzdaq_core.domain.parameters import StringListParameter
 from thzdaq_core.domain.measurements.procedures import Demagnetize, Monitor
-from thzdaq_core.domain.measurements.procedures.monitor import (
+from thzdaq_api.procedures import (
     default_quantities,
     monitor_quantities,
     plot_for,

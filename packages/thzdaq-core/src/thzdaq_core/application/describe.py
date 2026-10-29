@@ -106,7 +106,9 @@ def parameter_info(parameter: Parameter) -> measurements.ParameterInfo:
 
 
 def procedure_summary(cls: Type[Procedure]) -> measurements.ProcedureSummary:
-    return measurements.ProcedureSummary(cls.name, cls.title, cls.description)
+    return measurements.ProcedureSummary(
+        cls.name, cls.title, cls.description, tuple(cls.plots)
+    )
 
 
 def procedure_info(procedure: Procedure) -> measurements.ProcedureInfo:
