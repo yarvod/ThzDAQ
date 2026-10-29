@@ -1,6 +1,10 @@
-"""The bench's profile, the drivers a profile can use, the shared connections."""
+"""The bench's profile, the drivers a profile can use, the shared connections.
 
-from typing import Any, Dict, Optional, Tuple, Union
+The profile travels as its YAML file holds it (version 2): instruments by id,
+each with its driver, title, connection and the devices configured on it.
+"""
+
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import msgspec
 
@@ -39,6 +43,16 @@ class DriverInfo(msgspec.Struct, frozen=True):
     kinds: Tuple[DeviceKindInfo, ...] = ()
     channels: Tuple[str, ...] = ()  # fixed channels: outputs of a supply
     connection: Optional[Dict[str, Any]] = None  # the recommended one
+
+
+class ConnectionKindInfo(msgspec.Struct, frozen=True):
+    """A way to reach an instrument (a TCP socket, a Prologix GPIB adapter): the
+    fields of a connection it uses, in form order, and their defaults."""
+
+    key: str
+    title: str
+    fields: Tuple[str, ...]
+    defaults: Dict[str, Any] = {}
 
 
 class ConnectionInfo(msgspec.Struct, frozen=True):
@@ -86,6 +100,36 @@ class ListDrivers(Operation[Tuple[DriverInfo, ...]]):
     and the connection it recommends."""
 
 
+class ListConnectionKinds(Operation[Tuple[ConnectionKindInfo, ...]]):
+    """The kinds of connections an instrument of the profile may use, with the
+    fields each one takes."""
+
+
+class ConnectInstrument(Operation[str]):
+    """Open an instrument and ask who it is: returns its identity, or "opened"
+    when it cannot tell."""
+
+    instrument: str
+
+
+class GetSisCalibration(Operation[Dict[str, Any]]):
+    """The calibration coefficients of a SIS bias as the profile keeps them, or
+    the defaults of its channel. A coefficient is a number or an arithmetic
+    expression ("5.47e-9 / 5")."""
+
+    ref: str
+
+
+class SetSisCalibration(Operation[StationProfile]):
+    """Keep the calibration coefficients of a SIS bias in the profile; they are
+    checked first. The device's write_calibration action stores them in the
+    block."""
+
+    rights = Rights.STATION
+    ref: str
+    coefficients: Dict[str, Any]
+
+
 class ListConnections(Operation[Tuple[ConnectionInfo, ...]]):
     """Connections the profile's instruments share, and their state."""
 
@@ -96,3 +140,12 @@ class ResetConnection(Operation[bool]):
 
     rights = Rights.SET
     key: ConnectionKey
+
+
+def free_id(taken: Iterable[str], prefix: str) -> str:
+    """The first id like power_supply_3 that is not taken."""
+    used = set(taken)
+    number = 1
+    while f"{prefix}_{number}" in used:
+        number += 1
+    return f"{prefix}_{number}"
