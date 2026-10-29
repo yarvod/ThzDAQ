@@ -1,14 +1,13 @@
 """Setup dock: the saved instruments, as in the old app, plus their devices.
 
 Every instrument is a card: driver, connection, status and the devices it
-hosts (SIS bias and coil). Add / Edit / Delete
-change the station profile, which is saved at once; device docks follow.
+hosts (SIS bias and coil). Add / Edit / Delete change the station profile
+through the lab, which checks and saves it at once; device docks follow.
 """
 
-import copy
 import html
 import textwrap
-from typing import Dict, Optional
+from typing import Any, Callable, Dict, Optional, Sequence
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -30,29 +29,25 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.application.describe import parameter_info
-from thzdaq_core.domain.errors import StationError
-from thzdaq_core.domain.station.config import (
-    DeviceConfig,
-    InstrumentConfig,
-    StationConfig,
-)
-from thzdaq_core.domain.station.kinds import instrument_type
-from thzdaq_instruments import ConfigurationError, InstrumentError, default_registry
-from thzdaq_instruments.transport.base import (
-    KIND_FIELDS,
-    KIND_TITLES,
-    KINDS,
-    SOCKET,
-    ConnectionSpec,
+from thzdaq_api.errors import LabError
+from thzdaq_api.station import (
+    ConnectInstrument,
+    ConnectionKindInfo,
+    DriverInfo,
+    ListConnections,
+    ResetConnection,
 )
 
+from thzdaq_gui import profile as fmt
 from thzdaq_gui import theme
 from thzdaq_gui.forms import ParameterForm
 from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 
 # How often the Connections group shows the state of the links
 REFRESH_MS = 2000
+
+# Saves an entry (new id, entry) into the profile; LabError when the lab refuses
+Save = Callable[[str, Dict[str, Any]], None]
 
 
 def breakable_path(path) -> str:
@@ -61,26 +56,40 @@ def breakable_path(path) -> str:
     return text.replace("\\", "\\\u200b").replace("/", "/\u200b")
 
 
-def connection_text(spec: Optional[ConnectionSpec]) -> str:
-    if spec is None:
+def connection_text(
+    connection: Optional[Dict[str, Any]], kinds: Sequence[ConnectionKindInfo]
+) -> str:
+    if not connection:
         return "no connection"
-    kind = KIND_TITLES.get(spec.kind, spec.kind)
-    where = spec.host or spec.serial_port or spec.resource or ""
-    if spec.port and spec.host:
-        where += f":{spec.port}"
-    if spec.gpib is not None:
-        where += f" GPIB {spec.gpib}"
-    return f"{kind} {where}".strip()
+    kind = connection.get(fmt.KIND, "")
+    title = next((k.title for k in kinds if k.key == kind), kind)
+    where = (
+        connection.get("host")
+        or connection.get("serial_port")
+        or connection.get("resource")
+        or ""
+    )
+    if connection.get("port") and connection.get("host"):
+        where += f":{connection['port']}"
+    if connection.get("gpib") is not None:
+        where += f" GPIB {connection['gpib']}"
+    return f"{title} {where}".strip()
 
 
 class ConnectionEditor(QWidget):
-    def __init__(self, parent=None):
+    """A connection of the profile: its kind, and the fields that kind uses."""
+
+    # Details the editor does not show, kept as they were (the driver's)
+    KEPT = ("write_termination", "read_termination")
+
+    def __init__(self, kinds: Sequence[ConnectionKindInfo], parent=None):
         super().__init__(parent)
+        self.kinds = {kind.key: kind for kind in kinds}
         self.form = QFormLayout(self)
         self.form.setContentsMargins(0, 0, 0, 0)
         self.kind = QComboBox()
-        for kind in KINDS:
-            self.kind.addItem(KIND_TITLES.get(kind, kind), kind)
+        for kind in kinds:
+            self.kind.addItem(kind.title, kind.key)
         self.host = QLineEdit()
         self.host.setPlaceholderText("169.254.0.1")
         self.port = QSpinBox()
@@ -113,40 +122,38 @@ class ConnectionEditor(QWidget):
             self.form.addRow(label, getattr(self, name))
             self.rows[name] = label
         self.kind.currentIndexChanged.connect(self.update_rows)
-        self.base: Optional[ConnectionSpec] = None
+        self.base: Dict[str, Any] = {}
         self.set_spec(None)
 
+    def fields(self) -> Sequence[str]:
+        kind = self.kinds.get(self.kind.currentData())
+        return kind.fields if kind is not None else ()
+
     def update_rows(self) -> None:
-        used = KIND_FIELDS.get(self.kind.currentData(), ())
+        used = self.fields()
         for name, label in self.rows.items():
             label.setVisible(name in used)
             getattr(self, name).setVisible(name in used)
 
-    def set_spec(self, spec: Optional[ConnectionSpec]) -> None:
-        self.base = spec
-        if spec is None:
-            self.kind.setCurrentIndex(self.kind.findData(SOCKET))
-            for line in (self.host, self.serial_port, self.resource):
-                line.clear()
-            self.port.setValue(0)
-            self.timeout.setValue(2.0)
-            self.read_delay.setValue(0.0)
-            self.update_rows()
-            return
-        self.kind.setCurrentIndex(max(0, self.kind.findData(spec.kind)))
-        self.host.setText(spec.host or "")
-        self.port.setValue(spec.port or 0)
-        self.serial_port.setText(spec.serial_port or "")
-        self.gpib.setValue(spec.gpib or 0)
-        self.resource.setText(spec.resource or "")
-        self.baudrate.setCurrentIndex(max(0, self.baudrate.findData(spec.baudrate)))
-        self.timeout.setValue(spec.timeout)
-        self.read_delay.setValue(spec.read_delay)
+    def set_spec(self, connection: Optional[Dict[str, Any]]) -> None:
+        """Show a connection of the profile; None: an empty one of the first kind."""
+        self.base = dict(connection or {})
+        index = self.kind.findData(self.base.get(fmt.KIND))
+        self.kind.setCurrentIndex(max(0, index))
+        kind = self.kinds[self.kind.currentData()]
+        value = {**kind.defaults, **self.base}.get
+        self.host.setText(value("host") or "")
+        self.port.setValue(value("port") or 0)
+        self.serial_port.setText(value("serial_port") or "")
+        self.gpib.setValue(value("gpib") or 0)
+        self.resource.setText(value("resource") or "")
+        self.baudrate.setCurrentIndex(max(0, self.baudrate.findData(value("baudrate"))))
+        self.timeout.setValue(value("timeout") or self.timeout.minimum())
+        self.read_delay.setValue(value("read_delay") or 0.0)
         self.update_rows()
 
-    def spec(self) -> ConnectionSpec:
-        kind = self.kind.currentData()
-        used = KIND_FIELDS.get(kind, ())
+    def spec(self) -> Dict[str, Any]:
+        """The connection as the profile holds it; the lab checks it."""
         values = {
             "host": self.host.text().strip() or None,
             "port": self.port.value() or None,
@@ -157,51 +164,61 @@ class ConnectionEditor(QWidget):
             "timeout": self.timeout.value(),
             "read_delay": self.read_delay.value(),
         }
-        fields = {k: v for k, v in values.items() if k in used}
-        # Terminations and other details stay as the driver recommended them
-        keep = {}
-        if self.base is not None:
-            keep = {
-                "write_termination": self.base.write_termination,
-                "read_termination": self.base.read_termination,
-            }
-        return ConnectionSpec(kind, **fields, **keep)
+        used = self.fields()
+        kept = {k: self.base[k] for k in self.KEPT if k in self.base}
+        return {
+            fmt.KIND: self.kind.currentData(),
+            **{k: v for k, v in values.items() if k in used and v is not None},
+            **kept,
+        }
+
+
+def saved_or_told(dialog: QDialog, title: str, save: Callable[[], None]) -> None:
+    """Save and close; a refusal of the lab is told and the dialog stays."""
+    try:
+        save()
+    except LabError as e:
+        QMessageBox.warning(dialog, title, str(e))
+        return
+    dialog.accept()
 
 
 class InstrumentDialog(QDialog):
-    """Add or edit an instrument: driver, name, connection."""
+    """Add or edit an instrument: driver, name, connection. Save puts it into
+    the profile; the dialog stays open while the lab refuses it."""
 
     def __init__(
-        self, config: StationConfig, instrument_id: Optional[str] = None, parent=None
+        self, session, save: Save, instrument_id: Optional[str] = None, parent=None
     ):
         super().__init__(parent)
-        self.config = config
+        self.session = session
+        self.save = save
         self.instrument_id = instrument_id
+        profile = session.profile().profile
+        self.profile = profile
         editing = instrument_id is not None
-        spec = config.instruments.get(instrument_id) if editing else None
+        spec = fmt.instruments(profile).get(instrument_id, {}) if editing else {}
+        self.spec = spec
         self.setWindowTitle("Edit instrument" if editing else "Add instrument")
         self.setWindowIcon(theme.icon("chip"))
-        self.registry = default_registry()
+        self.drivers = session.drivers()
         form = QFormLayout()
         self.driver = QComboBox()
         # Real drivers only: simulation is the checkbox below (or --simulate)
-        for info in sorted(self.registry.all(), key=lambda i: i.title):
+        for info in sorted(self.drivers.values(), key=lambda i: i.title):
             if not info.simulated:
                 self.driver.addItem(info.title, info.key)
-        if spec is not None and self.driver.findData(spec.driver) < 0:
+        driver = spec.get(fmt.DRIVER)
+        if driver is not None and self.driver.findData(driver) < 0:
             # A driver no longer offered (Pfeiffer, a simulator): keep it as it is
-            title = (
-                self.registry.get(spec.driver).title
-                if spec.driver in self.registry
-                else spec.driver
-            )
-            self.driver.addItem(title, spec.driver)
+            known = self.drivers.get(driver)
+            self.driver.addItem(known.title if known else driver, driver)
         self.title = QLineEdit()
         self.title.setPlaceholderText("shown in menus and docks")
         self.ident = QLabel()
         self.ident.setProperty("role", "muted")
         self.simulate = QCheckBox("Always simulate this instrument")
-        self.connection = ConnectionEditor()
+        self.connection = ConnectionEditor(session.connection_kinds())
         self.recommended = QPushButton("Recommended connection")
         self.recommended.clicked.connect(self.fill_recommended)
         form.addRow("Driver", self.driver)
@@ -220,14 +237,13 @@ class InstrumentDialog(QDialog):
         layout.addWidget(box)
         layout.addWidget(buttons)
         self.driver.currentIndexChanged.connect(self.driver_changed)
-        if spec is not None:
-            self.driver.setCurrentIndex(max(0, self.driver.findData(spec.driver)))
-            self.driver.setEnabled(
-                False
-            )  # devices depend on it; delete and add instead
-            self.title.setText(spec.title)
-            self.simulate.setChecked(spec.simulate)
-            self.connection.set_spec(spec.connection)
+        if editing:
+            self.driver.setCurrentIndex(max(0, self.driver.findData(driver)))
+            # Devices depend on the driver; delete and add instead
+            self.driver.setEnabled(False)
+            self.title.setText(spec.get(fmt.TITLE, ""))
+            self.simulate.setChecked(bool(spec.get(fmt.SIMULATE)))
+            self.connection.set_spec(spec.get(fmt.CONNECTION))
             self.ident.setText(instrument_id)
         else:
             self.driver_changed()
@@ -235,61 +251,62 @@ class InstrumentDialog(QDialog):
     def driver_key(self) -> str:
         return self.driver.currentData()
 
+    def driver_info(self) -> Optional[DriverInfo]:
+        return self.drivers.get(self.driver_key())
+
     def accept_values(self) -> None:
-        try:
-            self.instrument()
-        except ConfigurationError as e:
-            QMessageBox.warning(self, "Connection", str(e))
-            return
-        self.accept()
+        saved_or_told(
+            self, "Instrument", lambda: self.save(self.new_id(), self.instrument())
+        )
 
     def driver_changed(self) -> None:
         if self.instrument_id is not None:
             return
-        key = self.driver_key()
-        self.ident.setText(self.config.next_id(instrument_type(key)))
-        info = self.registry.get(key)
+        info = self.driver_info()
+        self.ident.setText(fmt.next_id(self.profile, info.type))
         self.title.setPlaceholderText(info.title)
         self.fill_recommended()
 
     def fill_recommended(self) -> None:
-        if self.driver_key() not in self.registry:
-            return
-        cls = self.registry.get(self.driver_key()).cls
-        factory = getattr(cls, "connection", None)
-        if callable(factory):
-            try:
-                self.connection.set_spec(factory())
-            except TypeError:
-                pass
+        info = self.driver_info()
+        if info is not None and info.connection is not None:
+            self.connection.set_spec(info.connection)
 
-    def instrument(self) -> InstrumentConfig:
-        old = self.config.instruments.get(self.instrument_id)
-        key = self.driver_key()
-        info = self.registry.get(key) if key in self.registry else None
+    def instrument(self) -> Dict[str, Any]:
+        """The entry of the profile, with what the dialog does not show kept."""
+        info = self.driver_info()
         simulated = info is not None and info.simulated
-        spec = copy.deepcopy(old) if old else InstrumentConfig(key)
-        spec.title = self.title.text().strip() or (info.title if info else key)
-        spec.simulate = self.simulate.isChecked() or simulated
-        spec.connection = None if simulated else self.connection.spec()
-        return spec
+        entry = {**self.spec, fmt.DRIVER: self.driver_key()}
+        entry[fmt.TITLE] = self.title.text().strip() or (
+            info.title if info else self.driver_key()
+        )
+        entry[fmt.SIMULATE] = self.simulate.isChecked() or simulated
+        entry[fmt.CONNECTION] = None if simulated else self.connection.spec()
+        return entry
 
     def new_id(self) -> str:
         return self.instrument_id or self.ident.text()
 
 
 class DeviceDialog(QDialog):
-    """Add or edit a device on an instrument: kind, channel, name, settings."""
+    """Add or edit a device on an instrument: kind, channel, name, settings. Save
+    puts it into the profile; the dialog stays open while the lab refuses it."""
 
-    def __init__(self, station, instrument_id: str, device_id=None, parent=None):
+    def __init__(
+        self, session, save: Save, instrument_id: str, device_id=None, parent=None
+    ):
         super().__init__(parent)
-        self.station = station
+        self.save = save
         self.instrument_id = instrument_id
         self.device_id = device_id
-        config = station.config
-        spec = config.instruments[instrument_id].devices.get(device_id)
+        self.profile = session.profile().profile
+        instrument = fmt.instruments(self.profile)[instrument_id]
+        self.host = instrument.get(fmt.TITLE, "")
+        spec = fmt.devices(instrument).get(device_id)
+        self.spec = dict(spec or {})
         self.setWindowTitle("Edit device" if spec else "Add device")
-        self.kinds = station.kinds(instrument_id)
+        driver = session.drivers().get(instrument[fmt.DRIVER])
+        self.kinds = {kind.key: kind for kind in (driver.kinds if driver else ())}
         form = QFormLayout()
         self.kind = QComboBox()
         for key, kind in self.kinds.items():
@@ -315,56 +332,52 @@ class DeviceDialog(QDialog):
         layout.addWidget(buttons)
         self.kind.currentIndexChanged.connect(self.kind_changed)
         if spec is not None:
-            self.kind.setCurrentIndex(max(0, self.kind.findData(spec.kind)))
+            self.kind.setCurrentIndex(max(0, self.kind.findData(spec.get(fmt.KIND))))
             self.kind.setEnabled(False)
             self.kind_changed()
-            self.channel.setCurrentIndex(max(0, self.channel.findData(spec.channel)))
-            self.title.setText(spec.title)
-            self.settings.set_values(spec.settings)
+            self.channel.setCurrentIndex(
+                max(0, self.channel.findData(spec.get(fmt.CHANNEL)))
+            )
+            self.title.setText(spec.get(fmt.TITLE, ""))
+            self.settings.set_values(spec.get(fmt.SETTINGS) or {})
             self.ident.setText(device_id)
         else:
             self.kind_changed()
-        self.metadata = dict(spec.metadata) if spec else {}
 
     def kind_changed(self) -> None:
-        key = self.kind.currentData()
-        kind = self.kinds.get(key)
+        kind = self.kinds.get(self.kind.currentData())
         if kind is None:
             return
         self.channel.clear()
-        for channel in kind.keys:
-            self.channel.addItem(str(channel), channel)
-        self.channel.setVisible(bool(kind.keys))
-        self.channel_label.setVisible(bool(kind.keys))
-        self.settings.set_parameters(parameter_info(p) for p in kind.settings)
+        for channel in kind.channels:
+            self.channel.addItem(channel, channel)
+        self.channel.setVisible(bool(kind.channels))
+        self.channel_label.setVisible(bool(kind.channels))
+        self.settings.set_parameters(kind.settings)
         self.settings_box.setVisible(bool(kind.settings))
         if self.device_id is None:
-            self.ident.setText(self.station.config.next_id(key))
+            self.ident.setText(fmt.next_id(self.profile, kind.key))
 
     def accept_values(self) -> None:
-        try:
-            self.settings.values()
-        except ValueError as e:
-            QMessageBox.warning(self, "Device settings", str(e))
-            return
-        self.accept()
-
-    def device(self) -> DeviceConfig:
-        key = self.kind.currentData()
-        kind = self.kinds[key]
-        title = self.title.text().strip()
-        channel = self.channel.currentData() if kind.keys else None
-        if not title:
-            host = self.station.config.instruments[self.instrument_id].title
-            title = f"{kind.title} {channel}" if channel is not None else kind.title
-            title = f"{host} {title}" if host else title
-        return DeviceConfig(
-            kind=key,
-            channel=channel,
-            title=title,
-            settings=self.settings.values(),
-            metadata=self.metadata,
+        saved_or_told(
+            self, "Device settings", lambda: self.save(self.new_id(), self.device())
         )
+
+    def device(self) -> Dict[str, Any]:
+        """The entry of the profile; raises ValueError for settings that are not numbers."""
+        kind = self.kinds[self.kind.currentData()]
+        title = self.title.text().strip()
+        channel = self.channel.currentData() if kind.channels else None
+        if not title:
+            title = f"{kind.title} {channel}" if channel is not None else kind.title
+            title = f"{self.host} {title}" if self.host else title
+        return {
+            **self.spec,
+            fmt.KIND: kind.key,
+            fmt.CHANNEL: channel,
+            fmt.TITLE: title,
+            fmt.SETTINGS: self.settings.values(),
+        }
 
     def new_id(self) -> str:
         return self.device_id or self.ident.text()
@@ -386,22 +399,20 @@ class InstrumentCard(QGroupBox):
     edit_device_requested = Signal(str, str)
     delete_device_requested = Signal(str, str)
 
-    def __init__(self, station, instrument_id: str, parent=None):
+    def __init__(self, session, instrument_id: str, spec: Dict[str, Any], parent=None):
         super().__init__(parent)
         self.instrument_id = instrument_id
-        spec = station.config.instruments[instrument_id]
-        self.search_text = f"{spec.title} {instrument_id} {spec.driver}".lower()
-        self.setTitle(spec.title or instrument_id)
+        driver_key = spec.get(fmt.DRIVER, "")
+        title = spec.get(fmt.TITLE, "")
+        self.search_text = f"{title} {instrument_id} {driver_key}".lower()
+        self.setTitle(title or instrument_id)
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        info = (
-            default_registry().get(spec.driver)
-            if spec.driver in default_registry()
-            else None
-        )
-        driver = QLabel(info.title if info else spec.driver)
+        info = session.drivers().get(driver_key)
+        driver = QLabel(info.title if info else driver_key)
         where = QLabel(
-            connection_text(spec.connection) + ("  [sim]" if spec.simulate else "")
+            connection_text(spec.get(fmt.CONNECTION), session.connection_kinds())
+            + ("  [sim]" if spec.get(fmt.SIMULATE) else "")
         )
         where.setWordWrap(True)
         ident = QLabel(instrument_id)
@@ -422,28 +433,27 @@ class InstrumentCard(QGroupBox):
             button = compact_button(icon_name, text)
             button.clicked.connect(lambda _=False, s=signal: s.emit(self.instrument_id))
             buttons.addWidget(button)
-        kinds = {}
-        try:
-            kinds = station.kinds(instrument_id)
-        except InstrumentError:
-            pass
+        kinds = info.kinds if info else ()
         if kinds:
             add = compact_button("plus", "Add device")
-            add.setToolTip(", ".join(k.title for k in kinds.values()))
+            add.setToolTip(", ".join(k.title for k in kinds))
             add.clicked.connect(
                 lambda: self.add_device_requested.emit(self.instrument_id)
             )
             buttons.addWidget(add)
         buttons.addStretch()
         layout.addLayout(buttons)
-        for device_id, device in spec.devices.items():
+        for device_id, device in fmt.devices(spec).items():
             row = QHBoxLayout()
             icon = QLabel()
-            icon.setPixmap(theme.device_icon(device.kind).pixmap(16, 16))
-            channel = f" {device.channel}" if device.channel is not None else ""
+            kind = device.get(fmt.KIND, "")
+            icon.setPixmap(theme.device_icon(kind).pixmap(16, 16))
+            channel = device.get(fmt.CHANNEL)
+            channel = f" {channel}" if channel is not None else ""
+            device_title = device.get(fmt.TITLE, "")
             label = QLabel(
-                f"{device.title or device_id}  <span style='color:{theme.MUTED}'>"
-                f"{device.kind}{channel} · {device_id}</span>"
+                f"{device_title or device_id}  <span style='color:{theme.MUTED}'>"
+                f"{kind}{channel} · {device_id}</span>"
             )
             label.setWordWrap(True)
             row.addWidget(icon)
@@ -459,7 +469,7 @@ class InstrumentCard(QGroupBox):
                     lambda _=False, s=signal, d=device_id: s.emit(self.instrument_id, d)
                 )
                 row.addWidget(tool)
-            self.search_text += f" {device.title} {device_id}".lower()
+            self.search_text += f" {device_title} {device_id}".lower()
             layout.addLayout(row)
 
     def set_status(self, text: str, ok: bool) -> None:
@@ -476,12 +486,11 @@ class ConnectionsGroup(QGroupBox):
     instruments on it go on with the next command.
     """
 
-    def __init__(self, station, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__("Connections", parent)
-        self.station = station
+        self.session = session
         self.rows: Dict[tuple, QLabel] = {}
         self.resetting = set()
-        self.jobs = []
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
         note = QLabel("Shared by the instruments listed; Reset if one hangs")
@@ -493,7 +502,7 @@ class ConnectionsGroup(QGroupBox):
         header.addWidget(note, 1)
         header.addWidget(refresh)
         layout.addLayout(header)
-        for connection in station.connections():
+        for connection in session.call(ListConnections()):
             row = QHBoxLayout()
             label = QLabel(
                 f"<b>{connection.label}</b><br><span style='color:{theme.MUTED}'>"
@@ -515,7 +524,7 @@ class ConnectionsGroup(QGroupBox):
         self.timer.start(REFRESH_MS)
 
     def refresh(self) -> None:
-        for connection in self.station.connections():
+        for connection in self.session.call(ListConnections()):
             state = self.rows.get(connection.key)
             if state is None or connection.key in self.resetting:
                 continue
@@ -529,30 +538,22 @@ class ConnectionsGroup(QGroupBox):
             state.setStyleSheet(f"color: {color}")
 
     def reset(self, key: tuple) -> None:
-        from thzdaq_gui.update_dialog import Background
-
         self.rows[key].setText("resetting...")
         self.resetting.add(key)
-        station = self.station
-
-        def job(_task):
-            # Abort first: a command blocked on the link holds its lock
-            station.transport_pool.abort(key)
-            return station.reset_connection(key)
+        lab, reset = self.session.lab, ResetConnection(key=key)
 
         def done(_):
             self.resetting.discard(key)
             self.refresh()
 
-        def failed(message):
+        def failed(error):
             self.resetting.discard(key)
-            self.rows[key].setText(f"failed: {message}")
+            self.rows[key].setText(f"failed: {error}")
 
-        task = Background(job, self)
-        task.done.connect(done)
-        task.failed.connect(failed)
-        self.jobs.append(task)
-        task.start()
+        # A queue of its own: not behind a command that hangs on the link
+        self.session.calls.submit(
+            lambda: lab.call(reset), done, failed, str(key), key=f"reset {key}"
+        )
 
 
 class SetupWidget(QWidget):
@@ -601,36 +602,35 @@ class SetupWidget(QWidget):
 
     # Building
     def rebuild(self, *_) -> None:
-        station = self.session.station
-        path = self.session.path
+        station = self.session.profile()
+        loaded = station.path is not None
         self.profile.setText(
             f"<b>{station.name}</b><br>"
-            f"<span style='color:{theme.MUTED}'>{breakable_path(path)}</span>"
-            if station is not None
+            f"<span style='color:{theme.MUTED}'>{breakable_path(station.path)}</span>"
+            if loaded
             else "No station profile"
         )
-        self.profile.setToolTip(str(path) if path else "")
-        self.btnAdd.setEnabled(station is not None)
+        self.profile.setToolTip(station.path or "")
+        self.btnAdd.setEnabled(loaded)
         container = QWidget()
         column = QVBoxLayout(container)
         self.cards = {}
         self.connections = None
-        if station is not None and station.connections():
-            self.connections = ConnectionsGroup(station)
+        if self.session.call(ListConnections()):
+            self.connections = ConnectionsGroup(self.session)
             column.addWidget(self.connections)
-        if station is not None:
-            for instrument_id in station.config.instruments:
-                card = InstrumentCard(station, instrument_id)
-                card.connect_requested.connect(self.connect_instrument)
-                card.edit_requested.connect(self.edit_instrument)
-                card.delete_requested.connect(self.delete_instrument)
-                card.add_device_requested.connect(self.add_device)
-                card.edit_device_requested.connect(self.edit_device)
-                card.delete_device_requested.connect(self.delete_device)
-                if instrument_id in self.statuses:
-                    card.set_status(*self.statuses[instrument_id])
-                column.addWidget(card)
-                self.cards[instrument_id] = card
+        for instrument_id, spec in fmt.instruments(station.profile).items():
+            card = InstrumentCard(self.session, instrument_id, spec)
+            card.connect_requested.connect(self.connect_instrument)
+            card.edit_requested.connect(self.edit_instrument)
+            card.delete_requested.connect(self.delete_instrument)
+            card.add_device_requested.connect(self.add_device)
+            card.edit_device_requested.connect(self.edit_device)
+            card.delete_device_requested.connect(self.delete_device)
+            if instrument_id in self.statuses:
+                card.set_status(*self.statuses[instrument_id])
+            column.addWidget(card)
+            self.cards[instrument_id] = card
         column.addStretch()
         self.scroll.setWidget(container)
         self.filter(self.search.text())
@@ -640,112 +640,100 @@ class SetupWidget(QWidget):
         for card in self.cards.values():
             card.setVisible(not text or text in card.search_text)
 
-    # Editing
-    def _edited(self) -> Optional[StationConfig]:
-        if self.session.station is None:
-            return None
-        return copy.deepcopy(self.session.station.config)
+    # Editing: a changed copy of the profile goes to the lab
+    def edited(self) -> Dict[str, Any]:
+        return fmt.changed(self.session.profile().profile)
 
-    def _apply(self, config: StationConfig) -> bool:
+    def apply(self, profile: Dict[str, Any]) -> None:
+        """Hand the profile to the lab; a refusal is told here."""
         try:
-            self.session.update_config(config)
-        except (StationError, OSError) as e:
+            self.session.update_profile(profile)
+        except LabError as e:
             QMessageBox.critical(self, STATION_PROFILE, str(e))
-            return False
-        return True
+
+    def save_instrument(self, instrument_id: str, entry: Dict[str, Any]) -> None:
+        profile = self.edited()
+        fmt.instruments(profile)[instrument_id] = entry
+        self.statuses.pop(instrument_id, None)
+        self.session.update_profile(profile)
+
+    def device_saver(self, instrument_id: str) -> Save:
+        def save(device_id: str, entry: Dict[str, Any]) -> None:
+            profile = self.edited()
+            fmt.devices(fmt.instruments(profile)[instrument_id])[device_id] = entry
+            self.session.update_profile(profile)
+
+        return save
 
     def add_instrument(self) -> None:
-        config = self._edited()
-        if config is None:
-            return
-        dialog = InstrumentDialog(config, parent=self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        config.instruments[dialog.new_id()] = dialog.instrument()
-        self._apply(config)
+        InstrumentDialog(self.session, self.save_instrument, parent=self).exec()
 
     def edit_instrument(self, instrument_id: str) -> None:
-        config = self._edited()
-        dialog = InstrumentDialog(config, instrument_id, self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        config.instruments[instrument_id] = dialog.instrument()
-        self.statuses.pop(instrument_id, None)
-        self._apply(config)
+        InstrumentDialog(self.session, self.save_instrument, instrument_id, self).exec()
 
     def delete_instrument(self, instrument_id: str) -> None:
-        config = self._edited()
-        spec = config.instruments[instrument_id]
-        devices = len(spec.devices)
-        extra = f" and its {devices} device(s)" if devices else ""
+        profile = self.edited()
+        spec = fmt.instruments(profile)[instrument_id]
+        count = len(fmt.devices(spec))
+        extra = f" and its {count} device(s)" if count else ""
         answer = QMessageBox.question(
             self,
             "Delete instrument",
-            f"Delete '{spec.title or instrument_id}'{extra}?",
+            f"Delete '{spec.get(fmt.TITLE) or instrument_id}'{extra}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return
-        del config.instruments[instrument_id]
+        del fmt.instruments(profile)[instrument_id]
         self.statuses.pop(instrument_id, None)
-        self._apply(config)
+        self.apply(profile)
 
     def add_device(self, instrument_id: str) -> None:
-        dialog = DeviceDialog(self.session.station, instrument_id, parent=self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        config = self._edited()
-        config.instruments[instrument_id].devices[dialog.new_id()] = dialog.device()
-        self._apply(config)
+        save = self.device_saver(instrument_id)
+        DeviceDialog(self.session, save, instrument_id, parent=self).exec()
 
     def edit_device(self, instrument_id: str, device_id: str) -> None:
-        dialog = DeviceDialog(self.session.station, instrument_id, device_id, self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        config = self._edited()
-        config.instruments[instrument_id].devices[device_id] = dialog.device()
-        self._apply(config)
+        save = self.device_saver(instrument_id)
+        DeviceDialog(self.session, save, instrument_id, device_id, self).exec()
 
     def delete_device(self, instrument_id: str, device_id: str) -> None:
-        config = self._edited()
-        device = config.instruments[instrument_id].devices[device_id]
+        profile = self.edited()
+        devices = fmt.devices(fmt.instruments(profile)[instrument_id])
+        title = devices[device_id].get(fmt.TITLE) or device_id
         answer = QMessageBox.question(
             self,
             "Delete device",
-            f"Delete '{device.title or device_id}'?",
+            f"Delete '{title}'?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
-            del config.instruments[instrument_id].devices[device_id]
-            self._apply(config)
+            del devices[device_id]
+            self.apply(profile)
 
     # Connecting
     def connect_instrument(self, instrument_id: str) -> None:
-        station = self.session.station
         card = self.cards.get(instrument_id)
-        if station is None or card is None:
+        if card is None:
             return
         card.status.setText("connecting...")
-
-        def job():
-            instrument = station.instrument(instrument_id)
-            identify = getattr(instrument, "identify", None)
-            return identify() if callable(identify) else "opened"
+        lab, connect = self.session.lab, ConnectInstrument(instrument=instrument_id)
 
         def done(identity):
             if self.connections is not None:
                 self.connections.refresh()
-            self.statuses[instrument_id] = (f"OK: {identity}", True)
-            if instrument_id in self.cards:
-                self.cards[instrument_id].set_status(f"OK: {identity}", True)
+            self.tell(instrument_id, f"OK: {identity}", True)
 
         def failed(error):
-            text = f"{error.__class__.__name__}: {error}"
-            self.statuses[instrument_id] = (text, False)
-            if instrument_id in self.cards:
-                self.cards[instrument_id].set_status(text, False)
+            self.tell(instrument_id, str(error), False)
 
-        title = station.config.instruments[instrument_id].title or instrument_id
-        self.session.worker.submit(job, done, failed, title, key=instrument_id)
+        self.session.calls.submit(
+            lambda: lab.call(connect), done, failed, card.title(), key=instrument_id
+        )
+
+    def tell(self, instrument_id: str, text: str, ok: bool) -> None:
+        """How connecting went, kept for the card after a rebuild."""
+        self.statuses[instrument_id] = (text, ok)
+        if instrument_id in self.cards:
+            self.cards[instrument_id].set_status(text, ok)

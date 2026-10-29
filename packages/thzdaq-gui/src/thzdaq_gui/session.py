@@ -1,7 +1,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_api.devices import (
@@ -13,6 +13,15 @@ from thzdaq_api.devices import (
 from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
 from thzdaq_api.measurements import ListProcedures, ProcedureSummary
+from thzdaq_api.station import (
+    ConnectionKindInfo,
+    DriverInfo,
+    GetStation,
+    ListConnectionKinds,
+    ListDrivers,
+    StationProfile,
+    UpdateStation,
+)
 from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station, save_station
 from thzdaq_core.application.assembly import Assembled, assemble
@@ -43,7 +52,8 @@ class Session(QObject):
     """What the window works with: the bench profile, data and workers.
 
     The profile is always a file: Setup edits it and every change is saved
-    at once, like the old settings.ini.
+    at once, like the old settings.ini. An edit goes to the lab
+    (update_profile); config_changed follows when the lab tells it.
 
     lab is the bench as the daemon's clients call it; bridge brings its events
     to the GUI thread, calls runs its operations in the background, a queue per
@@ -53,7 +63,7 @@ class Session(QObject):
     """
 
     station_changed = Signal(object)  # a new Station (another profile)
-    config_changed = Signal(object)  # the same Station with an edited profile
+    config_changed = Signal()  # the profile was edited: devices may differ
 
     def __init__(self, data_root: str = "data", parent=None):
         super().__init__(parent)
@@ -73,6 +83,9 @@ class Session(QObject):
         self.bridge = Bridge(self)
         self._assembled: Optional[Assembled] = None
         self._procedures: Optional[Tuple[ProcedureSummary, ...]] = None
+        self._drivers: Optional[Dict[str, DriverInfo]] = None
+        self._connection_kinds: Optional[Tuple[ConnectionKindInfo, ...]] = None
+        self.bridge.station_changed.connect(self._profile_changed)
         self.path: Optional[Path] = None
         self.simulate = False
         self.lively = True  # simulators drift and get noisy (tests turn it off)
@@ -107,7 +120,32 @@ class Session(QObject):
     def procedure(self, name: str) -> ProcedureSummary:
         return next(p for p in self.procedures() if p.name == name)
 
+    def drivers(self) -> Dict[str, DriverInfo]:
+        """Drivers a profile may name, by key."""
+        if self._drivers is None:
+            self._drivers = {d.key: d for d in self.lab.call(ListDrivers())}
+        return self._drivers
+
+    def connection_kinds(self) -> Tuple[ConnectionKindInfo, ...]:
+        if self._connection_kinds is None:
+            self._connection_kinds = self.lab.call(ListConnectionKinds())
+        return self._connection_kinds
+
     # What the profile gives: asked once per profile
+    def profile(self) -> StationProfile:
+        if self._profile is None:
+            self._profile = self.lab.call(GetStation())
+        return self._profile
+
+    def update_profile(self, profile: Dict[str, Any]) -> None:
+        """Hand an edited profile to the lab, which checks, saves and applies it
+        (LabError when it refuses)."""
+        self._profile = self.lab.call(UpdateStation(profile=profile))
+
+    def _profile_changed(self, *_) -> None:
+        self._forget_devices()
+        self.config_changed.emit()
+
     def devices(self) -> Tuple[DeviceInfo, ...]:
         if self._devices is None:
             self._devices = self.lab.call(ListDevices())
@@ -120,6 +158,7 @@ class Session(QObject):
         return self._descriptions[ref]
 
     def _forget_devices(self) -> None:
+        self._profile: Optional[StationProfile] = None
         self._devices: Optional[Tuple[DeviceInfo, ...]] = None
         self._descriptions: Dict[str, DeviceDescription] = {}
 
@@ -150,18 +189,6 @@ class Session(QObject):
         return self.load_station(
             self.path, self.simulate if simulate is None else simulate
         )
-
-    def update_config(self, config: StationConfig) -> None:
-        """Apply an edited profile: save the file, reopen changed instruments."""
-        config.validate()
-        if self.station is None:
-            raise RuntimeError("No station loaded")
-        if self.path is not None:
-            save_station(config, self.path)
-        # Only closes instruments whose connection changed; they reopen on next use
-        self.station.reconfigure(config)
-        self._forget_devices()
-        self.config_changed.emit(self.station)
 
     def _open_lab(self, station: Station, simulate: bool) -> None:
         """The use cases around this station, in this process; the lanes are

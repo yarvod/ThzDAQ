@@ -2,12 +2,12 @@
 
 What a dock shows is the device as the lab describes it: its quantities, its
 actions and the settings it keeps in the profile, so every driver gets a
-working dock. It reads, sets and acts through the lab (DeviceModel). Actions
-get buttons; an analyzer's trace, a chopper's rotation and a SIS bias's
-calibration get groups of their own, a device kind its quick scans.
+working dock. It reads, sets and acts through the lab (DeviceModel), and keeps
+what belongs in the profile through update_station. Actions get buttons; an
+analyzer's trace, a chopper's rotation and a SIS bias's calibration get groups
+of their own, a device kind its quick scans.
 """
 
-import copy
 import json
 import math
 import time
@@ -45,14 +45,11 @@ from thzdaq_api.devices import (
     QuantityInfo,
     Trace,
 )
+from thzdaq_api.errors import LabError
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE, default_quantities
-from thzdaq_core.domain.sis.calibration import (
-    CALIBRATION_KEY,
-    WRITE_CALIBRATION,
-    calibration_for,
-    evaluate_sis_calibration,
-)
+from thzdaq_api.station import GetSisCalibration, SetSisCalibration
 
+from thzdaq_gui import profile as fmt
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.device_types import type_title
@@ -72,6 +69,7 @@ from thzdaq_gui.settings import (
 TO_HOT, TO_COLD = "to_hot", "to_cold"
 START_ROTATION, STOP = "start_rotation", "stop"
 CONFIGURE, READ_TRACE = "configure", "read_trace"
+WRITE_CALIBRATION = "write_calibration"  # a SIS bias's coefficients into the block
 RUNNING = "running"  # what a chopper reads: whether it rotates
 ACTION_ICONS = {
     TO_HOT: "fire",
@@ -246,27 +244,30 @@ class QuantityPanel(QWidget):
         model.set_done.connect(self.was_set)
         model.set_failed.connect(self.set_failed)
 
-    # Where values are remembered
-    def instrument_spec(self):
-        station = self.session.station
-        return station.config.instruments.get(self.ref) if station else None
+    # Where values are remembered: a configuration in the profile, a setpoint here
+    def kept(self) -> Dict[str, Any]:
+        """The instrument's configuration in the profile."""
+        instrument = fmt.instruments(self.session.profile().profile).get(self.ref)
+        return (instrument or {}).get(fmt.SETTINGS) or {}
 
     def remembered(self, key: str):
         if self.config:
-            spec = self.instrument_spec()
-            return spec.settings.get(key) if spec is not None else None
+            return self.kept().get(key)
         return settings().value(setpoint_key(self.ref, key))
 
     def remember(self, quantity: QuantityInfo, value) -> None:
         if not self.config:
             settings().setValue(setpoint_key(self.ref, quantity.key), value)
             return
-        spec = self.instrument_spec()
-        if spec is None or spec.settings.get(quantity.key) == value:
+        if self.kept().get(quantity.key) == value:
             return
-        config = copy.deepcopy(self.session.station.config)
-        config.instruments[self.ref].settings[quantity.key] = value
-        self.session.update_config(config)
+        profile = fmt.changed(self.session.profile().profile)
+        instrument = fmt.instruments(profile)[self.ref]
+        instrument.setdefault(fmt.SETTINGS, {})[quantity.key] = value
+        try:
+            self.session.update_profile(profile)
+        except LabError as e:
+            self.tell(str(e))
 
     def prefill(self) -> None:
         for key, field in self.fields.items():
@@ -725,7 +726,8 @@ class SettingsGroup(QGroupBox):
         self.panel = panel
         layout = QFormLayout(self)
         layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        saved = self.spec().settings
+        _, device = fmt.find_device(panel.session.profile().profile, panel.ref)
+        saved = device.get(fmt.SETTINGS) or {}
         self.fields: Dict[str, QuantityField] = {}
         for setting in described:
             field = QuantityField(setting, panel.ref, kind)
@@ -738,25 +740,29 @@ class SettingsGroup(QGroupBox):
         save.clicked.connect(self.save)
         layout.addRow("", save)
 
-    def spec(self):
-        return self.panel.session.station.config.find_device(self.panel.ref)[1]
-
     def save(self) -> None:
         session = self.panel.session
-        config = copy.deepcopy(session.station.config)
-        spec = config.find_device(self.panel.ref)[1]
+        profile = fmt.changed(session.profile().profile)
+        _, device = fmt.find_device(profile, self.panel.ref)
+        values = device.setdefault(fmt.SETTINGS, {})
         for key, field in self.fields.items():
-            spec.settings[key] = float(field.value())
-        session.update_config(config)
+            values[key] = float(field.value())
+        try:
+            session.update_profile(profile)
+        except LabError as e:
+            QMessageBox.warning(self, self.title(), str(e))
+            return
         for field in self.fields.values():
             field.set_pending(False)
 
 
 class CalibrationDialog(QDialog):
-    """SIS block calibration coefficients: expressions allowed ("5.47e-9 / 5")."""
+    """SIS block calibration coefficients: expressions allowed ("5.47e-9 / 5").
+    Save hands them to the lab, which checks them; a refusal is shown here."""
 
-    def __init__(self, coefficients: dict, parent=None):
+    def __init__(self, coefficients: dict, save, parent=None):
         super().__init__(parent)
+        self.save = save
         self.setWindowTitle("SIS calibration coefficients")
         self.resize(520, 520)
         layout = QVBoxLayout(self)
@@ -774,8 +780,8 @@ class CalibrationDialog(QDialog):
     def check(self) -> None:
         try:
             data = json.loads(self.editor.toPlainText())
-            evaluate_sis_calibration(data)
-        except (ValueError, TypeError, KeyError) as e:
+            self.save(data)
+        except (ValueError, LabError) as e:
             self.problem.setText(str(e))
             return
         self.coefficients = data
@@ -798,22 +804,17 @@ class CalibrationGroup(QGroupBox):
         panel.model.acted.connect(self.written)
         panel.model.action_failed.connect(self.refused)
 
-    def spec(self):
-        return self.panel.session.station.config.find_device(self.panel.ref)[1]
-
     def calibration(self) -> dict:
-        spec = self.spec()
-        return calibration_for(spec.channel, spec.metadata.get(CALIBRATION_KEY))
+        """As the profile keeps them, or the defaults of the channel."""
+        return self.panel.session.call(GetSisCalibration(ref=self.panel.ref))
+
+    def keep(self, coefficients: dict) -> None:
+        self.panel.session.call(
+            SetSisCalibration(ref=self.panel.ref, coefficients=coefficients)
+        )
 
     def edit_calibration(self) -> None:
-        dialog = CalibrationDialog(self.calibration(), self)
-        if dialog.exec() == QDialog.Accepted:
-            session = self.panel.session
-            config = copy.deepcopy(session.station.config)
-            config.find_device(self.panel.ref)[1].metadata[
-                CALIBRATION_KEY
-            ] = dialog.coefficients
-            session.update_config(config)
+        CalibrationDialog(self.calibration(), self.keep, self).exec()
 
     def write_calibration(self) -> None:
         """With the coefficients of the profile as it is now."""

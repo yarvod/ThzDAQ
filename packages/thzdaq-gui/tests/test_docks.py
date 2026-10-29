@@ -219,19 +219,22 @@ class TestWindow:
             "device:sis_bias_1" in window.docks and "device:chopper_1" in window.docks
         )
 
-    def test_device_docks_follow_the_setup(self, window, session, profile, monkeypatch):
+    def test_device_docks_follow_the_setup(
+        self, window, session, profile, monkeypatch, wait
+    ):
         setup = window.setupWidget
-        monkeypatch.setattr(DeviceDialog, "exec", lambda self: QDialog.Accepted)
 
         def fill(dialog_self):
             dialog_self.kind.setCurrentIndex(dialog_self.kind.findData("sis_bias"))
             dialog_self.channel.setCurrentIndex(dialog_self.channel.findData("DEV1"))
             dialog_self.title.setText("SIS b2d2")
-            return QDialog.Accepted
+            dialog_self.accept_values()  # Save
+            return dialog_self.result()
 
         monkeypatch.setattr(DeviceDialog, "exec", fill)
         setup.add_device("sis_block_1")
-        assert "device:sis_bias_3" in window.docks
+        # The lab tells the profile changed; the docks and Setup follow
+        wait(lambda: "device:sis_bias_3" in window.docks)
         saved = load_station(profile).instruments["sis_block_1"].devices["sis_bias_3"]
         assert (saved.kind, saved.channel, saved.title) == (
             "sis_bias",
@@ -242,37 +245,47 @@ class TestWindow:
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
         setup.delete_device("sis_block_1", "sis_bias_3")
-        assert "device:sis_bias_3" not in window.docks
+        wait(lambda: "device:sis_bias_3" not in window.docks)
         setup.delete_instrument("power_supply_2")
-        assert "device:power_supply_2" not in window.docks
+        wait(lambda: "device:power_supply_2" not in window.docks)
         assert "device:yig_power_1" not in window.docks
         assert "power_supply_2" not in load_station(profile).instruments
 
-    def test_add_instrument_dialog(self, window, session, profile, monkeypatch):
+    def test_add_instrument_dialog(self, window, session, profile, monkeypatch, wait):
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+
         def fill(dialog_self):
             dialog_self.driver.setCurrentIndex(dialog_self.driver.findData("rs.nrx"))
             dialog_self.title.setText("Second NRX")
+            dialog_self.connection.host.setText("")
+            dialog_self.accept_values()  # refused: a socket needs a host
+            assert dialog_self.result() != QDialog.Accepted and warnings
             dialog_self.connection.host.setText("10.0.0.7")
-            return QDialog.Accepted
+            dialog_self.accept_values()
+            return dialog_self.result()
 
         monkeypatch.setattr(InstrumentDialog, "exec", fill)
         window.setupWidget.add_instrument()
         spec = load_station(profile).instruments["power_meter_2"]
         assert spec.title == "Second NRX" and spec.connection.host == "10.0.0.7"
         assert spec.connection.port == 5025  # from the recommended connection
-        assert "device:power_meter_2" in window.docks
+        assert "host" in warnings[0]
+        wait(lambda: "device:power_meter_2" in window.docks)
 
     def test_connection_editor_shows_fields_of_the_kind(self, app, session):
-        dialog = InstrumentDialog(session.station.config, "signal_generator_1")
+        dialog = InstrumentDialog(session, lambda *a: None, "signal_generator_1")
         editor = dialog.connection
         assert editor.kind.currentData() == PROLOGIX
         assert editor.gpib.value() == 19 and not editor.gpib.isHidden()
         assert editor.serial_port.isHidden()
         assert not dialog.driver.isEnabled()
-        assert dialog.instrument().connection.gpib == 19
+        assert dialog.instrument()["connection"]["gpib"] == 19
 
     def test_driver_list_has_no_simulators_or_pfeiffer(self, app, session):
-        dialog = InstrumentDialog(session.station.config)
+        dialog = InstrumentDialog(session, lambda *a: None)
         keys = [dialog.driver.itemData(i) for i in range(dialog.driver.count())]
         assert "rigol.dp832a" in keys and "scontel.sis_block" in keys
         assert not [k for k in keys if k.startswith(("sim.", "pfeiffer."))]
@@ -286,17 +299,20 @@ class TestWindow:
             "\u200b"
         ) == path.count("\\")
 
-    def test_editing_keeps_a_driver_no_longer_offered(self, app):
-        from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
-        from thzdaq_instruments.transport import SERIAL, ConnectionSpec
+    def test_editing_keeps_a_driver_no_longer_offered(self, app, session, monkeypatch):
+        from thzdaq_api.station import StationProfile
 
-        spec = ConnectionSpec(SERIAL, serial_port="COM3")
-        config = StationConfig(
-            "bench", {"gauge": InstrumentConfig("pfeiffer.gauge", spec, title="G")}
-        )
-        dialog = InstrumentDialog(config, "gauge")
+        gauge = {
+            "driver": "pfeiffer.gauge",
+            "title": "G",
+            "connection": {"kind": "serial", "serial_port": "COM3"},
+        }
+        profile = StationProfile("bench", None, True, {"instruments": {"gauge": gauge}})
+        monkeypatch.setattr(session, "profile", lambda: profile)
+        dialog = InstrumentDialog(session, lambda *a: None, "gauge")
         assert dialog.driver_key() == "pfeiffer.gauge"
-        assert dialog.instrument().driver == "pfeiffer.gauge"
+        assert dialog.instrument()["driver"] == "pfeiffer.gauge"
+        assert dialog.instrument()["connection"]["serial_port"] == "COM3"
 
     def test_connect_reports_identity(self, window, wait):
         window.setupWidget.connect_instrument("sis_block_1")
@@ -534,6 +550,25 @@ class TestDeviceDocks:
         wait(lambda: shown)
         channel = session.station.instrument("sis_block_1").channel("DEV2")
         assert channel.calibration["VoltageStep"] == pytest.approx(1e-5)
+
+        # Edited coefficients: the lab checks them, a refusal stays in the dialog
+        from thzdaq_gui.docks.devices import CalibrationDialog
+
+        def edit(dialog_self):
+            data = json.loads(dialog_self.editor.toPlainText())
+            data["VoltageStep"] = "1e-5 *"
+            dialog_self.editor.setPlainText(json.dumps(data))
+            dialog_self.check()
+            assert "VoltageStep" in dialog_self.problem.text()
+            data["VoltageStep"] = "2e-5 / 2"
+            dialog_self.editor.setPlainText(json.dumps(data))
+            dialog_self.check()
+            return dialog_self.result()
+
+        monkeypatch.setattr(CalibrationDialog, "exec", edit)
+        calibration.edit_calibration()
+        device = load_station(profile).instruments["sis_block_1"].devices["sis_bias_2"]
+        assert device.metadata["calibration_coefficients"]["VoltageStep"] == "2e-5 / 2"
 
     def test_iv_scan_in_the_device_dock(self, window, session, wait):
         from thzdaq_gui.docks.measure import ProcedureBox
@@ -923,11 +958,10 @@ class TestExit:
 
 def test_no_stray_windows_flash(app, session, tmp_path):
     """Widgets shown before they have a parent pop up as small windows."""
-    import copy
 
     from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QWidget
-    from thzdaq_core.domain.station.config import DeviceConfig
+    from thzdaq_gui import profile as fmt
     from thzdaq_gui.main_window import MainWindow
 
     shown = []
@@ -950,11 +984,10 @@ def test_no_stray_windows_flash(app, session, tmp_path):
             mode="pro",
         )
         window.show()
-        config = copy.deepcopy(session.station.config)
-        config.instruments["sis_block_1"].devices["sis_bias_3"] = DeviceConfig(
-            "sis_bias", channel="DEV1"
-        )
-        session.update_config(config)
+        edited = fmt.changed(session.profile().profile)
+        sis_block = fmt.instruments(edited)["sis_block_1"]
+        fmt.devices(sis_block)["sis_bias_3"] = {"kind": "sis_bias", "channel": "DEV1"}
+        session.update_profile(edited)
         app.processEvents()
         # Dock contents detached and attached again (closing, perspectives)
         dock = window.docks["device:power_meter_1"]
@@ -1030,10 +1063,18 @@ class TestHangs:
         box.start()
         assert warnings and "still running" in warnings[0]
 
-    def test_connections_group(self, app, wait):
+    def test_connections_group(self, app, wait, tmp_path):
+        from thzdaq_core.adapters.json_store import MeasurementStore
+        from thzdaq_core.adapters.yaml_profiles import YamlProfiles
+        from thzdaq_core.application.assembly import assemble
+        from thzdaq_core.application.bench import Bench
+        from thzdaq_core.application.lanes import Lanes
+        from thzdaq_core.application.local import LocalControl, LocalLab
+        from thzdaq_core.application.workspaces import Workspaces
         from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
         from thzdaq_core.domain.station.station import Station
         from thzdaq_gui.docks.setup import ConnectionsGroup
+        from thzdaq_gui.workers import DeviceWorker
         from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
         from thzdaq_instruments.transport.fake import FakeLink
 
@@ -1045,7 +1086,22 @@ class TestHangs:
             )},
         )  # fmt: skip
         station = Station(config, pause=time.sleep, pool=pool)
-        group = ConnectionsGroup(station)
+        workspaces = Workspaces(tmp_path, tmp_path / "data", MeasurementStore)
+        assembled = assemble(
+            Bench(station, Lanes()), workspaces, YamlProfiles(), LocalControl()
+        )
+
+        class Client:
+            """What the group needs of a session: its lab and its call queue."""
+
+            lab = LocalLab(assembled)
+            calls = DeviceWorker()
+
+            def call(self, operation):
+                return self.lab.call(operation)
+
+        client = Client()
+        group = ConnectionsGroup(client)
         (state,) = group.rows.values()
         assert state.text() == "not connected"
         station["rigol:1"].get_output()
@@ -1054,6 +1110,8 @@ class TestHangs:
         wait(lambda: state.text() == "error, reconnects")
         group.reset(next(iter(group.rows)))
         wait(lambda: state.text() == "connected")
+        client.calls.stop()
+        assembled.close()
         station.close()
 
 
