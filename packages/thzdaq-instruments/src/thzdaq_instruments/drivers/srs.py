@@ -2,7 +2,7 @@ from typing import Literal, Tuple
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import ScpiInstrument
-from thzdaq_instruments.transport.base import PROLOGIX, ConnectionSpec
+from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
 Output = Literal["X", "Y", "R", "THETA"]
 OUTPUTS = {"X": 1, "Y": 2, "R": 3, "THETA": 4}
@@ -21,7 +21,7 @@ class StanfordSR830(ScpiInstrument):
     """SRS SR830 lock-in amplifier, usually GPIB behind Prologix."""
 
     @staticmethod
-    def connection(host: str = "169.254.156.103", gpib: int = 8) -> ConnectionSpec:
+    def connection(host: str = PROLOGIX_HOST, gpib: int = 8) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib)
 
     def test(self) -> bool:

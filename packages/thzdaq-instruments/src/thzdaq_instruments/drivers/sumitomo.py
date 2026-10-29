@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Instrument, ScpiInstrument
-from thzdaq_instruments.transport.base import HTTP, SERIAL, SOCKET, ConnectionSpec
+from thzdaq_instruments.transport.base import HTTP, ConnectionSpec, serial_or_gateway
 from thzdaq_instruments.transport.http import JsonClient, JsonHttpClient
 from thzdaq_instruments.units import PSI, celsius_to_kelvin
 
@@ -77,11 +77,7 @@ class SumitomoF70(ScpiInstrument):
     def connection(
         serial_port: Optional[str] = None, host: Optional[str] = None, port: int = 23
     ) -> ConnectionSpec:
-        """Direct serial port or a serial-to-Ethernet gateway."""
-        common = dict(write_termination="\r", read_termination="\r", timeout=2.0)
-        if host:
-            return ConnectionSpec(SOCKET, host=host, port=port, **common)
-        return ConnectionSpec(SERIAL, serial_port=serial_port, baudrate=9600, **common)
+        return serial_or_gateway(serial_port, host, port)
 
     def command(self, command: str) -> List[str]:
         """Send $CMD with checksum, return the reply fields without the command and CRC."""

@@ -2,7 +2,7 @@ from typing import Literal, Tuple
 
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.readings import Trace, linspace
-from thzdaq_instruments.transport.base import PROLOGIX, ConnectionSpec
+from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
 # Bandwidths the FSEK accepts, Hz
 BANDWIDTHS = tuple(
@@ -24,7 +24,7 @@ class RohdeSchwarzFSEK30(ScpiInstrument):
     """R&S FSEK30 spectrum analyzer, usually GPIB behind Prologix: SpectrumAnalyzer."""
 
     @staticmethod
-    def connection(host: str = "169.254.156.103", gpib: int = 20) -> ConnectionSpec:
+    def connection(host: str = PROLOGIX_HOST, gpib: int = 20) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib, read_delay=0.01)
 
     def test(self) -> bool:

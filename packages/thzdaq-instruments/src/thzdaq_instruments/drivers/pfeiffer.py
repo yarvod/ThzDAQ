@@ -16,7 +16,11 @@ from thzdaq_instruments.drivers.pfeiffer_parameters import (
 )
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import ScpiInstrument
-from thzdaq_instruments.transport.base import SERIAL, SOCKET, ConnectionSpec, Transport
+from thzdaq_instruments.transport.base import (
+    ConnectionSpec,
+    Transport,
+    serial_or_gateway,
+)
 from thzdaq_instruments.units import HPA, celsius_to_kelvin
 
 BOOLEAN_OLD, U_INTEGER, U_REAL, U_EXPO, STRING = 0, 1, 2, 3, 4
@@ -133,10 +137,7 @@ class PfeifferDevice(ScpiInstrument):
         serial_port: Optional[str] = None, host: Optional[str] = None, port: int = 4001
     ) -> ConnectionSpec:
         """USB/RS-485 adapter or an RS-485 to Ethernet gateway."""
-        common = dict(write_termination="\r", read_termination="\r", timeout=2.0)
-        if host:
-            return ConnectionSpec(SOCKET, host=host, port=port, **common)
-        return ConnectionSpec(SERIAL, serial_port=serial_port, baudrate=9600, **common)
+        return serial_or_gateway(serial_port, host, port)
 
     @staticmethod
     def parameter(ref: ParameterRef) -> Parameter:

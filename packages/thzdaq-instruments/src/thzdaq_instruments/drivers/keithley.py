@@ -1,6 +1,6 @@
 from thzdaq_instruments.drivers.power_supply import ScpiPowerSupply
 from thzdaq_instruments.readings import ChannelReading
-from thzdaq_instruments.transport.base import PROLOGIX, ConnectionSpec
+from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
 
 class Keithley2200(ScpiPowerSupply):
@@ -9,7 +9,7 @@ class Keithley2200(ScpiPowerSupply):
     channel_keys = (1,)
 
     @staticmethod
-    def connection(host: str = "169.254.156.103", gpib: int = 22) -> ConnectionSpec:
+    def connection(host: str = PROLOGIX_HOST, gpib: int = 22) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib)
 
     def test(self) -> bool:

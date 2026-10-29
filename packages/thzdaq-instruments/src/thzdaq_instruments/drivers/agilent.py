@@ -3,7 +3,7 @@ from typing import Literal
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.quantities import GENERATOR_QUANTITIES
-from thzdaq_instruments.transport.base import PROLOGIX, ConnectionSpec
+from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
 
 OemState = Literal["ON", "OFF", "NONE", "REAR", "FRONT"]
 
@@ -20,7 +20,7 @@ class AgilentE8247C(ScpiInstrument):
     MAX_AMPLITUDE = 25.0  # dBm
 
     @staticmethod
-    def connection(host: str = "169.254.156.103", gpib: int = 19) -> ConnectionSpec:
+    def connection(host: str = PROLOGIX_HOST, gpib: int = 19) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib)
 
     def test(self) -> bool:

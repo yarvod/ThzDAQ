@@ -29,6 +29,7 @@ MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB, VISA)
 KINDS = MESSAGE_KINDS + (HTTP, MODBUS_TCP, MODBUS_RTU)
 
 PROLOGIX_DEFAULT_PORT = 1234
+PROLOGIX_HOST = "169.254.156.103"  # the GPIB-Ethernet adapter of the bench
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,17 @@ class ConnectionSpec:
 
     def with_gpib(self, gpib: int) -> "ConnectionSpec":
         return replace(self, gpib=gpib)
+
+
+def serial_or_gateway(
+    serial_port: Optional[str], host: Optional[str], port: int
+) -> ConnectionSpec:
+    """A serial line at 9600 baud with CR line ends: a port of this computer, or a
+    serial-to-Ethernet gateway when a host is given."""
+    common = dict(write_termination="\r", read_termination="\r", timeout=2.0)
+    if host:
+        return ConnectionSpec(SOCKET, host=host, port=port, **common)
+    return ConnectionSpec(SERIAL, serial_port=serial_port, baudrate=9600, **common)
 
 
 class Link(ABC):
