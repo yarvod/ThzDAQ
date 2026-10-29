@@ -20,6 +20,9 @@ class RohdeSchwarzNRX(ScpiInstrument):
     <= 0 that have no dBm: they are NaN, which plots and monitors skip.
     """
 
+    driver_key = "rs.nrx"
+    device_type = "power_meter"
+
     quantities = POWER_METER_QUANTITIES
 
     def __init__(

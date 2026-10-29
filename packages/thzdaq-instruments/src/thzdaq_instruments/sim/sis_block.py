@@ -85,6 +85,8 @@ class SimSisCtrlChannel(Channel):
 
 
 class SimSisBlock(Instrument):
+    driver_key = "sim.sis_block"
+    device_type = "sis_block"
     channel_class = SimSisBiasChannel
     channel_keys = DEVICES
     subdevices = {

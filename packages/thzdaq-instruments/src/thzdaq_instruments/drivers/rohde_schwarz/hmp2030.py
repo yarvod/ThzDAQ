@@ -10,6 +10,9 @@ class RohdeSchwarzHMP2030(ScpiPowerSupply):
     transaction. Channel outputs take effect only with the general output on.
     """
 
+    driver_key = "rs.hmp2030"
+    device_type = "power_supply"
+
     channel_keys = (1, 2, 3)
 
     @staticmethod

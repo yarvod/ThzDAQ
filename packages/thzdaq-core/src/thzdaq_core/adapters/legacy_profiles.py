@@ -9,9 +9,21 @@ import re
 from collections import OrderedDict
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from thzdaq_instruments.drivers import NiYigFilter, ScontelSisBlock, SumitomoF70Rest
-from thzdaq_instruments.drivers.chopper import ModbusChopper
-from thzdaq_instruments.drivers.rohde_schwarz import RohdeSchwarzNRX
+from thzdaq_instruments.drivers import (
+    AgilentE8247C,
+    ArduinoGrid,
+    Keithley2200,
+    LakeShore336,
+    ModbusChopper,
+    NiYigFilter,
+    RigolDP832A,
+    RohdeSchwarzFSEK30,
+    RohdeSchwarzHMP2030,
+    RohdeSchwarzNRX,
+    RohdeSchwarzZVA67,
+    ScontelSisBlock,
+    SumitomoF70Rest,
+)
 from thzdaq_instruments.transport.base import (
     HTTP,
     PROLOGIX,
@@ -30,16 +42,16 @@ from thzdaq_core.domain.station.config import (
 )
 
 LEGACY_DRIVERS = {
-    "Keithley Power Supply": "keithley.2200",
-    "Agilent Signal Generator": "agilent.e8247c",
-    "Rigol Power Supply": "rigol.dp832a",
-    "Sumitomo F70 Compressor": "sumitomo.f70_rest",
-    "LakeShore Temperature Controller": "lakeshore.336",
-    "Rohde Schwarz VNA ZVA 67": "rs.zva67",
-    "Rohde Schwarz Spectrum FSEK 30": "rs.fsek30",
-    "Rohde Schwarz Power Supply": "rs.hmp2030",
-    "Scontel SIS Block": "scontel.sis_block",
-    "GRID": "arduino.grid",
+    "Keithley Power Supply": Keithley2200.driver_key,
+    "Agilent Signal Generator": AgilentE8247C.driver_key,
+    "Rigol Power Supply": RigolDP832A.driver_key,
+    "Sumitomo F70 Compressor": SumitomoF70Rest.driver_key,
+    "LakeShore Temperature Controller": LakeShore336.driver_key,
+    "Rohde Schwarz VNA ZVA 67": RohdeSchwarzZVA67.driver_key,
+    "Rohde Schwarz Spectrum FSEK 30": RohdeSchwarzFSEK30.driver_key,
+    "Rohde Schwarz Power Supply": RohdeSchwarzHMP2030.driver_key,
+    "Scontel SIS Block": ScontelSisBlock.driver_key,
+    "GRID": ArduinoGrid.driver_key,
 }
 # Connection adapters, not instruments: their address is already in each device config
 LEGACY_ADAPTER_SECTIONS = {"Prologix ethernet"}
@@ -78,13 +90,13 @@ def legacy_connection(entry: Mapping[str, Any], driver: str) -> ConnectionSpec:
     host = entry.get("host") or None
     port = int(entry["port"]) if str(entry.get("port") or "").isdigit() else None
     gpib = entry.get("gpib")
-    if driver == "scontel.sis_block":
+    if driver == ScontelSisBlock.driver_key:
         return ScontelSisBlock.connection(host=host, port=port or 9876)
-    if driver == "sumitomo.f70_rest":
+    if driver == SumitomoF70Rest.driver_key:
         return SumitomoF70Rest.connection(host=host, port=port or 21024)
     if kind == HTTP:
         # The grid answers after the move, give it time
-        timeout = 30.0 if driver == "arduino.grid" else 2.0
+        timeout = 30.0 if driver == ArduinoGrid.driver_key else 2.0
         return ConnectionSpec(HTTP, host=host, port=port, timeout=timeout)
     if kind == PROLOGIX:
         return ConnectionSpec(PROLOGIX, host=host, port=port, gpib=int(gpib))
@@ -109,17 +121,19 @@ def _state_defaults() -> Dict[str, InstrumentConfig]:
     """Instruments the legacy app addressed through hard-coded state constants."""
     return {
         "power_meter_1": InstrumentConfig(
-            driver="rs.nrx",
+            driver=RohdeSchwarzNRX.driver_key,
             connection=RohdeSchwarzNRX.connection(),
             # The legacy driver configured the meter like this on every connect
             options={"aperture_time": 0.05, "averaging": False},
             title="R&S NRX",
         ),
         "yig_filter_1": InstrumentConfig(
-            driver="ni.yig", connection=NiYigFilter.connection(), title="NI YIG"
+            driver=NiYigFilter.driver_key,
+            connection=NiYigFilter.connection(),
+            title="NI YIG",
         ),
         "chopper_1": InstrumentConfig(
-            driver="chopper.modbus",
+            driver=ModbusChopper.driver_key,
             connection=ModbusChopper.connection(),
             title="Chopper",
         ),
@@ -149,7 +163,7 @@ def station_from_legacy(
         for entry in entries or []:
             title = _entry_name(section, entry)
             connection = legacy_connection(entry, driver)
-            if driver == "scontel.sis_block":
+            if driver == ScontelSisBlock.driver_key:
                 key = connection.link_key
                 instrument_id = sis_blocks.get(key)
                 if instrument_id is None:

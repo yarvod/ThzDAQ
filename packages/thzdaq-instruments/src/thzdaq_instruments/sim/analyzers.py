@@ -9,6 +9,9 @@ from thzdaq_instruments.readings import ComplexTrace, Trace, linspace
 class SimSpectrumAnalyzer(Instrument):
     """A single tone at `tone_frequency` above a flat noise floor."""
 
+    driver_key = "sim.spectrum_analyzer"
+    device_type = "spectrum_analyzer"
+
     def __init__(
         self,
         *,
@@ -62,6 +65,9 @@ class SimSpectrumAnalyzer(Instrument):
 
 class SimNetworkAnalyzer(Instrument):
     """Reflection of a resistive load at the end of a lossless line."""
+
+    driver_key = "sim.network_analyzer"
+    device_type = "vna"
 
     def __init__(
         self,

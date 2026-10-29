@@ -150,6 +150,9 @@ class ScontelSisBlock(ScpiInstrument):
     recommended connection (chunk reads with a short delay).
     """
 
+    driver_key = "scontel.sis_block"
+    device_type = "sis_block"
+
     channel_class = SisBiasChannel
     channel_keys = DEVICES
     subdevices = {

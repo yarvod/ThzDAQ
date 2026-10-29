@@ -15,6 +15,9 @@ class AgilentE8247C(ScpiInstrument):
     multiplier or an OEM head set on the instrument they include it.
     """
 
+    driver_key = "agilent.e8247c"
+    device_type = "signal_generator"
+
     quantities = GENERATOR_QUANTITIES
     ATTENUATOR_STEPS = (0, 10, 20, 30, 40, 50, 60, 70, 80, 90)  # dB
     MAX_AMPLITUDE = 25.0  # dBm

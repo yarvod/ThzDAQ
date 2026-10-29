@@ -6,6 +6,9 @@ from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, Connectio
 class Keithley2200(ScpiPowerSupply):
     """Keithley 2200-30-5, single channel, usually GPIB behind Prologix."""
 
+    driver_key = "keithley.2200"
+    device_type = "power_supply"
+
     channel_keys = (1,)
 
     @staticmethod

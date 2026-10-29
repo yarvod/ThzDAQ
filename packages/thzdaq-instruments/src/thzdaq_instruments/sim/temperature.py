@@ -13,6 +13,8 @@ class SimTemperatureInput(Channel):
 
 
 class SimTemperatureController(Instrument):
+    driver_key = "sim.temperature_controller"
+    device_type = "temperature_controller"
     channel_class = SimTemperatureInput
     channel_keys = ("A", "B", "C", "D")
 

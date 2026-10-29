@@ -30,6 +30,9 @@ class SimPowerMeter(Instrument):
     R&S NRX (display unit, averaging, filter and aperture time, limits).
     """
 
+    driver_key = "sim.power_meter"
+    device_type = "power_meter"
+
     quantities = POWER_METER_QUANTITIES
 
     def __init__(

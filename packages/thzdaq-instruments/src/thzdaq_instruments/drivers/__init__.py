@@ -39,44 +39,29 @@ from thzdaq_instruments.sim import (
     SimYigFilter,
 )
 
-DRIVERS = {
-    "rigol.dp832a": (RigolDP832A, "Rigol DP832A power supply", SimPowerSupply),
-    "rs.hmp2030": (RohdeSchwarzHMP2030, "R&S HMP2030 power supply", SimPowerSupply),
-    "keithley.2200": (Keithley2200, "Keithley 2200 power supply", SimPowerSupply),
-    "agilent.e8247c": (
-        AgilentE8247C,
-        "Agilent E8247C signal generator",
-        SimSignalGenerator,
-    ),
-    "rs.nrx": (RohdeSchwarzNRX, "R&S NRX power meter", SimPowerMeter),
-    "scontel.sis_block": (ScontelSisBlock, "Scontel SIS bias block", SimSisBlock),
-    "ni.yig": (NiYigFilter, "NI digital YIG filters", SimYigFilter),
-    "chopper.modbus": (ModbusChopper, "Modbus chopper", SimChopper),
-    "rs.zva67": (RohdeSchwarzZVA67, "R&S ZVA67 network analyzer", SimNetworkAnalyzer),
-    "rs.fsek30": (
-        RohdeSchwarzFSEK30,
-        "R&S FSEK30 spectrum analyzer",
-        SimSpectrumAnalyzer,
-    ),
-    "lakeshore.336": (
-        LakeShore336,
-        "LakeShore 336 temperature controller",
-        SimTemperatureController,
-    ),
-    "srs.sr830": (StanfordSR830, "SRS SR830 lock-in amplifier", None),
-    "sumitomo.f70": (SumitomoF70, "Sumitomo F-70 compressor (RS-232)", SimCompressor),
-    "sumitomo.f70_rest": (
-        SumitomoF70Rest,
-        "Sumitomo F-70 compressor (REST)",
-        SimCompressor,
-    ),
-    "arduino.grid": (ArduinoGrid, "Arduino wire grid rotator", SimRotator),
-}
+# Built-in drivers: class (with its driver_key), title, simulator
+DRIVERS = (
+    (RigolDP832A, "Rigol DP832A power supply", SimPowerSupply),
+    (RohdeSchwarzHMP2030, "R&S HMP2030 power supply", SimPowerSupply),
+    (Keithley2200, "Keithley 2200 power supply", SimPowerSupply),
+    (AgilentE8247C, "Agilent E8247C signal generator", SimSignalGenerator),
+    (RohdeSchwarzNRX, "R&S NRX power meter", SimPowerMeter),
+    (ScontelSisBlock, "Scontel SIS bias block", SimSisBlock),
+    (NiYigFilter, "NI digital YIG filters", SimYigFilter),
+    (ModbusChopper, "Modbus chopper", SimChopper),
+    (RohdeSchwarzZVA67, "R&S ZVA67 network analyzer", SimNetworkAnalyzer),
+    (RohdeSchwarzFSEK30, "R&S FSEK30 spectrum analyzer", SimSpectrumAnalyzer),
+    (LakeShore336, "LakeShore 336 temperature controller", SimTemperatureController),
+    (StanfordSR830, "SRS SR830 lock-in amplifier", None),
+    (SumitomoF70, "Sumitomo F-70 compressor (RS-232)", SimCompressor),
+    (SumitomoF70Rest, "Sumitomo F-70 compressor (REST)", SimCompressor),
+    (ArduinoGrid, "Arduino wire grid rotator", SimRotator),
+)
 
 
 def register_drivers(registry) -> None:
-    for key, (cls, title, sim) in DRIVERS.items():
-        registry.register(key, cls, title=title, sim=sim)
+    for cls, title, sim in DRIVERS:
+        registry.register(cls.driver_key, cls, title=title, sim=sim)
 
 
 __all__ = [

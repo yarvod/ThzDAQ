@@ -16,6 +16,7 @@ class DriverInfo:
     title: str
     sim: Optional[Type[Instrument]] = None
     simulated: bool = False
+    device_type: str = ""  # power_supply: instrument ids in profiles start with it
 
     @property
     def capabilities(self) -> Tuple[type, ...]:
@@ -58,6 +59,7 @@ class DriverRegistry:
                 title=title or driver_cls.__name__,
                 sim=sim,
                 simulated=simulated,
+                device_type=driver_cls.device_type,
             )
             return driver_cls
 

@@ -57,6 +57,9 @@ class ModbusChopper(Instrument):
     Both sensors on = hot load in the beam, both off = cold load.
     """
 
+    driver_key = "chopper.modbus"
+    device_type = "chopper"
+
     quantities = CHOPPER_QUANTITIES
 
     def __init__(

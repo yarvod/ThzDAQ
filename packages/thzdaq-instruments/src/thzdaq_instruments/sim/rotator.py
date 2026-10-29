@@ -4,6 +4,9 @@ from thzdaq_instruments.instrument import Instrument
 
 
 class SimRotator(Instrument):
+    driver_key = "sim.rotator"
+    device_type = "grid"
+
     def __init__(self, *, name: Optional[str] = None, angle: float = 0.0):
         super().__init__(name=name)
         self.angle = angle

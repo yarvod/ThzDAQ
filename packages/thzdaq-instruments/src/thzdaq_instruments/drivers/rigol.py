@@ -7,6 +7,9 @@ from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec
 class RigolDP832A(ScpiPowerSupply):
     """Rigol DP832A, three channels, LAN port 5555."""
 
+    driver_key = "rigol.dp832a"
+    device_type = "power_supply"
+
     channel_keys = (1, 2, 3)
 
     @staticmethod

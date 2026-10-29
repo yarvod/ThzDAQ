@@ -15,6 +15,9 @@ DataFormat = Literal["COMP", "MLOG", "MLIN", "PHAS", "REAL", "IMAG"]
 class RohdeSchwarzZVA67(ScpiInstrument):
     """R&S ZVA67 vector network analyzer: NetworkAnalyzer, PowerLevel."""
 
+    driver_key = "rs.zva67"
+    device_type = "vna"
+
     @staticmethod
     def connection(host: str = "169.254.106.189", port: int = 5025) -> ConnectionSpec:
         return ConnectionSpec(SOCKET, host=host, port=port)

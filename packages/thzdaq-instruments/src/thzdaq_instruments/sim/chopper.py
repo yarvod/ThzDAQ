@@ -9,6 +9,9 @@ LoadPosition = Literal["hot", "cold"]
 class SimChopper(Instrument):
     """Chopper with the controls of the Modbus one: moves, alignment, rotation."""
 
+    driver_key = "sim.chopper"
+    device_type = "chopper"
+
     quantities = CHOPPER_QUANTITIES
 
     def __init__(self, *, name: Optional[str] = None, position: LoadPosition = "cold"):

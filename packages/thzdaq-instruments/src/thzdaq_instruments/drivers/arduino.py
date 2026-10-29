@@ -14,6 +14,9 @@ class ArduinoGrid(Instrument):
     absolute angle; the driver keeps the current angle (no position readback).
     """
 
+    driver_key = "arduino.grid"
+    device_type = "grid"
+
     def __init__(
         self,
         connection: Optional[ConnectionSpec] = None,

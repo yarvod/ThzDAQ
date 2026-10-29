@@ -14,47 +14,23 @@ channels (supply outputs) have no kinds; how a measurement uses a channel
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Type
 
+from thzdaq_instruments import default_registry
 from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.instrument import Instrument
+from thzdaq_instruments.registry import DriverRegistry
 
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.parameters import FloatParameter, Parameter
 from thzdaq_core.domain.station.ports import AttributePort
 
-# Instrument ids name the kind of device: power_supply_3, not rigol_dp832a_1
-INSTRUMENT_TYPES = {
-    "keithley.2200": "power_supply",
-    "rigol.dp832a": "power_supply",
-    "rs.hmp2030": "power_supply",
-    "sim.power_supply": "power_supply",
-    "agilent.e8247c": "signal_generator",
-    "sim.signal_generator": "signal_generator",
-    "rs.nrx": "power_meter",
-    "sim.power_meter": "power_meter",
-    "scontel.sis_block": "sis_block",
-    "sim.sis_block": "sis_block",
-    "ni.yig": "yig_filter",
-    "sim.yig_filter": "yig_filter",
-    "chopper.modbus": "chopper",
-    "sim.chopper": "chopper",
-    "rs.zva67": "vna",
-    "sim.network_analyzer": "vna",
-    "rs.fsek30": "spectrum_analyzer",
-    "sim.spectrum_analyzer": "spectrum_analyzer",
-    "lakeshore.336": "temperature_controller",
-    "sim.temperature_controller": "temperature_controller",
-    "srs.sr830": "lock_in",
-    "sumitomo.f70": "compressor",
-    "sumitomo.f70_rest": "compressor",
-    "sim.compressor": "compressor",
-    "sim.vacuum_gauge": "vacuum_gauge",
-    "arduino.grid": "grid",
-    "sim.rotator": "grid",
-}
 
-
-def instrument_type(driver: str) -> str:
-    return INSTRUMENT_TYPES.get(driver) or driver.split(".")[-1].replace("-", "_")
+def instrument_type(driver: str, registry: Optional[DriverRegistry] = None) -> str:
+    """rigol.dp832a -> power_supply: instrument ids in profiles name the kind of
+    device (power_supply_3, not rigol_dp832a_1); the driver declares it."""
+    registry = registry or default_registry()
+    if driver in registry and registry.get(driver).device_type:
+        return registry.get(driver).device_type
+    return driver.split(".")[-1].replace("-", "_")
 
 
 def _named(name: str, parameter: Parameter) -> Parameter:

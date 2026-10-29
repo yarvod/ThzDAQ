@@ -25,6 +25,8 @@ class SimYigChannel(Channel):
 
 
 class SimYigFilter(Instrument):
+    driver_key = "sim.yig_filter"
+    device_type = "yig_filter"
     channel_class = SimYigChannel
     channel_keys = ("yig_1", "yig_2")
 

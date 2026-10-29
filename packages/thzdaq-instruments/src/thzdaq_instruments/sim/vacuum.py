@@ -6,6 +6,9 @@ from thzdaq_instruments.units import PSI, celsius_to_kelvin
 
 
 class SimVacuumGauge(Instrument):
+    driver_key = "sim.vacuum_gauge"
+    device_type = "vacuum_gauge"
+
     def __init__(self, *, name: Optional[str] = None, pressure: float = 1e-4):
         super().__init__(name=name)
         self.pressure = pressure  # Pa
@@ -22,6 +25,9 @@ class SimVacuumGauge(Instrument):
 
 
 class SimCompressor(Instrument):
+    driver_key = "sim.compressor"
+    device_type = "compressor"
+
     def __init__(self, *, name: Optional[str] = None):
         super().__init__(name=name)
         self.running = False

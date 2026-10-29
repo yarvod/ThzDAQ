@@ -73,6 +73,9 @@ class SumitomoF70(ScpiInstrument):
     status with the pressure command; both are fixed here.
     """
 
+    driver_key = "sumitomo.f70"
+    device_type = "compressor"
+
     @staticmethod
     def connection(
         serial_port: Optional[str] = None, host: Optional[str] = None, port: int = 23
@@ -148,6 +151,9 @@ class SumitomoF70(ScpiInstrument):
 
 class SumitomoF70Rest(Instrument):
     """F-70 behind the lab REST service (°C and psig there): Compressor."""
+
+    driver_key = "sumitomo.f70_rest"
+    device_type = "compressor"
 
     def __init__(
         self,

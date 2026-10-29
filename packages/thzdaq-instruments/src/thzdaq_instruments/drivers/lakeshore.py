@@ -111,6 +111,9 @@ class HeaterOutput:
 class LakeShore336(ScpiInstrument):
     """LakeShore 336 temperature controller; inputs via channel("A".."D")."""
 
+    driver_key = "lakeshore.336"
+    device_type = "temperature_controller"
+
     channel_class = TemperatureInput
     channel_keys = ("A", "B", "C", "D")
 

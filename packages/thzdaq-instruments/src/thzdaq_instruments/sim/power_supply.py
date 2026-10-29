@@ -56,6 +56,8 @@ class SimSupplyChannel(Channel):
 
 
 class SimPowerSupply(Instrument):
+    driver_key = "sim.power_supply"
+    device_type = "power_supply"
     channel_class = SimSupplyChannel
     channel_keys = (1, 2, 3)
 

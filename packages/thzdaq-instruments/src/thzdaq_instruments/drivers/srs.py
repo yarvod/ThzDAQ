@@ -20,6 +20,9 @@ SENSITIVITIES = tuple(
 class StanfordSR830(ScpiInstrument):
     """SRS SR830 lock-in amplifier, usually GPIB behind Prologix."""
 
+    driver_key = "srs.sr830"
+    device_type = "lock_in"
+
     @staticmethod
     def connection(host: str = PROLOGIX_HOST, gpib: int = 8) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib)

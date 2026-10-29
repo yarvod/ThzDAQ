@@ -30,6 +30,9 @@ class YigChannel(Channel):
 class NiYigFilter(Instrument):
     """Digital YIG filters driven by the NI DAQ REST service."""
 
+    driver_key = "ni.yig"
+    device_type = "yig_filter"
+
     channel_class = YigChannel
     channel_keys = ("yig_1", "yig_2")
 

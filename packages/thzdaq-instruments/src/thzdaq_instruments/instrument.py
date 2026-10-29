@@ -42,6 +42,8 @@ class Instrument:
     coil, heater output).
     """
 
+    driver_key: ClassVar[str] = ""  # its id in profiles and the registry: rigol.dp832a
+    device_type: ClassVar[str] = ""  # the kind of device it is: power_supply
     channel_class: ClassVar[Optional[Type[Channel]]] = None
     channel_keys: ClassVar[Tuple[Hashable, ...]] = ()
     subdevices: ClassVar[Dict[str, SubdeviceType]] = {}

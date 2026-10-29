@@ -16,28 +16,26 @@ from thzdaq_instruments.sim.temperature import (
 from thzdaq_instruments.sim.vacuum import SimCompressor, SimVacuumGauge
 from thzdaq_instruments.sim.yig_filter import SimYigChannel, SimYigFilter
 
-SIMULATORS = {
-    "sim.power_supply": (SimPowerSupply, "Simulated power supply"),
-    "sim.signal_generator": (SimSignalGenerator, "Simulated signal generator"),
-    "sim.power_meter": (SimPowerMeter, "Simulated power meter"),
-    "sim.sis_block": (SimSisBlock, "Simulated SIS bias block"),
-    "sim.yig_filter": (SimYigFilter, "Simulated YIG filter"),
-    "sim.chopper": (SimChopper, "Simulated chopper"),
-    "sim.temperature_controller": (
-        SimTemperatureController,
-        "Simulated temperature controller",
-    ),
-    "sim.spectrum_analyzer": (SimSpectrumAnalyzer, "Simulated spectrum analyzer"),
-    "sim.network_analyzer": (SimNetworkAnalyzer, "Simulated network analyzer"),
-    "sim.vacuum_gauge": (SimVacuumGauge, "Simulated vacuum gauge"),
-    "sim.compressor": (SimCompressor, "Simulated compressor"),
-    "sim.rotator": (SimRotator, "Simulated rotator"),
-}
+# Simulators as drivers of their own: class (with its driver_key), title
+SIMULATORS = (
+    (SimPowerSupply, "Simulated power supply"),
+    (SimSignalGenerator, "Simulated signal generator"),
+    (SimPowerMeter, "Simulated power meter"),
+    (SimSisBlock, "Simulated SIS bias block"),
+    (SimYigFilter, "Simulated YIG filter"),
+    (SimChopper, "Simulated chopper"),
+    (SimTemperatureController, "Simulated temperature controller"),
+    (SimSpectrumAnalyzer, "Simulated spectrum analyzer"),
+    (SimNetworkAnalyzer, "Simulated network analyzer"),
+    (SimVacuumGauge, "Simulated vacuum gauge"),
+    (SimCompressor, "Simulated compressor"),
+    (SimRotator, "Simulated rotator"),
+)
 
 
 def register_simulators(registry) -> None:
-    for key, (cls, title) in SIMULATORS.items():
-        registry.register(key, cls, title=title, simulated=True)
+    for cls, title in SIMULATORS:
+        registry.register(cls.driver_key, cls, title=title, simulated=True)
 
 
 __all__ = [

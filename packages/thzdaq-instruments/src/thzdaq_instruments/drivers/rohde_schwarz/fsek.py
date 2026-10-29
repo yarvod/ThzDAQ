@@ -23,6 +23,9 @@ def nearest_bandwidth(bandwidth: float) -> float:
 class RohdeSchwarzFSEK30(ScpiInstrument):
     """R&S FSEK30 spectrum analyzer, usually GPIB behind Prologix: SpectrumAnalyzer."""
 
+    driver_key = "rs.fsek30"
+    device_type = "spectrum_analyzer"
+
     @staticmethod
     def connection(host: str = PROLOGIX_HOST, gpib: int = 20) -> ConnectionSpec:
         return ConnectionSpec(PROLOGIX, host=host, gpib=gpib, read_delay=0.01)

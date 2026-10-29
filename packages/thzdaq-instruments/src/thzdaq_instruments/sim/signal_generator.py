@@ -12,6 +12,9 @@ class SimSignalGenerator(Instrument):
     set, set_frequency(223 GHz) puts 223/18 GHz out of the generator.
     """
 
+    driver_key = "sim.signal_generator"
+    device_type = "signal_generator"
+
     quantities = GENERATOR_QUANTITIES
 
     def __init__(
