@@ -2,7 +2,9 @@
 background, and the readings of polls as the lab tells them.
 
 The calls of a device go one after another in its instrument's queue
-(session.calls); devices do not wait for each other.
+(session.calls); devices do not wait for each other. A set or an action
+refused because another measurement sweeps the device is a conflict: whoever
+shows the device asks, and the retry it is given goes on (share).
 """
 
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
@@ -18,6 +20,7 @@ from thzdaq_api.devices import (
     SetQuantity,
     SubscribePoll,
 )
+from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
 
@@ -35,6 +38,7 @@ class DeviceModel(QObject):
     set_failed = Signal(str, object, str)  # key, the value asked, why not
     acted = Signal(str, object)  # action, what it returned: a value or a Trace
     action_failed = Signal(str, str)  # action, why
+    conflict = Signal(str, object)  # why, a retry that goes on anyway
 
     def __init__(self, session, info: DeviceInfo, parent=None):
         super().__init__(parent)
@@ -55,19 +59,39 @@ class DeviceModel(QObject):
             lambda error: self.read_failed.emit(str(error)),
         )
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, share: bool = False) -> None:
         self._call(
-            SetQuantity(ref=self.ref, key=key, value=value),
+            SetQuantity(ref=self.ref, key=key, value=value, share=share),
             lambda done: self.set_done.emit(key, done.value),
-            lambda error: self.set_failed.emit(key, value, str(error)),
+            lambda error: self._refused(
+                error,
+                lambda: self.set_failed.emit(key, value, str(error)),
+                lambda: self.set(key, value, share=True),
+            ),
         )
 
-    def call(self, action: str, arguments: Optional[Mapping[str, Any]] = None) -> None:
+    def call(
+        self,
+        action: str,
+        arguments: Optional[Mapping[str, Any]] = None,
+        share: bool = False,
+    ) -> None:
+        given = dict(arguments or {})
         self._call(
-            CallAction(ref=self.ref, action=action, arguments=dict(arguments or {})),
+            CallAction(ref=self.ref, action=action, arguments=given, share=share),
             lambda done: self.acted.emit(action, done.result),
-            lambda error: self.action_failed.emit(action, str(error)),
+            lambda error: self._refused(
+                error,
+                lambda: self.action_failed.emit(action, str(error)),
+                lambda: self.call(action, given, share=True),
+            ),
         )
+
+    def _refused(self, error: BaseException, failed, again) -> None:
+        """Told as it failed; a conflict also offers to go on anyway."""
+        failed()
+        if isinstance(error, LabError) and error.code == ErrorCode.CONFLICT:
+            self.conflict.emit(str(error), again)
 
     def poll(self, interval: float, keys: Optional[Sequence[str]] = None) -> None:
         """Readings every interval seconds until stop_polling; called again, with

@@ -11,6 +11,7 @@ from thzdaq_api.devices import (
 )
 from thzdaq_api.events import GetSnapshot, StationChanged
 from thzdaq_api.lab import Lab
+from thzdaq_api.leases import LeaseInfo, ListLeases
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.measurements import (
     DATA,
@@ -62,6 +63,7 @@ class Session(QObject):
 
     station_changed = Signal()  # another profile, or another lab: build anew
     config_changed = Signal()  # the profile was edited: devices may differ
+    leases_changed = Signal()  # measurements took or gave back devices
 
     def __init__(self, lab_of: Connect, workspace, parent=None):
         super().__init__(parent)
@@ -82,10 +84,12 @@ class Session(QObject):
         self.bridge = Bridge(self)
         self.bridge.station_changed.connect(self._profile_changed)
         self.bridge.resync.connect(self._resynced)
+        self.bridge.leases_changed.connect(self._leases_heard)
         self._procedures: Optional[Tuple[ProcedureSummary, ...]] = None
         self._drivers: Optional[Dict[str, DriverInfo]] = None
         self._connection_kinds: Optional[Tuple[ConnectionKindInfo, ...]] = None
         self._path: Optional[str] = None  # of the profile heard last
+        self._leases: Optional[Tuple[LeaseInfo, ...]] = None
         self._forget_devices()
 
     def open(self, simulate: bool) -> None:
@@ -97,6 +101,7 @@ class Session(QObject):
         # Events from the snapshot on: nothing between them is missed
         self.bridge.listen(lab, lab.call(GetSnapshot()).seq)
         self._forget_devices()
+        self._leases = None
         self._path = self.profile().path
         logger.info(f"Working with {self._path} (simulate={simulate})")
         self.station_changed.emit()
@@ -179,9 +184,20 @@ class Session(QObject):
         another, self._path = body.path != self._path, body.path
         (self.station_changed if another else self.config_changed).emit()
 
+    def leases(self) -> Tuple[LeaseInfo, ...]:
+        """Who uses which device now: read, set or swept by a measurement."""
+        if self._leases is None:
+            self._leases = self.lab.call(ListLeases())
+        return self._leases
+
+    def _leases_heard(self, body) -> None:
+        self._leases = body.leases
+        self.leases_changed.emit()
+
     def _resynced(self, *_) -> None:
         """Events were lost (the daemon restarted): all is asked anew."""
         self._forget_devices()
+        self._leases = None
         self._path = self.profile().path
         self.station_changed.emit()
 

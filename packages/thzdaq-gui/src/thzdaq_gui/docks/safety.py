@@ -30,6 +30,7 @@ from thzdaq_gui import profile as fmt
 from thzdaq_gui import theme
 from thzdaq_gui.fields import default_prefix
 from thzdaq_gui.forms import saved_or_told
+from thzdaq_gui.wording import SAFE_STATE
 
 NUMBERS = ("float", "int")
 SWITCH = ("Off", "On")  # a switch in the safe state
@@ -301,7 +302,7 @@ class SafetyDialog(QDialog):
         )  # fmt: skip
         layout.addWidget(
             table_box(
-                "Safe state", self.safe_state, "Add value",
+                SAFE_STATE, self.safe_state, "Add value",
                 "Set in this order by Safe state and when the daemon stops "
                 "measurements.",
             )

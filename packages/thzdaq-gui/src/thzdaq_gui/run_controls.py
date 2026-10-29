@@ -61,6 +61,9 @@ class Run(Protocol):
     def start(self) -> None:
         ...
 
+    def check(self) -> None:
+        ...
+
     def stop(self) -> None:
         ...
 
@@ -81,6 +84,12 @@ class RunControls(QWidget):
         self.btnStart = QPushButton(theme.icon("play", "#111111"), "Start")
         self.btnStart.setProperty("accent", True)
         self.btnStart.clicked.connect(lambda: self.run and self.run.start())
+        self.btnCheck = QPushButton(theme.icon("clipboard-check-outline"), "Check")
+        self.btnCheck.setToolTip(
+            "Would it start? Parameters, devices, their limits and who uses them, "
+            "checked without starting"
+        )
+        self.btnCheck.clicked.connect(lambda: self.run and self.run.check())
         self.btnStop = QPushButton(theme.icon("stop"), "Stop")
         self.btnStop.setEnabled(False)
         self.btnStop.clicked.connect(lambda: self.run and self.run.stop())
@@ -94,7 +103,7 @@ class RunControls(QWidget):
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        buttons = (self.btnStart, self.btnStop, self.btnAbort)
+        buttons = (self.btnStart, self.btnCheck, self.btnStop, self.btnAbort)
         self.state: Optional[QLabel] = None
         if row:
             layout = QHBoxLayout(self)
@@ -148,6 +157,7 @@ class RunControls(QWidget):
             return
         status = self.run.status()
         self.btnStart.setEnabled(not status.running)
+        self.btnCheck.setEnabled(not status.running)
         self.btnStop.setEnabled(status.running)
         self.btnAbort.setVisible(status.running and status.can_abort)
         if status.total is None:

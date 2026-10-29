@@ -64,6 +64,7 @@ from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
 from thzdaq_gui.perspectives import Perspectives
+from thzdaq_gui.safe_state import SafeStateAction
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 from thzdaq_gui.settings import MODE, STATION_PATH, WINDOW_GEOMETRY, location
 from thzdaq_gui.settings import settings as app_settings
@@ -262,6 +263,11 @@ class MainWindow(QMainWindow):
         self.runBarAction = toolbar.addWidget(self.runBar)
         self.perspectives.add_to(toolbar)
         toolbar.addSeparator()
+        self.safeState = SafeStateAction(self.session, self)
+        safe = QToolButton()
+        safe.setDefaultAction(self.safeState)
+        safe.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toolbar.addWidget(safe)
         # Ctrl+K (Cmd+K on macOS) finds any dock, from any window of the app
         self.quickFind = QuickFind(self.navigator(), self)
         find = QAction(theme.icon("magnify"), "Find…", self)

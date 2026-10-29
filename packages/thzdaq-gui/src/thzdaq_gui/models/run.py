@@ -3,15 +3,18 @@ its events, its records gathered into a measurement as they come.
 
 The start is an operation in the background (it opens the instruments); the
 events of the run may come before its answer, so they wait until the run's
-number is known.
+number is known. A start refused because a device it needs is swept by another
+measurement is a conflict: whoever drives the run asks, and share() goes on.
 """
 
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
+import msgspec
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api import events
 from thzdaq_api.data import decode_values
-from thzdaq_api.measurement_file import RUNNING, DeviceUse, Measurement
+from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.measurement_file import CONFLICTS, RUNNING, DeviceUse, Measurement
 from thzdaq_api.measurements import (
     AbortMeasurement,
     CancelMeasurement,
@@ -35,6 +38,7 @@ class RunModel(QObject):
     log = Signal(str)
     finished = Signal(object)  # Measurement, ended
     failed = Signal(str)  # could not start: missing device, bad parameters
+    conflict = Signal(str)  # could not start: another measurement sweeps a device
     running_changed = Signal(bool)
 
     def __init__(self, session, title_of: Callable[[str], str], parent=None):
@@ -43,6 +47,7 @@ class RunModel(QObject):
         self.session = session
         self.title_of = title_of
         self.run: Optional[RunInfo] = None
+        self._asked: Optional[StartMeasurement] = None  # the last start
         self.measurement: Optional[Measurement] = None
         self.running = False
         self._early: List[Body] = []  # events heard before the run's number
@@ -70,17 +75,42 @@ class RunModel(QObject):
         devices: Mapping[str, str],
         comment: str = "",
     ) -> None:
-        if self.running:
-            raise RuntimeError("A measurement is already running")
-        self.run, self.measurement, self._early = None, None, []
-        self._set_running(True)
-        operation = StartMeasurement(
+        self._start(self._operation(procedure, parameters, devices, comment))
+
+    def share(self) -> None:
+        """Start the run refused for a conflict again, the conflict accepted:
+        both measurements note it."""
+        self._start(msgspec.structs.replace(self._asked, share=True))
+
+    def check(
+        self, procedure: str, parameters: Mapping[str, Any], devices: Mapping[str, str]
+    ) -> RunInfo:
+        """The run a start would make, checked by the lab without starting it
+        (a dry run); LabError says why it would not start."""
+        operation = self._operation(procedure, parameters, devices)
+        return self.session.call(msgspec.structs.replace(operation, dry_run=True))
+
+    def _operation(
+        self,
+        procedure: str,
+        parameters: Mapping[str, Any],
+        devices: Mapping[str, str],
+        comment: str = "",
+    ) -> StartMeasurement:
+        return StartMeasurement(
             procedure=procedure,
             parameters=dict(parameters),
             devices=dict(devices),
             comment=comment,
             workspace=str(self.session.workspace),
         )
+
+    def _start(self, operation: StartMeasurement) -> None:
+        if self.running:
+            raise RuntimeError("A measurement is already running")
+        self.run, self.measurement, self._early = None, None, []
+        self._asked = operation
+        self._set_running(True)
         lab = self.session.lab
         self.session.calls.submit(
             lambda: lab.call(operation), self._accepted, self._refused
@@ -106,8 +136,11 @@ class RunModel(QObject):
             self._heard(body)
 
     def _refused(self, error: BaseException) -> None:
-        self.failed.emit(str(error))
         self._set_running(False)
+        if isinstance(error, LabError) and error.code == ErrorCode.CONFLICT:
+            self.conflict.emit(str(error))
+        else:
+            self.failed.emit(str(error))
 
     def _heard(self, body: Body) -> None:
         if self.run is None:
@@ -132,6 +165,7 @@ class RunModel(QObject):
             },
             metadata={"path": run.path} if run.path else {},
         )
+        self._noted(run)
         self.started.emit(self.measurement)
 
     def _on_records(self, body: events.MeasurementRecords) -> None:
@@ -152,8 +186,14 @@ class RunModel(QObject):
         measurement.finish(run.status, run.finished or "", run.error)
         if run.path:
             measurement.metadata["path"] = run.path
+        self._noted(run)
         self.finished.emit(measurement)
         self._set_running(False)
+
+    def _noted(self, run: RunInfo) -> None:
+        """The conflicts it accepted, as its file keeps them: Data marks it."""
+        if run.conflicts:
+            self.measurement.metadata[CONFLICTS] = list(run.conflicts)
 
     def _set_running(self, running: bool) -> None:
         self.running = running

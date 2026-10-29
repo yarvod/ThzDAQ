@@ -46,6 +46,7 @@ from thzdaq_api.devices import (
     Trace,
 )
 from thzdaq_api.errors import LabError
+from thzdaq_api.leases import EXCLUSIVE, READ, SHARED
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE, default_quantities
 from thzdaq_api.station import GetSisCalibration, SetSisCalibration
 
@@ -82,6 +83,9 @@ ACTION_ICONS = {
     READ_TRACE: "chart-line",
     WRITE_CALIBRATION: "upload",
 }
+
+# How a measurement uses a device it holds (its lease)
+USES = {READ: "reads", SHARED: "sets", EXCLUSIVE: "sweeps"}
 
 # Quick measurements of a device kind, run on the device: (title, procedure, slot)
 SCANS = {
@@ -884,7 +888,13 @@ class DeviceWidget(QScrollArea):
         )
         subtitle.setProperty("role", "muted")
         layout.addWidget(subtitle)
+        self.use = QLabel()  # who uses it now
+        self.use.setWordWrap(True)
+        self.use.setStyleSheet(f"color: {theme.ACCENT}")
+        layout.addWidget(self.use)
+        self.channels = channels_of(session.devices(), info)
         model = DeviceModel(session, info, self)
+        model.conflict.connect(self.ask_to_share)
         main = QuantityPanel(
             session, hub, model,
             [q for q in described.quantities if not q.persistent], info.kind, dock,
@@ -902,10 +912,12 @@ class DeviceWidget(QScrollArea):
             if config.quantities:
                 layout.addWidget(self._boxed("Configuration", config))
                 self.panels.append(config)
-        for channel in channels_of(session.devices(), info):
+        for channel in self.channels:
             quantities = session.description(channel.ref).quantities
+            channel_model = DeviceModel(session, channel, self)
+            channel_model.conflict.connect(self.ask_to_share)
             panel = QuantityPanel(
-                session, hub, DeviceModel(session, channel, self),
+                session, hub, channel_model,
                 [q for q in quantities if not q.persistent], CHANNEL, dock,
             )  # fmt: skip
             self.panels.append(panel)
@@ -914,6 +926,31 @@ class DeviceWidget(QScrollArea):
             layout.addWidget(group)
         layout.addStretch()
         self.setWidget(inner)
+        session.leases_changed.connect(self.show_use)
+        self.show_use()
+
+    def show_use(self) -> None:
+        """Which running measurements use it (or its channels) and how."""
+        refs = {self.ref, *(channel.ref for channel in self.channels)}
+        uses = [
+            f"#{lease.run} {lease.title} {USES[lease.mode]} "
+            f"{self.session.title_of(lease.device)}"
+            for lease in self.session.leases()
+            if lease.device in refs
+        ]
+        self.use.setText("In use: " + "; ".join(uses))
+        self.use.setVisible(bool(uses))
+
+    def ask_to_share(self, message: str, again) -> None:
+        """A device another measurement sweeps: change it anyway?"""
+        answer = QMessageBox.question(
+            self,
+            self.info.title,
+            f"{message}.\n\nChange it anyway? The measurement notes who changed "
+            "what, and its data may be spoiled.",
+        )
+        if answer == QMessageBox.Yes:
+            again()
 
     @staticmethod
     def _boxed(title: str, widget: QWidget) -> QGroupBox:

@@ -1598,3 +1598,127 @@ class TestDaemon:
         window.daemonWidget.btnStart.click()
         wait(lambda: window.daemon.state == OK)
         assert window.bannerBar.isHidden()
+
+
+SLOW_IV = {
+    "voltage": {"start": 0.0, "stop": 5e-3, "points": 2000},
+    "settle_time": 0.01,
+    "first_point_delay": 0.0,
+}
+
+
+def sweep_bias(session, ref="sis_bias_1"):
+    """Another client's measurement that sweeps a bias while a test acts."""
+    from thzdaq_api.measurements import StartMeasurement
+
+    return session.call(
+        StartMeasurement(
+            procedure="sis.iv_curve", parameters=SLOW_IV, devices={"bias": ref}
+        )
+    )
+
+
+def ended(session, run):
+    from thzdaq_api.measurements import CancelMeasurement, WaitMeasurement
+
+    session.call(CancelMeasurement(id=run.id))
+    return session.call(WaitMeasurement(id=run.id, timeout=10))
+
+
+class TestConflicts:
+    def test_a_start_on_a_swept_device_is_asked_once(
+        self, window, session, wait, monkeypatch
+    ):
+        from thzdaq_api.measurement_file import CONFLICTS
+
+        other = sweep_bias(session)
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(FAST_IV)
+        box.devices.combos["bias"].setCurrentIndex(
+            box.devices.combos["bias"].findData("sis_bias_1")
+        )
+        asked, answers = [], [QMessageBox.No, QMessageBox.Yes]
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *a, **k: asked.append(a[2]) or answers.pop(0),
+        )
+        box.start()
+        wait(lambda: len(asked) == 1)
+        assert f"#{other.id}" in asked[0] and "Start anyway?" in asked[0]
+        assert box.status().outcome == "not started: a device is in use"
+        finished = []
+        box.runner.finished.connect(finished.append)
+        box.start()  # yes: it goes on and notes the conflict
+        wait(lambda: finished)
+        assert finished[0].metadata[CONFLICTS][0]["run"] == other.id
+        model = session.measurements
+        row = model.items.index(finished[0])
+        assert model.data(model.index(row, 5), Qt.DecorationRole) is not None
+        assert "Conflicts accepted" in model.data(model.index(row, 5), Qt.ToolTipRole)
+        ended(session, other)
+
+    def test_check_says_whether_it_would_start(self, window, session, monkeypatch):
+        box = window.docks["measure:sis.iv_curve"].widget().box
+        box.form.set_values(FAST_IV)
+        told = []
+        monkeypatch.setattr(
+            QMessageBox, "information", lambda *a, **k: told.append(a[2])
+        )
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: told.append(a[2]))
+        box.check()
+        assert told[-1].startswith("Ready to start: 6 steps on SIS")
+        assert not session.running()  # nothing started
+        other = sweep_bias(session, box.mapping()["bias"])
+        box.check()
+        assert f"#{other.id}" in told[-1]
+        ended(session, other)
+
+    def test_a_device_dock_shows_who_sweeps_it_and_asks(
+        self, window, session, bench, wait, monkeypatch
+    ):
+        widget = window.docks["device:sis_bias_1"].widget()
+        assert widget.use.isHidden()
+        other = sweep_bias(session)
+        wait(lambda: not widget.use.isHidden())
+        assert (
+            f"#{other.id}" in widget.use.text() and "sweeps SIS1" in widget.use.text()
+        )
+        asked = []
+        monkeypatch.setattr(
+            QMessageBox,
+            "question",
+            lambda *a, **k: asked.append(a[2]) or QMessageBox.Yes,
+        )
+        panel = widget.panels[0]
+        voltage = next(q for q in panel.quantities if q.key == "voltage_set")
+        panel.write(voltage, 1e-3)  # refused, asked, set anyway
+        wait(lambda: asked and not panel.fields["voltage_set"].pending)
+        assert f"#{other.id}" in asked[0]
+        wait(lambda: panel.fields["voltage_set"].value() == 1e-3)
+        # The sweep notes who changed its device (and restores it at its end)
+        noted = ended(session, other).conflicts
+        assert [(c["key"], c["by"]) for c in noted] == [("voltage_set", "gui")]
+        wait(lambda: widget.use.isHidden())
+
+    def test_the_safe_state_button_sets_the_profile_values(
+        self, window, session, bench, wait, monkeypatch
+    ):
+        from thzdaq_gui import profile as fmt
+
+        told = []
+        monkeypatch.setattr(
+            QMessageBox, "information", lambda *a, **k: told.append(a[2])
+        )
+        window.safeState.trigger()  # the profile has none yet
+        assert "no safe state" in told[-1]
+        edited = fmt.changed(session.profile().profile)
+        edited[fmt.SAFETY] = {fmt.SAFE_STATE: {"sis_bias_1": {"voltage_set": 0.0}}}
+        session.update_profile(edited)
+        bench.station.device("sis_bias_1").set_voltage(2e-3)
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+        window.safeState.trigger()
+        wait(lambda: len(told) == 2)
+        assert "sis_bias_1 voltage_set → 0.0: set" in told[-1]
+        voltage = bench.station.device("sis_bias_1").get_voltage()
+        assert abs(voltage) < 1e-4

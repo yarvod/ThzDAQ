@@ -10,6 +10,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from thzdaq_api.measurement_file import (
     CANCELLED,
     COMPLETED,
+    CONFLICTS,
     FAILED,
     INTERRUPTED,
     RUNNING,
@@ -33,6 +34,15 @@ STATUS_COLORS = {
 
 def short_time(stamp: Optional[str]) -> str:
     return stamp.replace("T", " ")[:19] if stamp else "--"
+
+
+def conflicts_text(conflicts) -> str:
+    """For a tooltip: what others did to the devices it swept, accepted."""
+    lines = [
+        ", ".join(f"{key} {value}" for key, value in entry.items() if key != "at")
+        for entry in conflicts
+    ]
+    return "Conflicts accepted (share):\n" + "\n".join(lines)
 
 
 class MeasurementsModel(QAbstractTableModel):
@@ -78,11 +88,16 @@ class MeasurementsModel(QAbstractTableModel):
                 item.status,
                 item.size,
             )[column]
+        conflicts = item.metadata.get(CONFLICTS) or ()
         if role == Qt.ForegroundRole and column == 5:
             from PySide6.QtGui import QColor
 
             return QColor(STATUS_COLORS.get(item.status, theme.TEXT))
+        if role == Qt.DecorationRole and column == 5 and conflicts:
+            return theme.icon("alert-outline", theme.ACCENT)
         if role == Qt.ToolTipRole:
+            if column == 5 and conflicts:
+                return conflicts_text(conflicts)
             return item.metadata.get("path") or item.error or None
         return None
 

@@ -52,6 +52,7 @@ from thzdaq_gui.wording import INVALID_PARAMETERS
 
 # A start or a stop that takes this long is treated as a hung device
 STUCK_AFTER_MS = 5000
+CHECK = "Check"
 
 
 class ProcedureBox(QWidget):
@@ -153,6 +154,7 @@ class ProcedureBox(QWidget):
         self.runner.progress.connect(self.on_progress)
         self.runner.log.connect(self.note)
         self.runner.failed.connect(self.on_failed)
+        self.runner.conflict.connect(self.on_conflict)
         self.runner.finished.connect(self.on_finished)
         self.runner.running_changed.connect(self.on_running)
         self.status_changed.connect(self.show_process_status)
@@ -312,6 +314,44 @@ class ProcedureBox(QWidget):
         self.update_status(state=CONNECTING, done=0, total=run.steps or None)
         self.stuck.start()
         self.runner.start(self.procedure, parameters, self.mapping(), self.comment)
+
+    def check(self) -> None:
+        """Whether it would start now, asked of the lab without starting it."""
+        problem = self.devices_problem()
+        if problem:
+            self.devices_box.set_expanded(True)
+            QMessageBox.warning(self, CHECK, problem)
+            return
+        try:
+            planned = self.runner.check(
+                self.procedure, self.parameters(), self.mapping()
+            )
+        except (ValueError, LabError) as e:
+            self.note(f"would not start: {e}")
+            QMessageBox.warning(self, CHECK, str(e))
+            return
+        steps = f"{planned.total} steps" if planned.total else "until stopped"
+        devices = ", ".join(self.session.title_of(r) for r in planned.devices.values())
+        text = f"Ready to start: {steps} on {devices or 'no devices'}"
+        self.note(text)
+        QMessageBox.information(self, CHECK, text)
+
+    def on_conflict(self, message: str) -> None:
+        """A device it needs is swept by another measurement: one question for
+        the whole run."""
+        self.note(message)
+        answer = QMessageBox.question(
+            self,
+            self.info.title,
+            f"{message}.\n\nStart anyway? A measurement that sweeps a device "
+            "others change may get spoiled data; both note the conflict.",
+        )
+        if answer == QMessageBox.Yes:
+            self.update_status(state=CONNECTING, done=0)
+            self.stuck.start()
+            self.runner.share()
+        else:
+            self.update_status(outcome="not started: a device is in use")
 
     def stop(self) -> None:
         self.runner.cancel()
