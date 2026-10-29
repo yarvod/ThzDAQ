@@ -4,6 +4,7 @@ Scale factors convert UI values at the boundary: ``5 * GHZ`` -> Hz, ``hz / GHZ``
 """
 
 import math
+import re
 
 GHZ = 1e9
 MHZ = 1e6
@@ -45,6 +46,31 @@ def prefix_factor(prefix: str) -> float:
         if name == prefix:
             return factor
     raise ValueError(f"Unknown SI prefix {prefix!r}")
+
+
+def parse_value(text: str, unit: str) -> float:
+    """A value typed with its unit, to SI: "2.3mV" or "2.3 mV" for V -> 0.0023.
+
+    A bare number is SI already; units without prefixes (dBm, dB, deg) take
+    the number as it is; "u" stands for "µ".
+    """
+    match = re.fullmatch(
+        r"\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(\S*)\s*", text
+    )
+    if match is None:
+        raise ValueError(f"{text!r} is not a number")
+    number, suffix = float(match.group(1)), match.group(2).replace("u", "µ")
+    if not suffix:
+        return number
+    if suffix == unit:
+        return number
+    prefix = suffix[: -len(unit)] if unit and suffix.endswith(unit) else None
+    if prefix is None or not any(p[0] == prefix for p in prefixes_for(unit)):
+        expected = (
+            f"{unit} with an SI prefix" if prefixes_for(unit) else unit or "no unit"
+        )
+        raise ValueError(f"{text!r}: expected {expected}")
+    return number * prefix_factor(prefix)
 
 
 def dbm_to_watt(dbm: float) -> float:

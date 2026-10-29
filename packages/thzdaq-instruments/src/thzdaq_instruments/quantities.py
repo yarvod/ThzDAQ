@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union
 
 from thzdaq_instruments import capabilities as caps
+from thzdaq_instruments.units import parse_value
 
 Kind = Literal["float", "int", "bool", "text"]
 
@@ -47,6 +48,35 @@ class Quantity:
     @property
     def label(self) -> str:
         return f"{self.title}, {self.unit}" if self.unit else self.title
+
+    def parse(self, value: Any) -> Any:
+        """A value as a person or a client gives it, as this quantity takes it:
+        "2.3mV" -> 0.0023 for a V quantity, "on" -> True for a bool one."""
+        if self.kind == "bool":
+            if isinstance(value, str):
+                words = {
+                    "true": True,
+                    "on": True,
+                    "1": True,
+                    "false": False,
+                    "off": False,
+                    "0": False,
+                }
+                if value.strip().lower() not in words:
+                    raise ValueError(f"{self.key}: {value!r} is not on or off")
+                return words[value.strip().lower()]
+            return bool(value)
+        if self.kind == "text":
+            text = str(value)
+            if self.choices and text not in [str(c) for c in self.choices]:
+                raise ValueError(
+                    f"{self.key}: {text!r} is not one of {list(self.choices)}"
+                )
+            return text
+        number = parse_value(value, self.unit) if isinstance(value, str) else value
+        if isinstance(number, bool) or not isinstance(number, (int, float)):
+            raise ValueError(f"{self.key}: {value!r} is not a number")
+        return int(number) if self.kind == "int" else float(number)
 
     def read(self, target: Any) -> Any:
         if self.source is not None:

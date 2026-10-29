@@ -80,3 +80,27 @@ def test_generator_multiplier_like_the_instrument():
     generator.set_frequency_multiplier(1)
     with pytest.raises(Exception):
         generator.set_frequency(223e9)
+
+
+def test_values_typed_with_units():
+    from thzdaq_instruments.units import parse_value
+
+    assert parse_value("2.3mV", "V") == pytest.approx(2.3e-3)
+    assert parse_value(" 2.3 mV ", "V") == pytest.approx(2.3e-3)
+    assert parse_value("5uA", "A") == pytest.approx(5e-6)
+    assert parse_value("223 GHz", "Hz") == pytest.approx(223e9)
+    assert parse_value("1e-3", "V") == 1e-3  # a bare number is SI
+    assert parse_value("-10 dBm", "dBm") == -10.0
+    for bad, unit in (("2.3 mA", "V"), ("5 kdBm", "dBm"), ("volts", "V")):
+        with pytest.raises(ValueError):
+            parse_value(bad, unit)
+
+
+def test_quantity_parses_what_a_client_sends():
+    voltage = Quantity("voltage_set", "Voltage setpoint", "V", set=lambda t, v: None)
+    output = Quantity("output", "Output", kind="bool", set=lambda t, v: None)
+    assert voltage.parse("2.3mV") == pytest.approx(2.3e-3) and voltage.parse(2) == 2.0
+    assert output.parse("on") is True and output.parse(0) is False
+    for bad in ("maybe", [1]):
+        with pytest.raises(ValueError):
+            (output if bad == "maybe" else voltage).parse(bad)
