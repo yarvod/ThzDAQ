@@ -72,11 +72,16 @@
 
   У каждого вызова есть `origin` (gui, cli, mcp:<имя>, assistant). `Procedure.run` выполняется
   в демоне с настоящими драйверами, наружу идут только события.
-- **Действия устройств декларативно**, как `Quantity`: `Action(key, title, params, danger)`.
-  Они выводятся из возможностей (`LoadSwitch` → `to_hot/to_cold`, `Rotator` → `rotate_to`,
-  `Compressor` → `turn_on/off`, `SpectrumAnalyzer/NetworkAnalyzer` → `read_trace`), драйвер
-  добавляет свои (SIS: калибровка, чоппер: вращение). Так особые группы доков
-  (`ChopperGroup`, `CompressorGroup`, `TraceGroup`, `SisBiasGroup`) становятся вызовами `call`.
+- **Действия устройств декларативно**, как `Quantity` (`thzdaq_instruments/actions.py`):
+  `Action(key, title, call, arguments, danger, changes)`, аргументы с единицами и пределами.
+  Они выводятся из возможностей (`LoadSwitch` → `to_hot/to_cold`, `Compressor` →
+  `turn_on/off` с предупреждением, `SpectrumAnalyzer/NetworkAnalyzer` → `configure` и
+  `read_trace`), драйвер добавляет свои (чоппер: `start_rotation`, `stop`). У поворотного
+  устройства действия нет: угол — задаваемая величина. Действия, которым нужен профиль, даёт
+  вид устройства: `sis_bias` → `write_calibration` (коэффициенты из метаданных устройства).
+  `changes=False` у чтения (трасса): оно не мешает развёртке. Особые группы доков
+  (`ChopperGroup`, `CompressorGroup`, `TraceGroup`, `SisBiasGroup`) уже выполняют эти
+  действия; в клиенте GUI они станут вызовами `call_action`.
 - **Одновременные обращения:**
   1. полоса прибора — очередь и поток на прибор, перенос `_Lane` в `thzdaq_core/application/lanes.py`: ручные операции
      всех клиентов идут по порядку;
@@ -229,8 +234,10 @@ thzdaq (мета, PyPI) ──► thzdaq-cli + thzdaq-api; extras [analysis] [da
 DTO, поэтому типы на границе одни на всех и прослойка «доменный объект → DTO» не нужна.
 
 - **thzdaq-api** — контракт и клиент. Зависит только от `msgspec`; без Qt, numpy и драйверов.
-  - Операции (`ops/`): у каждой — Struct аргументов с именем, типом результата, классом прав,
-    признаком «долгая» и описанием для модели. JSON-схема генерируется из Struct.
+  - Операции — в модулях областей (`devices.py`, `measurements.py`, `station.py`,
+    `leases.py`, `analysis.py`, `events.py`), явный список в `catalog.py`. У каждой — Struct
+    аргументов с именем, типом результата, классом прав, признаком «долгая» и описанием для
+    модели. JSON-схема генерируется из Struct.
   - DTO: `DeviceInfo`, `QuantityInfo`, `ActionInfo`, `ProcedureInfo` (параметры — JSON-схема,
     слоты, графики), `PlotInfo`, `RunInfo`, `MeasurementSummary`, `ConnectionInfo`,
     `LeaseInfo`, `DaemonStatus`.
@@ -284,7 +291,7 @@ thzdaq_core/
   тестируется без них.
 
 ### Юзкейсы: обработчик на операцию
-- Одна операция — один обработчик (`application/handlers/<область>/<операция>.py`):
+- Одна операция — один класс-обработчик (`application/handlers/<область>.py`):
   - реализует операцию из api: тип аргументов и результата берёт оттуда;
   - зависимости — в конструкторе (доменные и прикладные сервисы);
   - `handle(args, origin) → result`; своего состояния нет, поэтому параллельные вызовы
@@ -1309,11 +1316,15 @@ MCP лишь передаёт этот список чужой программ�
 ## Пакеты и файлы
 
 - `thzdaq-api` (новый, `msgspec`):
-  - `ops/` — операции по областям: устройства, измерения, станция, соединения, аренды,
-    подтверждения, анализ, скрипты, рабочие папки, UI, демон;
-  - `dto.py`, `events.py` (события и `Snapshot`), `errors.py` (`ErrorCode`, `LabError`);
-  - `measurement_file.py` — формат `thzdaq-measurement` v1 (`Column.source`), чтение JSON и
-    хвоста `.jsonl` после сбоя;
+  - `operation.py` (`Operation[R]`, `Rights`), `errors.py` (`ErrorCode`, `LabError`),
+    `wire.py` (единственный JSON-кодек);
+  - области — операции и их DTO рядом: `devices.py` (устройства, величины, действия,
+    трассы), `measurements.py`, `station.py` (профиль, драйверы, соединения), `leases.py`,
+    `analysis.py`, `events.py` (события и `Snapshot`); дальше — подтверждения, скрипты,
+    рабочие папки, UI, демон;
+  - `data.py` — значения файлов измерений (комплексные, NaN); `measurement_file.py` —
+    формат `thzdaq-measurement` v1 (`Column.source`), чтение JSON и хвоста `.jsonl` после
+    сбоя;
   - `catalog.py` — список операций и JSON-схемы;
   - `lab.py` — `Lab`, клиентские функции и объекты устройств, `connect`;
   - `remote.py` — `RemoteLab`: HTTP + SSE на stdlib, поток-читатель, переподключение с
@@ -1321,8 +1332,10 @@ MCP лишь передаёт этот список чужой программ�
   - `host.py` — файл хоста, файл установки, `connect_or_start()`, отвязанный запуск, `kill`;
   - `script.py` — сессии скриптов на стороне клиента (`lab.measurement`, `m.sweep`,
     `m.record`, `m.plot`).
-- `thzdaq-instruments`: `Action` и вывод действий из возможностей рядом с `quantities.py`;
-  `actions` у драйверов (scontel, chopper, sumitomo, rs, arduino); паспортные `limits` и
+- `thzdaq-analysis`: `iv`, `noise`, `shot_noise`, `two_sb`, `decibels` — чистые расчёты,
+  только numpy.
+- `thzdaq-instruments`: `actions.py` — `Action`, `Argument` и вывод действий из возможностей
+  рядом с `quantities.py`; `actions` у драйверов (чоппер; дальше sumitomo, rs); паспортные `limits` и
   пометка опасных методов; `Quantity.write` проверяет `minimum/maximum`;
   `transport/prologix.py` — `++loc` для использованных адресов перед закрытием простаивающего
   соединения.
@@ -1333,12 +1346,16 @@ MCP лишь передаёт этот список чужой программ�
     `shared`; у встроенных процедур `exclusive` для слотов развёртки, у `monitor.time` все
     слоты `read`), `PlotSpec`, процедуры, `common.py` (общие параметры, подписи осей);
   - `domain/data/` — `Measurement`, колонки; `domain/leases.py` — режимы, конфликты с явным
-    намерением, записи `interactions` / `conflict` в оба измерения; `domain/actions.py`;
-    `domain/sis/`;
+    намерением, записи `interactions` / `conflict` в оба измерения; `domain/sis/`
+    (калибровка и её действие у `sis_bias`, размагничивание);
   - `application/dispatch.py` (диспетчер и конвейер), `policy.py`, `approvals.py`
     (подтверждения, ответ от любого человеческого клиента, заранее выданные разрешения
     скриптов);
-  - `application/handlers/<область>/` — обработчик на операцию;
+  - `application/handlers/<область>.py` — обработчик на операцию, `assembly.py` — явный
+    список обработчиков и служб; `bench.py` (станция и полосы), `devices.py` (чтение,
+    запись, действия с проверкой аренды), `runs.py` (измерения в потоках, аренды, события
+    пачками), `station.py` (профиль и соединения), `describe.py` (домен → DTO), `values.py`
+    (известные значения), `clock.py`;
   - `application/runner.py` — раннер: проверка диапазонов до старта, `dry_run`;
   - `application/events.py` — шина, кольцевой буфер, снимок, слияние частых `quantity_set`;
   - `application/lanes.py` — из `thzdaq_gui/workers.py::_Lane`, без Qt; `polling.py`;
@@ -1411,12 +1428,16 @@ MCP лишь передаёт этот список чужой программ�
    - аренды `read` / `shared` / `exclusive`, владелец — id измерения или сессии; конфликт
      только на `exclusive`, с явным намерением (share); измерения записывают конфликты и чужие изменения;
    - `slot_modes` у встроенных процедур.
+
+   Сделано на ветке `daemon`: 24 операции в 6 областях, обработчики и `LocalLab`, анализ
+   вынесен в пакет `thzdaq-analysis`. Слияние частых `quantity_set` переходит в шаг 4 (поток
+   SSE), сессии скриптов как владельцы аренд — в М3.
 3. **Защита:**
    - паспортные пределы драйверов;
    - раздел `safety`: `min/max/warn/step/rate`, `safe_state`, OVP/OCP;
    - `GuardedPort` с кэшем уставок и прерываемой лесенкой;
    - проверка развёрток до старта;
-   - опасные действия с диалогом в GUI.
+   - опасные действия с диалогом в GUI (кнопки действий с `danger` уже спрашивают).
 4. **Демон и клиент:**
    - `thzdaq-daemon`: точка сборки, HTTP + SSE над диспетчером;
    - `RemoteLab`; контрактные тесты одни и те же на `LocalLab` и `RemoteLab`;
