@@ -4,7 +4,8 @@ A configured device is a sub-device a driver declares (SubdeviceType: SIS
 bias, SIS coil): the part comes from the instrument accessor and the
 settings become attributes of the part (SIS offsets). Each kind declares its
 settings as parameters with units, so the Setup form and validation come for
-free.
+free, and may add actions that need the device's profile (a SIS bias writes its
+calibration into the block).
 
 Instruments that are one device (a generator, a power meter) or have fixed
 channels (supply outputs) have no kinds; how a measurement uses a channel
@@ -12,15 +13,17 @@ channels (supply outputs) have no kinds; how a measurement uses a channel
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Callable, Dict, Hashable, Mapping, Optional, Tuple, Type
 
 from thzdaq_instruments import default_registry
+from thzdaq_instruments.actions import Action
 from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.registry import DriverRegistry
 
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.parameters import FloatParameter, Parameter
+from thzdaq_core.domain.sis.calibration import calibration_actions
 from thzdaq_core.domain.station.ports import AttributePort
 
 
@@ -38,6 +41,10 @@ def _named(name: str, parameter: Parameter) -> Parameter:
     return parameter
 
 
+# Actions of a configured device from its channel and profile metadata
+ActionFactory = Callable[[Hashable, Mapping[str, Any]], Tuple[Action, ...]]
+
+
 @dataclass(frozen=True)
 class DeviceKind:
     key: str
@@ -48,6 +55,7 @@ class DeviceKind:
     keys: Tuple[Any, ...] = ()
     part_class: Optional[type] = None
     needs_channel: bool = False
+    action_factory: Optional[ActionFactory] = None
 
     def defaults(self) -> Dict[str, Any]:
         return {p.name: p.default for p in self.settings}
@@ -65,6 +73,13 @@ class DeviceKind:
             except ProcedureError as e:
                 raise StationError(f"{self.title}: {name}: {e}") from None
         return values
+
+    def actions(
+        self, channel: Hashable, metadata: Mapping[str, Any]
+    ) -> Tuple[Action, ...]:
+        if self.action_factory is None:
+            return ()
+        return self.action_factory(channel, metadata)
 
     def build(self, part: Any, settings: Dict[str, Any]) -> Any:
         values = self.clean(settings)
@@ -84,6 +99,10 @@ SUBDEVICE_SETTINGS: Dict[str, Tuple[Parameter, ...]] = {
 }  # fmt: skip
 
 
+# Actions of driver sub-devices that need the profile, by sub-device key
+SUBDEVICE_ACTIONS: Dict[str, ActionFactory] = {"sis_bias": calibration_actions}
+
+
 def subdevice_kinds(driver_cls: Type[Instrument]) -> Dict[str, DeviceKind]:
     return {
         key: DeviceKind(
@@ -94,6 +113,7 @@ def subdevice_kinds(driver_cls: Type[Instrument]) -> Dict[str, DeviceKind]:
             keys=sub.keys,
             part_class=sub.part_class,
             needs_channel=True,
+            action_factory=SUBDEVICE_ACTIONS.get(key),
         )
         for key, sub in driver_cls.subdevices.items()
     }

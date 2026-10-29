@@ -36,7 +36,12 @@ from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
 from thzdaq_core.domain.measurements.procedures.monitor import default_quantities
 from thzdaq_core.domain.measurements.catalog import get_procedure
 from thzdaq_core.domain.measurements.procedures.common import POWER_DBM, S_DB
-from thzdaq_core.domain.sis.calibration import calibration_for, evaluate_sis_calibration
+from thzdaq_core.domain.sis.calibration import (
+    CALIBRATION_KEY,
+    WRITE_CALIBRATION,
+    calibration_for,
+    evaluate_sis_calibration,
+)
 from thzdaq_core.domain.station.kinds import SUBDEVICE_SETTINGS
 from thzdaq_core.domain.station.station import INSTRUMENT, channel_title
 from thzdaq_instruments.capabilities import (
@@ -762,8 +767,9 @@ class SisBiasGroup(QGroupBox):
         row = QHBoxLayout()
         edit = QPushButton(theme.icon("table-edit"), "Calibration…")
         edit.clicked.connect(self.edit_calibration)
-        write = QPushButton(theme.icon("upload"), "Write to block")
-        write.clicked.connect(self.write_calibration)
+        write = action_button(
+            self.write_action(), "upload", lambda _: self.write_calibration()
+        )
         row.addWidget(edit)
         row.addWidget(write)
         layout.addRow("Calibration", row)
@@ -788,30 +794,26 @@ class SisBiasGroup(QGroupBox):
 
     def calibration(self) -> dict:
         spec = self.spec()
-        return calibration_for(
-            spec.channel, spec.metadata.get("calibration_coefficients")
-        )
+        return calibration_for(spec.channel, spec.metadata.get(CALIBRATION_KEY))
 
     def edit_calibration(self) -> None:
         dialog = CalibrationDialog(self.calibration(), self)
         if dialog.exec() == QDialog.Accepted:
             self._update(
                 lambda spec: spec.metadata.__setitem__(
-                    "calibration_coefficients", dialog.coefficients
+                    CALIBRATION_KEY, dialog.coefficients
                 )
             )
 
+    def write_action(self) -> Action:
+        """The device's calibration write, with the profile as it is now."""
+        actions = self.panel.session.station.actions(self.device_id)
+        return next(a for a in actions if a.key == WRITE_CALIBRATION)
+
     def write_calibration(self) -> None:
-        answer = QMessageBox.question(
-            self,
-            "Write calibration",
-            f"Write the calibration of {self.panel.title} to the SIS block EEPROM?",
-        )
-        if answer != QMessageBox.Yes:
-            return
-        values = evaluate_sis_calibration(self.calibration())
+        action = self.write_action()
         self.panel.session.worker.submit(
-            lambda: self.panel.device().write_calibration(values),
+            lambda: action.run(self.panel.device(), {}),
             lambda answer: QMessageBox.information(
                 self, "Calibration", f"Block answered: {answer}"
             ),

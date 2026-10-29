@@ -90,3 +90,24 @@ def test_a_swept_device_takes_a_change_only_with_share_and_a_read_always(lab):
             share=True,
         )
     )
+
+
+def test_a_sis_bias_writes_the_calibration_of_its_profile(lab):
+    from thzdaq_core.domain.sis.calibration import (
+        calibration_for,
+        evaluate_sis_calibration,
+    )
+
+    actions = {a.key: a for a in lab.call(DescribeDevice(ref="sis_bias_1")).actions}
+    assert actions["write_calibration"].danger  # it overwrites the block's memory
+    station = lab.assembled.runs.bench.station
+    instrument_id, spec = station.config.find_device("sis_bias_1")
+    done = lab.call(CallAction(ref="sis_bias_1", action="write_calibration"))
+    assert done.result == "OK"
+    channel = station.instrument(instrument_id).channel(spec.channel)
+    assert channel.calibration == evaluate_sis_calibration(
+        calibration_for(spec.channel)
+    )
+    assert "write_calibration" not in {
+        a.key for a in lab.call(DescribeDevice(ref="sis_coil_1")).actions
+    }

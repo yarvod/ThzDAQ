@@ -394,8 +394,15 @@ class Station:
         return quantities_for(self.info(ref).capabilities, own)
 
     def actions(self, ref: str) -> List[Action]:
-        """What a device does on request, known without opening anything."""
-        own = getattr(self.part_class(ref), "actions", ())
+        """What a device does on request, known without opening anything: from
+        its capabilities, its driver and, for a configured device, its kind."""
+        own = list(getattr(self.part_class(ref), "actions", ()))
+        found = self.config.find_device(ref)
+        if found is not None:
+            instrument_id, spec = found
+            kind = self.kinds(instrument_id).get(spec.kind)
+            if kind is not None:
+                own += kind.actions(spec.channel, spec.metadata)
         return actions_for(self.info(ref).capabilities, own)
 
     def device_use(self, ref: str) -> DeviceUse:

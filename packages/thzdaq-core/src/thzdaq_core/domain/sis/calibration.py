@@ -2,7 +2,8 @@
 
 Coefficients may be numbers or quoted arithmetic expressions ("5.476e-9 / 5"),
 evaluated safely (numbers, + - * / ** and parentheses only). Moved from the
-legacy store/sisCalibration.py.
+legacy store/sisCalibration.py. A bias device keeps its coefficients in the
+profile (device metadata); its write_calibration action stores them in the block.
 """
 
 import ast
@@ -10,7 +11,13 @@ import math
 import operator
 from copy import deepcopy
 from numbers import Real
-from typing import Mapping
+from typing import Any, Mapping, Optional, Tuple
+
+from thzdaq_instruments.actions import Action
+
+# Device metadata in the profile that holds the coefficients of a bias device
+CALIBRATION_KEY = "calibration_coefficients"
+WRITE_CALIBRATION = "write_calibration"  # the action of a bias device
 
 CALIBRATION_FIELDS = {
     "CurrentADC": 2,
@@ -193,3 +200,25 @@ def calibration_for(channel_key: str, stored=None) -> dict:
     if stored:
         return normalize_sis_calibration(stored)
     return default_sis_calibration(channel_key)
+
+
+def calibration_actions(
+    channel: Any, metadata: Mapping[str, Any]
+) -> Tuple[Action, ...]:
+    """Actions of a bias device on its channel, with the profile's metadata."""
+
+    def write(target) -> Optional[str]:
+        values = evaluate_sis_calibration(
+            calibration_for(channel, metadata.get(CALIBRATION_KEY))
+        )
+        return target.write_calibration(values)
+
+    return (
+        Action(
+            WRITE_CALIBRATION,
+            "Write to block",
+            write,
+            danger="Overwrites the calibration in the SIS block memory",
+            help="Store the coefficients of the profile in the SIS block",
+        ),
+    )

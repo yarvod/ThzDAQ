@@ -34,6 +34,7 @@ from thzdaq_instruments.transport.base import (
 )
 
 from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.sis.calibration import CALIBRATION_KEY
 from thzdaq_core.domain.station.kinds import instrument_type
 from thzdaq_core.domain.station.config import (
     DeviceConfig,
@@ -188,7 +189,7 @@ def station_from_legacy(
                         "offset_current": _offset(entry.get("offset_current")),
                     },
                     metadata=(
-                        {"calibration_coefficients": entry["calibration_coefficients"]}
+                        {CALIBRATION_KEY: entry["calibration_coefficients"]}
                         if entry.get("calibration_coefficients")
                         else {}
                     ),
