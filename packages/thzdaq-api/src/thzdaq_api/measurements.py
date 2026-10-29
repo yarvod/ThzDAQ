@@ -182,6 +182,7 @@ class DescribeProcedure(Operation[ProcedureInfo]):
     procedure: str
     parameters: Dict[str, Any] = {}
     devices: Dict[str, str] = {}  # slot -> device
+    typed: Dict[str, str] = {}  # parameters as people type them, as in start
 
 
 class StartMeasurement(Operation[RunInfo]):
@@ -194,7 +195,9 @@ class StartMeasurement(Operation[RunInfo]):
     folder when not given). dry_run checks all a start checks (parameters,
     devices, the limits of what it sets, conflicts) without opening an
     instrument or writing a file, and returns the run it would be, planned,
-    with number 0."""
+    with number 0. typed gives parameters as people type them, in the units
+    they are shown in: a sweep as start:stop:points ("0:7:351" for mV), a list
+    comma separated; the daemon parses them."""
 
     rights = Rights.RUN
     procedure: str
@@ -204,6 +207,7 @@ class StartMeasurement(Operation[RunInfo]):
     share: bool = False
     workspace: Optional[str] = None
     dry_run: bool = False
+    typed: Dict[str, str] = {}
 
 
 class ListRuns(Operation[Tuple[RunInfo, ...]]):

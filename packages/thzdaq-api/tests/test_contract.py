@@ -122,3 +122,26 @@ def test_lists_are_typed_with_commas_semicolons_or_spaces():
 
     assert split_list(" 4, 6;8  10 ") == ["4", "6", "8", "10"]
     assert split_list("") == []
+
+
+def test_a_reset_lane_fails_what_waits_and_starts_anew():
+    import threading
+
+    from thzdaq_api.lanes import LaneReset, Lanes
+
+    lanes = Lanes()
+    release, outcomes = threading.Event(), []
+    lanes.submit(
+        "nrx",
+        lambda: release.wait(5) and "late",
+        lambda r, e: outcomes.append(r),
+        label="NRX",
+    )
+    lanes.submit("nrx", lambda: "never", lambda r, e: outcomes.append(e))
+    while lanes.current != "NRX":
+        threading.Event().wait(0.005)  # until the first job holds the lane
+    assert lanes.reset("nrx") and not lanes.reset("sis")
+    assert isinstance(outcomes[0], LaneReset)  # the waiting one failed at once
+    assert lanes.call("nrx", lambda: "fresh") == "fresh"  # a new lane
+    release.set()
+    lanes.stop()

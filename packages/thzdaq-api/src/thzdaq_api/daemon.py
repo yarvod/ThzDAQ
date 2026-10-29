@@ -114,6 +114,38 @@ class StopDaemon(Operation[None]):
     mode: StopMode = StopMode.GRACEFUL
 
 
+class DaemonSettings(msgspec.Struct, frozen=True):
+    """What the daemon keeps in its daemon.json."""
+
+    idle_timeout: float  # s with no client and no measurement before it ends; 0: never
+
+
+class GetDaemonSettings(Operation[DaemonSettings]):
+    """The daemon's settings: how long it waits idle before it ends."""
+
+
+class SetDaemonSettings(Operation[DaemonSettings]):
+    """Change the daemon's settings; they are kept for its next starts."""
+
+    rights = Rights.DAEMON
+    idle_timeout: float
+
+
+class ReadDaemonLog(Operation[Tuple[str, ...]]):
+    """The last lines of the daemon's log; none when it keeps no log file."""
+
+    lines: int = 100
+
+
+class ResetLane(Operation[bool]):
+    """An instrument that does not answer holds its queue: break its commands
+    and give it a new queue. Calls waiting in the old one fail at once; the one
+    that hangs ends when its read is broken. Returns whether it had a queue."""
+
+    rights = Rights.DAEMON
+    instrument: str
+
+
 class RestartDaemon(Operation[None]):
     """Stop the daemon as stop_daemon does and start it again with the same
     profile; clients reconnect and take a new snapshot."""

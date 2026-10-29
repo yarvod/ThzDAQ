@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 Deliver = Callable[[Any, Optional[BaseException]], None]
 
 
+class LaneReset(Exception):
+    """A job that waited in a lane given up by reset()."""
+
+
 class _Lane:
     def __init__(self, key: str):
         self.queue: "queue.Queue" = queue.Queue()
@@ -50,6 +54,18 @@ class _Lane:
             # its last reference stays with whoever deliver handed it to
             del item, job, deliver
             result = None
+
+    def abandon(self, key: str) -> None:
+        """Fail the jobs that wait; the one running ends here when it can."""
+        while True:
+            try:
+                item = self.queue.get_nowait()
+            except queue.Empty:
+                break
+            if item is not None:
+                _, deliver, _ = item
+                deliver(None, LaneReset(f"the queue of {key} was reset"))
+        self.queue.put(None)  # the thread ends after the job it runs
 
 
 class Lanes:
@@ -93,6 +109,16 @@ class Lanes:
         if error is not None:
             raise error
         return result
+
+    def reset(self, key: str) -> bool:
+        """A new lane for key: the old one, held by a job that hangs, is given
+        up. Returns whether key had a lane."""
+        with self._lock:
+            old = self._lanes.pop(key, None)
+        if old is None:
+            return False
+        old.abandon(key)
+        return True
 
     def status(self) -> List[Tuple[str, int, Optional[str], float]]:
         """Each instrument's lane: (instrument, jobs waiting, the device the

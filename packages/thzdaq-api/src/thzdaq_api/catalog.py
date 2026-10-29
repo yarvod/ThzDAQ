@@ -41,6 +41,10 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     leases.ListLeases,
     analysis.AnalyzeIv,
     daemon.GetDaemonStatus,
+    daemon.GetDaemonSettings,
+    daemon.SetDaemonSettings,
+    daemon.ReadDaemonLog,
+    daemon.ResetLane,
     daemon.StopDaemon,
     daemon.RestartDaemon,
 )
