@@ -16,14 +16,17 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 MAX_WAIT_S = 60.0  # a client waits again rather than holding a request longer
 
 
-def build(name: str, parameters: Mapping[str, Any]) -> Procedure:
-    """A procedure with parameters as JSON gives them (SI, sweeps as dicts)."""
+def build(
+    name: str, parameters: Mapping[str, Any], typed: Mapping[str, str]
+) -> Procedure:
+    """A procedure with parameters as JSON gives them (SI, sweeps as dicts) and
+    as people type them (display units, sweeps as start:stop:points)."""
     try:
         cls = get_procedure(name)
     except ProcedureError as e:
         raise LabError(ErrorCode.NOT_FOUND, str(e)) from None
     try:
-        return cls.from_json(parameters)
+        return cls.from_json(parameters, typed)
     except ProcedureError as e:
         raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
 
@@ -42,7 +45,7 @@ class DescribeProcedure(Handler[api.DescribeProcedure, api.ProcedureInfo]):
         self.devices = devices
 
     def handle(self, args, origin):
-        procedure = build(args.procedure, args.parameters)
+        procedure = build(args.procedure, args.parameters, args.typed)
 
         def quantities(slot: str):
             ref = args.devices.get(slot)
@@ -58,7 +61,7 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
         self.runs = runs
 
     def handle(self, args, origin):
-        procedure = build(args.procedure, args.parameters)
+        procedure = build(args.procedure, args.parameters, args.typed)
         return self.runs.start(
             procedure,
             args.devices,

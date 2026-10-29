@@ -7,7 +7,7 @@ import threading
 from typing import Callable, Optional, Tuple, TypeVar
 
 from thzdaq_api import wire
-from thzdaq_api.daemon import API_VERSION, ClientInfo, ProcessInfo
+from thzdaq_api.daemon import API_VERSION, ClientInfo, DaemonSettings, ProcessInfo
 from thzdaq_api.events import Event
 from thzdaq_api.host import app_version
 from thzdaq_api.operation import Operation
@@ -40,14 +40,16 @@ class LocalLab:
 
 
 class LocalControl:
-    """The process of a LocalLab is this one: it has no clients of its own, and
-    a stop is only noted (the owner of the bench ends it)."""
+    """The process of a LocalLab is this one: it has no clients of its own, no
+    log file, settings only while it lives, and a stop is only noted (the
+    owner of the bench ends it)."""
 
     def __init__(self, simulate: bool = False):
         self.simulate = simulate
         self.started = wall_time()
         self.stopped = threading.Event()
         self.restart = False
+        self._settings = DaemonSettings(idle_timeout=0.0)
 
     def process(self) -> ProcessInfo:
         return ProcessInfo(
@@ -61,3 +63,12 @@ class LocalControl:
     def stop(self, restart: bool) -> None:
         self.restart = restart
         self.stopped.set()
+
+    def settings(self) -> DaemonSettings:
+        return self._settings
+
+    def change(self, settings: DaemonSettings) -> None:
+        self._settings = settings
+
+    def log(self, lines: int) -> Tuple[str, ...]:
+        return ()

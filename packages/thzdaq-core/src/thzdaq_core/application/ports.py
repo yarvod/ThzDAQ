@@ -9,7 +9,7 @@ passes them in.
 from pathlib import Path
 from typing import Optional, Protocol, Tuple
 
-from thzdaq_api.daemon import ClientInfo, ProcessInfo
+from thzdaq_api.daemon import ClientInfo, DaemonSettings, ProcessInfo
 
 from thzdaq_api.measurement_file import Measurement
 from thzdaq_core.domain.station.config import StationConfig
@@ -50,3 +50,12 @@ class DaemonControl(Protocol):
     def stop(self, restart: bool) -> None:
         """End the process once the current operation has answered; restart:
         start it again with the same profile."""
+
+    def settings(self) -> DaemonSettings:
+        ...
+
+    def change(self, settings: DaemonSettings) -> None:
+        """Take these settings now and keep them for the next starts."""
+
+    def log(self, lines: int) -> Tuple[str, ...]:
+        """The last lines of its log; none without a log file."""

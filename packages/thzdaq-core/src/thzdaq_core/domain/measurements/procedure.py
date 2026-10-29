@@ -88,18 +88,28 @@ class Procedure:
         return found
 
     @classmethod
-    def from_json(cls, data: Mapping[str, Any]) -> "Procedure":
-        """Raises ProcedureError naming every invalid parameter."""
+    def from_json(
+        cls, data: Mapping[str, Any], typed: Optional[Mapping[str, str]] = None
+    ) -> "Procedure":
+        """data as JSON carries it (SI); typed as people type it, in the units
+        it is shown in ("0:7:351" for a sweep in mV). Raises ProcedureError
+        naming every invalid parameter."""
+        typed = typed or {}
         parameters = cls.parameters()
-        unknown = set(data) - set(parameters)
+        unknown = (set(data) | set(typed)) - set(parameters)
         if unknown:
             raise ProcedureError(f"{cls.name}: unknown parameters {sorted(unknown)}")
         values, problems = {}, []
-        for key, value in data.items():
+        given = [(key, value, False) for key, value in data.items()]
+        given += [(key, text, True) for key, text in typed.items()]
+        for key, value, as_typed in given:
+            parameter = parameters[key]
             try:
-                values[key] = parameters[key].from_json(value)
+                values[key] = (
+                    parameter.parse(value) if as_typed else parameter.from_json(value)
+                )
             except ProcedureError as e:
-                problems.append(f"{parameters[key].label}: {e}")
+                problems.append(f"{parameter.label}: {e}")
         if problems:
             raise ProcedureError("; ".join(problems))
         return cls(**values)

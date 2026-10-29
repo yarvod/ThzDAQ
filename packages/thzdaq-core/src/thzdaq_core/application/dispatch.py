@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, Type
 
 from thzdaq_api import catalog, wire
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.lanes import LaneReset
 from thzdaq_api.operation import Operation
 from thzdaq_instruments.errors import InstrumentError, LimitError
 
@@ -32,7 +33,7 @@ class Dispatcher:
             raise
         except LimitError as e:
             raise LabError(ErrorCode.OUT_OF_LIMITS, str(e)) from e
-        except InstrumentError as e:
+        except (InstrumentError, LaneReset) as e:
             raise LabError(ErrorCode.INSTRUMENT, str(e)) from e
         except Exception as e:
             logger.exception(f"{args.name} failed ({origin})")

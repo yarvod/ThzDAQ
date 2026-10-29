@@ -5,7 +5,16 @@ what they changed) and then sets the profile's safe state; graceful is
 refused while measurements run.
 """
 
-from thzdaq_api.daemon import DaemonStatus, Heartbeat, LaneInfo, PollInfo, StopMode
+from typing import Tuple
+
+from thzdaq_api.daemon import (
+    DaemonSettings,
+    DaemonStatus,
+    Heartbeat,
+    LaneInfo,
+    PollInfo,
+    StopMode,
+)
 from thzdaq_api.errors import ErrorCode, LabError
 
 from thzdaq_core.application.bench import Bench
@@ -70,6 +79,35 @@ class DaemonService:
         """The short news of a stream that heard up to seq."""
         status = self.status()
         return Heartbeat(seq, len(status.clients), len(status.runs), status.problems)
+
+    def settings(self) -> DaemonSettings:
+        return self.control.settings()
+
+    def change(self, idle_timeout: float) -> DaemonSettings:
+        if idle_timeout < 0:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS, "idle_timeout is 0 (never) or more s"
+            )
+        self.control.change(DaemonSettings(idle_timeout=idle_timeout))
+        return self.control.settings()
+
+    def log(self, lines: int) -> Tuple[str, ...]:
+        if lines <= 0:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, "lines must be above 0")
+        return self.control.log(lines)
+
+    def reset_lane(self, instrument: str) -> bool:
+        """Break the commands of an instrument that hangs and give it a new
+        lane; the calls waiting in the old one fail."""
+        station = self.bench.station
+        if instrument not in station.config.instruments:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No instrument {instrument!r}",
+                "get_station lists them",
+            )
+        station.abort([d.ref for d in station.devices() if d.instrument == instrument])
+        return self.bench.lanes.reset(instrument)
 
     def stop(self, mode: StopMode, origin: str, restart: bool = False) -> None:
         running = self.runs.active()

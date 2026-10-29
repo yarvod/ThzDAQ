@@ -1,4 +1,7 @@
-"""Operations on the daemon: its status, stopping and restarting it."""
+"""Operations on the daemon: its status, settings and log, a lane that hangs,
+stopping and restarting it."""
+
+from typing import Tuple
 
 from thzdaq_api import daemon as api
 
@@ -34,3 +37,43 @@ class RestartDaemon(Handler[api.RestartDaemon, None]):
 
     def handle(self, args, origin):
         self.daemon.stop(args.mode, origin, restart=True)
+
+
+class GetDaemonSettings(Handler[api.GetDaemonSettings, api.DaemonSettings]):
+    operation = api.GetDaemonSettings
+
+    def __init__(self, daemon: DaemonService):
+        self.daemon = daemon
+
+    def handle(self, args, origin):
+        return self.daemon.settings()
+
+
+class SetDaemonSettings(Handler[api.SetDaemonSettings, api.DaemonSettings]):
+    operation = api.SetDaemonSettings
+
+    def __init__(self, daemon: DaemonService):
+        self.daemon = daemon
+
+    def handle(self, args, origin):
+        return self.daemon.change(args.idle_timeout)
+
+
+class ReadDaemonLog(Handler[api.ReadDaemonLog, Tuple[str, ...]]):
+    operation = api.ReadDaemonLog
+
+    def __init__(self, daemon: DaemonService):
+        self.daemon = daemon
+
+    def handle(self, args, origin):
+        return self.daemon.log(args.lines)
+
+
+class ResetLane(Handler[api.ResetLane, bool]):
+    operation = api.ResetLane
+
+    def __init__(self, daemon: DaemonService):
+        self.daemon = daemon
+
+    def handle(self, args, origin):
+        return self.daemon.reset_lane(args.instrument)

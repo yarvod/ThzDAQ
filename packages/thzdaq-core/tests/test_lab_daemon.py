@@ -51,3 +51,25 @@ def test_a_cancel_ends_the_measurements_and_goes_safe(lab):
     reading = lab.call(ReadDevice(ref="sis_bias_1", keys=("voltage_set",)))
     assert reading.values["voltage_set"] == 0.0
     assert control(lab).stopped.is_set() and control(lab).restart
+
+
+def test_settings_are_kept_and_the_log_read(lab):
+    from thzdaq_api.daemon import GetDaemonSettings, ReadDaemonLog, SetDaemonSettings
+
+    assert lab.call(SetDaemonSettings(idle_timeout=300.0)).idle_timeout == 300.0
+    assert lab.call(GetDaemonSettings()).idle_timeout == 300.0
+    with pytest.raises(LabError) as caught:
+        lab.call(SetDaemonSettings(idle_timeout=-1.0))
+    assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert isinstance(lab.call(ReadDaemonLog(lines=5)), tuple)
+
+
+def test_a_lane_is_reset_and_its_instrument_works_again(lab):
+    from thzdaq_api.daemon import ResetLane
+
+    lab.call(ReadDevice(ref="power_meter_1"))  # it has a lane now
+    assert lab.call(ResetLane(instrument="power_meter_1")) is True
+    assert "power" in lab.call(ReadDevice(ref="power_meter_1")).values
+    with pytest.raises(LabError) as caught:
+        lab.call(ResetLane(instrument="power_meter_9"))
+    assert caught.value.code == ErrorCode.NOT_FOUND

@@ -227,3 +227,22 @@ def test_a_comment_goes_into_the_file_of_a_measurement(lab, tmp_path):
     with pytest.raises(LabError) as caught:
         lab.call(SetComment(path=str(tmp_path / "nothing.json"), comment="x"))
     assert caught.value.code == ErrorCode.NOT_FOUND
+
+
+def test_parameters_are_typed_as_people_type_them(lab):
+    typed = {"voltage": "0:2:11", "settle_time": "0", "first_point_delay": "0"}
+    info = lab.call(DescribeProcedure(procedure=IV_CURVE, typed=typed))
+    assert info.steps == 11
+    with pytest.raises(LabError) as error:
+        lab.call(DescribeProcedure(procedure=IV_CURVE, typed={"voltage": "0:2"}))
+    assert error.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert "start:stop:points" in str(error.value)
+    planned = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE,
+            typed=typed,
+            devices={"bias": "sis_bias_1"},
+            dry_run=True,
+        )
+    )
+    assert planned.total == 11

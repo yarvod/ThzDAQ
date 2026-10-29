@@ -88,6 +88,10 @@ def assemble(
             station.ListConnections(profile),
             station.ResetConnection(profile),
             daemon.GetDaemonStatus(service),
+            daemon.GetDaemonSettings(service),
+            daemon.SetDaemonSettings(service),
+            daemon.ReadDaemonLog(service),
+            daemon.ResetLane(service),
             daemon.StopDaemon(service),
             daemon.RestartDaemon(service),
         )
