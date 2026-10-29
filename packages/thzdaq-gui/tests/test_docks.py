@@ -299,7 +299,7 @@ class TestWindow:
 
 
 class TestDeviceDocks:
-    def test_quantity_panel_reads_and_sets(self, window, session, wait):
+    def test_quantity_panel_reads_and_sets(self, window, session, wait, monkeypatch):
         widget = window.docks["device:sis_bias_1"].widget()
         panel = widget.panels[0]
         assert [q.key for q in panel.quantities] == [
@@ -322,11 +322,22 @@ class TestDeviceDocks:
         assert (
             float(settings().value(setpoint_key("sis_bias_1", "voltage_set"))) == 2.5e-3
         )
-        # Active is the opposite of the block's short: off shorts the output
+        # Active is the opposite of the block's short: off shorts the output.
+        # It may harm a biased junction, so a person is asked first
+        asked = []
+        answer = [QMessageBox.No]
+        monkeypatch.setattr(
+            QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or answer[0]
+        )
         active = next(q for q in panel.quantities if q.key == "active")
+        channel = session.station.instrument("sis_block_1").channel("DEV4")
+        shorted = channel.get_short()
+        panel.write(active, shorted)
+        assert asked and active.danger in asked[0]
+        assert channel.get_short() == shorted  # no: nothing is written
+        answer[0] = QMessageBox.Yes
         panel.write(active, True)
         wait(lambda: panel.toggles["active"].isChecked())
-        channel = session.station.instrument("sis_block_1").channel("DEV4")
         assert not channel.get_short()
         panel.write(active, False)
         wait(lambda: not panel.toggles["active"].isChecked())

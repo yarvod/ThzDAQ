@@ -398,6 +398,9 @@ class QuantityPanel(QWidget):
     def write(self, quantity: Quantity, value) -> None:
         if self.session.station is None:
             return
+        if quantity.danger and not confirmed(self, quantity.title, quantity.danger):
+            self.unflip(quantity, value)
+            return
 
         def done(_):
             field = self.fields.get(quantity.key)
@@ -407,10 +410,7 @@ class QuantityPanel(QWidget):
             self.read()
 
         def failed(error):
-            toggle = self.toggles.get(quantity.key)
-            if toggle is not None:  # the click has already flipped it
-                toggle.setChecked(not value)
-                toggle.setText("On" if not value else "Off")
+            self.unflip(quantity, value)
             self.failed(error)
 
         self.session.worker.submit(
@@ -420,6 +420,13 @@ class QuantityPanel(QWidget):
             self.title,
             key=self.lane,
         )
+
+    def unflip(self, quantity: Quantity, value) -> None:
+        """A switch the click has flipped goes back: it was not set."""
+        toggle = self.toggles.get(quantity.key)
+        if toggle is not None:
+            toggle.setChecked(not value)
+            toggle.setText("On" if not value else "Off")
 
     def stop(self) -> None:
         self.monitor.setChecked(False)
@@ -432,6 +439,12 @@ def _same(a, b) -> bool:
         return str(a).strip().upper() == str(b).strip().upper()
 
 
+def confirmed(parent: QWidget, title: str, danger: str) -> bool:
+    """Whether a person goes on with something that may harm the bench."""
+    answer = QMessageBox.question(parent, title, f"{danger}. {title}?")
+    return answer == QMessageBox.Yes
+
+
 def action_button(action: Action, icon_name: str, run, tip: str = "") -> QPushButton:
     """A button running a device action without arguments; a dangerous one asks
     first, with its warning."""
@@ -439,12 +452,8 @@ def action_button(action: Action, icon_name: str, run, tip: str = "") -> QPushBu
     button.setToolTip(tip or action.help or action.danger)
 
     def clicked():
-        if action.danger:
-            answer = QMessageBox.question(
-                button, action.title, f"{action.danger}. {action.title}?"
-            )
-            if answer != QMessageBox.Yes:
-                return
+        if action.danger and not confirmed(button, action.title, action.danger):
+            return
         run(action)
 
     button.clicked.connect(clicked)
