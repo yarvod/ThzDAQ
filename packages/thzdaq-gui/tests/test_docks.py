@@ -4,10 +4,11 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
-from thzdaq_core.data import COMPLETED, read_json
-from thzdaq_core.measurements.parameters import Sweep
-from thzdaq_core.measurements.registry import list_procedures
-from thzdaq_core.station import load_station
+from thzdaq_core.domain.data.measurement import COMPLETED
+from thzdaq_core.adapters.json_store import read_json
+from thzdaq_core.domain.parameters import Sweep
+from thzdaq_core.domain.measurements.catalog import list_procedures
+from thzdaq_core.adapters.yaml_profiles import load_station
 from thzdaq_gui.docks.setup import DeviceDialog, InstrumentDialog
 from thzdaq_instruments.transport.base import PROLOGIX
 
@@ -272,7 +273,7 @@ class TestWindow:
         ) == path.count("\\")
 
     def test_editing_keeps_a_driver_no_longer_offered(self, app):
-        from thzdaq_core.station import InstrumentConfig, StationConfig
+        from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
         from thzdaq_instruments.transport import SERIAL, ConnectionSpec
 
         spec = ConnectionSpec(SERIAL, serial_port="COM3")
@@ -513,7 +514,7 @@ class TestDeviceDocks:
 
 class TestMeasureAndData:
     def test_saved_parameters_survive_a_dropped_one(self, window, session):
-        from thzdaq_core.measurements.registry import get_procedure
+        from thzdaq_core.domain.measurements.catalog import get_procedure
         from thzdaq_gui.docks.measure import ProcedureBox
         from thzdaq_gui.settings import settings
 
@@ -559,9 +560,12 @@ class TestMeasureAndData:
     def test_data_dock_opens_plots_and_exports(
         self, window, session, wait, tmp_path, monkeypatch
     ):
-        from thzdaq_core.data import Measurement, MeasurementStore
+        from thzdaq_core.domain.data.measurement import Measurement
+        from thzdaq_core.adapters.json_store import MeasurementStore
 
-        measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+        measurement = Measurement(
+            "sis.iv_curve", title="SIS I-V curve", started="2026-10-29T12:00:00.000"
+        )
         for v in (1e-3, 2e-3):
             measurement.append("iv", {"voltage": v, "current": v / 20})
         path = MeasurementStore(tmp_path / "other").save(measurement)
@@ -592,7 +596,7 @@ class TestMeasureAndData:
         import shutil
         from pathlib import Path
 
-        from thzdaq_core.data import Measurement
+        from thzdaq_core.domain.data.measurement import Measurement
         from thzdaq_gui.folders import MEASUREMENTS, Folders
         from thzdaq_gui.settings import settings
 
@@ -783,9 +787,10 @@ class TestPerspectives:
 
 
 def test_measurement_json_is_plain(tmp_path):
-    from thzdaq_core.data import Measurement, MeasurementStore
+    from thzdaq_core.domain.data.measurement import Measurement
+    from thzdaq_core.adapters.json_store import MeasurementStore
 
-    measurement = Measurement("demo")
+    measurement = Measurement("demo", started="2026-10-29T12:00:00.000")
     measurement.append("t", {"x": 1.0})
     data = json.loads(MeasurementStore(tmp_path).save(measurement).read_text())
     assert data["tables"]["t"]["data"] == {"x": [1.0]}
@@ -834,7 +839,7 @@ def test_no_stray_windows_flash(app, session, tmp_path):
 
     from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QWidget
-    from thzdaq_core.station import DeviceConfig
+    from thzdaq_core.domain.station.config import DeviceConfig
     from thzdaq_gui.main_window import MainWindow
 
     shown = []
@@ -940,7 +945,8 @@ class TestHangs:
         assert warnings and "still running" in warnings[0]
 
     def test_connections_group(self, app, wait):
-        from thzdaq_core.station import InstrumentConfig, Station, StationConfig
+        from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
+        from thzdaq_core.domain.station.station import Station
         from thzdaq_gui.docks.setup import ConnectionsGroup
         from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
         from thzdaq_instruments.transport.fake import FakeLink

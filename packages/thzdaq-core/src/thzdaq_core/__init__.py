@@ -1,1 +1,1 @@
-"""ThzDAQ core: bench (station) model, measurements and data, no GUI dependency."""
+"""ThzDAQ core: domain, application and adapters of the bench, no GUI and no network."""

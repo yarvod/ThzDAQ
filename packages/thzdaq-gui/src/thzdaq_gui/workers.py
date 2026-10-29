@@ -11,9 +11,9 @@ import time
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from thzdaq_core.data.store import MeasurementStore
-from thzdaq_core.measurements.procedure import Procedure
-from thzdaq_core.measurements.runner import MeasurementRunner, RunObserver
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_core.application.runner import MeasurementRunner, RunObserver
 
 logger = logging.getLogger(__name__)
 

@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
-from thzdaq_core.measurements.registry import list_procedures
+from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_instruments import InstrumentError
 
 from thzdaq_gui import theme

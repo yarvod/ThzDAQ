@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.data.store import dumps, export_csv
+from thzdaq_core.adapters.json_store import dumps, export_csv
 
 from thzdaq_gui import theme
 from thzdaq_gui.folders import MEASUREMENTS

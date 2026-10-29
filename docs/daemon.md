@@ -270,6 +270,7 @@ thzdaq_core/
                 рабочие папки; порты (Protocol): хранилище измерений, профили, часы, журнал;
                 LocalLab
   adapters/     JSON-хранилище измерений, YAML-профили, журнал в файл
+  cli/          локальные thzdaq и thzdaq-station, пока их не заменит thzdaq-cli
 ```
 - `application → domain`; `adapters → application` (порты) и `domain`. Домен не импортирует ни
   application, ни adapters.
@@ -324,7 +325,7 @@ thzdaq_core/
   возможностей — классы `capabilities.py`, в DTO и скриптах — строки с этими именами;
 - имя процедуры — атрибут её класса; слоты и графики — объявления процедуры;
 - общие параметры процедур (Settle time, Hot load, Load switch delay) и подписи осей —
-  фабрики и константы в `domain/measurements/common.py`;
+  фабрики и константы в `domain/measurements/procedures/common.py`;
 - имена операций, типы событий, коды ошибок — thzdaq-api;
 - ключи настроек GUI — один модуль GUI.
 

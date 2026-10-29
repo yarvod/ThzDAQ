@@ -2,29 +2,24 @@ import json
 import math
 
 import pytest
-from thzdaq_core.data import (
-    INTERRUPTED,
-    Column,
-    Measurement,
-    MeasurementStore,
-    Table,
-    export_csv,
-    read_json,
-)
-from thzdaq_core.data.store import dumps, loads
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements import (
+from thzdaq_core.domain.data.measurement import INTERRUPTED, Column, Measurement, Table
+from thzdaq_core.adapters.json_store import MeasurementStore, export_csv, read_json
+from thzdaq_core.adapters.json_store import dumps, loads
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.domain.parameters import (
     BoolParameter,
     ChoiceParameter,
     FloatListParameter,
     FloatParameter,
     IntParameter,
-    PlotSpec,
-    Procedure,
     Sweep,
     SweepParameter,
 )
+from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_instruments.units import GHZ, MV
+
+STARTED = "2026-10-29T12:00:00.000"  # measurements made by hand get a start time
 
 
 class Demo(Procedure):
@@ -155,10 +150,12 @@ class TestDataStore:
 
     def test_store_roundtrip(self, tmp_path):
         store = MeasurementStore(tmp_path)
-        measurement = Measurement("sis.iv_curve", title="I-V", parameters={"a": 1})
+        measurement = Measurement(
+            "sis.iv_curve", title="I-V", parameters={"a": 1}, started=STARTED
+        )
         measurement.append("iv", {"voltage": 1e-3, "current": 2e-6})
         measurement.results["rn"] = 20.0
-        measurement.finish("completed")
+        measurement.finish("completed", STARTED)
         path = store.save(measurement)
         assert path.parent.name == measurement.started[:10]
         assert "sis_iv_curve" in path.name and path.suffix == ".json"
@@ -173,14 +170,14 @@ class TestDataStore:
 
     def test_ids_are_numbers_that_keep_growing(self, tmp_path):
         store = MeasurementStore(tmp_path)
-        first = Measurement("sis.iv_curve", id=store.next_id())
+        first = Measurement("sis.iv_curve", id=store.next_id(), started=STARTED)
         assert first.id == 1
         assert store.save(first).name == "000001_sis_iv_curve.json"
         assert store.next_id() == 2
         # Another program run on the same folder continues after the largest
-        old = Measurement("demo", id="20261023-022400-ab12")  # older text id
+        old = Measurement("demo", id="20261023-022400-ab12", started=STARTED)  # text id
         store.save(old)
-        store.save(Measurement("demo", id=41))
+        store.save(Measurement("demo", id=41, started=STARTED))
         assert MeasurementStore(tmp_path).next_id() == 42
         assert store.next_id() == 42
         assert {m.id for m in store} == {1, 41, "20261023-022400-ab12"}
@@ -188,8 +185,8 @@ class TestDataStore:
         assert len(loaded.started) == len("2026-10-23T03:08:22.123")  # ms
 
     def test_runner_numbers_measurements(self, tmp_path):
-        from thzdaq_core.data import DeviceUse
-        from thzdaq_core.measurements import MeasurementRunner
+        from thzdaq_core.domain.data.measurement import DeviceUse
+        from thzdaq_core.application.runner import MeasurementRunner
 
         class Nothing(Procedure):
             name = "test.nothing"
@@ -213,7 +210,7 @@ class TestDataStore:
         assert ids == [1, 2]
 
     def test_running_file_reads_back_interrupted(self, tmp_path):
-        measurement = Measurement("demo")
+        measurement = Measurement("demo", started=STARTED)
         measurement.append("iv", {"voltage": 1.0})
         path = MeasurementStore(tmp_path).save(measurement)
         loaded = read_json(path)

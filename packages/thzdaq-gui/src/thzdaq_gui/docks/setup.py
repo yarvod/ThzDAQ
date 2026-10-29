@@ -30,9 +30,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.errors import ProcedureError, StationError
-from thzdaq_core.station.config import DeviceConfig, InstrumentConfig, StationConfig
-from thzdaq_core.station.kinds import instrument_type
+from thzdaq_core.domain.errors import ProcedureError, StationError
+from thzdaq_core.domain.station.config import (
+    DeviceConfig,
+    InstrumentConfig,
+    StationConfig,
+)
+from thzdaq_core.domain.station.kinds import instrument_type
 from thzdaq_instruments import ConfigurationError, InstrumentError, default_registry
 from thzdaq_instruments.transport.base import (
     HTTP,

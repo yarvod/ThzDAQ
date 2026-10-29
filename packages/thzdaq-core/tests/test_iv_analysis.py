@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from thzdaq_core.analysis.iv import (
+from thzdaq_core.domain.analysis.iv import (
     IVAnalysisConfig,
     IVGapConfig,
     NumpyIVGapAnalyzer,

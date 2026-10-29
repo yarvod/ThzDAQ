@@ -1,23 +1,24 @@
 import pytest
-from thzdaq_core.data import COMPLETED, DeviceUse
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements import MeasurementRunner, StringListParameter
-from thzdaq_core.measurements.procedures import Demagnetize, Monitor
-from thzdaq_core.measurements.procedures.monitor import (
+from thzdaq_core.domain.data.measurement import COMPLETED, DeviceUse
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.application.runner import MeasurementRunner
+from thzdaq_core.domain.parameters import StringListParameter
+from thzdaq_core.domain.measurements.procedures import Demagnetize, Monitor
+from thzdaq_core.domain.measurements.procedures.monitor import (
     default_quantities,
     monitor_quantities,
     plot_for,
 )
 from thzdaq_instruments.quantities import quantities_of
-from thzdaq_core.sis import (
+from thzdaq_core.domain.sis.calibration import (
     CALIBRATION_FIELDS,
     calibration_for,
     default_sis_calibration,
-    demagnetization_currents,
     evaluate_numeric_expression,
     evaluate_sis_calibration,
     normalize_sis_calibration,
 )
+from thzdaq_core.domain.sis.demagnetization import demagnetization_currents
 from thzdaq_instruments.sim import (
     SimChopper,
     SimCompressor,

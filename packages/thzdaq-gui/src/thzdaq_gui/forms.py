@@ -19,9 +19,9 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QWidget,
 )
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements.parameters import Parameter, Sweep
-from thzdaq_core.measurements.procedure import Procedure
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.domain.parameters import Parameter, Sweep
+from thzdaq_core.domain.measurements.procedure import Procedure
 
 LIMIT = 1e15
 

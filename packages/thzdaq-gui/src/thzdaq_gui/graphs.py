@@ -28,10 +28,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.data.measurement import Column, Measurement
-from thzdaq_core.measurements.plots import PlotSpec
-from thzdaq_core.measurements.procedures.monitor import plot_for
-from thzdaq_core.measurements.registry import list_procedures
+from thzdaq_core.domain.data.measurement import Column, Measurement
+from thzdaq_core.domain.measurements.plots import PlotSpec
+from thzdaq_core.domain.measurements.procedures.monitor import plot_for
+from thzdaq_core.domain.measurements.catalog import list_procedures
 
 from thzdaq_gui import theme
 

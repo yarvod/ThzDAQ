@@ -1,13 +1,14 @@
 import math
 
 import pytest
-from thzdaq_core.analysis.noise import match_hot_cold, noise_temperature
-from thzdaq_core.analysis.shot_noise import dynamic_resistance, linear_fit
-from thzdaq_core.analysis.two_sb import sideband_rejection
-from thzdaq_core.data import COMPLETED, DeviceUse
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements import MeasurementRunner, get_procedure
-from thzdaq_core.measurements.procedures import (
+from thzdaq_core.domain.analysis.noise import match_hot_cold, noise_temperature
+from thzdaq_core.domain.analysis.shot_noise import dynamic_resistance, linear_fit
+from thzdaq_core.domain.analysis.two_sb import sideband_rejection
+from thzdaq_core.domain.data.measurement import COMPLETED, DeviceUse
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.application.runner import MeasurementRunner
+from thzdaq_core.domain.measurements.catalog import get_procedure
+from thzdaq_core.domain.measurements.procedures import (
     GridCurrentAngle,
     IfBalance,
     PumpBalance,
@@ -315,7 +316,7 @@ def test_if_switch_polarity_is_a_parameter():
 
 
 def test_if_switch_parameters_only_where_the_switch_is_used():
-    from thzdaq_core.measurements.registry import get_procedure
+    from thzdaq_core.domain.measurements.catalog import get_procedure
 
     for name in ("two_sb.if_balance", "two_sb.srr", "two_sb.tn", "two_sb.optimization"):
         parameters = get_procedure(name).parameters()
@@ -344,7 +345,8 @@ class TestActivePlots:
     def test_monitor_graphs_follow_the_units(self):
         from pathlib import Path
 
-        from thzdaq_core.station import Station, load_station
+        from thzdaq_core.domain.station.station import Station
+        from thzdaq_core.adapters.yaml_profiles import load_station
 
         example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
         station = Station(load_station(example))
@@ -358,7 +360,7 @@ class TestActivePlots:
 
 class TestHotColdContrast:
     def test_the_log_says_why_tn_is_missing(self):
-        from thzdaq_core.measurements import RunObserver
+        from thzdaq_core.application.runner import RunObserver
 
         class Logs(RunObserver):
             def __init__(self):
@@ -389,7 +391,8 @@ class TestHotColdContrast:
     def test_a_simulated_detector_sees_the_simulated_load(self):
         from pathlib import Path
 
-        from thzdaq_core.station import Station, load_station
+        from thzdaq_core.domain.station.station import Station
+        from thzdaq_core.adapters.yaml_profiles import load_station
         from thzdaq_instruments.sim.power_meter import T_RECEIVER
 
         example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"

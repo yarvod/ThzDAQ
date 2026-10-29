@@ -3,10 +3,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from thzdaq_core.data.store import MeasurementStore
-from thzdaq_core.station.config import StationConfig
-from thzdaq_core.station.station import Station
-from thzdaq_core.station.storage import load_station, save_station
+from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_core.domain.station.config import StationConfig
+from thzdaq_core.domain.station.station import Station
+from thzdaq_core.adapters.yaml_profiles import load_station, save_station
 
 from thzdaq_gui.folders import MEASUREMENTS, PROFILES, Folders
 from thzdaq_gui.measurements import MeasurementsModel

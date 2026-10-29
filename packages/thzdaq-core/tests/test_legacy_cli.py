@@ -3,9 +3,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from thzdaq_core.station import Station, load_station
-from thzdaq_core.station.cli import main
-from thzdaq_core.station.legacy import slug, station_from_legacy
+from thzdaq_core.domain.station.station import Station
+from thzdaq_core.adapters.yaml_profiles import load_station
+from thzdaq_core.cli.station import main
+from thzdaq_core.adapters.legacy_profiles import slug, station_from_legacy
 
 EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 
@@ -132,7 +133,7 @@ class TestCli:
 
     def test_console_script_entry(self):
         result = subprocess.run(
-            [sys.executable, "-m", "thzdaq_core.station.cli", "show", str(EXAMPLE)],
+            [sys.executable, "-m", "thzdaq_core.cli.station", "show", str(EXAMPLE)],
             capture_output=True,
             text=True,
         )
@@ -141,8 +142,8 @@ class TestCli:
 
 def test_core_does_not_import_gui():
     code = (
-        "import sys, thzdaq_core.station, thzdaq_core.station.cli, "
-        "thzdaq_core.station.legacy;"
+        "import sys, thzdaq_core.domain.station.station, thzdaq_core.cli.station, "
+        "thzdaq_core.adapters.legacy_profiles;"
         "print(sorted(m for m in sys.modules "
         "if m.split('.')[0] in ('PySide6', 'pyqtgraph', 'store', 'interface')))"
     )

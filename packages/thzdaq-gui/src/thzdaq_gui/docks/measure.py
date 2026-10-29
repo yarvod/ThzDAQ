@@ -23,9 +23,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.errors import ProcedureError, StationError
-from thzdaq_core.measurements.procedure import Procedure
-from thzdaq_core.measurements.procedures.monitor import (
+from thzdaq_core.domain.errors import ProcedureError, StationError
+from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_core.domain.measurements.procedures.monitor import (
     KEY_SEPARATOR,
     default_quantities,
     monitor_quantities,

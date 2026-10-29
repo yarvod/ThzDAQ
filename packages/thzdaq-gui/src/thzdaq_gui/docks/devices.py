@@ -32,10 +32,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_core.measurements.procedures.monitor import default_quantities
-from thzdaq_core.measurements.registry import get_procedure
-from thzdaq_core.sis import calibration_for, evaluate_sis_calibration
-from thzdaq_core.station.station import INSTRUMENT, channel_title
+from thzdaq_core.domain.measurements.procedures.monitor import default_quantities
+from thzdaq_core.domain.measurements.catalog import get_procedure
+from thzdaq_core.domain.sis.calibration import calibration_for, evaluate_sis_calibration
+from thzdaq_core.domain.station.station import INSTRUMENT, channel_title
 from thzdaq_instruments.capabilities import (
     Compressor,
     LoadSwitch,

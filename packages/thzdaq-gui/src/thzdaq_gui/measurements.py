@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
-from thzdaq_core.data.measurement import (
+from thzdaq_core.domain.data.measurement import (
     CANCELLED,
     COMPLETED,
     FAILED,
@@ -12,7 +12,7 @@ from thzdaq_core.data.measurement import (
     RUNNING,
     Measurement,
 )
-from thzdaq_core.data.store import MeasurementStore, read_json
+from thzdaq_core.adapters.json_store import MeasurementStore, read_json
 
 from thzdaq_gui import theme
 

@@ -11,8 +11,8 @@ from typing import List
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
-from thzdaq_core.errors import ProcedureError
-from thzdaq_core.measurements.registry import get_procedure
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.domain.measurements.catalog import get_procedure
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name

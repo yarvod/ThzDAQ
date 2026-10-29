@@ -70,15 +70,22 @@ packages/
                          # scontel, national_instruments, chopper, lakeshore, srs, sumitomo,
                          # arduino (pfeiffer — отключён до переписывания)
     sim/                 # симуляторы каждого вида приборов
-  thzdaq-core/src/thzdaq_core/
-    parameters.py        # декларативные параметры процедур и настроек устройств
-    station/             # config, kinds (подустройства), ports (AttributePort), station, storage
-                         # (YAML), legacy (импорт settings.ini), cli (thzdaq-station)
-    measurements/        # procedure, plots (PlotSpec), runner, registry, procedures/
-    data/                # measurement (DTO), store (JSON)
-    analysis/            # iv, noise, shot_noise, two_sb — чистые расчёты
-    sis/                 # калибровка SIS-блока, размагничивание
-    cli.py               # thzdaq list | describe | run | show
+  thzdaq-core/src/thzdaq_core/   # слои: cli → adapters → application → domain (import-linter)
+    domain/              # без файлов, часов и своих потоков
+      parameters.py      # декларативные параметры процедур и настроек устройств
+      station/           # config, kinds (подустройства), ports (AttributePort), station,
+                         # profile (формат профиля: словари, миграции)
+      measurements/      # procedure, plots (PlotSpec), catalog (процедуры по имени),
+                         # procedures/ (встроенные, список BUILTIN)
+      data/              # measurement (DTO)
+      analysis/          # iv, noise, shot_noise, two_sb — чистые расчёты
+      sis/               # калибровка SIS-блока, размагничивание
+    application/         # runner (потоки, автосохранение, время), ports (MeasurementRepository)
+    adapters/            # json_store (измерения), yaml_profiles (профили), legacy_profiles
+                         # (импорт settings.ini)
+    cli/                 # measure (thzdaq list | describe | run | show), station (thzdaq-station)
+  thzdaq-api/, thzdaq-daemon/, thzdaq-cli/, thzdaq/   # контракт, демон, CLI-клиент, мета для PyPI
+                                                     # (docs/daemon.md; пока заготовки)
   thzdaq-gui/src/thzdaq_gui/
     app.py               # точка входа (composition root): тема, сессия, окно
     main_window.py       # окно: строит доки, меню и тулбар, раскладка каждого режима
@@ -249,7 +256,7 @@ instruments:
 ```
 - **Устройство** — то, чем пользуются: сам прибор (`power_meter_1`), его канал
   (`power_supply_1:2`) или настроенное устройство (`sis_bias_1`); id уникальны в станции.
-- **Виды настроенных устройств** (`station/kinds.py`) — только подустройства драйвера
+- **Виды настроенных устройств** (`domain/station/kinds.py`) — только подустройства драйвера
   (`sis_bias`, `sis_coil`); настройки вида описаны параметрами с единицами — из них строятся
   форма в Setup и проверка. Генератор, измеритель мощности — одно устройство; умножитель
   частоты — конфигурация генератора (`settings` прибора), а не отдельное устройство.
@@ -281,8 +288,7 @@ instruments:
 
 ### 4.6 Procedure — измерение без Qt
 ```python
-@register_procedure
-class IFNoise(Procedure):
+class IFNoise(Procedure):  # добавляется в список BUILTIN (procedures/__init__.py)
     name = "if.hot_cold"
     title = "IF noise (hot/cold)"
     requires = {"detector": PowerDetector, "if_filter": TunableFilter, "load": LoadSwitch}
@@ -336,7 +342,9 @@ class IFNoise(Procedure):
   | `two_sb.optimization` | карты SRR и Tn по сетке SIS1×SIS2 | все слоты 2SB |
 
 ### 4.7 Runner
-- `MeasurementRunner(station, store, observers)` (чистый Python): проверяет параметры, строит
+- `MeasurementRunner(station, store, observers)` (`application/runner.py`, чистый Python;
+  хранилище — порт `MeasurementRepository`, время начала и конца ставит раннер): проверяет
+  параметры, строит
   устройства слотов (`devices={"bias": "sis_bias_1"}`), создаёт `Measurement` со снимком стенда
   и описанием использованных устройств, вызывает `run(ctx)`, выполняет cleanup и ставит статус
   `completed | cancelled | failed`. Нет устройства — ошибка до создания файла.
@@ -346,7 +354,7 @@ class IFNoise(Procedure):
   `cancel()` из другого потока.
 
 ### 4.8 Данные
-- DTO (`data/measurement.py`): `Measurement` — номер (id), процедура, статус, время начала и
+- DTO (`domain/data/measurement.py`): `Measurement` — номер (id), процедура, статус, время начала и
   конца (до миллисекунд), комментарий,
   параметры, `devices: {слот: DeviceUse}`, `tables`, результаты, снимок стенда, метаданные.
   `Table` хранит данные по колонкам словарём, как старый стор (`{"voltage": [...], ...}`), и

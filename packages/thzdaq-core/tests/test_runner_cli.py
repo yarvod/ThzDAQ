@@ -4,27 +4,22 @@ import time
 from pathlib import Path
 
 import pytest
-from thzdaq_core.analysis.noise import noise_temperature
-from thzdaq_core.cli import main
-from thzdaq_core.data import (
-    CANCELLED,
-    COMPLETED,
-    FAILED,
-    DeviceUse,
-    MeasurementStore,
-    read_json,
+from thzdaq_core.domain.analysis.noise import noise_temperature
+from thzdaq_core.cli.measure import main
+from thzdaq_core.domain.data.measurement import CANCELLED, COMPLETED, FAILED, DeviceUse
+from thzdaq_core.adapters.json_store import MeasurementStore, read_json
+from thzdaq_core.domain.errors import ProcedureError, StationError
+from thzdaq_core.domain.parameters import FloatParameter
+from thzdaq_core.application.runner import MeasurementRunner, RunObserver
+from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_core.domain.measurements.catalog import get_procedure, list_procedures
+from thzdaq_core.domain.measurements.procedures import IFNoise, IVCurve
+from thzdaq_core.domain.station.config import (
+    DeviceConfig,
+    InstrumentConfig,
+    StationConfig,
 )
-from thzdaq_core.errors import ProcedureError, StationError
-from thzdaq_core.measurements import (
-    FloatParameter,
-    MeasurementRunner,
-    Procedure,
-    RunObserver,
-    get_procedure,
-    list_procedures,
-)
-from thzdaq_core.measurements.procedures import IFNoise, IVCurve
-from thzdaq_core.station import DeviceConfig, InstrumentConfig, Station, StationConfig
+from thzdaq_core.domain.station.station import Station
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.sim import SimChopper, SimPowerMeter, SimYigFilter
 
@@ -259,7 +254,7 @@ class TestCli:
 
 
 def test_parameter_names_cannot_shadow_procedure_api():
-    from thzdaq_core.measurements import FloatParameter as F
+    from thzdaq_core.domain.parameters import FloatParameter as F
 
     with pytest.raises(ProcedureError, match="clash"):
 

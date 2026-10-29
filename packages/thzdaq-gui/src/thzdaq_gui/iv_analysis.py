@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_gui.settings import settings
-from thzdaq_core.analysis.iv import (
+from thzdaq_core.domain.analysis.iv import (
     IVAnalysisConfig,
     IVAnalysisParameters,
     IVGapConfig,

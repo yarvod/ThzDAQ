@@ -2,18 +2,16 @@ from pathlib import Path
 
 import pytest
 import yaml
-from thzdaq_core.errors import StationError
-from thzdaq_core.station import (
+from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.station.config import (
     DeviceConfig,
     InstrumentConfig,
-    Station,
     StationConfig,
-    dump_station,
-    kinds_for,
-    load_station,
-    station_from_dict,
-    station_to_dict,
 )
+from thzdaq_core.domain.station.station import Station
+from thzdaq_core.adapters.yaml_profiles import dump_station, load_station
+from thzdaq_core.domain.station.kinds import kinds_for
+from thzdaq_core.domain.station.profile import station_from_dict, station_to_dict
 from thzdaq_instruments import DriverRegistry
 from thzdaq_instruments.capabilities import (
     CurrentSource,
@@ -304,7 +302,7 @@ class TestStation:
 
 class TestStorage:
     def test_example_profile_runs_simulated_2sb_bench(self):
-        with Station.load(EXAMPLE, simulate=True) as station:
+        with Station(load_station(EXAMPLE), simulate=True) as station:
             found = station.require(TWO_SB_DEVICES, TWO_SB_REQUIREMENTS)
             found["lo"].set_frequency(223e9)  # at the mixer: the generator multiplies
             assert found["lo"].get_frequency_multiplier() == 18
@@ -456,7 +454,8 @@ class TestStorage:
 
 def test_snapshot_asks_only_the_measurement_instruments():
     """A chopper opened earlier and not answering broke the start of an I-V."""
-    from thzdaq_core.station import InstrumentConfig, Station, StationConfig
+    from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
+    from thzdaq_core.domain.station.station import Station
 
     config = StationConfig(
         "bench",
