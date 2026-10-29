@@ -10,7 +10,7 @@ ThzDAQ is a uv workspace for SIS mixer control and measurements; see `docs/archi
 - `packages/thzdaq-gui` (`thzdaq_gui`): PySide6 + PySide6-QtAds + pyqtgraph application in the layout of the old app: the window only assembles the parts (`main_window.py`), docks by name and where they open (`docking.py`, names in `dock_names.py`), graph and device docks that follow the graphs and the station (`graph_docks.py`, `device_docks.py`), perspectives (`perspectives.py`), docks (`docks/`: Setup, device docks, measurement docks, Data, Log, Processes: what runs now, `processes.py`), graph docks (`graphs.py`), dock search (`navigator.py`: menus as a searchable tree by type, Ctrl+K), Lite and Pro modes (`modes.py`; Lite: one layout and the run bar on top, `runbar.py`; Pro: a dock per measurement and perspectives), run controls as a view of a run's status (`run_controls.py`), file dialogs that remember their folder (`folders.py`), dark theme with orange accents and qtawesome icons (`theme.py`). Docks only display and drive core objects.
 - `stations/`: bench profiles (YAML, version 2: instruments with `devices`; ids name the kind of device, e.g. `power_supply_3`). `main.py` is the GUI entry point. `assets/` holds the pixel app icon (`thzdaq.ico`, `thzdaq.icns`, drawn by `assets/make_icon.py`; rerun it after changing the drawing). `firmware/` keeps device firmware (Arduino grid rotators).
 
-Dependencies point one way: gui → core → instruments. Tests check that core and instruments never import Qt.
+Dependencies point one way: gui → core → instruments today, clients → api ← core → instruments as the daemon lands. `uv run lint-imports` checks the boundaries (contracts in the root `pyproject.toml`).
 
 ## Architecture Rules — Required
 
@@ -43,7 +43,7 @@ New code follows these boundaries now; existing code moves there during mileston
 - `uv run thzdaq-station check <profile> --simulate` checks a bench profile.
 - `uv run pytest` runs all package tests (GUI tests run offscreen); `uv run pytest packages/thzdaq-core` for one package.
 - `sh build.sh` / `build.bat [name]` build the PyInstaller distribution into `dist/`.
-- `uvx pre-commit run --all-files` runs Black, autoflake and hygiene hooks before committing.
+- `uvx pre-commit run --all-files` runs Black, autoflake, hygiene hooks and `lint-imports` before committing; `uv run lint-imports` checks the architecture boundaries alone.
 - `uv run python release.py X.Y.Z` (or `X.Y.Z-beta.N`: a GitHub pre-release, a new number for every beta) stamps `thzdaq_gui/version.py`, tags `vX.Y.Z` and pushes (`--again` moves an existing tag to the current commit after fixes and builds it again); `.github/workflows/release.yml` then tests, builds the Windows x64 zip and publishes the GitHub release that Help → Check for updates installs (`thzdaq_gui/updates.py`, standalone `thzdaq_gui/updater.py` built as `updater.exe`). `.github/workflows/ci.yml` runs the tests on every push.
 
 ## RTK (Rust Token Killer) — Required

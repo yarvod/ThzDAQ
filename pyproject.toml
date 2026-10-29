@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.1",
     "pillow==11.1.0",  # PyInstaller converts the PNG icon with it
     "pyinstaller==6.12.0",
     "pytest>=8.2",
@@ -45,3 +46,132 @@ testpaths = [
 ]
 addopts = "--import-mode=importlib"
 
+# Architecture boundaries (AGENTS.md, «Architecture Rules»; docs/daemon.md, «Пакеты, слои
+# и границы»). `uv run lint-imports` checks them in pre-commit and CI. An ignore that no
+# longer matches is an error, so the lists of known exceptions only shrink.
+[tool.importlinter]
+root_packages = [
+    "thzdaq",
+    "thzdaq_api",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_gui",
+    "thzdaq_instruments",
+]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The contract (thzdaq_api) imports nothing of ThzDAQ"
+type = "forbidden"
+source_modules = ["thzdaq_api"]
+forbidden_modules = [
+    "thzdaq",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_gui",
+    "thzdaq_instruments",
+]
+
+[[tool.importlinter.contracts]]
+name = "Instruments know nothing above them"
+type = "forbidden"
+source_modules = ["thzdaq_instruments"]
+forbidden_modules = [
+    "thzdaq",
+    "thzdaq_api",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_gui",
+]
+
+[[tool.importlinter.contracts]]
+name = "Core knows no daemon, no clients"
+type = "forbidden"
+source_modules = ["thzdaq_core"]
+forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_daemon", "thzdaq_gui"]
+
+[[tool.importlinter.contracts]]
+name = "The daemon serves no client's code"
+type = "forbidden"
+source_modules = ["thzdaq_daemon"]
+forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
+
+[[tool.importlinter.contracts]]
+name = "Clients use only the contract (thzdaq_api)"
+type = "forbidden"
+source_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
+forbidden_modules = ["thzdaq_core", "thzdaq_daemon", "thzdaq_instruments"]
+broken_contract_guidance = """
+A client (GUI, CLI, the thzdaq package) talks to the bench only through thzdaq_api.
+Add the operation or the data type to thzdaq_api instead of importing core or drivers.
+"""
+# The GUI before milestone M1 step 6 (GUI client): each line goes when its module moves
+# onto thzdaq_api, and an ignore that stops matching fails the check.
+ignore_imports = [
+    "thzdaq_gui.app -> thzdaq_instruments",
+    "thzdaq_gui.device_docks -> thzdaq_instruments",
+    "thzdaq_gui.docks.data -> thzdaq_core.**",
+    "thzdaq_gui.docks.devices -> thzdaq_core.**",
+    "thzdaq_gui.docks.devices -> thzdaq_instruments.**",
+    "thzdaq_gui.docks.measure -> thzdaq_core.**",
+    "thzdaq_gui.docks.measure -> thzdaq_instruments",
+    "thzdaq_gui.docks.setup -> thzdaq_core.**",
+    "thzdaq_gui.docks.setup -> thzdaq_instruments",
+    "thzdaq_gui.docks.setup -> thzdaq_instruments.**",
+    "thzdaq_gui.exit_dialog -> thzdaq_core.**",
+    "thzdaq_gui.fields -> thzdaq_instruments.**",
+    "thzdaq_gui.forms -> thzdaq_core.**",
+    "thzdaq_gui.graph_docks -> thzdaq_core.**",
+    "thzdaq_gui.graphs -> thzdaq_core.**",
+    "thzdaq_gui.iv_analysis -> thzdaq_core.**",
+    "thzdaq_gui.main_window -> thzdaq_core.**",
+    "thzdaq_gui.main_window -> thzdaq_instruments",
+    "thzdaq_gui.measurements -> thzdaq_core.**",
+    "thzdaq_gui.session -> thzdaq_core.**",
+    "thzdaq_gui.workers -> thzdaq_core.**",
+]
+
+[[tool.importlinter.contracts]]
+name = "Clients do not import each other"
+type = "independence"
+modules = ["thzdaq_cli", "thzdaq_daemon", "thzdaq_gui"]
+
+[[tool.importlinter.contracts]]
+name = "Core, instruments, contract, daemon and CLI have no Qt"
+type = "forbidden"
+source_modules = [
+    "thzdaq_api",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_instruments",
+]
+forbidden_modules = ["PySide6", "PySide6QtAds", "pyqtgraph", "qtawesome"]
+# Settings of the old program are QVariant-encoded: only Qt reads them (one importer)
+ignore_imports = ["thzdaq_core.adapters.legacy_profiles -> PySide6"]
+
+[[tool.importlinter.contracts]]
+name = "Core layers point inward: cli -> adapters -> application -> domain"
+type = "layers"
+containers = ["thzdaq_core"]
+layers = ["cli", "adapters", "application", "domain"]
+broken_contract_guidance = """
+The domain touches no files, clocks or threads of its own and never imports application,
+adapters or cli; the application reaches files through ports (application/ports.py)
+that adapters implement.
+"""
+
+[[tool.importlinter.contracts]]
+name = "No import cycles between sibling modules"
+type = "acyclic_siblings"
+ancestors = [
+    "thzdaq_api",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_gui",
+    "thzdaq_instruments",
+]

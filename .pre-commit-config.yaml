@@ -15,3 +15,12 @@ repos:
     hooks:
     -   id: autoflake
         args: [--remove-all-unused-imports, --ignore-init-module-imports, --in-place]
+
+-   repo: local
+    hooks:
+    -   id: lint-imports
+        name: architecture boundaries (import-linter)
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        types_or: [python, toml]

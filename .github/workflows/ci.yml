@@ -25,5 +25,8 @@ jobs:
       - name: Check the lock file
         run: uv lock --check
 
+      - name: Architecture boundaries
+        run: uv run lint-imports
+
       - name: Tests
         run: uv run pytest -q -p no:faulthandler
