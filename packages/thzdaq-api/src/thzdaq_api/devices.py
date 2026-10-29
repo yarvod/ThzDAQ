@@ -8,6 +8,22 @@ from thzdaq_api.operation import Operation, Rights
 
 Value = Union[bool, int, float, str, None]
 
+# Kinds of devices nobody configures: an instrument and its fixed channel
+INSTRUMENT = "instrument"
+CHANNEL = "channel"
+
+# Axes of traces: the power of a spectrum, the magnitude of an S-parameter
+POWER_DBM = "Power, dBm"
+S_DB = "|S|, dB"
+
+
+class Prefix(msgspec.Struct, frozen=True):
+    """An SI prefix a value is shown and typed in: ("G", 1e9, "×10⁹")."""
+
+    name: str
+    factor: float
+    note: str
+
 
 class QuantityInfo(msgspec.Struct, frozen=True):
     """A value a device reads or takes, in SI units (power in dBm, angles in deg).
@@ -30,6 +46,7 @@ class QuantityInfo(msgspec.Struct, frozen=True):
     step: Optional[float] = None  # the largest change in one command: more in steps
     rate: Optional[float] = None  # units per second at most between the steps
     danger: str = ""  # what may go wrong when it is set, shown first; empty when safe
+    prefixes: Tuple[Prefix, ...] = ()  # to show it in; none for dBm, dB, deg
 
     @property
     def label(self) -> str:
@@ -43,6 +60,7 @@ class DeviceInfo(msgspec.Struct, frozen=True):
     ref: str  # the id measurements and operations name it by
     title: str
     instrument: str  # the instrument it is or belongs to
+    driver: str  # of that instrument, as the profile names it
     kind: str  # instrument, channel, or the configured kind (sis_bias)
     type: str  # what device it is: the configured kind, else the instrument's type
     capabilities: Tuple[str, ...]
@@ -61,6 +79,7 @@ class ArgumentInfo(msgspec.Struct, frozen=True):
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     choices: Tuple[str, ...] = ()
+    prefixes: Tuple[Prefix, ...] = ()
 
 
 class ActionInfo(msgspec.Struct, frozen=True):
@@ -79,6 +98,8 @@ class DeviceDescription(msgspec.Struct, frozen=True):
     device: DeviceInfo
     quantities: Tuple[QuantityInfo, ...]
     actions: Tuple[ActionInfo, ...] = ()
+    # What a configured device keeps in the profile (a SIS bias's offsets)
+    settings: Tuple[QuantityInfo, ...] = ()
 
 
 class Trace(msgspec.Struct, frozen=True):
@@ -89,6 +110,10 @@ class Trace(msgspec.Struct, frozen=True):
     values: Tuple[float, ...]  # dBm, or the real part
     imaginary: Optional[Tuple[float, ...]] = None
     parameter: str = ""  # S21
+
+    def label(self) -> str:
+        """The axis of its values: the power, or the magnitude in dB."""
+        return POWER_DBM if self.imaginary is None else S_DB
 
 
 class Reading(msgspec.Struct, frozen=True):

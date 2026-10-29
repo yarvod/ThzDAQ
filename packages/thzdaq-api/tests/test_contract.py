@@ -103,7 +103,9 @@ def test_a_slot_lists_the_devices_that_suit_it():
     from thzdaq_api.measurements import SlotInfo
 
     def device(ref, kind, *capabilities):
-        return DeviceInfo(ref, ref.upper(), "block", kind, kind, capabilities)
+        return DeviceInfo(
+            ref, ref.upper(), "block", "sim.block", kind, kind, capabilities
+        )
 
     sis = device("sis_bias_1", "sis_bias", "VoltageSource", "VoltageCurrentMeter")
     supply = device("ps:1", "channel", "VoltageSource", "VoltageCurrentMeter")
