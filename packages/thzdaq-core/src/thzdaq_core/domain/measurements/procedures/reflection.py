@@ -1,6 +1,7 @@
 import cmath
 import math
 
+from thzdaq_api.procedures import REFLECTION
 from thzdaq_instruments.capabilities import NetworkAnalyzer, PowerLevel
 from thzdaq_instruments.units import GHZ, MV
 
@@ -18,7 +19,7 @@ S_PARAMETERS = ("S11", "S21", "S12", "S22")
 
 
 class SisReflection(Procedure):
-    name = "sis.reflection"
+    name = REFLECTION
     title = "SIS reflection (VNA)"
     description = "S-parameters of the SIS IF port over a bias sweep."
     requires = {"bias": BIAS, "vna": (NetworkAnalyzer, PowerLevel)}

@@ -1,3 +1,4 @@
+from thzdaq_api.procedures import IV_CURVE
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.units import MV, UA
 
@@ -7,7 +8,7 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 
 
 class IVCurve(Procedure):
-    name = "sis.iv_curve"
+    name = IV_CURVE
     title = "SIS I-V curve"
     description = "Sweep the bias voltage and read voltage and current."
     requires = {"bias": (VoltageSource, VoltageCurrentMeter)}

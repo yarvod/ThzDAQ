@@ -1,3 +1,4 @@
+from thzdaq_api.procedures import TWO_SB_OPTIMIZATION
 from thzdaq_instruments.units import GHZ, MV
 
 from thzdaq_core.domain.analysis.noise import noise_temperature
@@ -26,7 +27,7 @@ def _map(key: str, title: str, z: str, z_label: str) -> PlotSpec:
 
 
 class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
-    name = "two_sb.optimization"
+    name = TWO_SB_OPTIMIZATION
     title = "2SB SRR/Tn bias optimization"
     description = (
         "At one IF over a SIS1 x SIS2 bias grid: test tone in both sidebands "

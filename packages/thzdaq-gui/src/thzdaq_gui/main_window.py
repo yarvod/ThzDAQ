@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_instruments import InstrumentError
 
-from thzdaq_gui import theme
+from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.device_docks import DeviceDocks
 from thzdaq_gui.dock_names import (
     DATA,
@@ -57,7 +57,7 @@ from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.modes import MODE_KEY, Lite, Pro
-from thzdaq_gui.navigator import DockNavigator, QuickFind, type_title
+from thzdaq_gui.navigator import DockNavigator, QuickFind
 from thzdaq_gui.perspectives import Perspectives
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 from thzdaq_gui.settings import location
@@ -70,7 +70,6 @@ logger = logging.getLogger(__name__)
 
 DEVICE_HANG_S = 5.0
 STATE_VERSION = 3
-PROCEDURE_GROUPS = {"sis": "SIS", "if": "IF", "two_sb": "2SB"}
 
 
 class MainWindow(QMainWindow):
@@ -302,14 +301,14 @@ class MainWindow(QMainWindow):
         self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
     def add_measure_dock(self, cls) -> None:
-        group = cls.name.split(".")[0]
-        icon = theme.icon(theme.procedure_icon_name(cls.name))
+        group = procedure_groups.group(cls.name)
+        icon = theme.icon(group.icon)
         # Built when the dock is first opened (DockBody)
         body = DockBody(lambda: measure_widget(self.session, self.hub, cls))
         self.docks.add(
             dock_name(MEASURE, cls.name), cls.title or cls.name, body, "Measures",
             icon, QtAds.RightDockWidgetArea,
-            group=PROCEDURE_GROUPS.get(group, type_title(group)), hint=cls.name,
+            group=group.title, hint=cls.name,
         )  # fmt: skip
 
     # Docks as the mode shows them (menus, Ctrl+K, Processes)

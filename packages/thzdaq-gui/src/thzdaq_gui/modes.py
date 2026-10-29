@@ -9,13 +9,14 @@ from typing import Mapping, Optional, Tuple
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
+from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME, PV_CURVE
 
 from thzdaq_gui.dock_names import MEASURE, MEASUREMENT, dock_name, key_of
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 
 MODE_KEY = "ui/mode"
 CHOSEN_KEY = "ui/measurement"
-DEFAULT_MEASUREMENT = "sis.iv_curve"
+DEFAULT_MEASUREMENT = IV_CURVE
 
 
 class Mode:
@@ -49,7 +50,7 @@ class Pro(Mode):
     perspectives = True
     measure_column = tuple(
         dock_name(MEASURE, procedure)
-        for procedure in ("sis.iv_curve", "sis.pv_curve", "monitor.time")
+        for procedure in (IV_CURVE, PV_CURVE, MONITOR_TIME)
     )
 
 

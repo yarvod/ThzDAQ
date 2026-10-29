@@ -1,3 +1,4 @@
+from thzdaq_api.procedures import GRID_CURRENT_ANGLE
 from thzdaq_instruments.capabilities import Rotator, VoltageCurrentMeter
 from thzdaq_instruments.units import UA
 
@@ -8,7 +9,7 @@ from thzdaq_core.domain.measurements.procedures.common import restore_angle_on_e
 
 
 class GridCurrentAngle(Procedure):
-    name = "grid.current_angle"
+    name = GRID_CURRENT_ANGLE
     title = "SIS current versus grid angle"
     description = "Rotate the wire grid and read the pumped SIS current (I-A curve)."
     requires = {"grid": Rotator, "bias": VoltageCurrentMeter}

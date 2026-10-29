@@ -1,5 +1,6 @@
 from itertools import product
 
+from thzdaq_api.procedures import TWO_SB_IF_BALANCE, TWO_SB_PUMP_BALANCE
 from thzdaq_instruments.capabilities import (
     PowerDetector,
     PowerLevel,
@@ -27,7 +28,7 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
 
 
 class IfBalance(IfSwitchProcedure):
-    name = "two_sb.if_balance"
+    name = TWO_SB_IF_BALANCE
     title = "2SB IF balance"
     description = (
         "IF power of both channels over the IF band for every SIS1 x SIS2 bias pair."
@@ -102,7 +103,7 @@ class IfBalance(IfSwitchProcedure):
 
 
 class PumpBalance(TwoSbProcedure):
-    name = "two_sb.pump_balance"
+    name = TWO_SB_PUMP_BALANCE
     title = "2SB LO/RF balance"
     description = (
         "Pumped currents of both mixers versus LO or RF frequency for paired "

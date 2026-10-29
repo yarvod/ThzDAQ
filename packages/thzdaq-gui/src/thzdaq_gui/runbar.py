@@ -12,13 +12,10 @@ from typing import Dict, Optional
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QToolButton, QVBoxLayout, QWidget
 
-from thzdaq_gui import theme
+from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.measure import MeasureWidget
 from thzdaq_gui.run_controls import Run, RunControls
-
-# Groups of procedures in the bar's list, in this order
-GROUP_ORDER = ("sis", "if", "two_sb", "monitor", "grid")
 
 
 class RunBar(QWidget):
@@ -34,20 +31,14 @@ class RunBar(QWidget):
         self.combo.setToolTip("Measurement to run")
         self.combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         groups: Dict[str, list] = {}
-        for cls in procedures:
-            groups.setdefault(cls.name.split(".")[0], []).append(cls)
-        order = sorted(
-            groups,
-            key=lambda g: GROUP_ORDER.index(g)
-            if g in GROUP_ORDER
-            else len(GROUP_ORDER),
-        )
-        for group in order:
+        for cls in sorted(procedures, key=lambda c: procedure_groups.rank(c.name)):
+            groups.setdefault(procedure_groups.group(cls.name).key, []).append(cls)
+        for group in groups:
             if self.combo.count():
                 self.combo.insertSeparator(self.combo.count())
             for cls in groups[group]:
                 self.combo.addItem(
-                    theme.icon(theme.procedure_icon_name(cls.name)),
+                    theme.icon(procedure_groups.group(cls.name).icon),
                     cls.title or cls.name,
                     cls.name,
                 )

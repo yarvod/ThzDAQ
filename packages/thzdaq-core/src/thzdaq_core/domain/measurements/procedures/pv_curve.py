@@ -1,3 +1,4 @@
+from thzdaq_api.procedures import PV_CURVE, Y_FACTOR_VOLTAGE
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
 from thzdaq_instruments.units import MV, UA
 
@@ -19,7 +20,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
 
 
 class PVCurve(Procedure):
-    name = "sis.pv_curve"
+    name = PV_CURVE
     title = "SIS P-V curve"
     description = (
         "Sweep the bias and read the IF power; optionally with hot and cold "
@@ -161,7 +162,7 @@ class PVCurve(Procedure):
 
 
 class YFactorVoltage(PVCurve):
-    name = "sis.y_factor_voltage"
+    name = Y_FACTOR_VOLTAGE
     title = "SIS Y-factor (V)"
     description = (
         "P-V with hot and cold loads: Y-factor and noise temperature versus bias."

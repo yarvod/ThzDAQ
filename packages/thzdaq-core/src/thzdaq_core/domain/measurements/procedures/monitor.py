@@ -8,6 +8,7 @@ value) and goes to the graph of its unit: dBm to P-t, K to T-t, V to V-t, ...
 
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
 from thzdaq_instruments.units import GHZ, MA, MV, UA
 
@@ -69,7 +70,7 @@ def _time_plot(title, y_label, y_scale=1.0) -> PlotSpec:
 
 
 class Monitor(Procedure):
-    name = "monitor.time"
+    name = MONITOR_TIME
     title = "Monitor over time"
     description = (
         "Read the chosen values of devices (power, temperature, bias, pressure, "

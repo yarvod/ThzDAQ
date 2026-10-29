@@ -1,3 +1,4 @@
+from thzdaq_api.procedures import SHOT_NOISE
 from thzdaq_instruments.capabilities import PowerDetector, TunableFilter
 from thzdaq_instruments.readings import linspace
 from thzdaq_instruments.units import GHZ, MV, dbm_to_watt
@@ -15,7 +16,7 @@ from thzdaq_core.domain.measurements.procedures.common import BIAS, restore_bias
 
 
 class ShotNoise(Procedure):
-    name = "sis.shot_noise"
+    name = SHOT_NOISE
     title = "IF amplifier noise (SIS shot noise)"
     description = (
         "At two bias points above the gap: fit the dynamic resistance, sweep "

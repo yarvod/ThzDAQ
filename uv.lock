@@ -576,6 +576,7 @@ source = { editable = "packages/thzdaq-core" }
 dependencies = [
     { name = "numpy" },
     { name = "pyyaml" },
+    { name = "thzdaq-api" },
     { name = "thzdaq-instruments" },
 ]
 
@@ -588,6 +589,7 @@ dev = [
 requires-dist = [
     { name = "numpy", specifier = ">=1.26,<2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-instruments", editable = "packages/thzdaq-instruments" },
 ]
 

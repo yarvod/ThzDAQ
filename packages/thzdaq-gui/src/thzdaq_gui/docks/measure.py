@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.monitor import (
@@ -33,7 +34,7 @@ from thzdaq_core.domain.measurements.procedures.monitor import (
 )
 from thzdaq_instruments import InstrumentError
 
-from thzdaq_gui import theme
+from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.dock_names import DEVICE, MEASURE, dock_name
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
@@ -391,7 +392,7 @@ class ProcedureBox(QWidget):
         if running and self.process is None:
             self.process = self.session.processes.start(
                 self.process_title(),
-                theme.procedure_icon_name(self.procedure_class.name),
+                procedure_groups.group(self.procedure_class.name).icon,
                 self.dock_name(),
                 stop=self.stop,
                 abort=self.abort,
@@ -581,7 +582,7 @@ class MonitorWidget(MeasureWidget):
 
 
 # Docks with their own widget class by procedure name
-SPECIAL = {"monitor.time": MonitorWidget}
+SPECIAL = {MONITOR_TIME: MonitorWidget}
 
 
 def measure_widget(session, hub, procedure_class) -> MeasureWidget:

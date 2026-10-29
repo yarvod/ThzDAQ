@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
 from thzdaq_core.domain.measurements.procedures.monitor import default_quantities
 from thzdaq_core.domain.measurements.catalog import get_procedure
 from thzdaq_core.domain.sis.calibration import calibration_for, evaluate_sis_calibration
@@ -893,20 +894,18 @@ class DeviceWidget(QScrollArea):
         if info.kind == "sis_bias":
             groups.append(SisBiasGroup(panel, info.ref))
             groups.append(
-                scan_group(session, hub, "I-V scan", "sis.iv_curve", {"bias": info.ref})
+                scan_group(session, hub, "I-V scan", IV_CURVE, {"bias": info.ref})
             )
         if info.kind == "sis_coil":
             groups.append(
-                scan_group(
-                    session, hub, "I-CL scan", "sis.cl_curve", {"coil": info.ref}
-                )
+                scan_group(session, hub, "I-CL scan", CL_CURVE, {"coil": info.ref})
             )
             groups.append(
                 scan_group(
                     session,
                     hub,
                     "Demagnetization",
-                    "sis.demagnetize",
+                    DEMAGNETIZE,
                     {"coil": info.ref},
                 )
             )
