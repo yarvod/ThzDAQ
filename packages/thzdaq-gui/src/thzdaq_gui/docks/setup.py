@@ -40,7 +40,8 @@ from thzdaq_api.station import (
 
 from thzdaq_gui import profile as fmt
 from thzdaq_gui import theme
-from thzdaq_gui.forms import ParameterForm
+from thzdaq_gui.docks.safety import SafetyDialog
+from thzdaq_gui.forms import ParameterForm, saved_or_told
 from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 
 # How often the Connections group shows the state of the links
@@ -171,16 +172,6 @@ class ConnectionEditor(QWidget):
             **{k: v for k, v in values.items() if k in used and v is not None},
             **kept,
         }
-
-
-def saved_or_told(dialog: QDialog, title: str, save: Callable[[], None]) -> None:
-    """Save and close; a refusal of the lab is told and the dialog stays."""
-    try:
-        save()
-    except LabError as e:
-        QMessageBox.warning(dialog, title, str(e))
-        return
-    dialog.accept()
 
 
 class InstrumentDialog(QDialog):
@@ -579,7 +570,14 @@ class SetupWidget(QWidget):
         new_button.setIcon(theme.icon("file-plus-outline"))
         new_button.setToolTip(NEW_PROFILE)
         new_button.clicked.connect(self.new_profile_requested)
+        self.btnSafety = QToolButton()
+        self.btnSafety.setIcon(theme.icon("shield-check-outline"))
+        self.btnSafety.setToolTip(
+            "Safety: bench limits, safe state, hardware protection"
+        )
+        self.btnSafety.clicked.connect(self.edit_safety)
         header.addWidget(self.profile, 1)
+        header.addWidget(self.btnSafety)
         header.addWidget(open_button)
         header.addWidget(new_button)
         layout.addLayout(header)
@@ -612,6 +610,7 @@ class SetupWidget(QWidget):
         )
         self.profile.setToolTip(station.path or "")
         self.btnAdd.setEnabled(loaded)
+        self.btnSafety.setEnabled(loaded)
         container = QWidget()
         column = QVBoxLayout(container)
         self.cards = {}
@@ -664,6 +663,9 @@ class SetupWidget(QWidget):
             self.session.update_profile(profile)
 
         return save
+
+    def edit_safety(self) -> None:
+        SafetyDialog(self.session, self).exec()
 
     def add_instrument(self) -> None:
         InstrumentDialog(self.session, self.save_instrument, parent=self).exec()

@@ -21,6 +21,19 @@ CONNECTION = "connection"
 SIMULATE = "simulate"
 KIND = "kind"  # of a device (sis_bias), and of a connection (socket)
 CHANNEL = "channel"
+SAFETY = "safety"
+LIMITS = "limits"
+SAFE_STATE = "safe_state"
+HARDWARE_PROTECTION = "hardware_protection"
+# A limit of a quantity: its keys and how a table heads them
+LIMIT_KEYS = {
+    "min": "Min",
+    "max": "Max",
+    "warn_min": "Warn min",
+    "warn_max": "Warn max",
+    "step": "Step",
+    "rate": "Rate, /s",
+}
 
 
 def instruments(profile: Mapping[str, Any]) -> Dict[str, Entry]:

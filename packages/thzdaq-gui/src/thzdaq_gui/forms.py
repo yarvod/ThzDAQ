@@ -12,16 +12,19 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QSizePolicy,
     QSpinBox,
     QWidget,
 )
 from thzdaq_api.devices import DeviceInfo
+from thzdaq_api.errors import LabError
 from thzdaq_api.measurements import ParameterInfo, SlotInfo, split_list
 
 LIMIT = 1e15
@@ -309,6 +312,17 @@ class ParameterForm(QWidget):
                     self.editors[name].set(value)
                 except (TypeError, ValueError, AttributeError, KeyError):
                     pass  # a value saved by an older version: the editor keeps its own
+
+
+def saved_or_told(dialog: QDialog, title: str, save: Callable[[], None]) -> None:
+    """Save what a dialog holds and close it; a value that is not a number, or a
+    refusal of the lab, is told and the dialog stays."""
+    try:
+        save()
+    except (ValueError, LabError) as e:
+        QMessageBox.warning(dialog, title, str(e))
+        return
+    dialog.accept()
 
 
 class DeviceSlotsForm(QWidget):

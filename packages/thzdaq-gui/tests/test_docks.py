@@ -320,6 +320,59 @@ class TestWindow:
         wait(lambda: card.status.text().startswith("OK"))
         assert "SimSisBlock" in card.status.text()
 
+    def test_safety_is_edited_and_checked_by_the_lab(
+        self, window, session, profile, monkeypatch
+    ):
+        from PySide6.QtWidgets import QTableWidgetItem
+        from thzdaq_api.devices import DescribeDevice
+        from thzdaq_gui.docks.safety import SafetyDialog
+
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+
+        def fill(dialog):
+            limits = dialog.limits
+            row = limits.add_row("sis_bias_1", "voltage_set")
+            assert limits.item(row, 2).text() == "mV"  # typed as the dock shows it
+            limits.setItem(row, 3, QTableWidgetItem("8"))  # min
+            limits.setItem(row, 4, QTableWidgetItem("-8"))  # max
+            dialog.accept_values()  # refused by the lab: the dialog stays
+            assert dialog.result() != QDialog.Accepted
+            assert "min is above max" in warnings[-1]
+            limits.item(row, 3).setText("-8")
+            limits.item(row, 4).setText("8")
+            limits.setItem(row, 7, QTableWidgetItem("0.5"))  # step
+            state = dialog.safe_state
+            row = state.add_row("sis_bias_1", "voltage_set")
+            state.item(row, state.VALUE).setText("0")
+            row = state.add_row("signal_generator_1", "output")
+            state.cellWidget(row, state.VALUE).setCurrentText("Off")
+            dialog.protection.setChecked(True)
+            dialog.accept_values()
+            return dialog.result()
+
+        monkeypatch.setattr(SafetyDialog, "exec", fill)
+        window.setupWidget.edit_safety()
+        safety = load_station(profile).safety
+        limit = safety.limits["sis_bias_1"]["voltage_set"]
+        assert (limit.minimum, limit.maximum) == (pytest.approx(-8e-3), 8e-3)
+        assert limit.step == pytest.approx(5e-4) and limit.rate is None
+        assert safety.safe_state == {
+            "sis_bias_1": {"voltage_set": 0.0},
+            "signal_generator_1": {"output": False},
+        }
+        assert safety.hardware_protection
+        # The bench takes them at once
+        described = session.call(DescribeDevice(ref="sis_bias_1")).quantities
+        voltage = next(q for q in described if q.key == "voltage_set")
+        assert voltage.maximum == pytest.approx(8e-3)
+        # Shown again as they were saved
+        dialog = SafetyDialog(session)
+        assert dialog.limits.text(0, 4) == "8" and dialog.limits.text(0, 7) == "0.5"
+        assert dialog.safe_state.rowCount() == 2 and dialog.protection.isChecked()
+
 
 class TestDeviceDocks:
     def test_quantity_panel_reads_and_sets(self, window, session, wait, monkeypatch):
