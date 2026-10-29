@@ -86,6 +86,7 @@ class RunInfo(msgspec.Struct, frozen=True):
     finished: Optional[str] = None
     error: Optional[str] = None
     path: Optional[str] = None  # the file it is saved in
+    workspace: Optional[str] = None  # the folder whose data/ holds it
 
 
 class ListProcedures(Operation[Tuple[ProcedureSummary, ...]]):
@@ -106,7 +107,9 @@ class StartMeasurement(Operation[RunInfo]):
     them (a sweep: {"start", "stop", "points"}); devices maps slots to device
     refs. Returns at once; wait_measurement follows it. A device another
     measurement sweeps (or one this one sweeps that another uses) is a
-    conflict unless share is true; both measurements record it."""
+    conflict unless share is true; both measurements record it. workspace is
+    the folder of the experiment: the file goes to its data/ (the daemon's own
+    folder when not given)."""
 
     rights = Rights.RUN
     procedure: str
@@ -114,6 +117,7 @@ class StartMeasurement(Operation[RunInfo]):
     devices: Dict[str, str] = {}
     comment: str = ""
     share: bool = False
+    workspace: Optional[str] = None
 
 
 class ListRuns(Operation[Tuple[RunInfo, ...]]):
