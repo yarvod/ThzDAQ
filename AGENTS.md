@@ -22,6 +22,18 @@ Fix the design, not the symptom. A change that only works with a hack is not don
 - **No hacks.** No flags that silence a path for one caller, no sleeps or timers to "let it settle", no retries, no `getattr(self, "_x", default)` for attributes that may not exist, no catch-all `except` to hide a failure, no dead code left behind. If a third-party library (Qt, ADS, pyqtgraph) needs a workaround, it lives in the module that wraps that library (ADS: `docking.py`), runs once at the point where the library's behaviour causes the problem, and its comment names that behaviour.
 - **Prove it.** A bug fix reproduces the bug first (a test, or a script on simulators) and checks the fix against it.
 
+### Target boundaries (daemon work, `docs/daemon.md` → «Пакеты, слои и границы»)
+
+New code follows these boundaries now; existing code moves there during milestone M1.
+
+- **Packages.** `thzdaq-api` (contract and client: operations, DTO, events, errors, the measurement file format, `RemoteLab`, `connect_or_start`; depends only on `msgspec`) ← `thzdaq-core` (domain and use cases) → `thzdaq-instruments`; `thzdaq-daemon` (process, HTTP + SSE, the server-side composition root) → core and api. Clients `thzdaq-gui`, `thzdaq-cli`, `thzdaq-mcp` import only `thzdaq_api`, never `thzdaq_core`, `thzdaq_instruments` or `thzdaq_daemon`. `thzdaq` is the PyPI meta-package with extras. Only the root `main.py` knows both the GUI and the daemon.
+- **Layers in core.** `domain/` (station, `GuardedPort`, procedures, parameters, plots, measurement, leases, actions, analysis) ← `application/` (handlers, dispatcher, policy, approvals, runner, events, lanes, polling, scripts, workspaces, ports, `LocalLab`) ← `adapters/` (JSON store, YAML profiles, journal). The domain touches no files, threads or clocks; it gets them through ports.
+- **Use cases.** One operation = one Struct of arguments in `thzdaq_api.ops` and one stateless handler in `application/handlers/<area>/`, registered by an explicit list in the daemon's composition root. Every call from outside goes through the dispatcher: arguments → policy → handler → journal and event. A lease check and the write it guards run as one job in the device's lane. Procedures inside the daemon write through `GuardedPort` directly, not through the dispatcher.
+- **Contract types.** DTO, operation arguments and events are `msgspec` Structs in `thzdaq-api`; JSON schemas are generated from them, never written by hand. Values with units travel as strings and are parsed once, by the daemon.
+- **GUI.** View models in `thzdaq_gui/models/` are QObjects on QtCore that call `Lab`; they never import QtWidgets. Widgets show a view model and call its methods. One bridge turns `RemoteLab` events into Qt signals. Forms come from `ProcedureInfo` schemas, graphs from `PlotInfo`, analysis from daemon operations.
+- **Vocabulary.** Quantity keys and units live in instruments, a procedure's name, slots and plots on its class, shared procedure parameters and axis labels in `domain/measurements/common.py`, operation names, event types and error codes in api, GUI settings keys in one GUI module. Use them by import; the duplicate test fails on repeated literals and function bodies across modules.
+- **Enforcement.** import-linter contracts in the root `pyproject.toml` run in pre-commit and CI next to the duplicate test; a broken boundary fails the build.
+
 ## Build, Test, and Development Commands
 
 - `uv sync` creates or updates `.venv`; `uv lock` after changing any `pyproject.toml`.

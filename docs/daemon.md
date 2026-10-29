@@ -23,7 +23,21 @@
 - порядок — вехи М1–М4 (раздел «Вехи»): демон без потери функций → права и MCP → скрипты
   и рабочие папки → ассистент и редактор;
 - симуляция — отдельный демон, работающий одновременно с реальным;
-- в сборке два exe: оконный `ThzDAQ.exe` и консольный `thzdaq-cli.exe`.
+- в сборке два exe: оконный `ThzDAQ.exe` и консольный `thzdaq-cli.exe`;
+- **архитектура** (раздел «Пакеты, слои и границы»):
+  - контракт и клиент — отдельный пакет `thzdaq-api`; GUI, CLI, MCP и скрипты зависят только
+    от него;
+  - демон — пакет `thzdaq-daemon`: процесс, HTTP и SSE, точка сборки серверной стороны;
+  - CLI — пакет `thzdaq-cli`, такой же клиент, как GUI и MCP;
+  - `thzdaq-core` делится на `domain` / `application` / `adapters`;
+  - юзкейсы — обработчик на операцию и один диспетчер с общим конвейером поверх доменных
+    сервисов;
+  - DTO, аргументы операций и события — `msgspec`, JSON-схемы генерируются;
+  - GUI — модели вида на QtCore и виджеты, которые только показывают;
+  - анализ (I-V, шумы, 2SB) — операции демона;
+  - каждое понятие определено один раз, у своего владельца; тест ловит дубли;
+  - границы проверяет import-linter в pre-commit и CI;
+  - на PyPI одно имя `thzdaq` с extras.
 
 ## Архитектура
 
@@ -31,20 +45,20 @@
  Claude Code / Codex
         │ MCP по stdio
         ▼
-   thzdaq mcp ─────────┐
-                       │   HTTP JSON + SSE         ┌──────── thzdaq serve (демон) ────────┐
- CLI ──────────────────┼── 127.0.0.1 + токен ─────►│ API → LabService: операции, права,    │
-                       │                           │ аренды, события, опрос, раннеры, стор │
- GUI ──────────────────┘                           │   → Station → полосы → TransportPool  │
-  └ ассистент (в процессе GUI)                     └───────────────────────────────────────┘
+ thzdaq mcp (thzdaq-mcp) ─┐                         ┌──────── thzdaq-daemon ───────────────┐
+                          │   HTTP JSON + SSE       │ HTTP → диспетчер: права → аренды →    │
+ thzdaq (thzdaq-cli) ─────┼── 127.0.0.1 + токен ───►│ обработчик → журнал и событие         │
+                          │   контракт thzdaq-api   │ thzdaq-core: домен и юзкейсы          │
+ GUI (thzdaq-gui) ────────┘   (RemoteLab)           │   → Station → полосы → TransportPool  │
+  └ ассистент (в процессе GUI)                      └───────────────────────────────────────┘
       модель по API (Qwen, ...) ⇄ инструменты = те же операции
-      через RemoteService GUI, origin = assistant
+      через RemoteLab GUI, origin = assistant
 ```
 
 - **MCP — только для внешних агентов.** MCP нужен, чтобы чужая программа (Claude Code,
   Codex) получила наши инструменты. Ассистент внутри GUI — наш код с обеих сторон: он берёт
-  описания инструментов из того же каталога операций (`service/operations.py`) и вызывает их
-  через `RemoteService`, который у GUI уже есть. Ходить через `thzdaq mcp` значило бы
+  описания инструментов из того же каталога операций (`thzdaq_api.catalog`) и вызывает их
+  через `RemoteLab`, который у GUI уже есть. Ходить через `thzdaq mcp` значило бы
   добавить подпроцесс, stdio и asyncio в GUI ради того же результата. Набор инструментов у
   ассистента и у MCP-агентов одинаковый, потому что оба строятся из одного каталога.
   Подключать к ассистенту *чужие* MCP-серверы (поиск по документации и т. п.) можно позже,
@@ -64,7 +78,7 @@
   добавляет свои (SIS: калибровка, чоппер: вращение). Так особые группы доков
   (`ChopperGroup`, `CompressorGroup`, `TraceGroup`, `SisBiasGroup`) становятся вызовами `call`.
 - **Одновременные обращения:**
-  1. полоса прибора — очередь и поток на прибор, перенос `_Lane` в core: ручные операции
+  1. полоса прибора — очередь и поток на прибор, перенос `_Lane` в `thzdaq_core/application/lanes.py`: ручные операции
      всех клиентов идут по порядку;
   2. блокировка линка (`Link.RLock`): байты на одной шине не перемешиваются;
   3. **аренда**: кто сейчас пользуется устройством и как. Владелец аренды — конкретное
@@ -169,8 +183,8 @@
      `{run, table, rows}` с номером `seq` в кольцевой буфер.
   3. У каждого клиента свой поток HTTP-сервера. Он ждёт новых событий на условной
      переменной и пишет в открытый ответ `id: <seq>`, `event: <тип>`, `data: <json>`.
-  4. Поток-читатель `RemoteService` в GUI разбирает события и отдаёт их Qt-сигналом в
-     GUI-поток. Графики дописывают точки, а перерисовка идёт по таймеру (20–30 раз в
+  4. Поток-читатель `RemoteLab` разбирает события, а мост GUI (`bridge.py`) отдаёт их
+     Qt-сигналом моделям вида в GUI-потоке. Графики дописывают точки, а перерисовка идёт по таймеру (20–30 раз в
      секунду), а не на каждую точку.
 - **Монитор.** `subscribe_poll(ref, interval)` → планировщик ставит чтение в полосу прибора
   с наименьшим интервалом подписчиков. Если прошлое чтение ещё не закончилось, новое не
@@ -191,10 +205,141 @@
   команды редкие и идут обычными POST. SSE работает на stdlib, переподключение с
   `Last-Event-ID` совпадает с нашим `seq`, а в браузере есть `EventSource`. WebSocket нужен
   для частых сообщений от клиента или двоичных кадров; ни того ни другого пока нет. Шина
-  (`service/events.py`) от транспорта не зависит: если понадобится, WebSocket станет вторым
-  адаптером в `server/`, без изменений в сервисе.
+  (`thzdaq_core/application/events.py`) от транспорта не зависит: если понадобится,
+  WebSocket станет вторым адаптером в `thzdaq-daemon`, без изменений в core.
 - **Бенчмарк в тестах:** 10 тыс. событий в секунду через SSE в клиент. Проверяется задержка
   p99, отсутствие потерь и `resync` у искусственно медленного клиента.
+
+## Пакеты, слои и границы
+
+Правило одно: зависимости направлены внутрь, к домену. Клиенты (GUI, CLI, MCP, скрипты) знают
+только контракт. Демон собирает домен и юзкейсы и выставляет их по HTTP. Нарушение границы
+ломает сборку: правила проверяет import-linter в pre-commit и CI («Проверка границ»).
+
+### Пакеты
+```
+thzdaq-gui ──┐
+thzdaq-cli ──┼──► thzdaq-api ◄── thzdaq-core ──► thzdaq-instruments
+thzdaq-mcp ──┘          ▲             ▲
+                        └── thzdaq-daemon
+
+thzdaq (мета, PyPI) ──► thzdaq-cli + thzdaq-api; extras [analysis] [daemon] [mcp] [gui] [all]
+```
+Стрелка — «импортирует». `core → api`: юзкейсы реализуют операции контракта и возвращают его
+DTO, поэтому типы на границе одни на всех и прослойка «доменный объект → DTO» не нужна.
+
+- **thzdaq-api** — контракт и клиент. Зависит только от `msgspec`; без Qt, numpy и драйверов.
+  - Операции (`ops/`): у каждой — Struct аргументов с именем, типом результата, классом прав,
+    признаком «долгая» и описанием для модели. JSON-схема генерируется из Struct.
+  - DTO: `DeviceInfo`, `QuantityInfo`, `ActionInfo`, `ProcedureInfo` (параметры — JSON-схема,
+    слоты, графики), `PlotInfo`, `RunInfo`, `MeasurementSummary`, `ConnectionInfo`,
+    `LeaseInfo`, `DaemonStatus`.
+  - События — объединение с тегом (`QuantitySet`, `Values`, `MeasurementRecords`, …) и снимок
+    `Snapshot`.
+  - Ошибки — `ErrorCode` и `LabError(code, message, hint)`, одна таблица кодов на всех.
+  - Формат файла измерения `thzdaq-measurement` v1: это публичный формат данных, его читают
+    скрипты, `thzdaq show` и Data без демона.
+  - `Lab` (Protocol: `call(args) → result`, `events()`), `RemoteLab` (HTTP + SSE на stdlib),
+    файл хоста, `connect_or_start()`, `api_version`.
+  - Клиентские функции и объекты устройств (`lab.read/set/...`, `lab["sis_bias_1"]`).
+  - Значения с единицами (`"2.3mV"`) клиент передаёт строкой, разбирает их демон теми же
+    единицами, что и драйверы: разбора единиц в двух местах нет.
+- **thzdaq-core** — домен и юзкейсы, без сети и Qt.
+- **thzdaq-instruments** — приборы как сейчас: возможности (`capabilities.py`) — порты домена к
+  приборам, драйверы и транспорты — адаптеры к железу.
+- **thzdaq-daemon** — процесс демона. Точка сборки серверной стороны (станция, хранилища,
+  сервисы, обработчики, диспетчер), HTTP и SSE поверх диспетчера, файлы хоста и блокировка,
+  `daemon.json`, таймаут простоя, лог. Своей логики операций нет: только транспорт и жизненный
+  цикл.
+- **thzdaq-cli** — команда `thzdaq`: аргументы → вызовы `Lab` → вывод. `thzdaq daemon start`
+  запускает исполняемый файл демона, а не импортирует его.
+- **thzdaq-mcp** — `thzdaq mcp`: инструменты из каталога api, вызовы через `RemoteLab`.
+- **thzdaq-gui** — окно, клиент `Lab`.
+- **thzdaq** — мета-пакет для PyPI («Пакеты на PyPI»). Модуль `thzdaq` реэкспортирует
+  `connect` и клиентские функции из api.
+- `main.py` в корне — вход сборки: `ThzDAQ.exe` запускает GUI, с `--serve` — демона, с `--plot`
+  — окно графиков. Это единственное место вне пакетов, которое знает и про GUI, и про демона.
+
+### Слои внутри core
+```
+thzdaq_core/
+  domain/       станция и профиль, GuardedPort и пределы, процедуры и параметры, графики
+                (PlotSpec), измерение, аренды, действия устройств, анализ, SIS
+  application/  обработчики операций, диспетчер и конвейер, права и подтверждения, раннер,
+                шина событий и снимок, полосы приборов, опрос по подписке, сессии скриптов,
+                рабочие папки; порты (Protocol): хранилище измерений, профили, часы, журнал;
+                LocalLab
+  adapters/     JSON-хранилище измерений, YAML-профили, журнал в файл
+```
+- `application → domain`; `adapters → application` (порты) и `domain`. Домен не импортирует ни
+  application, ни adapters.
+- Время, файлы и потоки — только через порты или в application (полосы, опрос, раннер). Домен
+  тестируется без них.
+
+### Юзкейсы: обработчик на операцию
+- Одна операция — один обработчик (`application/handlers/<область>/<операция>.py`):
+  - реализует операцию из api: тип аргументов и результата берёт оттуда;
+  - зависимости — в конструкторе (доменные и прикладные сервисы);
+  - `handle(args, origin) → result`; своего состояния нет, поэтому параллельные вызовы
+    безопасны.
+- **Диспетчер** `dispatch(args, origin)` — единственный вход для HTTP и `LocalLab`. Конвейер у
+  всех операций один:
+  1. разбор и проверка аргументов (`msgspec`);
+  2. права: `Policy` (origin × класс операции) → `allow` / `ask` / `deny`. Ожидание ответа
+     человека идёт вне блокировок, после ответа проверка повторяется;
+  3. обработчик;
+  4. журнал и событие.
+
+  Аренды и защита проверяются внутри задания полосы прибора вместе с самой записью:
+  «проверить и записать» атомарно, гонки «проверил — записал» нет. Сквозные вещи пишутся один
+  раз; новая операция — новый файл, остальные не трогаются.
+- **Регистрация** — явным списком в точке сборки демона, а не побочным эффектом импорта: граф
+  зависимостей виден в одном месте. Тест: у каждой операции api ровно один обработчик.
+- **Измерение внутри демона идёт мимо диспетчера.** Процедура пишет в устройства через
+  `GuardedPort`, держа аренды со старта, поэтому тысячи точек развёртки конвейер не проходят.
+  Цена диспетчера — микросекунды; прибор отвечает за 10–200 мс.
+- **`LocalLab`** — реализация `Lab` поверх диспетчера в том же процессе. Это не режим работы
+  GUI («GUI как хост» не делаем), а основа тестов: одни и те же контрактные тесты идут на
+  `LocalLab` и на `RemoteLab` с сервером в потоке.
+
+### GUI-клиент
+- GUI зависит только от thzdaq-api и Qt: прибора, `Station` и процедур в нём нет.
+- **Модели вида** (`thzdaq_gui/models/`) — QObject на QtCore. Они держат состояние дока
+  (запуск, величины устройства, список измерений, процессы, демон) и вызывают `Lab`.
+  QtWidgets не импортируют и тестируются без окон.
+- **Виджеты** только показывают модель и зовут её методы; состояние друг у друга не читают
+  (как `RunStatus` и `RunControls` уже сейчас).
+- **Мост событий** один: поток-читатель `RemoteLab` → сигнал Qt (queued) → модели вида. Он
+  заменяет `DeviceWorker` и `QtRunner`.
+- Формы параметров и слотов строятся из `ProcedureInfo` (JSON-схема), графики — из `PlotInfo`.
+  GUI не импортирует `Parameter` и `PlotSpec`.
+- Анализ (I-V, шумы, 2SB) — операции демона (`analyze_iv(measurement, params)` → DTO). GUI,
+  CLI, MCP и ассистент получают один и тот же расчёт, numpy в GUI не нужен.
+- Настройки окна (QSettings) — объект из точки сборки GUI, все ключи в одном модуле.
+
+### Словарь без дублей
+Каждое понятие определено один раз, в слое, которому оно принадлежит, и используется
+импортом:
+- ключи величин и единицы — thzdaq-instruments (`quantities.py`, `units.py`); имена
+  возможностей — классы `capabilities.py`, в DTO и скриптах — строки с этими именами;
+- имя процедуры — атрибут её класса; слоты и графики — объявления процедуры;
+- общие параметры процедур (Settle time, Hot load, Load switch delay) и подписи осей —
+  фабрики и константы в `domain/measurements/common.py`;
+- имена операций, типы событий, коды ошибок — thzdaq-api;
+- ключи настроек GUI — один модуль GUI.
+
+Тест находит одинаковые строковые литералы и одинаковые тела функций в разных модулях и
+падает на новых дублях.
+
+### Проверка границ
+import-linter, контракты в корневом `pyproject.toml`, запуск в pre-commit и CI:
+- thzdaq-gui, thzdaq-cli и thzdaq-mcp не импортируют thzdaq_core, thzdaq_instruments и
+  thzdaq_daemon;
+- thzdaq-api не импортирует ничего из ThzDAQ;
+- слои core идут в одну сторону: adapters → application → domain;
+- thzdaq_core и thzdaq_instruments не импортируют Qt и HTTP-сервер;
+- модели вида GUI не импортируют QtWidgets;
+- циклов внутри пакетов нет.
 
 ## Запуск, подключение и управление демоном
 
@@ -217,7 +362,7 @@
 в `daemon.json` рядом с программой, как `stations/` и `data/`. QSettings для этого не
 подходят: демон не зависит от Qt.
 
-### Подключение клиента (общая функция `connect_or_start()` в `server/host.py`)
+### Подключение клиента (общая функция `connect_or_start()` в `thzdaq_api.host`)
 1. Прочитать `thzdaq-host.json`. Если файл есть, проверить `GET /health` с токеном
    (таймаут ~1 с).
 2. Ответ получен и `api_version` совпадает → подключиться.
@@ -229,8 +374,10 @@
    - POSIX: `start_new_session=True`;
    - stdout и stderr идут в лог демона.
 
-   Команда: из исходников `python -m thzdaq_core.server serve`, из сборки
-   `ThzDAQ.exe --serve` (тот же exe, без окна).
+   Команда: из исходников и из окружения с `thzdaq[daemon]` — `python -m thzdaq_daemon`, из
+   сборки — `ThzDAQ.exe --serve` (тот же exe, без окна). Сборка при каждом запуске записывает
+   свой путь в файл установки пользователя; по нему её находит клиент, поставленный с PyPI
+   без демона.
 
    Параметры: `--station` — профиль, который передал клиент (GUI — свой последний из
    QSettings, CLI — из `--station`), иначе последний из `daemon.json`; `--simulate`, если
@@ -533,14 +680,16 @@
 Версию SDK и поддержку возможностей в клиентах проверить перед началом М2.
 
 ### Один источник описаний
-Каталог операций в `thzdaq_core/service/operations.py` хранит для каждой операции имя,
-описание для модели, JSON-схему аргументов, класс прав и признак «долгая». Из него
-строятся:
-- инструменты MCP (`list_tools` → схемы, `call_tool` → `RemoteService`);
+Операции определены в thzdaq-api (`ops/`): у каждой Struct аргументов с именем, типом
+результата, классом прав, признаком «долгая» и описанием для модели. JSON-схема аргументов
+генерируется из Struct (`msgspec.json.schema`), руками не пишется. Из этого списка
+(`thzdaq_api.catalog`) строятся:
+- инструменты MCP (`list_tools` → схемы, `call_tool` → `RemoteLab`);
 - инструменты встроенного ассистента (формат OpenAI tools);
-- справка `thzdaq describe-ops` для отладки.
+- справка CLI и `thzdaq describe-ops`.
 
-Добавили операцию — она сразу появилась везде.
+Обработчики в core реализуют эти операции; тест проверяет, что у каждой ровно один
+обработчик. Добавили операцию — она сразу появилась везде.
 
 ### Набор инструментов
 - Стенд:
@@ -573,7 +722,7 @@
   обычный клиент демона с origin `mcp:<имя клиента из initialize>`.
 - MCP внутри демона (Streamable HTTP) не делаем: SDK построен на asyncio/ASGI, а демон — на
   потоках и stdlib. asyncio и зависимость `mcp` живут только в `thzdaq-mcp`.
-- `RemoteService` синхронный (`requests`), поэтому вызовы оборачиваются в
+- `RemoteLab` синхронный (stdlib `http.client`), поэтому вызовы оборачиваются в
   `anyio.to_thread.run_sync`. Иначе ожидание подтверждения или долгое чтение заблокирует
   цикл и сломает отмену.
 
@@ -641,7 +790,7 @@
 совпадают с командами CLI.
 
 ### Два слоя одного клиента
-- **Функции = команды CLI** (`thzdaq_core/client.py`, поверх `RemoteService`):
+- **Функции = команды CLI** (`thzdaq_api.lab`, поверх `RemoteLab`; реэкспорт в `thzdaq`):
   `lab.read(ref)`, `lab.set(ref, key, value)`, `lab.call(ref, action, **args)`,
   `lab.start(procedure, devices=..., **parameters)`, `lab.status()`, `lab.cancel(id)`,
   `lab.wait(id)`, `lab.measurements()`. Каждая — один вызов операции. CLI — тонкая обёртка
@@ -650,7 +799,7 @@
   `lab["sis_bias_1"]` возвращает объект, атрибуты и методы которого строятся из
   `describe_device` (величины и действия):
   ```python
-  from thzdaq_core import connect
+  from thzdaq import connect
 
   lab = connect()                      # найдёт или запустит демон
   bias, pm = lab["sis_bias_1"], lab["power_meter_1"]
@@ -735,8 +884,8 @@ curve, экспорт CSV и `thzdaq show` работают как с любым
 (`hot_cold` + `use_grid`) делает то же самое. Пример показывает, как это пишется скриптом,
 чтобы потом менять под себя.
 ```python
-from thzdaq_core import connect
-from thzdaq_core.analysis.noise import match_hot_cold, noise_temperature
+from thzdaq import connect
+from thzdaq_core.domain.analysis.noise import match_hot_cold, noise_temperature  # thzdaq[analysis]
 
 lab = connect()
 bias, pm = lab["sis_bias_1"], lab["power_meter_1"]
@@ -855,7 +1004,7 @@ with lab.measurement(
   символами (plotext) и обновляет его на месте; без `--plot` — прогресс и последние строки.
   Удобно по ssh и для агентов.
 - **В Jupyter (позже):** `run.live_plot()` / `m.live_plot()` — график в ячейке, обновляется по
-  событиям (matplotlib или plotly — extra `thzdaq-core[jupyter]`).
+  событиям (matplotlib или plotly — extra `thzdaq[jupyter]`).
 - **Из `m.plot`:** `m.plot(..., show=True)` открывает окно сразу при старте, если GUI
   закрыт. По умолчанию окно не открывается.
 
@@ -946,7 +1095,7 @@ my-experiment/
   работает без установки чего-либо. В настройках рабочей папки
   (`thzdaq.toml`) можно выбрать другой: `.venv` папки, окружение uv или conda, любой путь.
   GUI показывает найденные окружения и проверяет, что в выбранном установлен
-  `thzdaq-core` совместимой версии.
+  `thzdaq` совместимой версии.
 - **Сборка:** PyInstaller кладёт в exe только найденные модули. Для скриптов на встроенном
   Python в сборку включается стандартная библиотека целиком, иначе скрипт упадёт на
   `import statistics`. Тяжёлое (scipy и т. п.) — через своё окружение.
@@ -1027,22 +1176,20 @@ my-experiment/
    `measurements/procedures/` с тестами на симуляторах.
 
 ### Как могло бы выглядеть объявление
-Параметры, слоты и графики объявляются тем же, что уже есть у `Procedure`
-(`parameters.py`, возможности, `PlotSpec`). Тогда GUI переиспользует `ParameterForm`,
-`DeviceSlotsForm` и `ProcedureBox` без нового кода форм.
+Параметры, слоты и графики объявляются так же, как у `Procedure`. Демон описывает такой
+скрипт тем же `ProcedureInfo`, и GUI строит форму, слоты и запуск тем же кодом, что для
+встроенных процедур. Скрипт — клиент, поэтому возможности указываются по имени, а демон
+проверяет имена.
 ```python
-from thzdaq_core.script import Script, Sweep, Float, Slot, Plot
-from thzdaq_instruments.capabilities import (
-    LoadSwitch, PowerDetector, Rotator, VoltageCurrentMeter, VoltageSource,
-)
+from thzdaq.script import Script, Sweep, Float, Slot, Plot
 
 class PVGrid(Script):
     title = "P-V hot/cold по сетке"
     devices = {
-        "bias": Slot(VoltageSource, VoltageCurrentMeter, kind="sis_bias"),
-        "detector": Slot(PowerDetector),
-        "load": Slot(LoadSwitch),
-        "grid": Slot(Rotator),
+        "bias": Slot("VoltageSource", "VoltageCurrentMeter", kind="sis_bias"),
+        "detector": Slot("PowerDetector"),
+        "load": Slot("LoadSwitch"),
+        "grid": Slot("Rotator"),
     }
     bias_voltage = Sweep("Bias voltage", default="0:7:351", unit="mV")
     angle = Sweep("Grid angle", default="0:90:10", unit="deg")
@@ -1073,23 +1220,30 @@ class PVGrid(Script):
   как `hot_cold` → слот `load` у P-V).
 
 ## Пакеты на PyPI
-- Тот же workflow релиза по тегу публикует на PyPI `thzdaq-instruments`, `thzdaq-core`
-  (библиотека, клиент, CLI `thzdaq`) и `thzdaq-mcp` (trusted publishing из GitHub Actions)
-  вместе со сборкой exe. Версии пакетов совпадают с версией программы: сейчас пакеты `0.1.0`,
-  а программа `0.0.x` — `release.py` будет ставить одну версию всем.
-- Установка:
-  - `uv tool install thzdaq-core` — CLI глобально;
-  - `uv add thzdaq-core` / `pip install thzdaq-core==<версия exe>` — в свой проект или
-    conda-окружение;
-  - `uv tool install thzdaq-mcp` — для агентов.
+- Внутри — отдельные пакеты («Пакеты, слои и границы»), а человек ставит одно имя `thzdaq`:
+  - `uv tool install thzdaq` — команда `thzdaq` глобально; клиент без драйверов и numpy;
+  - `uv add thzdaq` / `pip install thzdaq==<версия exe>` — в свой проект, Jupyter или conda:
+    `from thzdaq import connect`;
+  - `thzdaq[analysis]` — функции анализа для своих расчётов в скрипте (thzdaq-core, numpy);
+  - `thzdaq[daemon]` — демон с драйверами: стенд на чистом Python без exe (Linux, своё
+    окружение);
+  - `thzdaq[mcp]` — `thzdaq mcp` для агентов;
+  - `thzdaq[gui]` — окно; `thzdaq[jupyter]` — живые графики в ячейке (позже); `thzdaq[all]` —
+    всё.
+- API только localhost, поэтому клиенту без `[daemon]` демон нужен на этой же машине:
+  `connect_or_start()` подключается к запущенному или запускает установленную сборку (путь —
+  из файла установки пользователя). Нет ни демона, ни сборки — ошибка называет, что
+  поставить.
+- Тот же workflow релиза по тегу публикует все пакеты (trusted publishing из GitHub Actions)
+  вместе со сборкой exe. Версия у всех пакетов одна — версия программы, её ставит
+  `release.py`.
 - На ПК стенда со сборкой ставить ничего не нужно: там уже есть `thzdaq-cli.exe` (CLI, MCP,
   встроенный Python для скриптов). PyPI нужен для своих окружений (Jupyter, scipy, другой
-  компьютер).
+  проект).
 - Совместимость: клиент и демон сверяют `api_version`. Один major — работают; иначе ошибка
   называет версию, которую надо поставить.
-- Проверить: свободны ли имена на PyPI. Ограничение `numpy<2` в `thzdaq-core` может
-  мешать в чужих окружениях: клиенту numpy не нужен, его стоит сделать необязательным
-  (extra для анализа).
+- Проверить: свободны ли имена на PyPI (`thzdaq`, `thzdaq-*`). `numpy<2` остаётся только у
+  thzdaq-core и к клиенту не попадает.
 - Python ≥ 3.11.
 
 ## Агенты рядом с GUI (Claude Code, Codex)
@@ -1114,13 +1268,13 @@ class PVGrid(Script):
 ## Ассистент в GUI: как он понимает инструменты
 Механизм тот же, что у MCP: **инструмент — это имя, описание и JSON-схема аргументов**.
 MCP лишь передаёт этот список чужой программе; внутри GUI он передаётся модели напрямую.
-- **Каталог операций** (`service/operations.py`) — описание для модели, схема, класс прав,
+- **Каталог операций** (`thzdaq_api.catalog`) — описание для модели, схема, класс прав,
   флаг «долгая», флаг `danger`. Из него строятся `tools` для модели, инструменты MCP и
   справка CLI.
 - **Цикл:**
   1. запрос к модели (OpenAI-совместимый `chat/completions`) с `tools=[...]`;
   2. модель отвечает текстом или `tool_calls`;
-  3. каждый вызов выполняется через `RemoteService` GUI с origin `assistant`: права,
+  3. каждый вызов выполняется через `RemoteLab` GUI с origin `assistant`: права,
      пределы, карточка подтверждения;
   4. результат возвращается модели сообщением `role: tool`;
   5. повтор, пока модель не ответит текстом.
@@ -1142,69 +1296,83 @@ MCP лишь передаёт этот список чужой программ�
 
 ## Пакеты и файлы
 
+- `thzdaq-api` (новый, `msgspec`):
+  - `ops/` — операции по областям: устройства, измерения, станция, соединения, аренды,
+    подтверждения, анализ, скрипты, рабочие папки, UI, демон;
+  - `dto.py`, `events.py` (события и `Snapshot`), `errors.py` (`ErrorCode`, `LabError`);
+  - `measurement_file.py` — формат `thzdaq-measurement` v1 (`Column.source`), чтение JSON и
+    хвоста `.jsonl` после сбоя;
+  - `catalog.py` — список операций и JSON-схемы;
+  - `lab.py` — `Lab`, клиентские функции и объекты устройств, `connect`;
+  - `remote.py` — `RemoteLab`: HTTP + SSE на stdlib, поток-читатель, переподключение с
+    `Last-Event-ID`, снимок;
+  - `host.py` — файл хоста, файл установки, `connect_or_start()`, отвязанный запуск, `kill`;
+  - `script.py` — сессии скриптов на стороне клиента (`lab.measurement`, `m.sweep`,
+    `m.record`, `m.plot`).
 - `thzdaq-instruments`: `Action` и вывод действий из возможностей рядом с `quantities.py`;
-  `actions` у драйверов (scontel, chopper, sumitomo, rs, arduino); паспортные `limits`
-  драйверов и пометка опасных методов; `Quantity.write` проверяет `minimum/maximum`.
+  `actions` у драйверов (scontel, chopper, sumitomo, rs, arduino); паспортные `limits` и
+  пометка опасных методов; `Quantity.write` проверяет `minimum/maximum`;
+  `transport/prologix.py` — `++loc` для использованных адресов перед закрытием простаивающего
+  соединения.
 - `thzdaq-core`:
-  - `service/service.py` — `LabService`;
-  - `service/operations.py` — каталог и сериализация: `DeviceInfo`, `Quantity` →
-    JSON-описания; `raw` (запрос / запись с подтверждением);
-  - `service/events.py` — шина, буфер, снимок, слияние частых `quantity_set`;
-  - `service/leases.py` — режимы `read` / `shared` / `exclusive`, владелец — id измерения
-    или сессии, конфликты с явным намерением, записи `interactions` / `conflict` в оба
-    измерения, автодобавление устройств в сессию скрипта;
-  - `service/approvals.py` — запросы подтверждения, ответ от любого человеческого клиента,
-    заранее выданные разрешения скриптов;
-  - `service/polling.py`;
-  - `service/lanes.py` — из `thzdaq_gui/workers.py::_Lane`, без Qt;
-  - `station/ports.py` — `GuardedPort`: пределы, лесенка, проверка после записи, журнал;
-  - `station/config.py`, `station/storage.py` — раздел `safety` профиля, история изменений;
-  - `measurements/parameters.py` (`applies`), `measurements/runner.py` — проверка диапазонов
-    до старта и `dry_run`;
-  - `server/http.py` — API и SSE;
-  - `server/client.py` — `RemoteService` + поток событий;
-  - `server/host.py` — файлы демона, `connect_or_start()`, отвязанный запуск, `kill`;
-  - `server/daemon.py` — процесс демона: блокировка, `daemon.json`, таймаут простоя,
-    `heartbeat`, `/health`, `/status`, stop/restart, лог с ротацией;
-  - `client.py` — Python-клиент: функции, объекты устройств, `lab.run`,
-    `lab.measurement` (сессия скрипта), `connect` (реэкспорт из `thzdaq_core`);
-  - `service/scripts.py` — сессии и запуск скриптов демоном (`thzdaq script ...`), `restore`
-    при обрыве;
-  - `data/measurement.py` (`Column.source`), `data/store.py` (дозапись `.jsonl` во время
-    измерения, сборка JSON в конце, чтение после сбоя);
-  - `workspace.py` — поиск `thzdaq.toml` вверх, `thzdaq init`, копии профиля в папке, выбор
-    интерпретатора; хранилища по папкам в `LabService`;
-  - `measurements/procedure.py` — `slot_modes` (по умолчанию `shared`); у встроенных
-    процедур `exclusive` для слотов развёртки, у `monitor.time` все слоты `read`;
-  - `cli.py` — тонкая обёртка над `client.py`, группы `thzdaq daemon ...`,
-    `thzdaq script ...`, `thzdaq agent-setup`; вопросы подтверждения в терминале;
-  - `transport/prologix.py` (instruments) — `++loc` для использованных адресов перед
-    закрытием простаивающего соединения.
+  - `domain/station/` — профиль (`config`, `kinds`, раздел `safety`), `Station`, `ports`
+    (`AttributePort`, `GuardedPort`: пределы, лесенка, кэш уставок, проверка после записи);
+  - `domain/measurements/` — `Procedure`, параметры (`applies`), `slot_modes` (по умолчанию
+    `shared`; у встроенных процедур `exclusive` для слотов развёртки, у `monitor.time` все
+    слоты `read`), `PlotSpec`, процедуры, `common.py` (общие параметры, подписи осей);
+  - `domain/data/` — `Measurement`, колонки; `domain/leases.py` — режимы, конфликты с явным
+    намерением, записи `interactions` / `conflict` в оба измерения; `domain/actions.py`;
+    `domain/analysis/`, `domain/sis/`;
+  - `application/dispatch.py` (диспетчер и конвейер), `policy.py`, `approvals.py`
+    (подтверждения, ответ от любого человеческого клиента, заранее выданные разрешения
+    скриптов);
+  - `application/handlers/<область>/` — обработчик на операцию;
+  - `application/runner.py` — раннер: проверка диапазонов до старта, `dry_run`;
+  - `application/events.py` — шина, кольцевой буфер, снимок, слияние частых `quantity_set`;
+  - `application/lanes.py` — из `thzdaq_gui/workers.py::_Lane`, без Qt; `polling.py`;
+  - `application/scripts.py` — сессии скриптов на стороне демона, `restore` и `on_exit` при
+    обрыве, автодобавление устройств;
+  - `application/workspaces.py` — поиск `thzdaq.toml`, копии профиля, хранилища по папкам;
+  - `application/ports.py` — `MeasurementRepository`, `ProfileRepository`, `Clock`,
+    `Journal`; `application/local.py` — `LocalLab`;
+  - `adapters/json_store.py` (дозапись `.jsonl`, сборка JSON в конце),
+    `adapters/yaml_profiles.py` (история `stations/.history/`), `adapters/journal.py`.
+- `thzdaq-daemon` (новый): `__main__.py` (вход `thzdaq-daemon`), `compose.py` (точка сборки:
+  станция, хранилища, сервисы, обработчики явным списком, диспетчер), `http.py`
+  (`POST /ops/<имя>` → диспетчер, `GET /events` — SSE, `/health`, `/status`), `process.py`
+  (блокировка, файл хоста, `daemon.json`, таймаут простоя, `heartbeat`, stop/restart, лог с
+  ротацией).
+- `thzdaq-cli` (новый): команда `thzdaq` — команды совпадают с клиентскими функциями api;
+  группы `daemon`, `script`, `station`, `agent-setup`; вопросы подтверждения в терминале.
+- `thzdaq-mcp` (новый, `mcp`): `thzdaq mcp` по stdio — клиент демона.
 - `thzdaq-gui`:
-  - `session.py` — `RemoteService` вместо `Station`; Qt-мост событий в сигналы;
-  - `workers.py` — `DeviceWorker`/`QtRunner` заменяются мостом;
-  - `docks/devices.py` (~15 мест `worker.submit(lambda: device...)` → `service.set/call/
-    subscribe_poll`), `docks/setup.py`, `docks/measure.py` (`start` → `service.start`, записи
-    по событиям run id), `graphs.py`, `measurements.py`/`docks/data.py` (список из демона);
+  - `models/` — модели вида на QtCore: запуск измерения, устройство, измерения (Data),
+    процессы, демон;
+  - `bridge.py` — события `RemoteLab` → сигналы Qt; заменяет `workers.py` (`DeviceWorker`,
+    `QtRunner`);
+  - `session.py` — `Lab`, мост и модели вместо `Station`;
+  - доки — виджеты над моделями: `docks/devices.py` (около 15 мест `worker.submit(lambda:
+    device...)` → `set`/`call`/`subscribe_poll`; группы чоппера, компрессора, трасс и SIS —
+    вызовы `call`), `docks/setup.py` (и Setup → Safety), `docks/measure.py` (`start` →
+    операция, записи по событиям run id), `docks/data.py` (список из демона), `graphs.py`
+    (графики из `PlotInfo`), `iv_analysis.py` (анализ — операция);
+  - `forms.py` — формы из JSON-схемы параметров и слотов;
+  - `settings.py` — объект настроек и все ключи QSettings;
   - индикатор демона в строке состояния, баннер потери связи и переподключение;
-  - `docks/daemon.py` — док Daemon: статус, клиенты, полосы, соединения, лог, управление;
-  - `docks/setup.py` — Setup → Safety (пределы, безопасное состояние, аппаратная защита);
-    кнопка «Всё в безопасное состояние» на тулбаре;
+    `docks/daemon.py`; кнопка «Всё в безопасное состояние» на тулбаре;
   - `app.py` — `connect_or_start()` с заставкой вместо прямой загрузки станции;
     `instance_lock` убирается;
-  - `exit_dialog.py` — выбор: оставить демон работать / завершить измерения и остановить
-    демон;
+  - `exit_dialog.py` — оставить демон работать или завершить измерения и остановить демон;
   - `updater.py`/`updates.py` — остановка демона перед заменой файлов;
   - `viewer.py` — окно только с графиками одного измерения (`thzdaq plot`, `--plot <id>`);
-  - консоль сырых команд в доке прибора (Advanced);
-  - `workspace.py` — рабочая папка: выбор при запуске, недавние, новая, Open in VS Code /
-    Explorer, заголовок окна, фильтр Data по папке;
-  - `docks/scripts.py`, `editor/` — док Scripts: список, редактор (pygments, jedi, наши
-    подсказки, pyflakes + проверка по стенду), Run/Stop, вывод, шаблоны, inline-diff
-    правок с ✓/✗/«Переделать», отслеживание изменений на диске.
-- `thzdaq-mcp` (новый, зависит от core и `mcp`): `thzdaq mcp` по stdio — клиент демона.
+  - консоль сырых команд в доке прибора (Advanced), `workspace.py`, `docks/scripts.py`,
+    `editor/` — вехи М3–М4.
+- `thzdaq` (новый, мета для PyPI): модуль `thzdaq` реэкспортирует клиент api; extras — в
+  «Пакеты на PyPI».
 - `main.py` (`--serve`, `--plot`), `cli_main.py` (вход `thzdaq-cli.exe`), `ThzDAQ.spec` /
   `build.sh` / `build.bat` — два exe в одном `COLLECT`.
+- Корневой `pyproject.toml` — контракты import-linter; `.pre-commit-config.yaml` и `ci.yml` —
+  их запуск и тест дублей словаря.
 - `release.py`, `.github/workflows/release.yml` — одна версия всем пакетам, публикация на
   PyPI вместе со сборкой.
 
@@ -1215,30 +1383,43 @@ MCP лишь передаёт этот список чужой программ�
 
 ### М1 — демон без потери функций
 Цель: всё, что программа умеет сейчас, работает через демон, а GUI и CLI — его клиенты.
-1. **Сервис в core** (без Qt, без сети):
-   - `LabService`, каталог операций, действия устройств;
+1. **Пакеты и границы** (раздел «Пакеты, слои и границы»):
+   - пакеты `thzdaq-api`, `thzdaq-daemon`, `thzdaq-cli`, `thzdaq`; core разложен на
+     `domain` / `application` / `adapters`;
+   - контракты import-linter и тест дублей в pre-commit и CI с первого коммита: дальше
+     границы держит сборка, а не ревью;
+   - словарь у владельцев: общие параметры процедур и подписи осей, имена процедур атрибутом
+     класса, ключи настроек GUI в одном модуле.
+2. **Контракт и юзкейсы** (без Qt, без сети):
+   - операции, DTO, события и ошибки в api (`msgspec`), каталог и схемы из них;
+   - обработчики, диспетчер и конвейер, `LocalLab`; у каждой операции один обработчик;
+   - действия устройств; анализ как операции;
    - события со снимком и слиянием частых уставок;
    - полосы, опрос по подписке;
    - аренды `read` / `shared` / `exclusive`, владелец — id измерения или сессии; конфликт
-     только на `exclusive`, с явным намерением;
+     только на `exclusive`, с явным намерением; проверка и запись — одним заданием полосы;
    - `slot_modes` у встроенных процедур.
-2. **Защита:**
+3. **Защита:**
    - паспортные пределы драйверов;
    - раздел `safety`: `min/max/warn/step/rate`, `safe_state`, OVP/OCP;
    - `GuardedPort` с кэшем уставок и прерываемой лесенкой;
    - проверка развёрток до старта;
    - опасные действия с диалогом в GUI.
-3. **API и демон:**
-   - HTTP + SSE, `RemoteService`;
+4. **Демон и клиент:**
+   - `thzdaq-daemon`: точка сборки, HTTP + SSE над диспетчером;
+   - `RemoteLab`; контрактные тесты одни и те же на `LocalLab` и `RemoteLab`;
    - файлы демона, `connect_or_start()` с защитой от гонки;
    - `/health`, `/status`, `heartbeat`;
    - таймаут простоя, stop/restart/kill, проверка версии, лог;
    - отдельный демон-симулятор.
-4. **Рабочая папка в API:** параметр `workspace` в `start` / `measurement`, хранилища по
+5. **Рабочая папка в API:** параметр `workspace` в `start` / `measurement`, хранилища по
    папкам. GUI и CLI пока передают папку программы, поэтому поведение как сейчас, а
    менять API в М3 не придётся.
-5. **GUI-клиент:**
-   - `Session` на `RemoteService`, доки через операции;
+6. **GUI-клиент:**
+   - модели вида на QtCore и мост событий вместо `DeviceWorker` и `QtRunner`; доки —
+     виджеты над моделями;
+   - формы из `ProcedureInfo`, графики из `PlotInfo`, анализ — операцией;
+   - объект настроек с ключами в одном модуле;
    - графики, Data и Event log по событиям, снимок при подключении;
    - индикатор и док Daemon, переподключение, новый диалог выхода (с учётом других
      клиентов);
@@ -1246,20 +1427,21 @@ MCP лишь передаёт этот список чужой программ�
      прибора видно, кто им сейчас пользуется и как;
    - изменение профиля с проверкой аренд.
 
-   Прямого доступа к `Station` в GUI не остаётся.
-6. **Базовый CLI-клиент:**
+   GUI зависит только от thzdaq-api — это проверяет import-linter.
+7. **Базовый CLI-клиент** (`thzdaq-cli`):
    - `daemon …`, `devices`, `read`, `set`, `call`, `run`, `status`, `cancel`, `watch`,
      `measurements`, `connections`, `--json`;
    - автозапуск демона, вопросы подтверждения в терминале;
    - `--local` нет: два владельца приборов — ровно то, от чего уходим. Для отладки есть
      `thzdaq daemon start --foreground`.
-7. **Сборка:**
+8. **Сборка:**
    - `ThzDAQ.exe` + `thzdaq-cli.exe` в одном `COLLECT`;
    - апдейтер останавливает демон и проверяет запущенные процессы установки;
    - `++loc` для Prologix.
 
 **Готово, когда** на стенде:
 - все встроенные измерения и доки работают как в текущей версии;
+- import-linter и тест дублей проходят, GUI и CLI не импортируют core;
 - измерение, запущенное из CLI, видно в GUI;
 - закрытие GUI не останавливает измерение;
 - симулятор работает одновременно с реальным стендом.
@@ -1325,16 +1507,22 @@ GUI, а отказ доходит до агента текстом.
 - WebSocket-адаптер и веб-клиент.
 
 ## Переиспользуем
-- `Station` целиком (`thzdaq_core/station/station.py`) — в демоне без изменений
+- `Station` (`thzdaq_core/station/station.py`) — в `domain/station/`, без изменений логики
 - `Quantity`, `read_values` (`thzdaq_instruments/quantities.py`)
-- `MeasurementRunner`, `RunObserver` (`thzdaq_core/measurements/runner.py`) — наблюдатель
-  публикует события
-- `Parameter.describe()` (`thzdaq_core/parameters.py`) → описания и JSON-схемы
-- `_Lane` (`thzdaq_gui/workers.py`) → `service/lanes.py`
-- `ParameterForm`, `DeviceSlotsForm` (`thzdaq_gui/forms.py`), `MainWindow.open_dock`
+- `MeasurementRunner`, `RunObserver` (`thzdaq_core/measurements/runner.py`) — в
+  `application/runner.py`; наблюдатель публикует события
+- `Parameter.describe()` (`thzdaq_core/parameters.py`) → JSON-схемы в `ProcedureInfo`
+- `_Lane` (`thzdaq_gui/workers.py`) → `application/lanes.py`; `HangWatch` → статус полос
+- `ParameterForm`, `DeviceSlotsForm` (`thzdaq_gui/forms.py`) — строятся из JSON-схемы
+- `RunStatus` / `RunControls` (`thzdaq_gui/run_controls.py`) — уже модель и вид: основа
+  модели запуска
+- `DockSpace`, `GraphDocks`, `DeviceDocks`, режимы Lite/Pro, `Perspectives` — раскладка окна
+  не меняется, меняется источник данных доков
 - `instance_lock` (`thzdaq_gui/app.py`) — та же временная папка для файла хоста
-- `build_procedure`, `parse_devices`, `summarize` (`thzdaq_core/cli.py`)
-- `MeasurementStore`, `read_json` (`thzdaq_core/data/store.py`)
+- `build_procedure`, `parse_devices`, `summarize` (`thzdaq_core/cli.py`) — в обработчиках и
+  `thzdaq-cli`
+- `MeasurementStore`, `read_json` (`thzdaq_core/data/store.py`) — в `adapters/json_store.py`
+  и `thzdaq_api.measurement_file`
 
 ## Проверка
 - `uv run pytest`:
@@ -1363,7 +1551,9 @@ GUI, а отказ доходит до агента текстом.
     - `safe_state` проходит лесенкой;
     - агент не может изменить `safety`;
     - расхождение после записи даёт предупреждение;
-  - те же тесты через `RemoteService` с сервером в потоке;
+  - контрактные тесты операций — одни и те же на `LocalLab` и на `RemoteLab` с сервером в
+    потоке; у каждой операции api ровно один обработчик;
+  - границы: import-linter и тест дублей словаря;
   - жизненный цикл (демон в подпроцессе, свой `THZDAQ_HOST_FILE`):
     - два клиента одновременно → один демон;
     - устаревший файл хоста (мёртвый pid) → новый запуск;
