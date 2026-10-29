@@ -1,13 +1,17 @@
+import sys
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parent))  # lab_helpers
 
 PROFILE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 
 
 @pytest.fixture
-def lab():
+def lab(tmp_path):
     """The use cases of the simulated example bench, called as a client would."""
+    from thzdaq_core.adapters.json_store import MeasurementStore
     from thzdaq_core.adapters.yaml_profiles import load_station
     from thzdaq_core.application.assembly import assemble
     from thzdaq_core.application.bench import Bench
@@ -17,7 +21,7 @@ def lab():
 
     station = Station(load_station(PROFILE), simulate=True)
     lanes = Lanes()
-    assembled = assemble(Bench(station, lanes))
+    assembled = assemble(Bench(station, lanes), MeasurementStore(tmp_path / "data"))
     yield LocalLab(assembled, origin="test")
     assembled.close()
     lanes.stop()

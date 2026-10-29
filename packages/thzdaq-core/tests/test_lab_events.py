@@ -6,18 +6,8 @@ import pytest
 from thzdaq_api.devices import CancelPoll, SetQuantity, SubscribePoll
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import GetSnapshot, QuantitySet, Resync, Values
+from lab_helpers import bodies, wait_for
 from thzdaq_core.application.events import EventBus
-
-
-def wait_for(predicate, timeout=3.0):
-    deadline = time.monotonic() + timeout
-    while not predicate():
-        assert time.monotonic() < deadline, "not reached in time"
-        time.sleep(0.005)
-
-
-def bodies(events, kind):
-    return [event.body for event in events if isinstance(event.body, kind)]
 
 
 def test_a_set_is_an_event_with_who_and_from_what(lab):

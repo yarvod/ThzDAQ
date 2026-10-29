@@ -5,58 +5,33 @@ largest in the file names, so they keep growing across runs of the program.
 Start and end times (to the millisecond) are in every file as well.
 
 The runner saves at the start, every few seconds while records come and at
-the end. Writes go to a temporary file first, so a crash leaves the previous
+the end. Values are encoded as thzdaq_api.data says (complex numbers, NaN).
+Writes go to a temporary file first, so a crash leaves the previous
 complete version; a file still marked running reads back as interrupted.
 """
 
 import csv
 import json
-import math
 import os
 import threading
 from pathlib import Path
 from typing import Any, Iterator, List, Optional, Union
+
+from thzdaq_api.data import decode_values, encode_values
 
 from thzdaq_core.domain.data.measurement import INTERRUPTED, RUNNING, Measurement
 
 PathLike = Union[str, Path]
 
 
-def _encode(value: Any) -> Any:
-    if isinstance(value, complex):
-        return {"__complex__": [value.real, value.imag]}
-    if isinstance(value, float) and not math.isfinite(value):
-        return {"__float__": repr(value)}
-    if isinstance(value, dict):
-        return {key: _encode(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_encode(item) for item in value]
-    if hasattr(value, "item") and callable(value.item):  # numpy scalars
-        return _encode(value.item())
-    return value
-
-
-def _decode(value: Any) -> Any:
-    if isinstance(value, dict):
-        if set(value) == {"__complex__"}:
-            real, imag = value["__complex__"]
-            return complex(real, imag)
-        if set(value) == {"__float__"}:
-            return float(value["__float__"])
-        return {key: _decode(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_decode(item) for item in value]
-    return value
-
-
 def dumps(value: Any, indent: Optional[int] = None) -> str:
     return json.dumps(
-        _encode(value), ensure_ascii=False, allow_nan=False, indent=indent
+        encode_values(value), ensure_ascii=False, allow_nan=False, indent=indent
     )
 
 
 def loads(text: str) -> Any:
-    return _decode(json.loads(text))
+    return decode_values(json.loads(text))
 
 
 def write_json(measurement: Measurement, path: PathLike) -> Path:

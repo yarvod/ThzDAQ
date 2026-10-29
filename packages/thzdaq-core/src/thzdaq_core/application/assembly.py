@@ -7,8 +7,10 @@ from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
 from thzdaq_core.application.events import EventBus
-from thzdaq_core.application.handlers import devices, state
+from thzdaq_core.application.handlers import devices, measurements, state
 from thzdaq_core.application.polling import Polling
+from thzdaq_core.application.ports import MeasurementRepository
+from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.values import KnownValues
 
 
@@ -17,16 +19,19 @@ class Assembled:
     dispatcher: Dispatcher
     events: EventBus
     polling: Polling
+    runs: Runs
 
     def close(self) -> None:
+        self.runs.stop()
         self.polling.stop()
 
 
-def assemble(bench: Bench) -> Assembled:
+def assemble(bench: Bench, store: MeasurementRepository) -> Assembled:
     events = EventBus()
     known = KnownValues()
     access = DeviceAccess(bench, known, events)
     polling = Polling(access, events)
+    runs = Runs(bench, store, events)
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -36,6 +41,13 @@ def assemble(bench: Bench) -> Assembled:
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
             state.GetSnapshot(events, known),
+            measurements.ListProcedures(),
+            measurements.DescribeProcedure(),
+            measurements.StartMeasurement(runs),
+            measurements.ListRuns(runs),
+            measurements.WaitMeasurement(runs),
+            measurements.CancelMeasurement(runs),
+            measurements.AbortMeasurement(runs),
         )
     )
-    return Assembled(dispatcher, events, polling)
+    return Assembled(dispatcher, events, polling, runs)
