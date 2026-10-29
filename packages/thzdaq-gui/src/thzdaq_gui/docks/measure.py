@@ -47,6 +47,7 @@ from thzdaq_gui.run_controls import (
     RunStatus,
 )
 from thzdaq_gui.settings import procedure_key, sections_path, settings
+from thzdaq_gui.wording import INVALID_PARAMETERS
 
 # A start or a stop that takes this long is treated as a hung device
 STUCK_AFTER_MS = 5000
@@ -285,7 +286,7 @@ class ProcedureBox(QWidget):
         try:
             procedure = self.form.procedure()
         except ProcedureError as e:
-            QMessageBox.warning(self, "Invalid parameters", str(e))
+            QMessageBox.warning(self, INVALID_PARAMETERS, str(e))
             return
         self.remember(procedure)
         self.window = procedure.plot_window()

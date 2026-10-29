@@ -53,6 +53,7 @@ from thzdaq_instruments.transport.base import (
 
 from thzdaq_gui import theme
 from thzdaq_gui.forms import ParameterForm
+from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 
 # How often the Connections group shows the state of the links
 REFRESH_MS = 2000
@@ -597,11 +598,11 @@ class SetupWidget(QWidget):
         self.profile.setWordWrap(True)
         open_button = QToolButton()
         open_button.setIcon(theme.icon("folder-open-outline"))
-        open_button.setToolTip("Open station profile")
+        open_button.setToolTip(OPEN_PROFILE)
         open_button.clicked.connect(self.open_profile_requested)
         new_button = QToolButton()
         new_button.setIcon(theme.icon("file-plus-outline"))
-        new_button.setToolTip("New station profile")
+        new_button.setToolTip(NEW_PROFILE)
         new_button.clicked.connect(self.new_profile_requested)
         header.addWidget(self.profile, 1)
         header.addWidget(open_button)
@@ -675,7 +676,7 @@ class SetupWidget(QWidget):
         try:
             self.session.update_config(config)
         except (StationError, OSError) as e:
-            QMessageBox.critical(self, "Station profile", str(e))
+            QMessageBox.critical(self, STATION_PROFILE, str(e))
             return False
         return True
 

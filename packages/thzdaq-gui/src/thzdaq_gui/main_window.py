@@ -64,6 +64,7 @@ from thzdaq_gui.settings import MODE, STATION_PATH, WINDOW_GEOMETRY, location
 from thzdaq_gui.settings import settings as app_settings
 from thzdaq_gui.update_dialog import Updates
 from thzdaq_gui.version import __version__
+from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 from thzdaq_gui.workers import HangWatch
 
 logger = logging.getLogger(__name__)
@@ -352,20 +353,20 @@ class MainWindow(QMainWindow):
 
     def open_profile(self) -> None:
         path = self.session.folders.open_path(
-            self, PROFILES, "Open station profile", "YAML (*.yaml *.yml)"
+            self, PROFILES, OPEN_PROFILE, "YAML (*.yaml *.yml)"
         )
         if path:
             self.load_profile(path, self.session.simulate)
 
     def new_profile(self) -> None:
         path = self.session.folders.save_path(
-            self, PROFILES, "New station profile", "", "YAML (*.yaml)"
+            self, PROFILES, NEW_PROFILE, "", "YAML (*.yaml)"
         )
         if path:
             try:
                 self.session.new_station(path, Path(path).stem)
             except (InstrumentError, OSError) as e:
-                QMessageBox.critical(self, "Station profile", str(e))
+                QMessageBox.critical(self, STATION_PROFILE, str(e))
 
     def load_profile(self, path, simulate: bool) -> None:
         if self.session.busy():
@@ -374,7 +375,7 @@ class MainWindow(QMainWindow):
         try:
             self.session.load_station(path, simulate)
         except (InstrumentError, OSError) as e:
-            QMessageBox.critical(self, "Station profile", str(e))
+            QMessageBox.critical(self, STATION_PROFILE, str(e))
 
     def set_simulate(self, on: bool) -> None:
         if self.session.path is not None and on != self.session.simulate:

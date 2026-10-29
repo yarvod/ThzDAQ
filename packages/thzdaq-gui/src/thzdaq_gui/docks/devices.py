@@ -35,7 +35,9 @@ from PySide6.QtWidgets import (
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
 from thzdaq_core.domain.measurements.procedures.monitor import default_quantities
 from thzdaq_core.domain.measurements.catalog import get_procedure
+from thzdaq_core.domain.measurements.procedures.common import POWER_DBM, S_DB
 from thzdaq_core.domain.sis.calibration import calibration_for, evaluate_sis_calibration
+from thzdaq_core.domain.station.kinds import SUBDEVICE_SETTINGS
 from thzdaq_core.domain.station.station import INSTRUMENT, channel_title
 from thzdaq_instruments.capabilities import (
     Compressor,
@@ -613,7 +615,7 @@ class TraceGroup(QGroupBox):
         layout.addLayout(row)
         self.graph = pg.PlotWidget()
         self.graph.setLabel("bottom", "Frequency", units="Hz")
-        self.graph.setLabel("left", "|S|, dB" if vna else "Power, dBm")
+        self.graph.setLabel("left", S_DB if vna else POWER_DBM)
         self.graph.showGrid(x=True, y=True, alpha=0.25)
         self.graph.setMinimumHeight(220)
         self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=1))
@@ -696,12 +698,14 @@ class CalibrationDialog(QDialog):
         self.accept()
 
 
-OFFSET_VOLTAGE = Quantity(
-    "offset_voltage", "Offset voltage", "V", set=lambda t, v: None
-)
-OFFSET_CURRENT = Quantity(
-    "offset_current", "Offset current", "A", set=lambda t, v: None
-)
+def offset_quantity(key: str) -> Quantity:
+    """A SIS bias offset as the profile declares it, shown like a quantity."""
+    setting = next(p for p in SUBDEVICE_SETTINGS["sis_bias"] if p.name == key)
+    return Quantity(key, setting.label, setting.unit, set=lambda t, v: None)
+
+
+OFFSET_VOLTAGE = offset_quantity("offset_voltage")
+OFFSET_CURRENT = offset_quantity("offset_current")
 
 
 class SisBiasGroup(QGroupBox):
@@ -723,8 +727,8 @@ class SisBiasGroup(QGroupBox):
         save = QPushButton(theme.icon("content-save-outline"), "Save offsets")
         save.setToolTip("Keep the offsets in the station profile (or Enter in a field)")
         save.clicked.connect(self.save_offsets)
-        layout.addRow("Offset voltage", self.offset_voltage)
-        layout.addRow("Offset current", self.offset_current)
+        layout.addRow(OFFSET_VOLTAGE.title, self.offset_voltage)
+        layout.addRow(OFFSET_CURRENT.title, self.offset_current)
         layout.addRow("", save)
         row = QHBoxLayout()
         edit = QPushButton(theme.icon("table-edit"), "Calibration…")

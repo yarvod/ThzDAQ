@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_gui.settings import IV_ANALYSIS, settings
+from thzdaq_gui.wording import INVALID_PARAMETERS
 from thzdaq_core.domain.analysis.iv import (
     IVAnalysisConfig,
     IVAnalysisParameters,
@@ -141,7 +142,7 @@ class ParametersDialog(QDialog):
         try:
             self.parameters = self.build()
         except ValueError as e:
-            QMessageBox.warning(self, "Invalid parameters", str(e))
+            QMessageBox.warning(self, INVALID_PARAMETERS, str(e))
             return
         self.accept()
 

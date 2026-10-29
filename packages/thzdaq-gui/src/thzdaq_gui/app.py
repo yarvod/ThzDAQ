@@ -18,6 +18,7 @@ from thzdaq_gui.settings import (
     stations_dir,
     use_file,
 )
+from thzdaq_gui.wording import STATION_PROFILE
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -86,7 +87,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "them: close the other before working with the instruments.",
         )
     if problem:
-        QMessageBox.critical(window, "Station profile", problem)
+        QMessageBox.critical(window, STATION_PROFILE, problem)
     if args.quit_after is not None:
         window.confirm_exit = False
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
