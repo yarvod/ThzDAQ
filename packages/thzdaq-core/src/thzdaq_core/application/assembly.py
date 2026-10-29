@@ -1,9 +1,11 @@
 """The use cases of a bench, assembled: every handler with what it needs, listed
-explicitly, and the services that run on their own (polling) to stop at the end."""
+explicitly, and the services that run on their own (polling, letting idle
+connections go) to stop at the end."""
 
 from dataclasses import dataclass
 
 from thzdaq_core.application.bench import Bench
+from thzdaq_core.application.connections import IdleConnections
 from thzdaq_core.application.daemon import DaemonService
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
@@ -32,10 +34,12 @@ class Assembled:
     polling: Polling
     runs: Runs
     daemon: DaemonService
+    idle: IdleConnections
 
     def close(self) -> None:
         self.runs.stop()
         self.polling.stop()
+        self.idle.stop()
 
 
 def assemble(
@@ -88,4 +92,4 @@ def assemble(
             daemon.RestartDaemon(service),
         )
     )
-    return Assembled(dispatcher, events, polling, runs, service)
+    return Assembled(dispatcher, events, polling, runs, service, IdleConnections(bench))
