@@ -627,7 +627,9 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
   измерения — предупреждает, что они будут остановлены. Созданные, обновлённые и удалённые
   перспективы записываются сразу. Перед выходом графики pyqtgraph закрываются явно
   (`close_plots()`).
-- Аргументы запуска: `--station`, `--simulate`, `--data`, `--settings`.
+- Аргументы запуска: `--station`, `--simulate`, `--workspace` (папка, в `data/` которой
+  ложатся измерения), `--settings`. GUI — клиент демона (`docs/daemon.md`): `--simulate`
+  выбирает демон-симулятор, `main.py --serve` запускает сам демон.
 
 ## 5. SOLID — как выполняется
 

@@ -83,7 +83,7 @@
   (`ChopperGroup`, `CompressorGroup`, `TraceGroup`, `SisBiasGroup`) уже выполняют эти
   действия; в клиенте GUI они станут вызовами `call_action`.
 - **Одновременные обращения:**
-  1. полоса прибора — очередь и поток на прибор, перенос `_Lane` в `thzdaq_core/application/lanes.py`: ручные операции
+  1. полоса прибора — очередь и поток на прибор, перенос `_Lane` в `thzdaq_api/lanes.py` (полосы нужны и демону, и клиенту): ручные операции
      всех клиентов идут по порядку;
   2. блокировка линка (`Link.RLock`): байты на одной шине не перемешиваются;
   3. **аренда**: кто сейчас пользуется устройством и как. Владелец аренды — конкретное
@@ -1406,7 +1406,7 @@ MCP лишь передаёт этот список чужой программ�
   - `application/runner.py` — раннер: проверка диапазонов до старта, `dry_run`;
   - `application/events.py` — шина, кольцевой буфер, ожидание по номеру; слияние частых
     `quantity_set` — в `runs.py`; `application/daemon.py` — статус и остановка демона;
-  - `application/lanes.py` — из `thzdaq_gui/workers.py::_Lane`, без Qt; `polling.py`;
+  - полосы — `thzdaq_api/lanes.py` (из `thzdaq_gui/workers.py::_Lane`, без Qt); `polling.py`;
   - `application/scripts.py` — сессии скриптов на стороне демона, `restore` и `on_exit` при
     обрыве, автодобавление устройств;
   - `application/workspaces.py` — поиск `thzdaq.toml`, копии профиля, хранилища по папкам;
@@ -1512,7 +1512,7 @@ MCP лишь передаёт этот список чужой программ�
    - [x] параметр `workspace` у `start_measurement`, папка в `RunInfo`;
    - [x] хранилища по папкам (`application/workspaces.py`);
    - [ ] `workspace` у `measurement` — вместе с сессиями скриптов (М3);
-   - [ ] GUI и CLI передают папку программы — когда станут клиентами (шаги 6, 7).
+   - [x] GUI передаёт папку программы (`--workspace`); [ ] CLI — шаг 7.
 6. **GUI-клиент** — по частям, GUI работает после каждой:
    - [x] формат файла измерения (`thzdaq_api.measurement_file`) и графики (`PlotInfo` с
      `point`/`curves`) — в api: клиенты читают и рисуют без core;
@@ -1541,13 +1541,18 @@ MCP лишь передаёт этот список чужой программ�
      их сброс — операции; правка профиля из доков — `update_station` и
      `get/set_sis_calibration`; сессия следует событию `station_changed`;
    - [x] Setup → Safety: пределы, безопасное состояние и аппаратная защита в таблицах;
-   - [ ] переход на `RemoteLab`: `connect_or_start()` с заставкой, индикатор и док Daemon,
-     переподключение, снимок при подключении, новый диалог выхода, `instance_lock` уходит;
+   - [x] переход на `RemoteLab`: сессия получает `Lab` (в программе — `connect_or_start()`
+     с заставкой, в тестах — `LocalLab`), слушает со снимка, следует `station_changed` и
+     `resync`; профиль загружается и создаётся `load/new_station`, Simulate — другой демон
+     на том же профиле; `instance_lock` ушёл; `main.py --serve` — демон;
+   - [x] индикатор и док Daemon (статус, Restart/Stop с режимом, Start, Kill, лог), баннер
+     «нет связи» с запуском, в диалоге выхода — остановить ли демон (по умолчанию — если
+     нет измерений и других клиентов); демон закрывает простаивающие соединения сам;
    - [ ] вопрос при конфликте на `exclusive`, жёлтая пометка у измерений с конфликтом, в
      доке прибора видно, кто им сейчас пользуется и как;
    - [ ] изменение профиля с проверкой аренд;
    - [ ] `dry_run`, кнопка «Всё в безопасное состояние»;
-   - [ ] GUI зависит только от thzdaq-api — это проверяет import-linter (список
+   - [x] GUI зависит только от thzdaq-api — это проверяет import-linter (список
      исключений в `pyproject.toml` пуст).
 7. **Базовый CLI-клиент** (`thzdaq-cli`):
    - [ ] `daemon …`, `devices`, `read`, `set`, `call`, `run`, `status`, `cancel`, `watch`,
@@ -1564,7 +1569,7 @@ MCP лишь передаёт этот список чужой программ�
 
 **Готово, когда** на стенде:
 - [ ] все встроенные измерения и доки работают как в текущей версии;
-- [x] import-linter и тест дублей проходят; [ ] GUI и CLI не импортируют core;
+- [x] import-linter и тест дублей проходят; [x] GUI не импортирует core; [ ] CLI тоже;
 - [ ] измерение, запущенное из CLI, видно в GUI;
 - [ ] закрытие GUI не останавливает измерение;
 - [ ] симулятор работает одновременно с реальным стендом.
@@ -1635,7 +1640,7 @@ GUI, а отказ доходит до агента текстом.
 - `MeasurementRunner`, `RunObserver` (`thzdaq_core/measurements/runner.py`) — в
   `application/runner.py`; наблюдатель публикует события
 - `Parameter.describe()` (`thzdaq_core/parameters.py`) → JSON-схемы в `ProcedureInfo`
-- `_Lane` (`thzdaq_gui/workers.py`) → `application/lanes.py`; `HangWatch` → статус полос
+- `_Lane` (`thzdaq_gui/workers.py`) → `thzdaq_api/lanes.py`; `HangWatch` → статус полос
 - `ParameterForm`, `DeviceSlotsForm` (`thzdaq_gui/forms.py`) — строятся из JSON-схемы
 - `RunStatus` / `RunControls` (`thzdaq_gui/run_controls.py`) — уже модель и вид: основа
   модели запуска
