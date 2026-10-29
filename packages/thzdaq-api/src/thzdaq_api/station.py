@@ -13,6 +13,22 @@ from thzdaq_api.operation import Operation, Rights
 
 ConnectionKey = Tuple[Union[str, int, float, None], ...]
 
+# Keys of the profile as it travels (StationProfile.profile)
+INSTRUMENTS = "instruments"
+DEVICES = "devices"
+SETTINGS = "settings"
+METADATA = "metadata"
+DRIVER = "driver"
+TITLE = "title"
+CONNECTION = "connection"
+SIMULATE = "simulate"
+KIND = "kind"  # of a device (sis_bias), and of a connection (socket)
+CHANNEL = "channel"
+SAFETY = "safety"
+LIMITS = "limits"
+SAFE_STATE = "safe_state"
+HARDWARE_PROTECTION = "hardware_protection"
+
 
 class StationProfile(msgspec.Struct, frozen=True):
     """The profile as its YAML file holds it (version 2: instruments with their

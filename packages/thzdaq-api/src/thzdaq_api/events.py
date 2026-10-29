@@ -5,7 +5,7 @@ the last event), then listens from that number; one that fell behind the
 daemon's buffer gets Resync and takes a new snapshot.
 """
 
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import msgspec
 
@@ -110,6 +110,15 @@ Body = Union[
     LeasesChanged,
     Resync,
 ]
+
+
+def run_id(body: Body) -> Optional[int]:
+    """The number of the measurement an event tells about; None for another."""
+    if isinstance(body, (MeasurementStarted, MeasurementFinished)):
+        return body.run.id
+    if isinstance(body, (MeasurementRecords, MeasurementProgress, MeasurementLog)):
+        return body.id
+    return None
 
 
 class Event(msgspec.Struct, frozen=True):
