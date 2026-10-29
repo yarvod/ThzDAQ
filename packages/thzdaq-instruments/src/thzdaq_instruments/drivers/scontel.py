@@ -8,14 +8,14 @@ from thzdaq_instruments.errors import (
     InstrumentError,
     InstrumentResponseError,
 )
-from thzdaq_instruments.instrument import Channel, ScpiInstrument, SubdeviceType
+from thzdaq_instruments.instrument import Channel, ScpiInstrument
 from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
 from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments import sis_block
+from thzdaq_instruments.sis_block import DEVICES
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 
 logger = logging.getLogger(__name__)
-
-DEVICES = ("DEV1", "DEV2", "DEV3", "DEV4")
 
 
 class SisBiasChannel(Channel):
@@ -155,10 +155,7 @@ class ScontelSisBlock(ScpiInstrument):
 
     channel_class = SisBiasChannel
     channel_keys = DEVICES
-    subdevices = {
-        "sis_bias": SubdeviceType("SIS bias", "channel", DEVICES, SisBiasChannel),
-        "sis_coil": SubdeviceType("SIS coil", "ctrl", DEVICES, SisCtrlChannel),
-    }
+    subdevices = sis_block.parts(SisBiasChannel, SisCtrlChannel)
 
     def __init__(
         self,

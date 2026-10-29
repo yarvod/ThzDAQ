@@ -2,12 +2,12 @@ import math
 from typing import Optional
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
-from thzdaq_instruments.instrument import Channel, Instrument, SubdeviceType
+from thzdaq_instruments.instrument import Channel, Instrument
 from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
 from thzdaq_instruments.readings import ChannelReading
+from thzdaq_instruments import sis_block
+from thzdaq_instruments.sis_block import DEVICES
 from thzdaq_instruments.sim.lively import Wobble, still
-
-DEVICES = ("DEV1", "DEV2", "DEV3", "DEV4")
 
 
 class SimSisBiasChannel(Channel):
@@ -89,10 +89,7 @@ class SimSisBlock(Instrument):
     device_type = "sis_block"
     channel_class = SimSisBiasChannel
     channel_keys = DEVICES
-    subdevices = {
-        "sis_bias": SubdeviceType("SIS bias", "channel", DEVICES, SimSisBiasChannel),
-        "sis_coil": SubdeviceType("SIS coil", "ctrl", DEVICES, SimSisCtrlChannel),
-    }
+    subdevices = sis_block.parts(SimSisBiasChannel, SimSisCtrlChannel)
 
     def __init__(
         self,
