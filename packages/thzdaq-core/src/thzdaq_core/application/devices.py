@@ -1,23 +1,26 @@
-"""Reading and setting device quantities, each in its instrument's lane; what is
-read or set becomes the known value, a set is an event.
+"""Reading and setting device quantities and running device actions, each in
+its instrument's lane; what is read or set becomes the known value, a set or an
+action is an event.
 
-A set of a device a running measurement sweeps needs share; the measurements
-using the device note who changed what (thzdaq_core.domain.leases). Leases
-change only when runs start and end, so the check just before the write holds.
+A set or an action that changes a device a running measurement sweeps needs
+share; the measurements using the device note who changed what
+(thzdaq_core.domain.leases). Leases change only when runs start and end, so the
+check just before the write holds.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.events import QuantitySet
+from thzdaq_api.events import ActionDone, QuantitySet
 from thzdaq_api.leases import EXCLUSIVE
+from thzdaq_instruments.actions import Action
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.values import KnownValues
-from thzdaq_core.domain.leases import LeaseConflict, Leases
+from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 
 # note(run id, metadata key, entry) into a running measurement
 Note = Callable[[int, str, Dict[str, Any]], None]
@@ -97,27 +100,64 @@ class DeviceAccess:
             parsed = quantity.parse(value)
         except ValueError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        users = self._users(ref, share)
+        before = self.known.get(ref, key)
+        self.bench.run(ref, lambda device: quantity.write(device, parsed))
+        self.known.update(ref, {key: parsed})
+        self.events.publish(QuantitySet(ref, key, parsed, before, origin))
+        self._note(users, origin, ref, key=key, before=before, value=parsed)
+        return parsed
+
+    def actions(self, ref: str) -> List[Action]:
+        self.bench.info(ref)  # an unknown device is NOT_FOUND
+        return self.bench.station.actions(ref)
+
+    def action(self, ref: str, key: str) -> Action:
+        for action in self.actions(ref):
+            if action.key == key:
+                return action
+        keys = ", ".join(a.key for a in self.actions(ref)) or "none"
+        raise LabError(
+            ErrorCode.NOT_FOUND, f"{ref} has no action {key!r}", f"it has: {keys}"
+        )
+
+    def act(
+        self,
+        ref: str,
+        key: str,
+        arguments: Dict[str, Any],
+        origin: str,
+        share: bool = False,
+    ) -> Any:
+        """Run an action; its arguments as given (a text may carry its unit) are
+        parsed by the action. Returns what the action returns (a trace)."""
+        action = self.action(ref, key)
+        try:
+            bound = action.bind(arguments)
+        except ValueError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        users = self._users(ref, share) if action.changes else []
+        result = self.bench.run(ref, lambda device: action.call(device, **bound))
+        if action.changes:
+            self.events.publish(ActionDone(ref, key, bound, origin))
+            self._note(users, origin, ref, action=key, arguments=bound)
+        return result
+
+    def _users(self, ref: str, share: bool) -> List[Lease]:
+        """The runs using a device; one sweeping it refuses a change without share."""
         users = self.leases.of(ref)
         swept = [lease for lease in users if lease.mode == EXCLUSIVE]
         if swept and not share:
             raise LabError(
                 ErrorCode.CONFLICT,
                 str(LeaseConflict(tuple(swept))),
-                "set with share to go on: the measurement notes it",
+                "call again with share to go on: the measurement notes it",
             )
-        before = self.known.get(ref, key)
-        self.bench.run(ref, lambda device: quantity.write(device, parsed))
-        self.known.update(ref, {key: parsed})
-        self.events.publish(QuantitySet(ref, key, parsed, before, origin))
-        change = {
-            "at": wall_time(),
-            "by": origin,
-            "device": ref,
-            "key": key,
-            "before": before,
-            "value": parsed,
-        }
+        return users
+
+    def _note(self, users: List[Lease], origin: str, ref: str, **what: Any) -> None:
+        """Who changed what, into the runs using the device."""
+        change = {"at": wall_time(), "by": origin, "device": ref, **what}
         for lease in users:
             kind = "conflicts" if lease.mode == EXCLUSIVE else "interactions"
             self.note(lease.owner, kind, change)
-        return parsed

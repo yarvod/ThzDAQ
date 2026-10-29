@@ -15,6 +15,7 @@ from typing import (
 )
 
 from thzdaq_instruments import default_registry
+from thzdaq_instruments.actions import Action, actions_for
 from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.instrument import Instrument
@@ -374,20 +375,28 @@ class Station:
         except TypeError as e:
             raise StationError(f"device {device_id!r}: {e}") from e
 
-    def quantities(self, ref: str) -> List[Quantity]:
-        """Values a device can read or set, known without opening anything."""
+    def part_class(self, ref: str) -> type:
+        """The class of the part a device is, known without opening anything."""
         info = self.info(ref)
         cls = self.driver_class(info.instrument)
         if info.kind == INSTRUMENT:
-            part_cls = cls
-        elif info.kind == CHANNEL:
-            part_cls = cls.channel_class
-        else:
-            kind = self.kinds(info.instrument).get(info.kind)
-            part_cls = kind.part_class if kind and kind.part_class else None
-            if part_cls is None:
-                part_cls = cls.channel_class if info.channel is not None else cls
-        return quantities_for(info.capabilities, getattr(part_cls, "quantities", ()))
+            return cls
+        if info.kind == CHANNEL:
+            return cls.channel_class
+        kind = self.kinds(info.instrument).get(info.kind)
+        if kind and kind.part_class:
+            return kind.part_class
+        return cls.channel_class if info.channel is not None else cls
+
+    def quantities(self, ref: str) -> List[Quantity]:
+        """Values a device can read or set, known without opening anything."""
+        own = getattr(self.part_class(ref), "quantities", ())
+        return quantities_for(self.info(ref).capabilities, own)
+
+    def actions(self, ref: str) -> List[Action]:
+        """What a device does on request, known without opening anything."""
+        own = getattr(self.part_class(ref), "actions", ())
+        return actions_for(self.info(ref).capabilities, own)
 
     def device_use(self, ref: str) -> DeviceUse:
         """How a device was set up, for measurement metadata."""

@@ -1,12 +1,14 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
 from dataclasses import asdict
-from typing import Type
+from typing import Any, Type
 
 from thzdaq_api import devices as api
 from thzdaq_api import measurements, station as station_api
+from thzdaq_instruments.actions import Action, Argument
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
+from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.registry import DriverInfo as Driver
 
 from thzdaq_core.domain.measurements.plots import PlotSpec
@@ -51,6 +53,45 @@ def quantity_info(quantity: Quantity) -> api.QuantityInfo:
         maximum=quantity.maximum,
         choices=tuple(str(c) for c in quantity.choices),
     )
+
+
+def argument_info(argument: Argument) -> api.ArgumentInfo:
+    return api.ArgumentInfo(
+        key=argument.key,
+        title=argument.title,
+        unit=argument.unit,
+        kind=argument.kind,
+        default=argument.default,
+        minimum=argument.minimum,
+        maximum=argument.maximum,
+        choices=tuple(str(c) for c in argument.choices),
+    )
+
+
+def action_info(action: Action) -> api.ActionInfo:
+    return api.ActionInfo(
+        key=action.key,
+        title=action.title,
+        arguments=tuple(argument_info(a) for a in action.arguments),
+        danger=action.danger,
+        changes=action.changes,
+        help=action.help,
+    )
+
+
+def action_result(result: Any) -> Any:
+    """What an action returned, as the contract carries it: a trace as Trace,
+    a value as it is."""
+    if isinstance(result, ComplexTrace):
+        return api.Trace(
+            frequency=tuple(result.frequency),
+            values=tuple(v.real for v in result.values),
+            imaginary=tuple(v.imag for v in result.values),
+            parameter=result.parameter,
+        )
+    if isinstance(result, Trace):
+        return api.Trace(tuple(result.frequency), tuple(result.values))
+    return result
 
 
 def parameter_info(parameter: Parameter) -> measurements.ParameterInfo:

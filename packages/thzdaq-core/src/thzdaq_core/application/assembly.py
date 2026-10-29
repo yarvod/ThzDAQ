@@ -43,6 +43,7 @@ def assemble(
             devices.DescribeDevice(bench, access),
             devices.ReadDevice(access),
             devices.SetQuantity(access),
+            devices.CallAction(access),
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
             state.GetSnapshot(events, known),

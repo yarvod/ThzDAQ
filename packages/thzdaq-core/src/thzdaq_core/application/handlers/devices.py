@@ -1,11 +1,16 @@
-"""Operations on devices: list, describe, read, set."""
+"""Operations on devices: list, describe, read, set, run an action."""
 
 from typing import Tuple
 
 from thzdaq_api import devices as api
 
 from thzdaq_core.application.bench import Bench
-from thzdaq_core.application.describe import device_info, quantity_info
+from thzdaq_core.application.describe import (
+    action_info,
+    action_result,
+    device_info,
+    quantity_info,
+)
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
 
@@ -34,6 +39,7 @@ class DescribeDevice(Handler[api.DescribeDevice, api.DeviceDescription]):
             quantities=tuple(
                 quantity_info(q) for q in self.devices.quantities(args.ref)
             ),
+            actions=tuple(action_info(a) for a in self.devices.actions(args.ref)),
         )
 
 
@@ -56,3 +62,16 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
     def handle(self, args, origin):
         value = self.devices.write(args.ref, args.key, args.value, origin, args.share)
         return api.QuantityValue(args.ref, args.key, value)
+
+
+class CallAction(Handler[api.CallAction, api.ActionResult]):
+    operation = api.CallAction
+
+    def __init__(self, devices: DeviceAccess):
+        self.devices = devices
+
+    def handle(self, args, origin):
+        result = self.devices.act(
+            args.ref, args.action, args.arguments, origin, args.share
+        )
+        return api.ActionResult(args.ref, args.action, action_result(result))
