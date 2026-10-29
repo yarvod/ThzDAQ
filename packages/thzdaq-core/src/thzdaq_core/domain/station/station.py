@@ -516,8 +516,8 @@ class Station:
                 continue
             try:
                 info = self.info(ref)
-            except StationError as e:
-                problems.append(f"{slot}: {e}")
+            except StationError:
+                problems.append(f"{slot}: no device {ref!r}")
                 continue
             missing = [
                 c.__name__

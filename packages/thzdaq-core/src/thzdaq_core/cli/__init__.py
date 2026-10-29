@@ -1,3 +1,3 @@
-"""Local command lines (thzdaq, thzdaq-station) that run the core in their own
-process; they give way to thzdaq-cli as a client of the daemon (docs/daemon.md, M1).
-"""
+"""thzdaq-station: profiles as files, without the daemon (show one, check it on
+simulators, import the old settings.ini). The bench itself is thzdaq, a client
+of the daemon (thzdaq-cli)."""

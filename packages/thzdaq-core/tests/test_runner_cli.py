@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from thzdaq_analysis.noise import noise_temperature
-from thzdaq_core.cli.measure import main
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, FAILED, DeviceUse
 from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_api.measurement_file import read_measurement
@@ -208,50 +207,6 @@ class TestRunner:
         assert get_procedure("sis.iv_curve") is IVCurve
         with pytest.raises(ProcedureError):
             get_procedure("nope")
-
-
-class TestCli:
-    def test_list_and_describe(self, capsys):
-        assert main(["list"]) == 0
-        assert "sis.iv_curve" in capsys.readouterr().out
-        assert main(["describe", "sis.iv_curve"]) == 0
-        out = capsys.readouterr().out
-        assert "0..7 mV, 351 points" in out and "start:stop:points in mV" in out
-
-    def test_run_simulated_on_example_station(self, tmp_path, capsys):
-        code = main(
-            [
-                "run",
-                "sis.iv_curve",
-                "--station",
-                str(EXAMPLE),
-                "--simulate",
-                "--device",
-                "bias=sis_bias_2",
-                "--set",
-                "voltage=0:6:13",
-                "--set",
-                "first_point_delay=0",
-                "--set",
-                "settle_time=0",
-                "--data",
-                str(tmp_path),
-                "--quiet",
-            ]
-        )
-        out = capsys.readouterr().out
-        assert code == 0 and "completed sis.iv_curve [iv: 13]" in out
-        path = next(tmp_path.rglob("*.json"))
-        assert main(["show", str(path)]) == 0
-        assert "voltage" in capsys.readouterr().out
-
-    def test_bad_arguments(self, capsys):
-        assert (
-            main(["run", "sis.iv_curve", "--station", str(EXAMPLE), "--set", "nope=1"])
-            == 2
-        )
-        assert "--set 'nope=1'" in capsys.readouterr().err
-        assert main(["describe", "unknown"]) == 2
 
 
 def test_parameter_names_cannot_shadow_procedure_api():

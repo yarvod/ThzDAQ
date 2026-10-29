@@ -12,7 +12,6 @@ dependencies = [
 ]
 
 [project.scripts]
-thzdaq = "thzdaq_core.cli.measure:main"
 thzdaq-station = "thzdaq_core.cli.station:main"
 
 [dependency-groups]
