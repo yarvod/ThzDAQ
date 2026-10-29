@@ -91,6 +91,18 @@ class Guard:
                 return f"{self.device} {quantity.key}: {shown} is {wrong} ({source})"
         return None
 
+    def range(self, quantity: Quantity) -> Limit:
+        """What a quantity takes: its own range, the passport and the bench
+        limits together."""
+        limits = [Limit(quantity.minimum, quantity.maximum)] + [
+            source[quantity.key]
+            for source in (self.passport, self.bench)
+            if quantity.key in source
+        ]
+        lows = [limit.minimum for limit in limits if limit.minimum is not None]
+        highs = [limit.maximum for limit in limits if limit.maximum is not None]
+        return Limit(max(lows, default=None), min(highs, default=None))
+
     def check(self, quantity: Quantity, value: float) -> None:
         problem = self.problem(quantity, value)
         if problem:

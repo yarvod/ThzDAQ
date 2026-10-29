@@ -1,6 +1,6 @@
 """Reading and setting device quantities and running device actions, each in
 its instrument's lane; what is read or set becomes the known value, a set or an
-action is an event.
+action is an event. The safe state of the profile is a set per value.
 
 A set or an action that changes a device a running measurement sweeps needs
 share; the measurements using the device note who changed what
@@ -8,12 +8,14 @@ share; the measurements using the device note who changed what
 check just before the write holds.
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from thzdaq_api.devices import SafeValue
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ActionDone, QuantitySet
 from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_instruments.actions import Action
+from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_core.application.bench import Bench
@@ -107,6 +109,20 @@ class DeviceAccess:
         self.events.publish(QuantitySet(ref, key, parsed, before, origin))
         self._note(users, origin, ref, key=key, before=before, value=parsed)
         return parsed
+
+    def safe_state(self, origin: str, share: bool = False) -> Tuple[SafeValue, ...]:
+        """Every value of the profile's safe state, in its order; one that
+        fails does not stop the others."""
+        done = []
+        for ref, values in self.bench.station.config.safety.safe_state.items():
+            for key, value in values.items():
+                try:
+                    value = self.write(ref, key, value, origin, share)
+                except (LabError, InstrumentError) as e:
+                    done.append(SafeValue(ref, key, value, str(e)))
+                else:
+                    done.append(SafeValue(ref, key, value))
+        return tuple(done)
 
     def actions(self, ref: str) -> List[Action]:
         self.bench.info(ref)  # an unknown device is NOT_FOUND

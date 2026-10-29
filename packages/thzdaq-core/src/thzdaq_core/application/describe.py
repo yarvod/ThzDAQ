@@ -16,6 +16,7 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import Parameter
 from thzdaq_core.domain.station.kinds import instrument_type, kinds_for
 from thzdaq_core.domain.station.profile import connection_to_dict
+from thzdaq_core.domain.station.safety import Guard, SafetyLimit
 from thzdaq_core.domain.station.station import (
     CHANNEL,
     INSTRUMENT,
@@ -40,7 +41,10 @@ def device_info(info: DeviceInfo, station: Station) -> api.DeviceInfo:
     )
 
 
-def quantity_info(quantity: Quantity) -> api.QuantityInfo:
+def quantity_info(quantity: Quantity, guard: Guard) -> api.QuantityInfo:
+    """A quantity as a device takes it: with its limits and how it changes."""
+    taken = guard.range(quantity)
+    bench = guard.bench.get(quantity.key, SafetyLimit())
     return api.QuantityInfo(
         key=quantity.key,
         title=quantity.title,
@@ -49,9 +53,14 @@ def quantity_info(quantity: Quantity) -> api.QuantityInfo:
         readable=quantity.readable,
         settable=quantity.settable,
         persistent=quantity.persistent,
-        minimum=quantity.minimum,
-        maximum=quantity.maximum,
+        minimum=taken.minimum,
+        maximum=taken.maximum,
         choices=tuple(str(c) for c in quantity.choices),
+        warn_minimum=bench.warn_minimum,
+        warn_maximum=bench.warn_maximum,
+        step=bench.step,
+        rate=bench.rate,
+        danger=quantity.danger,
     )
 
 

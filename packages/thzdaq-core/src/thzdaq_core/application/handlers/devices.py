@@ -1,4 +1,4 @@
-"""Operations on devices: list, describe, read, set, run an action."""
+"""Operations on devices: list, describe, read, set, run an action, go safe."""
 
 from typing import Tuple
 
@@ -34,10 +34,12 @@ class DescribeDevice(Handler[api.DescribeDevice, api.DeviceDescription]):
         self.devices = devices
 
     def handle(self, args, origin):
+        station = self.bench.station
+        guard = station.guard(args.ref)
         return api.DeviceDescription(
-            device=device_info(self.bench.info(args.ref), self.bench.station),
+            device=device_info(self.bench.info(args.ref), station),
             quantities=tuple(
-                quantity_info(q) for q in self.devices.quantities(args.ref)
+                quantity_info(q, guard) for q in self.devices.quantities(args.ref)
             ),
             actions=tuple(action_info(a) for a in self.devices.actions(args.ref)),
         )
@@ -75,3 +77,13 @@ class CallAction(Handler[api.CallAction, api.ActionResult]):
             args.ref, args.action, args.arguments, origin, args.share
         )
         return api.ActionResult(args.ref, args.action, action_result(result))
+
+
+class SafeState(Handler[api.SafeState, Tuple[api.SafeValue, ...]]):
+    operation = api.SafeState
+
+    def __init__(self, devices: DeviceAccess):
+        self.devices = devices
+
+    def handle(self, args, origin):
+        return self.devices.safe_state(origin, args.share)
