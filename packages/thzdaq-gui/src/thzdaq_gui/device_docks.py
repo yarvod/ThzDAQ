@@ -1,8 +1,8 @@
 """Device docks: one per instrument and configured device with controls.
 
-They follow the station: a dock comes and goes with its device, and is
-rebuilt only when what it is built from changes (an edited profile), so its
-reads and settings survive the rest.
+They follow the bench: a dock comes and goes with its device, and is rebuilt
+only when what it is built from changes (the device and its description), so
+its reads and settings survive the rest.
 """
 
 import logging
@@ -10,7 +10,8 @@ from typing import Dict, List
 
 import PySide6QtAds as QtAds
 from PySide6.QtWidgets import QLabel, QWidget
-from thzdaq_instruments import InstrumentError
+from thzdaq_api.devices import CHANNEL, DeviceInfo
+from thzdaq_api.errors import LabError
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import DEVICE, dock_name, key_of
@@ -18,7 +19,7 @@ from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.devices import DeviceWidget, has_content
 from thzdaq_gui.graphs import GraphHub
-from thzdaq_gui.device_types import id_type, type_title
+from thzdaq_gui.device_types import type_title
 
 logger = logging.getLogger(__name__)
 
@@ -34,35 +35,22 @@ class DeviceDocks:
         session.config_changed.connect(self.sync)
         session.station_changed.connect(self.rebuild)
 
-    def refs(self):
-        station = self.session.station
-        if station is None:
-            return []
+    def refs(self) -> List[DeviceInfo]:
         # Fixed channels live inside their instrument's dock; an instrument with
         # nothing to show (a SIS block: its parts are devices) gets no dock
         return [
             info
-            for info in station.devices()
-            if info.kind != "channel" and has_content(station, info)
+            for info in self.session.devices()
+            if info.kind != CHANNEL and has_content(self.session, info)
         ]
 
-    def signature(self, info) -> tuple:
+    def signature(self, info: DeviceInfo) -> tuple:
         """What a device dock is built from; it is rebuilt only when this changes.
 
-        Instrument settings (multiplier, OEM head) are left out: the dock writes
-        them itself and must survive saving them.
+        The values a dock keeps in the profile (a multiplier, offsets) are not
+        in it: the dock writes them itself and survives saving them.
         """
-        station = self.session.station
-        spec = station.config.instruments[info.instrument]
-        found = station.config.find_device(info.ref)
-        device = found[1] if found else None
-        return (
-            info,
-            spec.driver,
-            spec.title,
-            spec.simulate or self.session.simulate,
-            repr(device),
-        )
+        return info, self.session.description(info.ref)
 
     def rebuild(self, *_) -> None:
         """Another Station: every dock is rebuilt."""
@@ -79,7 +67,7 @@ class DeviceDocks:
             dock = self.docks.get(name)
             if dock is not None and self.signatures.get(name) == signature:
                 continue
-            factory = lambda ref=info.ref: self.widget(ref)  # noqa: E731
+            factory = lambda info=info: self.widget(info)  # noqa: E731
             self.signatures[name] = signature
             icon = theme.device_icon(info.kind, info.instrument)
             group, hint = self.group(info)
@@ -101,18 +89,16 @@ class DeviceDocks:
                 entry = self.docks.entries[name]
                 entry.icon, entry.group, entry.hint = icon, group, hint
 
-    def group(self, info):
+    def group(self, info: DeviceInfo):
         """Branch of the menu (the type: SIS bias, Power supply) and words to search."""
-        spec = self.session.station.config.instruments[info.instrument]
-        key = info.kind if info.kind != "instrument" else id_type(info.instrument)
-        return type_title(key), f"{info.ref} {info.instrument} {spec.driver}"
+        return type_title(info.type), f"{info.ref} {info.instrument} {info.driver}"
 
-    def widget(self, ref: str) -> QWidget:
+    def widget(self, info: DeviceInfo) -> QWidget:
         try:
-            return DeviceWidget(self.session, self.hub, ref)
-        except (InstrumentError, KeyError) as e:
-            logger.error(f"Device dock {ref}: {e}")
-            label = QLabel(f"{ref}: {e}")
+            return DeviceWidget(self.session, self.hub, info)
+        except LabError as e:
+            logger.error(f"Device dock {info.ref}: {e}")
+            label = QLabel(f"{info.ref}: {e}")
             label.setWordWrap(True)
             return label
 

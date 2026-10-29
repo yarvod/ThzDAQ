@@ -1,11 +1,12 @@
 """Value fields with an SI prefix selector, used by the device docks.
 
 A number is typed in the chosen unit (223 with "GHz — ×10⁹"), shown back in
-it, and the field reports SI values. Edits are applied only on purpose (Set,
-Enter); until then the field is marked pending (orange frame).
+it, and the field reports SI values. The prefixes are those the lab describes
+for the value. Edits are applied only on purpose (Set, Enter); until then the
+field is marked pending (orange frame).
 """
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -18,8 +19,7 @@ from PySide6.QtWidgets import (
     QStylePainter,
     QWidget,
 )
-from thzdaq_instruments.quantities import Quantity
-from thzdaq_instruments.units import prefix_factor, prefixes_for
+from thzdaq_api.devices import Prefix, QuantityInfo
 
 from thzdaq_gui.forms import CompactDoubleSpinBox
 from thzdaq_gui.settings import settings, unit_key
@@ -49,11 +49,14 @@ class PrefixBox(QComboBox):
     shows the multipliers.
     """
 
-    def __init__(self, unit: str, prefix: str = "", parent=None):
+    def __init__(
+        self, prefixes: Sequence[Prefix], unit: str, prefix: str = "", parent=None
+    ):
         super().__init__(parent)
         self.unit = unit
-        for name, factor, note in prefixes_for(unit):
-            self.addItem(f"{name}{unit} — {note}", name)
+        self.factors = {p.name: p.factor for p in prefixes}
+        for p in prefixes:
+            self.addItem(f"{p.name}{unit} — {p.note}", p.name)
         self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.setMinimumContentsLength(len(unit) + 2)
         self.view().setMinimumWidth(self.view().sizeHintForColumn(0) + 24)
@@ -66,7 +69,7 @@ class PrefixBox(QComboBox):
         return self.currentData() or ""
 
     def factor(self) -> float:
-        return prefix_factor(self.prefix()) if self.count() else 1.0
+        return self.factors[self.prefix()] if self.count() else 1.0
 
     def symbol(self) -> str:
         return f"{self.prefix()}{self.unit}"
@@ -89,7 +92,7 @@ class QuantityField(QWidget):
 
     apply_requested = Signal()  # Enter pressed in the number
 
-    def __init__(self, quantity: Quantity, ref: str, kind: str, parent=None):
+    def __init__(self, quantity: QuantityInfo, ref: str, kind: str, parent=None):
         super().__init__(parent)
         self.quantity = quantity
         self.unit_key = unit_key(ref, quantity.key)
@@ -98,6 +101,7 @@ class QuantityField(QWidget):
         self.choice: Optional[QComboBox] = None
         self.spin: Optional[QDoubleSpinBox] = None
         self.prefix = PrefixBox(
+            quantity.prefixes,
             quantity.unit,
             settings().value(self.unit_key)
             or default_prefix(kind, quantity.key, quantity.unit),

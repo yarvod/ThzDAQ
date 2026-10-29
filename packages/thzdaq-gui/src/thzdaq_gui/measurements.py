@@ -94,7 +94,7 @@ class MeasurementsModel(QAbstractTableModel):
         path = item.metadata.get("path")
         if path:
             lab, comment = self.session.lab, SetComment(path=path, comment=item.comment)
-            self.session.worker.submit(lambda: lab.call(comment))
+            self.session.calls.submit(lambda: lab.call(comment))
         self.dataChanged.emit(index, index)
         return True
 

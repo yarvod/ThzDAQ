@@ -412,41 +412,43 @@ class TestDeviceDocks:
         assert sis.displays["current"].prefix() == "µ"
 
     def test_chopper_dock(self, window, session, wait):
-        from thzdaq_instruments.actions import TO_HOT
-
-        from thzdaq_gui.docks.devices import ChopperGroup
+        from thzdaq_gui.docks.devices import START_ROTATION, STOP, TO_HOT, ChopperGroup
 
         widget = window.docks["device:chopper_1"].widget()
         main = widget.panels[0]
         assert [q.key for q in main.quantities] == ["load_state", "running"]
         group = widget.findChildren(ChopperGroup)[0]
         chopper = session.station.instrument("chopper_1")
-        group.run(TO_HOT)
+        group.call(TO_HOT)
         wait(lambda: main.values["load_state"].text() == "hot")
-        group.frequency.setValue(5.5)
-        group.start()
+        group.arguments[START_ROTATION].editors["frequency"].set(5.5)
+        group.call(START_ROTATION)
         wait(lambda: chopper.running and main.toggles == {} and
              main.values["running"].text() == "ON")  # fmt: skip
         assert chopper.frequency == 5.5
-        group.btnStop.click()
+        group.call(STOP)
         wait(lambda: not chopper.running)
 
     def test_spectrum_dock_applies_and_reads(self, window, session, wait):
-        from thzdaq_gui.docks.devices import TraceGroup
+        from thzdaq_api.devices import POWER_DBM
+        from thzdaq_gui.docks.devices import CONFIGURE, TraceGroup
 
         group = (
             window.docks["device:spectrum_analyzer_1"]
             .widget()
             .findChildren(TraceGroup)[0]
         )
+        assert group.title() == "Spectrum analyzer"
         analyzer = session.station.instrument("spectrum_analyzer_1")
-        group.start.setValue(6e9)
-        group.stop.setValue(2e9)
-        group.apply()
+        sweep = group.arguments[CONFIGURE].editors
+        sweep["center"].set(6e9)
+        sweep["span"].set(2e9)
+        group.call(CONFIGURE)
         wait(lambda: (analyzer.center, analyzer.span) == (6e9, 2e9))
         group.read()
         wait(lambda: group.curve.getData()[0] is not None and not group.pending)
         assert min(group.curve.getData()[0]) == pytest.approx(5e9)
+        assert group.graph.getAxis("left").labelText == POWER_DBM
 
     def test_coil_monitor_shows_the_current(self, window, session, wait):
         """The coil had only its setpoint field: Monitor showed nothing new."""
@@ -461,14 +463,22 @@ class TestDeviceDocks:
         wait(lambda: label.text() == "2.5 mA")
         coil.set_current(1e-3)
         wait(lambda: label.text() == "1 mA")
+        # The lab polls the coil for the dock; Monitor off ends the subscription
+        from thzdaq_api.daemon import GetDaemonStatus
+
+        def polls():
+            return [(p.ref, p.interval) for p in session.call(GetDaemonStatus()).polls]
+
+        assert polls() == [("sis_coil_1", pytest.approx(0.1))]
         panel.monitor.setChecked(False)
+        wait(lambda: polls() == [])
 
     def test_device_docks_use_their_instrument_queue(self, window):
         sis = window.docks["device:sis_bias_1"].widget().panels[0]
         meter = window.docks["device:power_meter_1"].widget().panels[0]
         supply = window.docks["device:power_supply_1"].widget().panels
-        assert (sis.lane, meter.lane) == ("sis_block_1", "power_meter_1")
-        assert {panel.lane for panel in supply} == {"power_supply_1"}  # channels too
+        assert (sis.model.lane, meter.model.lane) == ("sis_block_1", "power_meter_1")
+        assert {p.model.lane for p in supply} == {"power_supply_1"}  # channels too
 
     def test_instrument_dock_has_its_channels(self, window):
         widget = window.docks["device:power_supply_1"].widget()
@@ -493,12 +503,13 @@ class TestDeviceDocks:
     def test_sis_bias_offsets_and_calibration(
         self, window, session, profile, wait, monkeypatch
     ):
-        from thzdaq_gui.docks.devices import SisBiasGroup
+        from thzdaq_gui.docks.devices import CalibrationGroup, SettingsGroup
 
         widget = window.docks["device:sis_bias_2"].widget()
 
-        group = widget.findChildren(SisBiasGroup)[0]
-        field = group.offset_voltage
+        group = widget.findChildren(SettingsGroup)[0]
+        assert list(group.fields) == ["offset_voltage", "offset_current"]
+        field = group.fields["offset_voltage"]
         assert field.prefix.symbol() == "µV"  # same field as the rest of the dock
         field.set_value(1e-4, pending=True)
         assert field.spin.value() == pytest.approx(100.0)
@@ -507,19 +518,19 @@ class TestDeviceDocks:
         assert load_station(profile).instruments["sis_block_1"].devices[
             "sis_bias_2"
         ].settings["offset_voltage"] == pytest.approx(1e-4)
-        # The dock was rebuilt for the new settings; the device uses them
-        wait(lambda: True)
+        # The device uses them; the dock is not rebuilt for its own values
         assert session.station.device("sis_bias_2").offset_voltage == pytest.approx(
             1e-4
         )
+        assert window.docks["device:sis_bias_2"].widget() is widget
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
         shown = []
         monkeypatch.setattr(
             QMessageBox, "information", lambda *a, **k: shown.append(a[2])
         )
-        group = window.docks["device:sis_bias_2"].widget().findChildren(SisBiasGroup)[0]
-        group.write_calibration()
+        calibration = widget.findChildren(CalibrationGroup)[0]
+        calibration.write_calibration()
         wait(lambda: shown)
         channel = session.station.instrument("sis_block_1").channel("DEV2")
         assert channel.calibration["VoltageStep"] == pytest.approx(1e-5)
@@ -1238,12 +1249,13 @@ class TestProcesses:
         assert not panel.monitor.isChecked() and processes.items == []
 
     def test_chopper_rotation_follows_the_chopper(self, window, wait):
-        from thzdaq_gui.docks.devices import ChopperGroup
+        from thzdaq_gui.docks.devices import START_ROTATION, ChopperGroup
 
         group = window.docks["device:chopper_1"].widget().findChildren(ChopperGroup)[0]
         processes = window.session.processes
-        group.frequency.setValue(7.5)  # the last one is remembered across tests
-        group.start()
+        # The last one is remembered across tests
+        group.arguments[START_ROTATION].editors["frequency"].set(7.5)
+        group.call(START_ROTATION)
         wait(lambda: processes.items)
         (process,) = processes.items
         assert process.title == "Rotation · Chopper" and process.status == "7.5 Hz"

@@ -143,13 +143,10 @@ notebooks may import thzdaq_analysis themselves).
 # onto thzdaq_api, and an ignore that stops matching fails the check.
 ignore_imports = [
     "thzdaq_gui.app -> thzdaq_instruments",
-    "thzdaq_gui.device_docks -> thzdaq_instruments",
     "thzdaq_gui.docks.devices -> thzdaq_core.**",
-    "thzdaq_gui.docks.devices -> thzdaq_instruments.**",
     "thzdaq_gui.docks.setup -> thzdaq_core.**",
     "thzdaq_gui.docks.setup -> thzdaq_instruments",
     "thzdaq_gui.docks.setup -> thzdaq_instruments.**",
-    "thzdaq_gui.fields -> thzdaq_instruments.**",
     "thzdaq_gui.main_window -> thzdaq_instruments",
     "thzdaq_gui.session -> thzdaq_core.**",
     "thzdaq_gui.workers -> thzdaq_core.**",

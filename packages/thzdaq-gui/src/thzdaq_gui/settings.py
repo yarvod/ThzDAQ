@@ -88,6 +88,11 @@ def setpoint_key(ref: str, key: str) -> str:
     return f"setpoints/{ref}/{key}"
 
 
+def argument_key(ref: str, action: str, argument: str) -> str:
+    """The last value of an action's argument given from a device dock."""
+    return f"arguments/{ref}/{action}/{argument}"
+
+
 def folder_key(kind: str) -> str:
     """The folder the file dialogs of a kind of file start in."""
     return f"folders/{kind}"

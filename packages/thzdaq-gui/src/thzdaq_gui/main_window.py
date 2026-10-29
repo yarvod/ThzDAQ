@@ -120,7 +120,8 @@ class MainWindow(QMainWindow):
         self.build_toolbar()
         self.stationLabel = QLabel()
         self.statusBar().addPermanentWidget(self.stationLabel)
-        session.worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
+        for worker in (session.worker, session.calls):
+            worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
         # Manual control runs in one thread: tell when a device keeps it waiting
         self.hangWatch = HangWatch(session.worker, DEVICE_HANG_S, self)
         self.hangWatch.message.connect(lambda m: self.statusBar().showMessage(m, 2500))

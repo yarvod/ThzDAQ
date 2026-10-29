@@ -1,22 +1,24 @@
 """Device docks: control and monitor one instrument or device.
 
-The controls come from the device quantities (what its capabilities can read
-or set), so every driver gets a working dock. Kinds and capabilities that
-need more (SIS bias offsets and calibration, coil demagnetization, chopper,
-compressor, analyzers) add their own groups below.
+What a dock shows is the device as the lab describes it: its quantities, its
+actions and the settings it keeps in the profile, so every driver gets a
+working dock. It reads, sets and acts through the lab (DeviceModel). Actions
+get buttons; an analyzer's trace, a chopper's rotation and a SIS bias's
+calibration get groups of their own, a device kind its quick scans.
 """
 
 import copy
 import json
 import math
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Sequence
 
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -24,6 +26,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -32,52 +35,69 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
-from thzdaq_api.procedures import default_quantities
-from thzdaq_core.domain.measurements.procedures.common import POWER_DBM, S_DB
+from thzdaq_api.devices import (
+    CHANNEL,
+    INSTRUMENT,
+    ActionInfo,
+    ArgumentInfo,
+    DeviceDescription,
+    DeviceInfo,
+    QuantityInfo,
+    Trace,
+)
+from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE, default_quantities
 from thzdaq_core.domain.sis.calibration import (
     CALIBRATION_KEY,
     WRITE_CALIBRATION,
     calibration_for,
     evaluate_sis_calibration,
 )
-from thzdaq_core.domain.station.kinds import SUBDEVICE_SETTINGS
-from thzdaq_core.domain.station.station import INSTRUMENT, channel_title
-from thzdaq_instruments.capabilities import (
-    Compressor,
-    LoadSwitch,
-    NetworkAnalyzer,
-    SpectrumAnalyzer,
-)
-from thzdaq_instruments.actions import (
-    CONFIGURE_NETWORK,
-    CONFIGURE_SPECTRUM,
-    READ_TRACE,
-    START_ROTATION,
-    STOP_ROTATION,
-    TO_COLD,
-    TO_HOT,
-    TURN_OFF,
-    TURN_ON,
-    Action,
-)
-from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
+from thzdaq_gui.device_types import type_title
 from thzdaq_gui.dock_names import DEVICE, dock_name
 from thzdaq_gui.docks.measure import ProcedureBox
-from thzdaq_gui.forms import CompactDoubleSpinBox
-from thzdaq_gui.fields import (
-    PrefixBox,
-    QuantityField,
-    default_prefix,
-    format_number,
+from thzdaq_gui.fields import PrefixBox, QuantityField, default_prefix, format_number
+from thzdaq_gui.forms import CompactDoubleSpinBox, Editor
+from thzdaq_gui.models.device import DeviceModel
+from thzdaq_gui.settings import (
+    argument_key,
+    sections_path,
+    setpoint_key,
+    settings,
 )
-from thzdaq_gui.settings import sections_path, setpoint_key, settings
+
+# Actions of drivers a dock gives a place of its own, by key
+TO_HOT, TO_COLD = "to_hot", "to_cold"
+START_ROTATION, STOP = "start_rotation", "stop"
+CONFIGURE, READ_TRACE = "configure", "read_trace"
+RUNNING = "running"  # what a chopper reads: whether it rotates
+ACTION_ICONS = {
+    TO_HOT: "fire",
+    TO_COLD: "snowflake",
+    "turn_on": "power",
+    "turn_off": "power-off",
+    START_ROTATION: "rotate-3d-variant",
+    STOP: "stop",
+    CONFIGURE: "check",
+    READ_TRACE: "chart-line",
+    WRITE_CALIBRATION: "upload",
+}
+
+# Quick measurements of a device kind, run on the device: (title, procedure, slot)
+SCANS = {
+    "sis_bias": (("I-V scan", IV_CURVE, "bias"),),
+    "sis_coil": (
+        ("I-CL scan", CL_CURVE, "coil"),
+        ("Demagnetization", DEMAGNETIZE, "coil"),
+    ),
+}
 
 
-def format_value(value, quantity: Quantity, factor: float = 1.0, symbol=None) -> str:
+def format_value(
+    value, quantity: QuantityInfo, factor: float = 1.0, symbol=None
+) -> str:
     if value is None:
         return "--"
     if quantity.kind == "bool":
@@ -95,36 +115,32 @@ class QuantityPanel(QWidget):
     Fields start from the profile (configuration: multiplier, OEM head) or
     from the last values set (setpoints, in the registry); nothing is written
     to the device until Set or Enter. A configuration that differs in the
-    device is marked after the first read.
+    device is marked after the first read. Monitor asks the lab to poll the
+    device; readings come as they are told.
     """
 
     def __init__(
         self,
         session,
         hub,
-        ref: str,
-        title: str,
-        kind: str = "",
+        model: DeviceModel,
+        quantities: Sequence[QuantityInfo],
+        kind: str,
+        dock: str,
         config: bool = False,
         parent=None,
     ):
         super().__init__(parent)
         self.session = session
         self.hub = hub
-        self.ref = ref
-        self.title = title
+        self.model = model
+        self.ref = model.ref
+        self.title = model.title
         self.config = config
+        self.dock = dock  # where Processes reveals its monitor
         self.process = None  # polling, in the session's Processes
-        # The instrument whose queue the reads and writes join (DeviceWorker)
-        try:
-            self.lane = session.station.info(ref).instrument
-        except Exception:
-            self.lane = ref
-        # A fixed channel is shown in its instrument's dock
-        self.dock = dock_name(DEVICE, self.lane if kind == "channel" else ref)
-        self.quantities: List[Quantity] = [
-            q for q in session.station.quantities(ref) if q.persistent == config
-        ]
+        self.quantities: List[QuantityInfo] = list(quantities)
+        self.by_key = {q.key: q for q in self.quantities}
         self.values: Dict[str, QLabel] = {}
         self.fields: Dict[str, QuantityField] = {}
         self.displays: Dict[str, PrefixBox] = {}
@@ -148,7 +164,7 @@ class QuantityPanel(QWidget):
                 grid.addWidget(toggle, row, 1)
                 self.toggles[quantity.key] = toggle
             elif quantity.settable:
-                field = QuantityField(quantity, ref, kind)
+                field = QuantityField(quantity, self.ref, kind)
                 field.apply_requested.connect(lambda q=quantity: self.apply(q))
                 self.fields[quantity.key] = field
                 button = QPushButton(theme.icon("check"), "Set")
@@ -164,7 +180,9 @@ class QuantityPanel(QWidget):
                     grid.addWidget(value, row, 1)
                 else:
                     display = PrefixBox(
-                        quantity.unit, default_prefix(kind, quantity.key, quantity.unit)
+                        quantity.prefixes,
+                        quantity.unit,
+                        default_prefix(kind, quantity.key, quantity.unit),
                     )
                     display.setToolTip("Unit of the reading")
                     self.displays[quantity.key] = display
@@ -192,7 +210,6 @@ class QuantityPanel(QWidget):
         self.interval.setSuffix(" s")
         self.plot = QCheckBox("Plot")
         self.plot.setToolTip("Send the measured values to the P-t, V-t, I-t ... graphs")
-        self.plot.toggled.connect(self.plot_toggled)
         self.window = CompactDoubleSpinBox()
         self.window.setRange(0, 1e6)
         self.window.setDecimals(0)
@@ -220,13 +237,14 @@ class QuantityPanel(QWidget):
             hidden = (self.btnRead, self.monitor, self.interval, self.plot, self.window)
         for widget in hidden:
             widget.hide()
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.read)
         self.monitor.toggled.connect(self.set_monitoring)
-        self.interval.valueChanged.connect(
-            lambda v: self.timer.setInterval(int(v * 1000))
-        )
+        self.interval.valueChanged.connect(self.repoll)
         self.interval.valueChanged.connect(self.show_process_status)
+        self.plot.toggled.connect(self.plot_toggled)
+        model.values.connect(self.show_values)
+        model.read_failed.connect(self.failed)
+        model.set_done.connect(self.was_set)
+        model.set_failed.connect(self.set_failed)
 
     # Where values are remembered
     def instrument_spec(self):
@@ -239,7 +257,7 @@ class QuantityPanel(QWidget):
             return spec.settings.get(key) if spec is not None else None
         return settings().value(setpoint_key(self.ref, key))
 
-    def remember(self, quantity: Quantity, value) -> None:
+    def remember(self, quantity: QuantityInfo, value) -> None:
         if not self.config:
             settings().setValue(setpoint_key(self.ref, quantity.key), value)
             return
@@ -260,10 +278,30 @@ class QuantityPanel(QWidget):
                     pass
 
     # Reading
+    def watched(self, quantity: QuantityInfo) -> bool:
+        """Read on every poll: what the device measures or switches, its
+        configuration (to compare), a setpoint only when it is plotted."""
+        if not quantity.readable:
+            return False
+        if not quantity.settable or quantity.kind == "bool" or self.config:
+            return True
+        return self.plot.isChecked() and quantity in self.plotted
+
+    def polled(self, quantity: QuantityInfo) -> bool:
+        """Read now: what is watched, and a setpoint once, to fill its field
+        (it is what we set)."""
+        return self.watched(quantity) or (quantity.readable and not self.read_once)
+
+    def read(self) -> None:
+        keys = [q.key for q in self.quantities if self.polled(q)]
+        if self.pending or not keys:
+            return
+        self.pending = True
+        self.model.read(keys)
+
     def set_monitoring(self, on: bool) -> None:
         if on:
             self.started = time.monotonic()
-            self.timer.start(int(self.interval.value() * 1000))
             if self.process is None:
                 self.process = self.session.processes.start(
                     f"Monitor · {self.title}",
@@ -273,49 +311,32 @@ class QuantityPanel(QWidget):
                 )
             self.show_process_status()
             self.read()
+            self.repoll()
         else:
-            self.timer.stop()
+            self.model.stop_polling()
             self.session.processes.finish(self.process)
             self.process = None
+
+    def repoll(self, *_) -> None:
+        """The poll as the monitor asks for it now: its interval, what is watched."""
+        if self.monitor.isChecked():
+            keys = [q.key for q in self.quantities if self.watched(q)]
+            self.model.poll(self.interval.value(), keys)
 
     def show_process_status(self, *_) -> None:
         if self.process is not None:
             self.process.update(status=f"every {self.interval.value():g} s")
 
-    def device(self):
-        return self.session.station.device(self.ref)
-
-    def read(self) -> None:
-        if self.pending or self.session.station is None:
-            return
-        self.pending = True
-        readable = [q for q in self.quantities if self.polled(q)]
-        self.session.worker.submit(
-            lambda: read_values(self.device(), readable),
-            self.show_values,
-            self.failed,
-            self.title,
-            key=self.lane,
-        )
-
-    def polled(self, quantity: Quantity) -> bool:
-        """A setpoint is read once to fill its field (it is what we set), again
-        only to compare a configuration or to plot it (a coil has nothing else)."""
-        if not quantity.readable:
-            return False
-        if not quantity.settable or quantity.kind == "bool" or self.config:
-            return True
-        return not self.read_once or (
-            self.plot.isChecked() and quantity in self.plotted
-        )
-
     def show_values(self, values) -> None:
+        """A reading of the device: what it holds of this panel's values."""
         self.pending = False
         now = time.monotonic() - self.started
         first = not self.read_once
         self.read_once = True
         for quantity in self.quantities:
-            value = values.get(quantity.key)
+            if quantity.key not in values:
+                continue
+            value = values[quantity.key]
             if quantity.key in self.values:
                 box = self.fields.get(quantity.key)
                 box = box.prefix if box is not None else self.displays.get(quantity.key)
@@ -339,19 +360,22 @@ class QuantityPanel(QWidget):
 
     def plot_toggled(self, on: bool) -> None:
         self.raised = not on
+        self.repoll()
 
     def plot_values(self, values, now: float) -> None:
         window = self.window.value() or None
         for quantity in self.plotted:
+            if quantity.key not in values:
+                continue
             graph = self.hub.monitor_value(
-                self.ref, self.title, quantity, now, values.get(quantity.key), window
+                self.ref, self.title, quantity, now, values[quantity.key], window
             )
             if graph is not None and not self.raised:
                 # The graph of the first value comes to the front, once
                 self.raised = True
                 self.hub.raise_graph(graph)
 
-    def compare(self, quantity: Quantity, value) -> None:
+    def compare(self, quantity: QuantityInfo, value) -> None:
         """Mark a configuration that differs between the device and the profile."""
         note = self.notes.get(quantity.key)
         saved = self.remembered(quantity.key)
@@ -368,7 +392,7 @@ class QuantityPanel(QWidget):
             "value to the device; Take from device saves the device value in the profile."
         )
 
-    def take(self, quantity: Quantity) -> None:
+    def take(self, quantity: QuantityInfo) -> None:
         """Keep the device value: into the field and the profile, nothing is written."""
         value = self.device_values.get(quantity.key)
         if value is None:
@@ -379,50 +403,47 @@ class QuantityPanel(QWidget):
         self.notes[quantity.key].hide()
         self.remember(quantity, value)
 
-    def failed(self, error) -> None:
+    def failed(self, message: str) -> None:
         self.pending = False
         self.monitor.setChecked(False)
         for label in self.values.values():
             label.setText("--")
-        self.session.worker.error.emit(
-            f"{self.title}: {error.__class__.__name__}: {error}"
-        )
+        self.tell(message)
+
+    def tell(self, message: str) -> None:
+        """In the status bar, with the device named."""
+        self.session.calls.error.emit(f"{self.title}: {message}")
 
     # Writing
-    def apply(self, quantity: Quantity) -> None:
+    def apply(self, quantity: QuantityInfo) -> None:
         field = self.fields.get(quantity.key)
         if field is not None:
             self.write(quantity, field.value())
 
-    def write(self, quantity: Quantity, value) -> None:
-        if self.session.station is None:
-            return
+    def write(self, quantity: QuantityInfo, value) -> None:
         if quantity.danger and not confirmed(self, quantity.title, quantity.danger):
-            self.unflip(quantity, value)
+            self.unflip(quantity.key, value)
             return
+        self.model.set(quantity.key, value)
 
-        def done(_):
-            field = self.fields.get(quantity.key)
-            if field is not None:
-                field.set_value(value)  # the field is what the device was set to
-            self.remember(quantity, value)
-            self.read()
+    def was_set(self, key: str, value) -> None:
+        quantity = self.by_key.get(key)
+        if quantity is None:
+            return  # another panel's value of the device
+        field = self.fields.get(key)
+        if field is not None:
+            field.set_value(value)  # the field is what the device was set to
+        self.remember(quantity, value)
+        self.read()
 
-        def failed(error):
-            self.unflip(quantity, value)
-            self.failed(error)
+    def set_failed(self, key: str, value, message: str) -> None:
+        if key in self.by_key:
+            self.unflip(key, value)
+            self.tell(message)
 
-        self.session.worker.submit(
-            lambda: quantity.write(self.device(), value),
-            done,
-            failed,
-            self.title,
-            key=self.lane,
-        )
-
-    def unflip(self, quantity: Quantity, value) -> None:
+    def unflip(self, key: str, value) -> None:
         """A switch the click has flipped goes back: it was not set."""
-        toggle = self.toggles.get(quantity.key)
+        toggle = self.toggles.get(key)
         if toggle is not None:
             toggle.setChecked(not value)
             toggle.setText("On" if not value else "Off")
@@ -444,270 +465,291 @@ def confirmed(parent: QWidget, title: str, danger: str) -> bool:
     return answer == QMessageBox.Yes
 
 
-def action_button(action: Action, icon_name: str, run, tip: str = "") -> QPushButton:
-    """A button running a device action without arguments; a dangerous one asks
-    first, with its warning."""
-    button = QPushButton(theme.icon(icon_name), action.title)
-    button.setToolTip(tip or action.help or action.danger)
+def action_button(action: ActionInfo, run) -> QPushButton:
+    """A button running a device action; a dangerous one asks first, with its
+    warning."""
+    button = QPushButton(theme.icon(ACTION_ICONS.get(action.key, "play")), action.title)
+    button.setToolTip(action.help or action.danger)
 
     def clicked():
         if action.danger and not confirmed(button, action.title, action.danger):
             return
-        run(action)
+        run()
 
     button.clicked.connect(clicked)
     return button
 
 
-class ActionsGroup(QGroupBox):
-    """Buttons running device actions in the device thread."""
+def argument_editor(argument: ArgumentInfo) -> Editor:
+    """An editor of one argument of an action, SI values."""
+    if argument.kind == "float":
+        spin = pg.SpinBox(
+            suffix=argument.unit,
+            siPrefix=bool(argument.prefixes),
+            dec=True,
+            bounds=(argument.minimum, argument.maximum),
+        )
+        return Editor(spin, spin.value, lambda v: spin.setValue(float(v)))
+    if argument.kind == "int":
+        whole = QSpinBox()
+        low, high = argument.minimum, argument.maximum
+        whole.setRange(
+            -(2**31) if low is None else int(low),
+            2**31 - 1 if high is None else int(high),
+        )
+        return Editor(whole, whole.value, lambda v: whole.setValue(int(v)))
+    if argument.kind == "bool":
+        check = QCheckBox()
+        return Editor(
+            check, check.isChecked, lambda v: check.setChecked(v in (True, "true"))
+        )
+    if argument.choices:
+        combo = QComboBox()
+        combo.addItems(argument.choices)
+        return Editor(
+            combo, combo.currentText, lambda v: combo.setCurrentIndex(combo.findText(v))
+        )
+    line = QLineEdit()
+    return Editor(line, line.text, lambda v: line.setText(str(v)))
 
-    def __init__(self, title: str, panel: QuantityPanel, actions, parent=None):
-        super().__init__(title, parent)
-        layout = QHBoxLayout(self)
-        self.panel = panel
-        for action, icon_name in actions:
-            layout.addWidget(action_button(action, icon_name, self.run))
-        self.result = QLabel()
-        self.result.setProperty("role", "value")
-        layout.addWidget(self.result, 1)
 
-    def run(self, action: Action) -> None:
-        session = self.panel.session
-        session.worker.submit(
-            lambda: action.run(self.panel.device(), {}),
-            lambda value: self.result.setText("" if value is None else str(value)),
-            lambda error: self.result.setText(f"{error}"),
-            self.panel.title,
-            key=self.panel.lane,
+class ArgumentFields(QWidget):
+    """Editors of an action's arguments; the values given last are remembered
+    per device."""
+
+    def __init__(self, ref: str, action: ActionInfo, parent=None):
+        super().__init__(parent)
+        self.ref = ref
+        self.action = action
+        self.editors: Dict[str, Editor] = {}
+        form = QFormLayout(self)
+        form.setContentsMargins(0, 0, 0, 0)
+        for argument in action.arguments:
+            editor = argument_editor(argument)
+            saved = settings().value(self.key(argument))
+            start = saved if saved is not None else argument.default
+            if start is None:
+                start = argument.minimum
+            if start is not None:
+                editor.set(start)
+            form.addRow(argument.title, editor.widget)
+            self.editors[argument.key] = editor
+
+    def key(self, argument: ArgumentInfo) -> str:
+        return argument_key(self.ref, self.action.key, argument.key)
+
+    def values(self) -> Dict[str, Any]:
+        return {key: editor.get() for key, editor in self.editors.items()}
+
+    def remember(self) -> None:
+        for argument in self.action.arguments:
+            settings().setValue(self.key(argument), self.editors[argument.key].get())
+
+    def text(self) -> str:
+        """The values as people read them: "7.5 Hz"."""
+        values = self.values()
+        return ", ".join(
+            (
+                f"{values[a.key]:g} {a.unit}".strip()
+                if isinstance(values[a.key], (int, float))
+                else str(values[a.key])
+            )
+            for a in self.action.arguments
         )
 
 
-CHOPPER_FREQUENCY = "chopper_frequency"  # the last rotation frequency, as a setpoint
+class ActionsGroup(QGroupBox):
+    """Buttons running device actions; an action with arguments has its fields
+    above its button. After an action that changes the device, the panel reads
+    it."""
+
+    def __init__(
+        self,
+        title: str,
+        panel: QuantityPanel,
+        actions: Sequence[ActionInfo],
+        parent=None,
+    ):
+        super().__init__(title, parent)
+        self.panel = panel
+        self.actions = {action.key: action for action in actions}
+        self.arguments: Dict[str, ArgumentFields] = {}
+        layout = QVBoxLayout(self)
+        self.row = QHBoxLayout()  # actions without arguments
+        layout.addLayout(self.row)
+        for action in actions:
+            button = action_button(action, lambda a=action: self.run(a))
+            if not action.arguments:
+                self.row.addWidget(button)
+                continue
+            fields = ArgumentFields(panel.ref, action)
+            self.arguments[action.key] = fields
+            line = QHBoxLayout()
+            line.addWidget(fields)
+            line.addWidget(button)
+            line.addStretch()
+            layout.addLayout(line)
+        self.row.addStretch()
+        self.result = QLabel()
+        self.result.setProperty("role", "muted")
+        self.result.setWordWrap(True)
+        layout.addWidget(self.result)
+        panel.model.acted.connect(self.done)
+        panel.model.action_failed.connect(self.failed)
+
+    def add_to_row(self, widget: QWidget) -> None:
+        self.row.insertWidget(self.row.count() - 1, widget)  # before the stretch
+
+    def call(self, key: str) -> None:
+        self.run(self.actions[key])
+
+    def run(self, action: ActionInfo) -> None:
+        fields = self.arguments.get(action.key)
+        arguments = fields.values() if fields is not None else {}
+        if fields is not None:
+            fields.remember()
+        self.result.setText("working...")
+        self.panel.model.call(action.key, arguments)
+
+    def done(self, key: str, result) -> None:
+        if key not in self.actions:
+            return
+        self.result.setText("" if result is None else str(result))
+        if self.actions[key].changes:
+            self.panel.read()
+
+    def failed(self, key: str, message: str) -> None:
+        if key in self.actions:
+            self.result.setText(message)
 
 
-class ChopperGroup(QGroupBox):
+class ChopperGroup(ActionsGroup):
     """Hot / Cold and continuous rotation.
 
     Hot and Cold turn the blade by the sensors until the load is in place
-    (aligned to the detent), so no separate rotate or align is needed.
+    (aligned to the detent), so no separate rotate or align is needed. While
+    the chopper says it rotates, the rotation is in Processes.
     """
 
-    def __init__(self, panel: QuantityPanel, parent=None):
-        super().__init__("Chopper", parent)
-        self.panel = panel
-        layout = QVBoxLayout(self)
-        moves = QHBoxLayout()
-        for action, icon_name in ((TO_HOT, "fire"), (TO_COLD, "snowflake")):
-            tip = f"{action.help} (by the sensors)"
-            moves.addWidget(action_button(action, icon_name, self.run, tip))
-        layout.addLayout(moves)
-        rotation = QHBoxLayout()
-        frequency = START_ROTATION.arguments[0]
-        rotation.addWidget(QLabel(frequency.title))
-        self.frequency = CompactDoubleSpinBox()
-        self.frequency.setRange(frequency.minimum, frequency.maximum)
-        self.frequency.setDecimals(2)
-        self.frequency.setSingleStep(0.1)
-        self.frequency.setSuffix(" Hz")
-        saved = settings().value(setpoint_key(panel.ref, CHOPPER_FREQUENCY))
-        self.frequency.setValue(
-            float(saved) if saved is not None else frequency.default
-        )
-        self.btnStart = QPushButton(
-            theme.icon("rotate-3d-variant"), START_ROTATION.title
-        )
-        self.btnStart.clicked.connect(self.start)
-        self.btnStop = QPushButton(theme.icon("stop"), STOP_ROTATION.title)
-        self.btnStop.clicked.connect(self.stop)
-        for widget in (self.frequency, self.btnStart, self.btnStop):
-            rotation.addWidget(widget)
-        layout.addLayout(rotation)
-        self.result = QLabel()
-        self.result.setProperty("role", "muted")
-        layout.addWidget(self.result)
+    def __init__(
+        self, panel: QuantityPanel, actions: Sequence[ActionInfo], parent=None
+    ):
+        super().__init__("Chopper", panel, actions, parent)
         self.process = None  # continuous rotation, in the session's Processes
+        panel.model.values.connect(self.show_values)
         self.destroyed.connect(lambda: panel.session.processes.finish(self.process))
 
-    def start(self) -> None:
-        frequency = self.frequency.value()
-        settings().setValue(setpoint_key(self.panel.ref, CHOPPER_FREQUENCY), frequency)
-        self.run(START_ROTATION, {"frequency": frequency})
-
-    def stop(self) -> None:
-        self.run(STOP_ROTATION)
-
-    def run(self, action: Action, arguments=None) -> None:
-        self.result.setText("working...")
-
-        def job():
-            device = self.panel.device()
-            action.run(device, arguments or {})
-            return device.is_running() if hasattr(device, "is_running") else False
-
-        def done(rotating):
-            self.result.setText("")
-            self.show_rotation(rotating)
-            self.panel.read()
-
-        self.panel.session.worker.submit(
-            job,
-            done,
-            lambda error: self.result.setText(f"{error}"),
-            self.panel.title,
-            key=self.panel.lane,
-        )
+    def show_values(self, values) -> None:
+        if RUNNING in values:
+            self.show_rotation(bool(values[RUNNING]))
 
     def show_rotation(self, rotating: bool) -> None:
-        """The rotation in Processes as the chopper reports it after each command."""
         processes = self.panel.session.processes
         if rotating and self.process is None:
             self.process = processes.start(
-                f"Rotation · {self.panel.title}", "fan", self.panel.dock, stop=self.stop
+                f"Rotation · {self.panel.title}",
+                "fan",
+                self.panel.dock,
+                stop=lambda: self.call(STOP),
             )
         elif not rotating:
             processes.finish(self.process)
             self.process = None
         if self.process is not None:
-            self.process.update(status=f"{self.frequency.value():g} Hz")
+            self.process.update(status=self.arguments[START_ROTATION].text())
 
 
-class CompressorGroup(QGroupBox):
-    def __init__(self, panel: QuantityPanel, parent=None):
-        super().__init__("Compressor", parent)
-        self.panel = panel
-        layout = QVBoxLayout(self)
-        row = QHBoxLayout()
-        for action, icon_name in ((TURN_ON, "power"), (TURN_OFF, "power-off")):
-            row.addWidget(action_button(action, icon_name, self.run))
-        read = QPushButton(theme.icon("refresh"), "Read")
-        read.clicked.connect(lambda: self.run(None))
-        row.addWidget(read)
-        layout.addLayout(row)
-        self.text = QLabel("--")
-        self.text.setProperty("role", "value")
-        layout.addWidget(self.text)
+class TraceGroup(ActionsGroup):
+    """An analyzer: its sweep (configure) and the last trace, read once or
+    continuously."""
 
-    def run(self, action: Optional[Action]) -> None:
-        def job():
-            device = self.panel.device()
-            if action is not None:
-                action.run(device, {})
-            return device.read_temperatures(), device.read_pressures()
+    KEYS = (CONFIGURE, READ_TRACE)
 
-        def show(values):
-            temperatures, pressures = values
-            self.text.setText(
-                "T: " + ", ".join(f"{t:.1f} K" for t in temperatures)
-                + "\np: " + ", ".join(pg.siFormat(p, suffix="Pa") for p in pressures)
-            )  # fmt: skip
-
-        self.panel.session.worker.submit(
-            job,
-            show,
-            lambda e: self.text.setText(str(e)),
-            self.panel.title,
-            key=self.panel.lane,
-        )
-
-
-class TraceGroup(QGroupBox):
-    """Spectrum or network analyzer: settings and the last trace."""
-
-    def __init__(self, panel: QuantityPanel, vna: bool, parent=None):
-        super().__init__("Network analyzer" if vna else "Spectrum analyzer", parent)
-        self.panel = panel
-        self.vna = vna
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        self.start = pg.SpinBox(value=1e9, suffix="Hz", siPrefix=True, dec=True)
-        self.stop = pg.SpinBox(value=10e9, suffix="Hz", siPrefix=True, dec=True)
-        self.points = QSpinBox()
-        self.points.setRange(2, 100001)
-        self.points.setValue(401)
-        self.parameter = QPlainTextEdit("S11")
-        self.parameter.setMaximumHeight(28)
-        form.addRow("Start" if vna else "Center", self.start)
-        form.addRow("Stop" if vna else "Span", self.stop)
-        if vna:
-            form.addRow("Points", self.points)
-            form.addRow("S-parameter", self.parameter)
-        else:
-            self.start.setValue(5e9)
-            self.stop.setValue(1e9)
-        layout.addLayout(form)
-        row = QHBoxLayout()
-        configure = CONFIGURE_NETWORK if vna else CONFIGURE_SPECTRUM
-        apply_button = QPushButton(theme.icon("check"), configure.title)
-        apply_button.setToolTip(configure.help)
-        apply_button.clicked.connect(self.apply)
-        read = QPushButton(theme.icon("chart-line"), READ_TRACE.title)
-        read.clicked.connect(self.read)
+    def __init__(
+        self,
+        title: str,
+        panel: QuantityPanel,
+        actions: Sequence[ActionInfo],
+        parent=None,
+    ):
+        super().__init__(title, panel, actions, parent)
         self.continuous = QCheckBox("Continuous")
         self.continuous.toggled.connect(
             lambda on: self.timer.start(500) if on else self.timer.stop()
         )
-        row.addWidget(apply_button)
-        row.addWidget(read)
-        row.addWidget(self.continuous)
-        row.addStretch()
-        layout.addLayout(row)
+        self.add_to_row(self.continuous)
         self.graph = pg.PlotWidget()
         self.graph.setLabel("bottom", "Frequency", units="Hz")
-        self.graph.setLabel("left", S_DB if vna else POWER_DBM)
         self.graph.showGrid(x=True, y=True, alpha=0.25)
         self.graph.setMinimumHeight(220)
         self.curve = self.graph.plot([], [], pen=pg.mkPen(theme.ACCENT, width=1))
-        layout.addWidget(self.graph)
+        self.layout().addWidget(self.graph)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.read)
         self.pending = False
 
-    def apply(self) -> None:
-        start, stop = self.start.value(), self.stop.value()
-        points, parameter = self.points.value(), self.parameter.toPlainText().strip()
-
-        if self.vna:
-            action, arguments = CONFIGURE_NETWORK, {
-                "start": start,
-                "stop": stop,
-                "points": points,
-                "parameter": parameter or "S11",
-            }
-        else:
-            action, arguments = CONFIGURE_SPECTRUM, {"center": start, "span": stop}
-
-        def job():
-            action.run(self.panel.device(), arguments)
-
-        self.panel.session.worker.submit(
-            job, None, self.panel.failed, self.panel.title, key=self.panel.lane
-        )
-
     def read(self) -> None:
-        if self.pending:
-            return
-        self.pending = True
-        self.panel.session.worker.submit(
-            lambda: READ_TRACE.run(self.panel.device(), {}),
-            self.show,
-            self.error,
-            self.panel.title,
-            key=self.panel.lane,
-        )
+        if not self.pending:
+            self.pending = True
+            self.call(READ_TRACE)
 
-    def show(self, trace) -> None:
-        self.pending = False
+    def done(self, key: str, result) -> None:
+        if key == READ_TRACE:
+            self.pending = False
+            self.result.setText("")
+            self.show(result)
+        else:
+            super().done(key, result)
+
+    def failed(self, key: str, message: str) -> None:
+        if key == READ_TRACE:
+            self.pending = False
+            self.continuous.setChecked(False)
+        super().failed(key, message)
+
+    def show(self, trace: Trace) -> None:
         values = np.asarray(trace.values)
-        if np.iscomplexobj(values):
+        if trace.imaginary is not None:
             with np.errstate(divide="ignore"):
-                values = 20 * np.log10(np.abs(values))
+                values = 20 * np.log10(np.hypot(values, np.asarray(trace.imaginary)))
+        self.graph.setLabel("left", trace.label())
         self.curve.setData(np.asarray(trace.frequency), values)
 
-    def error(self, error) -> None:
-        self.pending = False
-        self.continuous.setChecked(False)
-        self.panel.failed(error)
+
+class SettingsGroup(QGroupBox):
+    """What a configured device keeps in the station profile (a SIS bias's
+    offsets), in the same fields as the rest of the dock."""
+
+    def __init__(self, panel: QuantityPanel, kind: str, described, parent=None):
+        super().__init__("Settings", parent)
+        self.panel = panel
+        layout = QFormLayout(self)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        saved = self.spec().settings
+        self.fields: Dict[str, QuantityField] = {}
+        for setting in described:
+            field = QuantityField(setting, panel.ref, kind)
+            field.set_value(saved.get(setting.key, 0.0))
+            field.apply_requested.connect(self.save)
+            layout.addRow(setting.title, field)
+            self.fields[setting.key] = field
+        save = QPushButton(theme.icon("content-save-outline"), "Save")
+        save.setToolTip("Keep them in the station profile (or Enter in a field)")
+        save.clicked.connect(self.save)
+        layout.addRow("", save)
+
+    def spec(self):
+        return self.panel.session.station.config.find_device(self.panel.ref)[1]
+
+    def save(self) -> None:
+        session = self.panel.session
+        config = copy.deepcopy(session.station.config)
+        spec = config.find_device(self.panel.ref)[1]
+        for key, field in self.fields.items():
+            spec.settings[key] = float(field.value())
+        session.update_config(config)
+        for field in self.fields.values():
+            field.set_pending(False)
 
 
 class CalibrationDialog(QDialog):
@@ -740,65 +782,24 @@ class CalibrationDialog(QDialog):
         self.accept()
 
 
-def offset_quantity(key: str) -> Quantity:
-    """A SIS bias offset as the profile declares it, shown like a quantity."""
-    setting = next(p for p in SUBDEVICE_SETTINGS["sis_bias"] if p.name == key)
-    return Quantity(key, setting.label, setting.unit, set=lambda t, v: None)
+class CalibrationGroup(QGroupBox):
+    """Calibration coefficients of a SIS bias, kept in the station profile, and
+    their write into the block."""
 
-
-OFFSET_VOLTAGE = offset_quantity("offset_voltage")
-OFFSET_CURRENT = offset_quantity("offset_current")
-
-
-class SisBiasGroup(QGroupBox):
-    """Offsets and calibration of a SIS bias device, kept in the station profile."""
-
-    def __init__(self, panel: QuantityPanel, device_id: str, parent=None):
-        super().__init__("SIS bias settings", parent)
+    def __init__(self, panel: QuantityPanel, action: ActionInfo, parent=None):
+        super().__init__("Calibration", parent)
         self.panel = panel
-        self.device_id = device_id
-        layout = QFormLayout(self)
-        layout.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        settings = self.spec().settings
-        # Same fields as the rest of the dock: number + prefix (µV, µA)
-        self.offset_voltage = QuantityField(OFFSET_VOLTAGE, device_id, "sis_bias")
-        self.offset_current = QuantityField(OFFSET_CURRENT, device_id, "sis_bias")
-        for field in (self.offset_voltage, self.offset_current):
-            field.set_value(settings.get(field.quantity.key, 0.0))
-            field.apply_requested.connect(self.save_offsets)
-        save = QPushButton(theme.icon("content-save-outline"), "Save offsets")
-        save.setToolTip("Keep the offsets in the station profile (or Enter in a field)")
-        save.clicked.connect(self.save_offsets)
-        layout.addRow(OFFSET_VOLTAGE.title, self.offset_voltage)
-        layout.addRow(OFFSET_CURRENT.title, self.offset_current)
-        layout.addRow("", save)
-        row = QHBoxLayout()
-        edit = QPushButton(theme.icon("table-edit"), "Calibration…")
+        row = QHBoxLayout(self)
+        edit = QPushButton(theme.icon("table-edit"), "Coefficients…")
         edit.clicked.connect(self.edit_calibration)
-        write = action_button(
-            self.write_action(), "upload", lambda _: self.write_calibration()
-        )
         row.addWidget(edit)
-        row.addWidget(write)
-        layout.addRow("Calibration", row)
+        row.addWidget(action_button(action, self.write_calibration))
+        row.addStretch()
+        panel.model.acted.connect(self.written)
+        panel.model.action_failed.connect(self.refused)
 
     def spec(self):
-        return self.panel.session.station.config.find_device(self.device_id)[1]
-
-    def _update(self, change) -> None:
-        session = self.panel.session
-        config = copy.deepcopy(session.station.config)
-        change(config.find_device(self.device_id)[1])
-        session.update_config(config)
-
-    def save_offsets(self) -> None:
-        def change(spec):
-            spec.settings["offset_voltage"] = float(self.offset_voltage.value())
-            spec.settings["offset_current"] = float(self.offset_current.value())
-
-        self._update(change)
-        for field in (self.offset_voltage, self.offset_current):
-            field.set_pending(False)
+        return self.panel.session.station.config.find_device(self.panel.ref)[1]
 
     def calibration(self) -> dict:
         spec = self.spec()
@@ -807,28 +808,24 @@ class SisBiasGroup(QGroupBox):
     def edit_calibration(self) -> None:
         dialog = CalibrationDialog(self.calibration(), self)
         if dialog.exec() == QDialog.Accepted:
-            self._update(
-                lambda spec: spec.metadata.__setitem__(
-                    CALIBRATION_KEY, dialog.coefficients
-                )
-            )
-
-    def write_action(self) -> Action:
-        """The device's calibration write, with the profile as it is now."""
-        actions = self.panel.session.station.actions(self.device_id)
-        return next(a for a in actions if a.key == WRITE_CALIBRATION)
+            session = self.panel.session
+            config = copy.deepcopy(session.station.config)
+            config.find_device(self.panel.ref)[1].metadata[
+                CALIBRATION_KEY
+            ] = dialog.coefficients
+            session.update_config(config)
 
     def write_calibration(self) -> None:
-        action = self.write_action()
-        self.panel.session.worker.submit(
-            lambda: action.run(self.panel.device(), {}),
-            lambda answer: QMessageBox.information(
-                self, "Calibration", f"Block answered: {answer}"
-            ),
-            lambda error: QMessageBox.critical(self, "Calibration", str(error)),
-            self.panel.title,
-            key=self.panel.lane,
-        )
+        """With the coefficients of the profile as it is now."""
+        self.panel.model.call(WRITE_CALIBRATION)
+
+    def written(self, key: str, answer) -> None:
+        if key == WRITE_CALIBRATION:
+            QMessageBox.information(self, self.title(), f"Block answered: {answer}")
+
+    def refused(self, key: str, message: str) -> None:
+        if key == WRITE_CALIBRATION:
+            QMessageBox.critical(self, self.title(), message)
 
 
 def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
@@ -842,73 +839,77 @@ def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
     return section
 
 
-# Capabilities whose dock has its own group even without quantities
-GROUP_CAPABILITIES = (LoadSwitch, Compressor, SpectrumAnalyzer, NetworkAnalyzer)
-GROUP_KINDS = ("sis_bias", "sis_coil")
+def channels_of(devices: Sequence[DeviceInfo], info: DeviceInfo) -> List[DeviceInfo]:
+    """The fixed channels of an instrument (outputs of a supply), shown in its dock."""
+    if info.kind != INSTRUMENT:
+        return []
+    return [d for d in devices if d.kind == CHANNEL and d.instrument == info.ref]
 
 
-def has_content(station, info) -> bool:
+def has_content(session, info: DeviceInfo) -> bool:
     """Whether the dock of a device would show anything."""
-    if station.quantities(info.ref) or info.kind in GROUP_KINDS:
+    if info.kind in SCANS:
         return True
-    if any(c in info.capabilities for c in GROUP_CAPABILITIES):
+    described = session.description(info.ref)
+    if described.quantities or described.actions or described.settings:
         return True
-    if info.kind == INSTRUMENT:
-        cls = station.driver_class(info.ref)
-        return any(
-            station.quantities(f"{info.ref}:{key}") for key in cls.fixed_channels()
-        )
-    return False
+    return any(
+        session.description(channel.ref).quantities
+        for channel in channels_of(session.devices(), info)
+    )
 
 
 class DeviceWidget(QScrollArea):
     """Dock content of an instrument (with its fixed channels) or a device."""
 
-    def __init__(self, session, hub, ref: str, parent=None):
+    def __init__(self, session, hub, info: DeviceInfo, parent=None):
         super().__init__(parent)
         self.session = session
         self.hub = hub
-        self.ref = ref
+        self.info = info
+        self.ref = info.ref
         self.panels: List[QuantityPanel] = []
         self.setWidgetResizable(True)
-        station = session.station
-        info = station.info(ref)
-        self.info = info
+        described = session.description(info.ref)
+        dock = dock_name(DEVICE, info.ref)
         inner = QWidget()
         layout = QVBoxLayout(inner)
         title = QLabel(info.title)
         title.setProperty("role", "title")
         layout.addWidget(title)
-        spec = station.config.instruments[info.instrument]
         subtitle = QLabel(
-            f"{spec.driver} · {info.ref}"
+            f"{info.driver} · {info.ref}"
             + ("" if info.kind == INSTRUMENT else f" · {info.kind}")
         )
         subtitle.setProperty("role", "muted")
         layout.addWidget(subtitle)
-        main = QuantityPanel(session, hub, ref, info.title, info.kind)
+        model = DeviceModel(session, info, self)
+        main = QuantityPanel(
+            session, hub, model,
+            [q for q in described.quantities if not q.persistent], info.kind, dock,
+        )  # fmt: skip
         if main.quantities:
             layout.addWidget(self._boxed("Values", main))
         self.panels.append(main)
         if info.kind == INSTRUMENT:
             # Multiplier, OEM head: kept in the profile, compared with the device
             config = QuantityPanel(
-                session, hub, ref, info.title, info.kind, config=True
-            )
+                session, hub, model,
+                [q for q in described.quantities if q.persistent], info.kind, dock,
+                config=True,
+            )  # fmt: skip
             if config.quantities:
                 layout.addWidget(self._boxed("Configuration", config))
                 self.panels.append(config)
-            cls = station.driver_class(ref)
-            for key in cls.fixed_channels():
-                channel_ref = f"{ref}:{key}"
-                panel = QuantityPanel(
-                    session, hub, channel_ref, channel_title(info.title, key), "channel"
-                )
-                self.panels.append(panel)
-                layout.addWidget(
-                    self._boxed(channel_title("", key).strip() or str(key), panel)
-                )
-        for group in self.extra_groups(main):
+        for channel in channels_of(session.devices(), info):
+            quantities = session.description(channel.ref).quantities
+            panel = QuantityPanel(
+                session, hub, DeviceModel(session, channel, self),
+                [q for q in quantities if not q.persistent], CHANNEL, dock,
+            )  # fmt: skip
+            self.panels.append(panel)
+            layout.addWidget(self._boxed(channel.title, panel))
+        for group in self.groups(main, described):
             layout.addWidget(group)
         layout.addStretch()
         self.setWidget(inner)
@@ -919,47 +920,31 @@ class DeviceWidget(QScrollArea):
         QVBoxLayout(box).addWidget(widget)
         return box
 
-    def extra_groups(self, panel: QuantityPanel):
+    def groups(self, panel: QuantityPanel, described: DeviceDescription):
+        """Its actions, settings and quick scans."""
         info, session, hub = self.info, self.session, self.hub
-        caps = info.capabilities
+        actions = {action.key: action for action in described.actions}
         groups = []
-        driver = self.session.station.driver_class(info.instrument)
-        if LoadSwitch in caps and START_ROTATION in getattr(driver, "actions", ()):
-            groups.append(ChopperGroup(panel))
-        elif LoadSwitch in caps:
-            groups.append(ActionsGroup(
-                "Calibration load", panel, ((TO_HOT, "fire"), (TO_COLD, "snowflake"))
-            ))  # fmt: skip
-        if Compressor in caps:
-            groups.append(CompressorGroup(panel))
-        if SpectrumAnalyzer in caps:
-            groups.append(TraceGroup(panel, vna=False))
-        if NetworkAnalyzer in caps:
-            groups.append(TraceGroup(panel, vna=True))
-        if info.kind == "sis_bias":
-            groups.append(SisBiasGroup(panel, info.ref))
+        traced = [actions.pop(key) for key in TraceGroup.KEYS if key in actions]
+        calibration = actions.pop(WRITE_CALIBRATION, None)
+        if actions:
+            chopper = START_ROTATION in actions
+            rest = list(actions.values())
             groups.append(
-                scan_group(session, hub, "I-V scan", IV_CURVE, {"bias": info.ref})
+                ChopperGroup(panel, rest)
+                if chopper
+                else ActionsGroup("Actions", panel, rest)
             )
-        if info.kind == "sis_coil":
-            groups.append(
-                scan_group(session, hub, "I-CL scan", CL_CURVE, {"coil": info.ref})
-            )
-            groups.append(
-                scan_group(
-                    session,
-                    hub,
-                    "Demagnetization",
-                    DEMAGNETIZE,
-                    {"coil": info.ref},
-                )
-            )
+        if traced:
+            groups.append(TraceGroup(type_title(info.type), panel, traced))
+        if described.settings:
+            groups.append(SettingsGroup(panel, info.kind, described.settings))
+        if calibration is not None:
+            groups.append(CalibrationGroup(panel, calibration))
+        for title, procedure, slot in SCANS.get(info.kind, ()):
+            groups.append(scan_group(session, hub, title, procedure, {slot: info.ref}))
         return groups
 
     def stop(self) -> None:
         for panel in self.panels:
             panel.stop()
-
-
-def device_widget(session, hub, ref: str) -> Optional[DeviceWidget]:
-    return DeviceWidget(session, hub, ref)

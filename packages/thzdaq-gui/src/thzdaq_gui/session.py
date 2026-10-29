@@ -46,9 +46,10 @@ class Session(QObject):
     at once, like the old settings.ini.
 
     lab is the bench as the daemon's clients call it; bridge brings its events
-    to the GUI thread. Until the GUI connects to a daemon (milestone M1, step
-    6) the lab runs in this process, around the session's own station, so the
-    instruments still have one owner while the docks move onto it.
+    to the GUI thread, calls runs its operations in the background, a queue per
+    instrument. Until the GUI connects to a daemon (milestone M1, step 6) the
+    lab runs in this process, around the session's own station and on the
+    worker's lanes, which Setup still uses to open instruments itself.
     """
 
     station_changed = Signal(object)  # a new Station (another profile)
@@ -58,6 +59,8 @@ class Session(QObject):
         super().__init__(parent)
         self.data_root = Path(data_root)  # where measurements are written
         self.worker = DeviceWorker(self)
+        # Lanes of their own: a call waits for its instrument's lane in worker
+        self.calls = DeviceWorker(self)
         self.measurements = MeasurementsModel(self, self)
         # Where file dialogs start until the user picks a folder of a kind
         self.folders = Folders(
@@ -187,4 +190,5 @@ class Session(QObject):
     def shutdown(self, timeout: float = 5.0) -> None:
         # Closing the lab cancels its runs and waits for their on_exit
         self._close_station()
+        self.calls.stop(timeout)
         self.worker.stop(timeout)

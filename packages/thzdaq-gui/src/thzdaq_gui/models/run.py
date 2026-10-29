@@ -81,7 +81,7 @@ class RunModel(QObject):
             comment=comment,
         )
         lab = self.session.lab
-        self.session.worker.submit(
+        self.session.calls.submit(
             lambda: lab.call(operation), self._accepted, self._refused
         )
 
@@ -96,7 +96,7 @@ class RunModel(QObject):
     def _call(self, operation) -> None:
         if self.run is not None and self.running:
             lab, call = self.session.lab, operation(id=self.run.id)
-            self.session.worker.submit(lambda: lab.call(call))
+            self.session.calls.submit(lambda: lab.call(call))
 
     def _accepted(self, run: RunInfo) -> None:
         self.run = run
