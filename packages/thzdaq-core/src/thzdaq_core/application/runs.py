@@ -153,13 +153,19 @@ class Runs:
         with self._lock:
             run = self._runs.get(run_id)
         if run is None:
-            raise LabError(ErrorCode.NOT_FOUND, f"No measurement {run_id} in the daemon")
+            raise LabError(
+                ErrorCode.NOT_FOUND, f"No measurement {run_id} in the daemon"
+            )
         return run
 
     def _forget_old(self) -> None:
         ended = [i for i, r in self._runs.items() if r.ended.is_set()]
         for run_id in ended[: max(0, len(ended) - KEPT)]:
             del self._runs[run_id]
+
+    def active(self) -> Tuple[RunInfo, ...]:
+        """The runs that have not ended."""
+        return tuple(info for info in self.all() if info.status == RUNNING)
 
     def get(self, run_id: int) -> RunInfo:
         return self._run(run_id).info()

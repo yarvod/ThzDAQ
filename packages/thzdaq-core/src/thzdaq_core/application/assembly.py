@@ -7,10 +7,11 @@ from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
 from thzdaq_core.application.events import EventBus
-from thzdaq_core.application.handlers import devices, measurements, state
+from thzdaq_core.application.handlers import devices, measurements, state, station
 from thzdaq_core.application.polling import Polling
-from thzdaq_core.application.ports import MeasurementRepository
+from thzdaq_core.application.ports import MeasurementRepository, ProfileRepository
 from thzdaq_core.application.runs import Runs
+from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
 
 
@@ -26,12 +27,15 @@ class Assembled:
         self.polling.stop()
 
 
-def assemble(bench: Bench, store: MeasurementRepository) -> Assembled:
+def assemble(
+    bench: Bench, store: MeasurementRepository, profiles: ProfileRepository
+) -> Assembled:
     events = EventBus()
     known = KnownValues()
     access = DeviceAccess(bench, known, events)
     polling = Polling(access, events)
     runs = Runs(bench, store, events)
+    profile = StationService(bench, profiles, runs, events)
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -48,6 +52,13 @@ def assemble(bench: Bench, store: MeasurementRepository) -> Assembled:
             measurements.WaitMeasurement(runs),
             measurements.CancelMeasurement(runs),
             measurements.AbortMeasurement(runs),
+            station.GetStation(profile),
+            station.LoadStation(profile),
+            station.NewStation(profile),
+            station.UpdateStation(profile),
+            station.ListDrivers(profile),
+            station.ListConnections(profile),
+            station.ResetConnection(profile),
         )
     )
     return Assembled(dispatcher, events, polling, runs)

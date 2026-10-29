@@ -54,3 +54,13 @@ def dump_station(config: StationConfig) -> str:
 
 def save_station(config: StationConfig, path: PathLike) -> None:
     Path(path).write_text(dump_station(config), encoding="utf-8")
+
+
+class YamlProfiles:
+    """Station profiles as YAML files (application.ports.ProfileRepository)."""
+
+    def load(self, path: PathLike) -> StationConfig:
+        return load_station(path)
+
+    def save(self, config: StationConfig, path: PathLike) -> None:
+        save_station(config, path)

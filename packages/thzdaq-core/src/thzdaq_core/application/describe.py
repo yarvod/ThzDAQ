@@ -4,14 +4,23 @@ from dataclasses import asdict
 from typing import Type
 
 from thzdaq_api import devices as api
-from thzdaq_api import measurements
+from thzdaq_api import measurements, station as station_api
+from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
+from thzdaq_instruments.registry import DriverInfo as Driver
 
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import Parameter
-from thzdaq_core.domain.station.kinds import instrument_type
-from thzdaq_core.domain.station.station import INSTRUMENT, CHANNEL, DeviceInfo, Station
+from thzdaq_core.domain.station.kinds import instrument_type, kinds_for
+from thzdaq_core.domain.station.profile import connection_to_dict
+from thzdaq_core.domain.station.station import (
+    CHANNEL,
+    INSTRUMENT,
+    ConnectionInfo,
+    DeviceInfo,
+    Station,
+)
 
 
 def device_info(info: DeviceInfo, station: Station) -> api.DeviceInfo:
@@ -76,4 +85,42 @@ def procedure_info(procedure: Procedure) -> measurements.ProcedureInfo:
         parameters=tuple(parameter_info(p) for p in procedure.parameters().values()),
         slots=slots,
         plots=tuple(plot_info(spec) for spec in procedure.plots),
+    )
+
+
+def driver_info(driver: Driver) -> station_api.DriverInfo:
+    cls = driver.cls
+    recommended = getattr(cls, "connection", None)
+    try:  # drivers that open a connection recommend one; others have none
+        connection = connection_to_dict(recommended()) if recommended else None
+    except (TypeError, ConfigurationError):  # it needs a port or an address
+        connection = None
+    return station_api.DriverInfo(
+        key=driver.key,
+        title=driver.title,
+        type=driver.device_type,
+        capabilities=tuple(c.__name__ for c in driver.capabilities),
+        simulated=driver.simulated,
+        kinds=tuple(
+            station_api.DeviceKindInfo(
+                key=kind.key,
+                title=kind.title,
+                settings=tuple(parameter_info(p) for p in kind.settings),
+                needs_channel=kind.needs_channel,
+                channels=tuple(str(k) for k in kind.keys),
+            )
+            for kind in kinds_for(cls).values()
+        ),
+        channels=tuple(str(k) for k in cls.fixed_channels()),
+        connection=connection,
+    )
+
+
+def connection_info(connection: ConnectionInfo) -> station_api.ConnectionInfo:
+    return station_api.ConnectionInfo(
+        key=tuple(connection.key),
+        label=connection.label,
+        instruments=connection.instruments,
+        open=connection.open,
+        broken=connection.broken,
     )

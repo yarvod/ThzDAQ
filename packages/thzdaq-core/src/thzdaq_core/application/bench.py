@@ -1,7 +1,7 @@
-"""The bench the use cases work on: the station loaded now and the lanes its
-instruments' jobs run in."""
+"""The bench the use cases work on: the station loaded now (another profile may
+replace it), the file it came from and the lanes its instruments' jobs run in."""
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
 
@@ -11,9 +11,15 @@ from thzdaq_core.domain.station.station import DeviceInfo, Station
 
 
 class Bench:
-    def __init__(self, station: Station, lanes: Lanes):
+    def __init__(self, station: Station, lanes: Lanes, path: Optional[str] = None):
         self.station = station
         self.lanes = lanes
+        self.path = path
+
+    def replace(self, station: Station, path: Optional[str]) -> None:
+        """Work with another station; the old one closes its instruments."""
+        old, self.station, self.path = self.station, station, path
+        old.close()
 
     def info(self, ref: str) -> DeviceInfo:
         try:
