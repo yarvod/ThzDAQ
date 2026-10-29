@@ -2,10 +2,15 @@ from thzdaq_api.procedures import GRID_CURRENT_ANGLE
 from thzdaq_instruments.capabilities import Rotator, VoltageCurrentMeter
 from thzdaq_instruments.units import UA
 
-from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
-from thzdaq_core.domain.measurements.procedures.common import restore_angle_on_exit
+from thzdaq_core.domain.measurements.procedures.common import (
+    CURRENT_UA,
+    GridAngle,
+    GridSpeed,
+    restore_angle_on_exit,
+    SettleTime,
+)
 
 
 class GridCurrentAngle(Procedure):
@@ -16,18 +21,13 @@ class GridCurrentAngle(Procedure):
     plots = (
         PlotSpec(
             "ia", "I-A", "ia", "angle", "current",
-            x_label="Angle, deg", y_label="Current, μA", y_scale=UA,
+            x_label="Angle, deg", y_label=CURRENT_UA, y_scale=UA,
         ),
     )  # fmt: skip
 
-    angle = SweepParameter(
-        "Grid angle", default=(0.0, 180.0, 37), unit="deg", max_points=10000
-    )
-    grid_speed = FloatParameter(
-        "Grid speed", default=180.0, minimum=1e-3, unit="deg/s",
-        help="Wait |Δangle| / speed after each rotation",
-    )  # fmt: skip
-    settle_time = FloatParameter("Settle time", default=0.1, minimum=0, unit="s")
+    angle = GridAngle((0.0, 180.0, 37), max_points=10000)
+    grid_speed = GridSpeed()
+    settle_time = SettleTime(0.1)
 
     def estimate_steps(self) -> int:
         return self.angle.points

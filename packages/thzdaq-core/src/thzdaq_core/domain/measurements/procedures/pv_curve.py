@@ -5,16 +5,27 @@ from thzdaq_instruments.units import MV, UA
 from thzdaq_core.domain.analysis.noise import match_hot_cold, noise_temperature
 from thzdaq_core.domain.parameters import (
     BoolParameter,
-    FloatParameter,
     IntParameter,
-    SweepParameter,
 )
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
+    CURRENT_UA,
+    POWER_DBM,
+    TN_K,
+    VOLTAGE_MV,
+    Y_DB,
+    BiasVoltage,
+    ColdLoad,
+    FirstPointDelay,
+    GridAngle,
+    GridSpeed,
+    HotLoad,
+    LoadDelay,
     restore_angle_on_exit,
     restore_bias_on_exit,
+    SettleTime,
     warn_without_contrast,
 )
 
@@ -30,51 +41,38 @@ class PVCurve(Procedure):
     plots = (
         PlotSpec(
             "pv", "P-V", "pv", "voltage", "power",
-            x_label="Voltage, mV", y_label="Power, dBm", x_scale=MV,
+            x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV,
             group_by=("angle", "load"),
         ),
         PlotSpec(
             "iv", "I-V", "pv", "voltage", "current",
-            x_label="Voltage, mV", y_label="Current, μA", x_scale=MV, y_scale=UA,
+            x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
             group_by=("angle", "load"), analysis="iv",
         ),
         PlotSpec(
             "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
-            x_label="Voltage, mV", y_label="Y, dB", x_scale=MV, group_by=("angle",),
+            x_label=VOLTAGE_MV, y_label=Y_DB, x_scale=MV, group_by=("angle",),
         ),
         PlotSpec(
             "tn", "Tn-V", "y_factor", "voltage", "noise_temperature",
-            x_label="Voltage, mV", y_label="Tn, K", x_scale=MV, group_by=("angle",),
+            x_label=VOLTAGE_MV, y_label=TN_K, x_scale=MV, group_by=("angle",),
         ),
     )  # fmt: skip
 
-    voltage = SweepParameter(
-        "Bias voltage",
-        default=(0.0, 7e-3, 351),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
-    settle_time = FloatParameter("Settle time", default=0.01, minimum=0, unit="s")
-    first_point_delay = FloatParameter(
-        "First point delay", default=0.5, minimum=0, unit="s"
-    )
+    voltage = BiasVoltage((0.0, 7e-3, 351))
+    settle_time = SettleTime(0.01)
+    first_point_delay = FirstPointDelay(0.5)
     hot_cold = BoolParameter("Hot/cold loads", default=False)
-    load_delay = FloatParameter("Load switch delay", default=2.0, minimum=0, unit="s")
-    t_hot = FloatParameter("Hot load", default=300.0, minimum=0, unit="K")
-    t_cold = FloatParameter("Cold load", default=77.0, minimum=0, unit="K")
+    load_delay = LoadDelay(2.0)
+    t_hot = HotLoad()
+    t_cold = ColdLoad()
     match_window = IntParameter(
         "Hot/cold match window", default=10, minimum=1,
         help="Cold points around the same index searched for the nearest voltage",
     )  # fmt: skip
     use_grid = BoolParameter("Rotate grid", default=False)
-    angle = SweepParameter(
-        "Grid angle", default=(0.0, 90.0, 10), unit="deg", max_points=1000
-    )
-    grid_speed = FloatParameter(
-        "Grid speed", default=180.0, minimum=1e-3, unit="deg/s",
-        help="Wait |Δangle| / speed after each rotation",
-    )  # fmt: skip
+    angle = GridAngle((0.0, 90.0, 10), max_points=1000)
+    grid_speed = GridSpeed()
 
     def active_plots(self, quantities=None):
         if self.hot_cold:

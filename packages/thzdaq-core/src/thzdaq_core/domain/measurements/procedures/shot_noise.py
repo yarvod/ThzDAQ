@@ -9,10 +9,17 @@ from thzdaq_core.domain.analysis.shot_noise import (
     mismatch,
     shot_noise_temperature,
 )
-from thzdaq_core.domain.parameters import FloatParameter, IntParameter, SweepParameter
+from thzdaq_core.domain.parameters import FloatParameter, IntParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
-from thzdaq_core.domain.measurements.procedures.common import BIAS, restore_bias_on_exit
+from thzdaq_core.domain.measurements.procedures.common import (
+    BIAS,
+    IF_GHZ,
+    POWER_DBM,
+    IFSweep,
+    restore_bias_on_exit,
+    SettleTime,
+)
 
 
 class ShotNoise(Procedure):
@@ -26,11 +33,11 @@ class ShotNoise(Procedure):
     plots = (
         PlotSpec(
             "power", "P-IF", "power", "frequency", "power",
-            x_label="IF, GHz", y_label="Power, dBm", x_scale=GHZ, group_by=("point",),
+            x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("point",),
         ),
         PlotSpec(
             "ta", "Ta-IF", "noise", "frequency", "amplifier_temperature",
-            x_label="IF, GHz", y_label="Ta, K", x_scale=GHZ,
+            x_label=IF_GHZ, y_label="Ta, K", x_scale=GHZ,
         ),
     )  # fmt: skip
 
@@ -47,15 +54,9 @@ class ShotNoise(Procedure):
     resistance_points = IntParameter(
         "Rd fit points", default=100, minimum=3, maximum=10000
     )
-    frequency = SweepParameter(
-        "IF",
-        default=(3 * GHZ, 13 * GHZ, 300),
-        unit="Hz",
-        display_unit="GHz",
-        display_scale=GHZ,
-    )
+    frequency = IFSweep((3 * GHZ, 13 * GHZ, 300))
     t_sis = FloatParameter("SIS temperature", default=4.0, minimum=0.1, unit="K")
-    settle_time = FloatParameter("Settle time", default=0.05, minimum=0, unit="s")
+    settle_time = SettleTime(0.05)
     point_delay = FloatParameter("IF point delay", default=0.01, minimum=0, unit="s")
 
     def check(self):

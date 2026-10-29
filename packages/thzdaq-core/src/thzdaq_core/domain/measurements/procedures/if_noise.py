@@ -3,10 +3,20 @@ from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFi
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_core.domain.analysis.noise import noise_temperature, y_factor_db
-from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
-from thzdaq_core.domain.measurements.procedures.common import warn_without_contrast
+from thzdaq_core.domain.measurements.procedures.common import (
+    IF_GHZ,
+    POWER_DBM,
+    TN_K,
+    Y_DB,
+    ColdLoad,
+    HotLoad,
+    IFSweep,
+    LoadDelay,
+    PointDelay,
+    warn_without_contrast,
+)
 
 LOADS = ("cold", "hot")
 
@@ -30,8 +40,8 @@ class IFNoise(Procedure):
             table="power",
             x="frequency",
             y="power",
-            x_label="IF, GHz",
-            y_label="Power, dBm",
+            x_label=IF_GHZ,
+            y_label=POWER_DBM,
             x_scale=GHZ,
             group_by=("load",),
         ),
@@ -41,8 +51,8 @@ class IFNoise(Procedure):
             table="noise",
             x="frequency",
             y="y_factor",
-            x_label="IF, GHz",
-            y_label="Y, dB",
+            x_label=IF_GHZ,
+            y_label=Y_DB,
             x_scale=GHZ,
         ),
         PlotSpec(
@@ -51,23 +61,17 @@ class IFNoise(Procedure):
             table="noise",
             x="frequency",
             y="noise_temperature",
-            x_label="IF, GHz",
-            y_label="Tn, K",
+            x_label=IF_GHZ,
+            y_label=TN_K,
             x_scale=GHZ,
         ),
     )
 
-    frequency = SweepParameter(
-        "IF",
-        default=(4 * GHZ, 12 * GHZ, 201),
-        unit="Hz",
-        display_unit="GHz",
-        display_scale=GHZ,
-    )
-    t_hot = FloatParameter("Hot load", default=300.0, minimum=0, unit="K")
-    t_cold = FloatParameter("Cold load", default=77.0, minimum=0, unit="K")
-    load_delay = FloatParameter("Load switch delay", default=0.5, minimum=0, unit="s")
-    point_delay = FloatParameter("Point delay", default=0.01, minimum=0, unit="s")
+    frequency = IFSweep((4 * GHZ, 12 * GHZ, 201))
+    t_hot = HotLoad()
+    t_cold = ColdLoad()
+    load_delay = LoadDelay(0.5)
+    point_delay = PointDelay(0.01)
 
     def check(self):
         if self.t_hot <= self.t_cold:

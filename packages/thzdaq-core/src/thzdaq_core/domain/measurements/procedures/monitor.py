@@ -12,6 +12,13 @@ from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
 from thzdaq_instruments.units import GHZ, MA, MV, UA
 
+from thzdaq_core.domain.measurements.procedures.common import (
+    COIL_CURRENT_MA,
+    CURRENT_UA,
+    FREQUENCY_GHZ,
+    POWER_DBM,
+    VOLTAGE_MV,
+)
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import FloatParameter, StringListParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
@@ -77,13 +84,13 @@ class Monitor(Procedure):
         "compressor) at a fixed interval until stopped or the duration ends."
     )
     plots = (
-        _time_plot("P-t", "Power, dBm"),
+        _time_plot("P-t", POWER_DBM),
         _time_plot("T-t", "Temperature, K"),
-        _time_plot("V-t", "Voltage, mV", MV),
-        _time_plot("I-t", "Current, μA", UA),
-        _time_plot("Coil-t", "Coil current, mA", MA),
+        _time_plot("V-t", VOLTAGE_MV, MV),
+        _time_plot("I-t", CURRENT_UA, UA),
+        _time_plot("Coil-t", COIL_CURRENT_MA, MA),
         _time_plot("p-t", "Pressure, Pa"),
-        _time_plot("f-t", "Frequency, GHz", GHZ),
+        _time_plot("f-t", FREQUENCY_GHZ, GHZ),
         _time_plot("Value-t", "Value"),
     )
 

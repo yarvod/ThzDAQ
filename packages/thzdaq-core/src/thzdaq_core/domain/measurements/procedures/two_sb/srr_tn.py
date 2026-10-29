@@ -2,6 +2,14 @@ from thzdaq_api.procedures import TWO_SB_SRR, TWO_SB_TN
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
 
+from thzdaq_core.domain.measurements.procedures.common import (
+    IF_GHZ,
+    POWER_DBM,
+    TN_K,
+    Y_DB,
+    IFSweep,
+    PointDelay,
+)
 from thzdaq_core.domain.analysis.two_sb import (
     SIDE_BANDS,
     power_difference,
@@ -10,7 +18,6 @@ from thzdaq_core.domain.analysis.two_sb import (
 from thzdaq_core.domain.parameters import (
     BoolParameter,
     ChoiceParameter,
-    FloatParameter,
     IntParameter,
 )
 from thzdaq_core.domain.measurements.plots import PlotSpec
@@ -19,25 +26,25 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SOURCE,
     HotColdMixin,
     IfSwitchProcedure,
+    LOFrequency,
     LoMixin,
-    SpectrumMixin,
-    if_sweep,
     side_bands,
+    SpectrumMixin,
     voltage_parameter,
 )
 
 NOISE_PLOTS = (
     PlotSpec(
         "noise_power", "P-IF hot/cold", "power", "frequency", "power",
-        x_label="IF, GHz", y_label="Power, dBm", x_scale=GHZ, group_by=("channel", "load"),
+        x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("channel", "load"),
     ),
     PlotSpec(
         "y_factor", "Y-IF", "noise", "frequency", "y_factor",
-        x_label="IF, GHz", y_label="Y, dB", x_scale=GHZ, group_by=("channel",),
+        x_label=IF_GHZ, y_label=Y_DB, x_scale=GHZ, group_by=("channel",),
     ),
     PlotSpec(
         "tn", "Tn-IF", "noise", "frequency", "noise_temperature",
-        x_label="IF, GHz", y_label="Tn, K", x_scale=GHZ, group_by=("channel",),
+        x_label=IF_GHZ, y_label=TN_K, x_scale=GHZ, group_by=("channel",),
     ),
 )  # fmt: skip
 
@@ -52,23 +59,23 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
     plots = (
         PlotSpec(
             "tone", "Test tone P-IF", "tone", "frequency", "power",
-            x_label="IF, GHz", y_label="Power, dBm", x_scale=GHZ, group_by=("tone", "channel"),
+            x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("tone", "channel"),
         ),
         PlotSpec(
             "ratio", "SRR-IF", "ratio", "frequency", "power_difference",
-            x_label="IF, GHz", y_label="P wanted - P image, dB", x_scale=GHZ, group_by=("tone",),
+            x_label=IF_GHZ, y_label="P wanted - P image, dB", x_scale=GHZ, group_by=("tone",),
         ),
     ) + NOISE_PLOTS  # fmt: skip
 
     sis1_voltage = voltage_parameter("SIS1 bias", 2.6e-3)
     sis2_voltage = voltage_parameter("SIS2 bias", 2.4e-3)
-    frequency = if_sweep()
+    frequency = IFSweep()
     tones = ChoiceParameter("Test tone sidebands", SIDE_BAND_CHOICES, default="both")
     chunk_size = IntParameter(
         "Points per IF switch", default=10, minimum=1,
         help="IF points measured in one channel before switching to the other",
     )  # fmt: skip
-    point_delay = FloatParameter("Point delay", default=0.05, minimum=0, unit="s")
+    point_delay = PointDelay(0.05)
     measure_y_factor = BoolParameter("Y-factor afterwards", default=True)
 
     def slots(self):
@@ -157,17 +164,10 @@ class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     description = "Hot/cold Y-factor and Tn of the upper and lower IF channels."
     plots = NOISE_PLOTS
 
-    lo_frequency = FloatParameter(
-        "LO frequency",
-        default=263 * GHZ,
-        minimum=0,
-        unit="Hz",
-        display_unit="GHz",
-        display_scale=GHZ,
-    )
+    lo_frequency = LOFrequency(263 * GHZ)
     sis1_voltage = voltage_parameter("SIS1 bias", 2.5e-3)
     sis2_voltage = voltage_parameter("SIS2 bias", 2.5e-3)
-    frequency = if_sweep()
+    frequency = IFSweep()
     channels = ChoiceParameter("IF channels", SIDE_BAND_CHOICES, default="both")
     tone_off = BoolParameter(
         "Switch the test tone off", default=False, help="Uses the 'test_tone' device"

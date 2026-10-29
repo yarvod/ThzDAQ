@@ -38,6 +38,10 @@ from thzdaq_core.domain.parameters import (
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
+    ColdLoad,
+    HotLoad,
+    LoadDelay,
+    PointDelay,
     restore_bias_on_exit,
     set_bias,
     warn_without_contrast,
@@ -47,6 +51,39 @@ SOURCE = (FrequencySource, Switchable)
 SIDE_BAND_CHOICES = ("both", "upper", "lower")
 
 
+# Parameters of the 2SB procedures; the default stays each procedure's own
+class SisBiasSweep(SweepParameter):
+    def __init__(self, number: int, default):
+        super().__init__(
+            f"SIS{number} bias",
+            default=default,
+            unit="V",
+            display_unit="mV",
+            display_scale=MV,
+        )
+
+
+class LOFrequency(FloatParameter):
+    def __init__(self, default: float):
+        super().__init__(
+            "LO frequency",
+            default=default,
+            minimum=0,
+            unit="Hz",
+            display_unit="GHz",
+            display_scale=GHZ,
+        )
+
+
+class PreciseBias(BoolParameter):
+    def __init__(self, default: bool):
+        super().__init__(
+            "Precise bias",
+            default=default,
+            help="Correct the bias by readback (slow: ~1 s per iteration)",
+        )
+
+
 def voltage_parameter(label: str, default: float) -> FloatParameter:
     return FloatParameter(
         label, default=default, minimum=-30e-3, maximum=30e-3,
@@ -54,19 +91,10 @@ def voltage_parameter(label: str, default: float) -> FloatParameter:
     )  # fmt: skip
 
 
-def if_sweep(default=(4 * GHZ, 12 * GHZ, 201)) -> SweepParameter:
-    return SweepParameter(
-        "IF", default=default, unit="Hz", display_unit="GHz", display_scale=GHZ
-    )
-
-
 class TwoSbProcedure(Procedure):
     """Bias both mixers, set the LO, measure IF channels; restore on exit."""
 
-    precise_bias = BoolParameter(
-        "Precise bias", default=True,
-        help="Correct the bias by readback (slow: ~1 s per iteration)",
-    )  # fmt: skip
+    precise_bias = PreciseBias(True)
     control_yig_power = BoolParameter(
         "Control YIG power",
         default=False,
@@ -128,14 +156,7 @@ class IfSwitchProcedure(TwoSbProcedure):
 class LoMixin:
     """Optional LO setting: frequency at the mixer, output on."""
 
-    lo_frequency = FloatParameter(
-        "LO frequency",
-        default=223 * GHZ,
-        minimum=0,
-        unit="Hz",
-        display_unit="GHz",
-        display_scale=GHZ,
-    )
+    lo_frequency = LOFrequency(223 * GHZ)
     set_lo = BoolParameter("Set LO", default=True)
 
     def lo_slots(self):
@@ -151,10 +172,10 @@ class LoMixin:
 class HotColdMixin:
     """Y-factor and Tn of each IF channel through the YIG and the power meter."""
 
-    t_hot = FloatParameter("Hot load", default=300.0, minimum=0, unit="K")
-    t_cold = FloatParameter("Cold load", default=77.0, minimum=0, unit="K")
-    load_delay = FloatParameter("Load switch delay", default=0.5, minimum=0, unit="s")
-    point_delay = FloatParameter("Point delay", default=0.01, minimum=0, unit="s")
+    t_hot = HotLoad()
+    t_cold = ColdLoad()
+    load_delay = LoadDelay(0.5)
+    point_delay = PointDelay(0.01)
 
     @staticmethod
     def hot_cold_slots():

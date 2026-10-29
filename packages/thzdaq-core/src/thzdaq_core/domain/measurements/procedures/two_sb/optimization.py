@@ -7,14 +7,15 @@ from thzdaq_core.domain.analysis.two_sb import (
     sideband_rejection,
     test_tone_frequency,
 )
-from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
+from thzdaq_core.domain.parameters import FloatParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
-from thzdaq_core.domain.measurements.procedures.common import set_bias
+from thzdaq_core.domain.measurements.procedures.common import IFFrequency, set_bias
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SOURCE,
     HotColdMixin,
     IfSwitchProcedure,
     LoMixin,
+    SisBiasSweep,
 )
 
 
@@ -40,28 +41,9 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
         _map("srr_lower", "SRR lower", "srr_lower", "dB"),
     )
 
-    if_frequency = FloatParameter(
-        "IF",
-        default=5 * GHZ,
-        minimum=0,
-        unit="Hz",
-        display_unit="GHz",
-        display_scale=GHZ,
-    )
-    sis1_voltage = SweepParameter(
-        "SIS1 bias",
-        default=(2.1e-3, 2.6e-3, 6),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
-    sis2_voltage = SweepParameter(
-        "SIS2 bias",
-        default=(2.1e-3, 2.6e-3, 6),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
+    if_frequency = IFFrequency(5 * GHZ)
+    sis1_voltage = SisBiasSweep(1, (2.1e-3, 2.6e-3, 6))
+    sis2_voltage = SisBiasSweep(2, (2.1e-3, 2.6e-3, 6))
     tone_delay = FloatParameter("Test tone delay", default=0.5, minimum=0, unit="s")
 
     def slots(self):

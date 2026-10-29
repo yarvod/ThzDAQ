@@ -2,7 +2,13 @@ from thzdaq_api.procedures import IV_CURVE
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.units import MV, UA
 
-from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
+from thzdaq_core.domain.measurements.procedures.common import (
+    CURRENT_UA,
+    VOLTAGE_MV,
+    BiasVoltage,
+    FirstPointDelay,
+    SettleTime,
+)
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 
@@ -19,32 +25,17 @@ class IVCurve(Procedure):
             table="iv",
             x="voltage",
             y="current",
-            x_label="Voltage, mV",
-            y_label="Current, μA",
+            x_label=VOLTAGE_MV,
+            y_label=CURRENT_UA,
             x_scale=MV,
             y_scale=UA,
             analysis="iv",
         ),
     )
 
-    voltage = SweepParameter(
-        "Bias voltage",
-        default=(0.0, 7e-3, 351),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
-    settle_time = FloatParameter(
-        "Settle time", default=0.01, minimum=0, maximum=10, unit="s"
-    )
-    first_point_delay = FloatParameter(
-        "First point delay",
-        default=0.5,
-        minimum=0,
-        maximum=10,
-        unit="s",
-        help="The bias source needs longer to reach the first point",
-    )
+    voltage = BiasVoltage((0.0, 7e-3, 351))
+    settle_time = SettleTime(0.01, maximum=10)
+    first_point_delay = FirstPointDelay(0.5, maximum=10)
 
     def estimate_steps(self) -> int:
         return self.voltage.points

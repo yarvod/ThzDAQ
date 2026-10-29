@@ -13,7 +13,13 @@ from thzdaq_core.domain.parameters import (
 )
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
-from thzdaq_core.domain.measurements.procedures.common import BIAS, restore_bias_on_exit
+from thzdaq_core.domain.measurements.procedures.common import (
+    BIAS,
+    VOLTAGE_MV,
+    BiasVoltage,
+    FirstPointDelay,
+    restore_bias_on_exit,
+)
 
 S_PARAMETERS = ("S11", "S21", "S12", "S22")
 
@@ -26,17 +32,11 @@ class SisReflection(Procedure):
     plots = (
         PlotSpec(
             "magnitude", "|S| (band mean) - V", "summary", "voltage", "magnitude_db",
-            x_label="Voltage, mV", y_label="|S|, dB", x_scale=MV, group_by=("parameter",),
+            x_label=VOLTAGE_MV, y_label="|S|, dB", x_scale=MV, group_by=("parameter",),
         ),
     )  # fmt: skip
 
-    voltage = SweepParameter(
-        "Bias voltage",
-        default=(0.0, 7e-3, 71),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
+    voltage = BiasVoltage((0.0, 7e-3, 71))
     frequency = SweepParameter(
         "VNA frequency", default=(2 * GHZ, 12 * GHZ, 301), unit="Hz",
         display_unit="GHz", display_scale=GHZ,
@@ -51,9 +51,7 @@ class SisReflection(Procedure):
         "Averaging wait", default=0.8, minimum=0, unit="s",
         help="Wait after changing bias or S-parameter for the VNA to average",
     )  # fmt: skip
-    first_point_delay = FloatParameter(
-        "First point delay", default=1.0, minimum=0, unit="s"
-    )
+    first_point_delay = FirstPointDelay(1.0)
 
     def estimate_steps(self) -> int:
         return self.voltage.points * len(self.s_parameters) * self.samples

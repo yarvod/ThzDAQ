@@ -1,11 +1,117 @@
-"""Helpers shared by procedures: bias handling, state restore, hot/cold checks."""
+"""What procedures share: parameters (one definition, a default per procedure), axis
+labels of plots, bias handling, state restore, hot/cold checks."""
 
 import math
-from typing import Iterable
+from typing import Iterable, Optional, Tuple
 
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
+from thzdaq_instruments.units import GHZ, MV
+
+from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
 
 BIAS = (VoltageSource, VoltageCurrentMeter)
+
+# Axis labels of plots
+CURRENT_UA = "Current, μA"
+COIL_CURRENT_MA = "Coil current, mA"
+VOLTAGE_MV = "Voltage, mV"
+POWER_DBM = "Power, dBm"
+IF_GHZ = "IF, GHz"
+FREQUENCY_GHZ = "Frequency, GHz"
+Y_DB = "Y, dB"
+TN_K = "Tn, K"
+
+Range = Tuple[float, float, int]
+
+
+# Parameters several procedures have; the default stays each procedure's own
+class SettleTime(FloatParameter):
+    def __init__(self, default: float, maximum: Optional[float] = None):
+        super().__init__(
+            "Settle time", default=default, minimum=0, maximum=maximum, unit="s"
+        )
+
+
+class FirstPointDelay(FloatParameter):
+    def __init__(self, default: float, maximum: Optional[float] = None):
+        super().__init__(
+            "First point delay",
+            default=default,
+            minimum=0,
+            maximum=maximum,
+            unit="s",
+            help="The bias source needs longer to reach the first point",
+        )
+
+
+class PointDelay(FloatParameter):
+    def __init__(self, default: float):
+        super().__init__("Point delay", default=default, minimum=0, unit="s")
+
+
+class BiasVoltage(SweepParameter):
+    def __init__(self, default: Range):
+        super().__init__(
+            "Bias voltage",
+            default=default,
+            unit="V",
+            display_unit="mV",
+            display_scale=MV,
+        )
+
+
+class IFSweep(SweepParameter):
+    def __init__(self, default: Range = (4 * GHZ, 12 * GHZ, 201)):
+        super().__init__(
+            "IF", default=default, unit="Hz", display_unit="GHz", display_scale=GHZ
+        )
+
+
+class IFFrequency(FloatParameter):
+    def __init__(self, default: float):
+        super().__init__(
+            "IF",
+            default=default,
+            minimum=0,
+            unit="Hz",
+            display_unit="GHz",
+            display_scale=GHZ,
+        )
+
+
+class HotLoad(FloatParameter):
+    def __init__(self):
+        super().__init__("Hot load", default=300.0, minimum=0, unit="K")
+
+
+class ColdLoad(FloatParameter):
+    def __init__(self):
+        super().__init__("Cold load", default=77.0, minimum=0, unit="K")
+
+
+class LoadDelay(FloatParameter):
+    def __init__(self, default: float):
+        super().__init__("Load switch delay", default=default, minimum=0, unit="s")
+
+
+class GridAngle(SweepParameter):
+    def __init__(self, default: Range, max_points: int):
+        super().__init__(
+            "Grid angle", default=default, unit="deg", max_points=max_points
+        )
+
+
+class GridSpeed(FloatParameter):
+    def __init__(self):
+        super().__init__(
+            "Grid speed",
+            default=180.0,
+            minimum=1e-3,
+            unit="deg/s",
+            help="Wait |Δangle| / speed after each rotation",
+        )
+
+
 PRECISE_ITERATIONS = 30
 
 

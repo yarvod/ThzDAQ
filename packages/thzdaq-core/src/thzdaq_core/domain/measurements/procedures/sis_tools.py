@@ -2,6 +2,10 @@ from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE
 from thzdaq_instruments.capabilities import CurrentSource, VoltageCurrentMeter
 from thzdaq_instruments.units import MA, UA
 
+from thzdaq_core.domain.measurements.procedures.common import (
+    COIL_CURRENT_MA,
+    CURRENT_UA,
+)
 from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -78,7 +82,7 @@ class CLCurve(Procedure):
     plots = (
         PlotSpec(
             "cl", "I-CL", "cl", "coil_current", "current",
-            x_label="Coil current, mA", y_label="Current, μA",
+            x_label=COIL_CURRENT_MA, y_label=CURRENT_UA,
             x_scale=MA, y_scale=UA,
         ),
     )  # fmt: skip

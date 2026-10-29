@@ -18,12 +18,22 @@ from thzdaq_core.domain.parameters import (
     SweepParameter,
 )
 from thzdaq_core.domain.measurements.plots import PlotSpec
-from thzdaq_core.domain.measurements.procedures.common import mv, set_bias
+from thzdaq_core.domain.measurements.procedures.common import (
+    CURRENT_UA,
+    FREQUENCY_GHZ,
+    IF_GHZ,
+    POWER_DBM,
+    IFSweep,
+    mv,
+    PointDelay,
+    set_bias,
+)
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SOURCE,
     IfSwitchProcedure,
+    PreciseBias,
+    SisBiasSweep,
     TwoSbProcedure,
-    if_sweep,
 )
 
 
@@ -36,7 +46,7 @@ class IfBalance(IfSwitchProcedure):
     plots = (
         PlotSpec(
             "power", "P-IF", "power", "frequency", "power",
-            x_label="IF, GHz", y_label="Power, dBm", x_scale=GHZ,
+            x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ,
             group_by=("channel", "bias"),
         ),
     )  # fmt: skip
@@ -55,8 +65,8 @@ class IfBalance(IfSwitchProcedure):
         display_unit="mV",
         display_scale=MV,
     )
-    frequency = if_sweep()
-    point_delay = FloatParameter("Point delay", default=0.05, minimum=0, unit="s")
+    frequency = IFSweep()
+    point_delay = PointDelay(0.05)
 
     def slots(self):
         return {
@@ -112,12 +122,12 @@ class PumpBalance(TwoSbProcedure):
     plots = (
         PlotSpec(
             "sis1", "SIS1 I-F", "pump", "frequency", "sis1_current",
-            x_label="Frequency, GHz", y_label="Current, μA", x_scale=GHZ, y_scale=UA,
+            x_label=FREQUENCY_GHZ, y_label=CURRENT_UA, x_scale=GHZ, y_scale=UA,
             group_by=("bias",),
         ),
         PlotSpec(
             "sis2", "SIS2 I-F", "pump", "frequency", "sis2_current",
-            x_label="Frequency, GHz", y_label="Current, μA", x_scale=GHZ, y_scale=UA,
+            x_label=FREQUENCY_GHZ, y_label=CURRENT_UA, x_scale=GHZ, y_scale=UA,
             group_by=("bias",),
         ),
     )  # fmt: skip
@@ -135,23 +145,11 @@ class PumpBalance(TwoSbProcedure):
         "Silence the other source", default=True,
         help="Output off and -80 dBm on the source that is not swept",
     )  # fmt: skip
-    sis1_voltage = SweepParameter(
-        "SIS1 bias",
-        default=(2.4e-3, 2.6e-3, 3),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
-    sis2_voltage = SweepParameter(
-        "SIS2 bias",
-        default=(2.4e-3, 2.6e-3, 3),
-        unit="V",
-        display_unit="mV",
-        display_scale=MV,
-    )
+    sis1_voltage = SisBiasSweep(1, (2.4e-3, 2.6e-3, 3))
+    sis2_voltage = SisBiasSweep(2, (2.4e-3, 2.6e-3, 3))
     bias_delay = FloatParameter("Bias delay", default=0.1, minimum=0, unit="s")
     measure_power = BoolParameter("Read IF power", default=False)
-    precise_bias = BoolParameter("Precise bias", default=False)
+    precise_bias = PreciseBias(False)
 
     @property
     def other(self) -> str:
