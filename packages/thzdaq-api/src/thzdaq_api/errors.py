@@ -11,6 +11,8 @@ class ErrorCode(str, Enum):
     NOT_FOUND = "not_found"  # no such device, quantity, measurement
     NOT_ALLOWED = "not_allowed"  # the operation does not apply: a read-only value
     INSTRUMENT = "instrument"  # the instrument failed or did not answer
+    # Outside the passport of the instrument or the bench limits: nothing was sent
+    OUT_OF_LIMITS = "out_of_limits"
     CONFLICT = "conflict"  # a device in exclusive use: repeat with share to go on
     INTERNAL = "internal"  # a fault of the daemon: its log has the details
 

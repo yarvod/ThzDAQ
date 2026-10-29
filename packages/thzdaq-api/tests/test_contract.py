@@ -86,3 +86,13 @@ def test_iv_analysis_travels_with_its_options():
         wire.decode_arguments(
             op.name, b'{"voltage": [], "current": [], "options": {"rn_form": 1}}'
         )
+
+
+def test_safe_state_says_how_each_value_went():
+    from thzdaq_api.devices import SafeState, SafeValue
+
+    op = SafeState(share=True)
+    assert op.name == "safe_state" and op.rights == Rights.SET
+    report = (SafeValue("sis_bias_1", "voltage_set", 0.0), SafeValue("x", "y", 1, "no"))
+    assert wire.decode_result(op, wire.encode(report)) == report
+    assert ErrorCode("out_of_limits") is ErrorCode.OUT_OF_LIMITS

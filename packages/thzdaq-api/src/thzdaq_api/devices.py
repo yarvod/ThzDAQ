@@ -10,7 +10,9 @@ Value = Union[bool, int, float, str, None]
 
 
 class QuantityInfo(msgspec.Struct, frozen=True):
-    """A value a device reads or takes, in SI units (power in dBm, angles in deg)."""
+    """A value a device reads or takes, in SI units (power in dBm, angles in deg).
+    minimum and maximum bound what it takes: its own range, the passport of the
+    instrument and the bench limits together."""
 
     key: str
     title: str
@@ -22,6 +24,12 @@ class QuantityInfo(msgspec.Struct, frozen=True):
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     choices: Tuple[str, ...] = ()  # the values a text quantity takes
+    # A soft range of the bench inside minimum..maximum: beyond it, ask first
+    warn_minimum: Optional[float] = None
+    warn_maximum: Optional[float] = None
+    step: Optional[float] = None  # the largest change in one command: more in steps
+    rate: Optional[float] = None  # units per second at most between the steps
+    danger: str = ""  # what may go wrong when it is set, shown first; empty when safe
 
 
 class DeviceInfo(msgspec.Struct, frozen=True):
@@ -95,6 +103,15 @@ class ActionResult(msgspec.Struct, frozen=True):
     result: Union[Value, Trace] = None
 
 
+class SafeValue(msgspec.Struct, frozen=True):
+    """A value of the safe state as it went: set, or why not."""
+
+    ref: str
+    key: str
+    value: Value
+    error: str = ""  # empty when it was set
+
+
 class Poll(msgspec.Struct, frozen=True):
     id: int  # to cancel it
     ref: str
@@ -124,9 +141,11 @@ class ReadDevice(Operation[Reading]):
 class SetQuantity(Operation[QuantityValue]):
     """Set a quantity of a device. A number is in SI units; a text may carry
     its unit ("2.3mV", "223 GHz"); switches take true or false. Returns the
-    value set, in SI units. A device a running measurement sweeps is refused
-    (conflict) unless share is true; the measurements using it record the
-    change."""
+    value set, in SI units. A value outside the limits of the device is refused
+    (out_of_limits) before anything is sent; a change larger than the bench
+    step goes in steps at the bench rate. A device a running measurement sweeps
+    is refused (conflict) unless share is true; the measurements using it
+    record the change."""
 
     rights = Rights.SET
     ref: str
@@ -149,6 +168,16 @@ class CallAction(Operation[ActionResult]):
     arguments: Dict[str, Union[bool, int, float, str]] = msgspec.field(
         default_factory=dict
     )
+    share: bool = False
+
+
+class SafeState(Operation[Tuple[SafeValue, ...]]):
+    """Set every device of the profile's safe state to its safe value, in steps
+    where the bench limits ask for them. A device that fails, or that a running
+    measurement sweeps (unless share is true), does not stop the others: each
+    value says how it went."""
+
+    rights = Rights.SET
     share: bool = False
 
 

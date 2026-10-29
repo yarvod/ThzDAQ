@@ -15,6 +15,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     devices.ReadDevice,
     devices.SetQuantity,
     devices.CallAction,
+    devices.SafeState,
     devices.SubscribePoll,
     devices.CancelPoll,
     events.GetSnapshot,
