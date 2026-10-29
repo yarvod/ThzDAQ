@@ -95,7 +95,7 @@ class TestDemagnetization:
             def device_use(self, ref):
                 return DeviceUse(ref)
 
-            def require(self, devices, requirements):
+            def require(self, devices, requirements, pause, planned=()):
                 return {"coil": coil}
 
             def snapshot(self, refs=None):
@@ -139,7 +139,7 @@ class TestMonitor:
             def device_use(self, ref):
                 return DeviceUse(ref)
 
-            def require(self, devices, requirements):
+            def require(self, devices, requirements, pause, planned=()):
                 return {slot: ports[slot] for slot in requirements}
 
             def snapshot(self, refs=None):

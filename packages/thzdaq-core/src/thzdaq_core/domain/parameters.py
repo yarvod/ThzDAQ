@@ -2,7 +2,9 @@
 
 Values live in SI inside procedures. Each parameter also knows its display unit
 and scale, so forms, CLI and saved metadata talk in GHz / mV while the code
-stays in Hz / V.
+stays in Hz / V. A parameter that a run sets a device to says where it goes
+(``applies``: slot, quantity key), so the values are checked against the limits
+of that device before the run starts.
 """
 
 import re
@@ -47,12 +49,14 @@ class Parameter:
         display_unit: Optional[str] = None,
         display_scale: float = 1.0,
         help: str = "",
+        applies: Optional[Tuple[str, str]] = None,
     ):
         self.label = label
         self.unit = unit  # SI unit of the value
         self.display_unit = display_unit if display_unit is not None else unit
         self.display_scale = display_scale  # SI value / display_scale = shown value
         self.help = help
+        self.applies = applies  # (slot, quantity key) the value is set to
         self.name = ""
         self.default = MISSING if default is MISSING else self.validate(default)
 
@@ -89,6 +93,10 @@ class Parameter:
 
     def format(self, value: Any) -> str:
         return f"{value}"
+
+    def bounds(self, value: Any) -> Tuple[float, ...]:
+        """The values that bound what a run sets its device to (see applies)."""
+        return ()
 
     def describe(self) -> Dict[str, Any]:
         default = None if self.default is MISSING else self.to_json(self.default)
@@ -142,6 +150,9 @@ class FloatParameter(Parameter):
 
     def format(self, value: float) -> str:
         return f"{value / self.display_scale:g} {self.display_unit}".strip()
+
+    def bounds(self, value: float) -> Tuple[float, ...]:
+        return (value,)
 
     def describe(self) -> Dict[str, Any]:
         return {**super().describe(), "minimum": self.minimum, "maximum": self.maximum}
@@ -225,6 +236,9 @@ class FloatListParameter(Parameter):
     def format(self, value) -> str:
         shown = ", ".join(f"{v / self.display_scale:g}" for v in value)
         return f"{shown} {self.display_unit}".strip()
+
+    def bounds(self, value) -> Tuple[float, ...]:
+        return (min(value), max(value))
 
 
 class StringListParameter(Parameter):
@@ -327,6 +341,9 @@ class SweepParameter(Parameter):
 
     def to_json(self, value: Sweep) -> Dict[str, Any]:
         return {"start": value.start, "stop": value.stop, "points": value.points}
+
+    def bounds(self, value: Sweep) -> Tuple[float, ...]:
+        return (value.start, value.stop)
 
     def format(self, value: Sweep) -> str:
         scale = self.display_scale

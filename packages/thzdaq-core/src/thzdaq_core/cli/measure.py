@@ -3,6 +3,7 @@
 import argparse
 import signal
 import sys
+import time
 from typing import List, Optional
 
 from thzdaq_instruments import InstrumentError
@@ -115,7 +116,9 @@ def cmd_run(args) -> int:
     procedure = build_procedure(args.procedure, args.set or [])
     store = None if args.no_save else MeasurementStore(args.data)
     config = load_station(args.station)
-    with Station(config, simulate=args.simulate, lively=True) as station:
+    with Station(
+        config, pause=time.sleep, simulate=args.simulate, lively=True
+    ) as station:
         runner = MeasurementRunner(station, store, [ConsoleObserver(args.quiet)])
         previous = signal.signal(signal.SIGINT, lambda *_: runner.cancel())
         try:

@@ -1,6 +1,7 @@
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE
 from thzdaq_instruments.capabilities import CurrentSource, VoltageCurrentMeter
+from thzdaq_instruments.quantities import CURRENT_SET
 from thzdaq_instruments.units import MA, UA
 
 from thzdaq_core.domain.measurements.procedures.common import (
@@ -35,6 +36,7 @@ class Demagnetize(Procedure):
         unit="A",
         display_unit="mA",
         display_scale=MA,
+        applies=("coil", CURRENT_SET.key),
     )
     maximum = FloatParameter(
         "Maximum current",
@@ -42,6 +44,7 @@ class Demagnetize(Procedure):
         unit="A",
         display_unit="mA",
         display_scale=MA,
+        applies=("coil", CURRENT_SET.key),
     )
     step = FloatParameter(
         "Current step",
@@ -96,6 +99,7 @@ class CLCurve(Procedure):
         unit="A",
         display_unit="mA",
         display_scale=MA,
+        applies=("coil", CURRENT_SET.key),
     )
     step_delay = FloatParameter("Step delay", default=0.1, minimum=0, unit="s")
 

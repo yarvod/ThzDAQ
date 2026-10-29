@@ -36,7 +36,7 @@ def sis_station() -> Station:
             )
         },
     )
-    return Station(config)
+    return Station(config, pause=time.sleep)
 
 
 class Recorder(RunObserver):
@@ -72,7 +72,7 @@ class CoupledStation:
             "load": self.chopper,
         }
 
-    def require(self, devices, requirements):
+    def require(self, devices, requirements, pause, planned=()):
         return {slot: self.ports[slot] for slot in requirements}
 
     def device_use(self, ref):
@@ -133,7 +133,7 @@ class TestRunner:
                 raise RuntimeError("detector exploded")
 
         class AnyStation(CoupledStation):
-            def require(self, devices, requirements):
+            def require(self, devices, requirements, pause, planned=()):
                 return {"bias": SimChopper()}
 
         class BadObserver(RunObserver):

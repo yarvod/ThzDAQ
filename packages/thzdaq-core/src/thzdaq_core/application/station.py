@@ -92,6 +92,7 @@ class StationService:
         old = self.bench.station
         station = Station(
             config,
+            pause=old.pause,
             registry=old.registry,
             pool=old.pool,
             simulate=old.simulate,

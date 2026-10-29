@@ -8,6 +8,7 @@ from thzdaq_instruments.capabilities import (
     Switchable,
     TunableFilter,
 )
+from thzdaq_instruments.quantities import VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, MV, UA
 
 from thzdaq_analysis.two_sb import SIDE_BANDS
@@ -64,6 +65,7 @@ class IfBalance(IfSwitchProcedure):
         unit="V",
         display_unit="mV",
         display_scale=MV,
+        applies=("sis1", VOLTAGE_SET.key),
     )
     sis2_voltages = FloatListParameter(
         "SIS2 voltages",
@@ -71,6 +73,7 @@ class IfBalance(IfSwitchProcedure):
         unit="V",
         display_unit="mV",
         display_scale=MV,
+        applies=("sis2", VOLTAGE_SET.key),
     )
     frequency = IFSweep()
     point_delay = PointDelay(0.05)

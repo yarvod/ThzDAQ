@@ -5,6 +5,7 @@ import math
 from typing import Iterable, List, Optional, Tuple
 
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
+from thzdaq_instruments.quantities import ANGLE, VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, MV
 
 from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
@@ -58,6 +59,7 @@ class BiasVoltage(SweepParameter):
             unit="V",
             display_unit="mV",
             display_scale=MV,
+            applies=("bias", VOLTAGE_SET.key),
         )
 
 
@@ -98,7 +100,11 @@ class LoadDelay(FloatParameter):
 class GridAngle(SweepParameter):
     def __init__(self, default: Range, max_points: int):
         super().__init__(
-            "Grid angle", default=default, unit="deg", max_points=max_points
+            "Grid angle",
+            default=default,
+            unit="deg",
+            max_points=max_points,
+            applies=("grid", ANGLE.key),
         )
 
 

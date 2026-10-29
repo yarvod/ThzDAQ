@@ -1,3 +1,4 @@
+import time
 import shutil
 import sys
 from pathlib import Path
@@ -23,7 +24,7 @@ def lab(tmp_path):
 
     profile = tmp_path / "bench.yaml"
     shutil.copy(PROFILE, profile)
-    station = Station(load_station(profile), simulate=True)
+    station = Station(load_station(profile), pause=time.sleep, simulate=True)
     lanes = Lanes()
     bench = Bench(station, lanes, str(profile))
     assembled = assemble(bench, MeasurementStore(tmp_path / "data"), YamlProfiles())

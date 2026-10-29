@@ -13,6 +13,7 @@ from typing import (
     Optional,
     Protocol,
     Sequence,
+    Tuple,
 )
 
 from thzdaq_core.domain.data.measurement import (
@@ -42,7 +43,11 @@ class StationLike(Protocol):
     """What the runner needs from a bench (Station implements it)."""
 
     def require(
-        self, devices: Mapping[str, str], requirements: Mapping[str, Capabilities]
+        self,
+        devices: Mapping[str, str],
+        requirements: Mapping[str, Capabilities],
+        pause: Callable[[float], None],
+        planned: Iterable[Tuple[str, str, Sequence[float]]] = (),
     ) -> Dict[str, Any]:
         ...
 
@@ -51,6 +56,22 @@ class StationLike(Protocol):
 
     def snapshot(self, refs: Optional[Iterable[str]] = None) -> Dict[str, Any]:
         ...
+
+
+class RampPause:
+    """How the ramps of a run's devices wait between steps: a cancel stops a
+    ramp at once while the run goes; what the run restores at its end ramps to
+    the end."""
+
+    def __init__(self, cancel_event: threading.Event):
+        self._cancel = cancel_event
+        self.restoring = False
+
+    def __call__(self, seconds: float) -> None:
+        if self.restoring:
+            time.sleep(seconds)
+        elif self._cancel.wait(seconds):
+            raise Cancelled
 
 
 class RunObserver:
@@ -237,9 +258,11 @@ class MeasurementRunner:
         procedure.validate()
         required = procedure.slots()
         refs = slot_devices(procedure, devices)
-        # Fails before any file exists when a device is missing or unsuitable
-        found = self.station.require(refs, required)
         self._cancel.clear()
+        ramps = RampPause(self._cancel)
+        # Fails before any file exists when a device is missing or unsuitable,
+        # or the run would set it beyond its limits
+        found = self.station.require(refs, required, ramps, procedure.planned())
         measurement = Measurement(
             procedure=procedure.name,
             title=procedure.title,
@@ -282,6 +305,7 @@ class MeasurementRunner:
             status, error = FAILED, f"{e.__class__.__name__}: {e}"
             measurement.metadata["traceback"] = traceback.format_exc()
         finally:
+            ramps.restoring = True
             cleanup_errors = ctx._run_cleanups()
             if cleanup_errors:
                 measurement.metadata["cleanup_errors"] = cleanup_errors

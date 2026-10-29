@@ -1,3 +1,4 @@
+import time
 import subprocess
 import sys
 from pathlib import Path
@@ -70,7 +71,7 @@ class TestLegacyImport:
 
     def test_imported_station_runs_simulated(self):
         config, _ = station_from_legacy(LEGACY)
-        with Station(config, simulate=True) as station:
+        with Station(config, pause=time.sleep, simulate=True) as station:
             station["sis_bias_2"].set_voltage(2.5e-3)
             station["sis_coil_2"].set_current(1e-3)
             assert station["sis_bias_2"].offset_voltage == -0.000187

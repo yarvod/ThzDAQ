@@ -31,7 +31,7 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     LoMixin,
     side_bands,
     SpectrumMixin,
-    voltage_parameter,
+    SisBias,
 )
 
 NOISE_PLOTS = (
@@ -70,8 +70,8 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
         ),
     ) + NOISE_PLOTS  # fmt: skip
 
-    sis1_voltage = voltage_parameter("SIS1 bias", 2.6e-3)
-    sis2_voltage = voltage_parameter("SIS2 bias", 2.4e-3)
+    sis1_voltage = SisBias(1, 2.6e-3)
+    sis2_voltage = SisBias(2, 2.4e-3)
     frequency = IFSweep()
     tones = ChoiceParameter("Test tone sidebands", SIDE_BAND_CHOICES, default="both")
     chunk_size = IntParameter(
@@ -169,8 +169,8 @@ class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     plots = NOISE_PLOTS
 
     lo_frequency = LOFrequency(263 * GHZ)
-    sis1_voltage = voltage_parameter("SIS1 bias", 2.5e-3)
-    sis2_voltage = voltage_parameter("SIS2 bias", 2.5e-3)
+    sis1_voltage = SisBias(1, 2.5e-3)
+    sis2_voltage = SisBias(2, 2.5e-3)
     frequency = IFSweep()
     channels = ChoiceParameter("IF channels", SIDE_BAND_CHOICES, default="both")
     tone_off = BoolParameter(

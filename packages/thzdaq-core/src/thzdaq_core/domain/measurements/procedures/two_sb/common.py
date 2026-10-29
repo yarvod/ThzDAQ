@@ -24,6 +24,7 @@ from thzdaq_instruments.capabilities import (
     Switchable,
     TunableFilter,
 )
+from thzdaq_instruments.quantities import VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, KHZ, MV
 
 from thzdaq_analysis.noise import noise_temperature
@@ -56,12 +57,31 @@ SIDE_BAND_CHOICES = ("both", "upper", "lower")
 class SisBiasSweep(SweepParameter):
     def __init__(self, number: int, default):
         super().__init__(
-            f"SIS{number} bias",
+            sis_bias(number),
             default=default,
             unit="V",
             display_unit="mV",
             display_scale=MV,
+            applies=(f"sis{number}", VOLTAGE_SET.key),
         )
+
+
+class SisBias(FloatParameter):
+    def __init__(self, number: int, default: float):
+        super().__init__(
+            sis_bias(number),
+            default=default,
+            minimum=-30e-3,
+            maximum=30e-3,
+            unit="V",
+            display_unit="mV",
+            display_scale=MV,
+            applies=(f"sis{number}", VOLTAGE_SET.key),
+        )
+
+
+def sis_bias(number: int) -> str:
+    return f"SIS{number} bias"
 
 
 class LOFrequency(FloatParameter):
@@ -83,13 +103,6 @@ class PreciseBias(BoolParameter):
             default=default,
             help="Correct the bias by readback (slow: ~1 s per iteration)",
         )
-
-
-def voltage_parameter(label: str, default: float) -> FloatParameter:
-    return FloatParameter(
-        label, default=default, minimum=-30e-3, maximum=30e-3,
-        unit="V", display_unit="mV", display_scale=MV,
-    )  # fmt: skip
 
 
 class TwoSbProcedure(Procedure):

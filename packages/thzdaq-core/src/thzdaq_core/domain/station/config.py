@@ -7,7 +7,7 @@ its offsets and calibration). Configured devices live under their instrument.
 
 Devices are addressed by refs: "power_meter_1", "power_supply_3:1" for a
 fixed channel, or the id of a configured device ("sis_bias_1"); ids are
-unique within the station.
+unique within the station. The safety section limits devices by ref.
 """
 
 import re
@@ -17,6 +17,7 @@ from typing import Any, Dict, Hashable, Iterator, List, Optional, Tuple
 from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.station.safety import Safety
 
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 CHANNEL_SEPARATOR = ":"
@@ -55,6 +56,7 @@ class StationConfig:
     name: str
     instruments: Dict[str, InstrumentConfig] = field(default_factory=dict)
     description: str = ""
+    safety: Safety = field(default_factory=Safety)
 
     def devices(self) -> Iterator[Tuple[str, str, DeviceConfig]]:
         """(device id, instrument id, config) of every configured device."""
@@ -83,6 +85,11 @@ class StationConfig:
             seen[device_id] = instrument_id
             if not device.kind:
                 problems.append(f"device {device_id!r} has no kind")
+        for ref in self.safety.refs():
+            instrument_id = ref.split(CHANNEL_SEPARATOR, 1)[0]
+            if instrument_id not in self.instruments and ref not in seen:
+                problems.append(f"safety names no device of the station: {ref!r}")
+        problems.extend(self.safety.problems())
         return problems
 
     def validate(self) -> "StationConfig":

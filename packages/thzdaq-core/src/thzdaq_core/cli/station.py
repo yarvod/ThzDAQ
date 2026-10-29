@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import time
 from typing import List, Optional
 
 from thzdaq_instruments import InstrumentError
@@ -36,7 +37,7 @@ def cmd_import(args) -> int:
 
 def cmd_show(args) -> int:
     config = load_station(args.profile)
-    station = Station(config, simulate=True)
+    station = Station(config, pause=time.sleep, simulate=True)
     print(f"{config.name}: {config.description}".rstrip(": "))
     for instrument_id, spec in config.instruments.items():
         where = spec.connection.link_key if spec.connection else "-"
@@ -55,7 +56,9 @@ def cmd_show(args) -> int:
 
 def cmd_check(args) -> int:
     failures = 0
-    with Station(load_station(args.profile), simulate=args.simulate) as station:
+    with Station(
+        load_station(args.profile), pause=time.sleep, simulate=args.simulate
+    ) as station:
         refs = args.devices or [info.ref for info in station.devices()]
         for ref in refs:
             try:

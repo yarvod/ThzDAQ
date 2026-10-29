@@ -4,6 +4,7 @@ import math
 from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.procedures import REFLECTION
 from thzdaq_instruments.capabilities import NetworkAnalyzer, PowerLevel
+from thzdaq_instruments.quantities import POWER_LEVEL
 from thzdaq_instruments.units import GHZ, MV
 
 from thzdaq_core.domain.parameters import (
@@ -45,8 +46,9 @@ class SisReflection(Procedure):
         display_unit="GHz", display_scale=GHZ,
     )  # fmt: skip
     power = FloatParameter(
-        "VNA power", default=-30.0, minimum=-100, maximum=10, unit="dBm"
-    )
+        "VNA power", default=-30.0, minimum=-100, maximum=10, unit="dBm",
+        applies=("vna", POWER_LEVEL.key),
+    )  # fmt: skip
     s_parameters = MultiChoiceParameter("S-parameters", S_PARAMETERS, default=("S11",))
     averages = IntParameter("VNA averages", default=1, minimum=1, maximum=1000)
     samples = IntParameter("Traces per point", default=1, minimum=1, maximum=100)

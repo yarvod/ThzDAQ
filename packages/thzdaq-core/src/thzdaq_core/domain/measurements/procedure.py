@@ -122,6 +122,16 @@ class Procedure:
         """Cross-parameter problems; override in procedures."""
         return []
 
+    def planned(self) -> List[Tuple[str, str, Tuple[float, ...]]]:
+        """(slot, quantity key, values) the run sets its devices to, as far as
+        the parameters tell: the limits of the devices are checked before the
+        run starts."""
+        return [
+            (*parameter.applies, parameter.bounds(getattr(self, key)))
+            for key, parameter in self.parameters().items()
+            if parameter.applies is not None
+        ]
+
     def validate(self) -> None:
         problems = []
         for key in self.parameters():

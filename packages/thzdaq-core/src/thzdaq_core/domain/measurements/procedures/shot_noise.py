@@ -2,6 +2,7 @@ from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import SHOT_NOISE
 from thzdaq_instruments.capabilities import PowerDetector, TunableFilter
 from thzdaq_instruments.readings import linspace
+from thzdaq_instruments.quantities import VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, MV, dbm_to_watt
 
 from thzdaq_analysis.shot_noise import (
@@ -44,10 +45,20 @@ class ShotNoise(Procedure):
     )  # fmt: skip
 
     voltage1 = FloatParameter(
-        "Bias 1", default=15e-3, unit="V", display_unit="mV", display_scale=MV
+        "Bias 1",
+        default=15e-3,
+        unit="V",
+        display_unit="mV",
+        display_scale=MV,
+        applies=("bias", VOLTAGE_SET.key),
     )
     voltage2 = FloatParameter(
-        "Bias 2", default=20e-3, unit="V", display_unit="mV", display_scale=MV
+        "Bias 2",
+        default=20e-3,
+        unit="V",
+        display_unit="mV",
+        display_scale=MV,
+        applies=("bias", VOLTAGE_SET.key),
     )
     resistance_span = FloatParameter(
         "Rd fit span", default=0.05, minimum=0.001, maximum=0.5,

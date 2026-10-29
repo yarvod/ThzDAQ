@@ -1,3 +1,4 @@
+import time
 import math
 
 import pytest
@@ -99,7 +100,7 @@ class Bench:
         ...
 
     # StationLike
-    def require(self, devices, requirements):
+    def require(self, devices, requirements, pause, planned=()):
         return {slot: self.ports[slot] for slot in requirements}
 
     def device_use(self, ref):
@@ -326,7 +327,7 @@ class TestActivePlots:
         from thzdaq_core.adapters.yaml_profiles import load_station
 
         example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
-        station = Station(load_station(example))
+        station = Station(load_station(example), pause=time.sleep)
         monitor = get_procedure("monitor.time")(
             watch=("power_meter_1", "sis_bias_1/voltage", "sis_coil_1")
         )
@@ -373,7 +374,7 @@ class TestHotColdContrast:
         from thzdaq_instruments.sim.power_meter import T_RECEIVER
 
         example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
-        with Station(load_station(example), simulate=True) as station:
+        with Station(load_station(example), pause=time.sleep, simulate=True) as station:
             detector = station.instrument("power_meter_1")
             alone = detector.read_power()  # no load open: as the profile says
             chopper = station.instrument("chopper_1")

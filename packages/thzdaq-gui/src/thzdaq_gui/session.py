@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -66,7 +67,9 @@ class Session(QObject):
         return any(runner.running for runner in self.runners)
 
     def load_station(self, path, simulate: bool = False) -> Station:
-        station = Station(load_station(path), simulate=simulate, lively=self.lively)
+        station = Station(
+            load_station(path), pause=time.sleep, simulate=simulate, lively=self.lively
+        )
         self._close_station()
         self.station, self.path, self.simulate = station, Path(path), simulate
         logger.info(f"Station {station.name} loaded from {path} (simulate={simulate})")

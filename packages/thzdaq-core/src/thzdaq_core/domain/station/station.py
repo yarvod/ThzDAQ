@@ -9,6 +9,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -16,10 +17,17 @@ from typing import (
 
 from thzdaq_instruments import default_registry
 from thzdaq_instruments.actions import Action, actions_for
-from thzdaq_instruments.capabilities import capabilities_of
+from thzdaq_instruments.capabilities import OutputProtection, capabilities_of
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.instrument import Instrument
-from thzdaq_instruments.quantities import Quantity, quantities_for, quantities_of
+from thzdaq_instruments.limits import Limit
+from thzdaq_instruments.quantities import (
+    CURRENT_SET,
+    VOLTAGE_SET,
+    Quantity,
+    quantities_for,
+    quantities_of,
+)
 from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_instruments.transport.pool import TransportPool, default_pool
 
@@ -32,12 +40,18 @@ from thzdaq_core.domain.station.config import (
     channel_ref,
 )
 from thzdaq_core.domain.station.kinds import DeviceKind, kind_capabilities, kinds_for
+from thzdaq_core.domain.station.ports import GuardedPort, Pause
 from thzdaq_core.domain.station.profile import station_to_dict
+from thzdaq_core.domain.station.safety import Guard
 
 logger = logging.getLogger(__name__)
 
 Capabilities = Union[Type, Tuple[Type, ...]]
 Requirements = Mapping[str, Capabilities]
+# (slot, quantity key, values) a run sets the device of a slot to
+Planned = Tuple[str, str, Sequence[float]]
+
+NUMBERS = ("float", "int")  # kinds of quantities a guard checks and ramps
 
 INSTRUMENT = "instrument"
 CHANNEL = "channel"
@@ -87,19 +101,23 @@ class Station:
     """Runtime bench: opens instruments on first use and hands out devices.
 
     Measurements get devices by ref and check capabilities (station.require),
-    never drivers, so the same procedure runs on any bench or simulator.
+    never drivers, so the same procedure runs on any bench or simulator. Every
+    device is handed out guarded (GuardedPort): the passport of its driver and
+    the safety section of the profile hold whoever sets it.
     """
 
     def __init__(
         self,
         config: StationConfig,
         *,
+        pause: Pause,
         registry: Optional[DriverRegistry] = None,
         pool: Optional[TransportPool] = None,
         simulate: bool = False,
         lively: bool = False,
     ):
         self.config = config.validate()
+        self.pause = pause  # how ramps outside measurements wait between steps
         self.registry = registry or default_registry()
         self.pool = pool
         self.simulate = simulate
@@ -107,8 +125,9 @@ class Station:
         # exact values
         self.lively = lively
         self._instruments: Dict[str, Instrument] = {}
-        self._devices: Dict[str, Any] = {}
+        self._devices: Dict[str, GuardedPort] = {}
         self._lock = threading.RLock()
+        self._check_safety()
 
     @property
     def name(self) -> str:
@@ -164,7 +183,25 @@ class Station:
                 # hot/cold give a receiver's Y, not the drift of two sweeps
                 instrument.load_position = self._simulated_load
             self._instruments[instrument_id] = instrument
+            self._protect(instrument_id)
             return instrument
+
+    def _protect(self, instrument_id: str) -> None:
+        """Supply outputs of the instrument keep the bench maxima of voltage
+        and current themselves (OVP, OCP), when the profile asks for it."""
+        safety = self.config.safety
+        if not safety.hardware_protection:
+            return
+        for ref, limits in safety.limits.items():
+            info = self.info(ref)
+            if info.instrument != instrument_id or not info.provides(OutputProtection):
+                continue
+            voltage, current = (limits.get(q.key) for q in (VOLTAGE_SET, CURRENT_SET))
+            if voltage or current:
+                self._part(ref).set_protection(
+                    voltage.maximum if voltage else None,
+                    current.maximum if current else None,
+                )
 
     def _simulated_load(self) -> Optional[str]:
         """Where the open simulated load switch (a chopper) is: hot, cold, None."""
@@ -330,25 +367,30 @@ class Station:
     def __getitem__(self, ref: str) -> Any:
         return self.device(ref)
 
-    def device(self, ref: str) -> Any:
+    def device(self, ref: str) -> GuardedPort:
+        """The device of a ref, guarded; opens its instrument on first use."""
         with self._lock:
-            if ref in self._devices:
-                return self._devices[ref]
-            if ref in self.config.instruments:
-                device = self.instrument(ref)
-            elif CHANNEL_SEPARATOR in ref:
-                instrument_id, key = ref.split(CHANNEL_SEPARATOR, 1)
-                cls = self.driver_class(instrument_id)
-                matches = [k for k in cls.fixed_channels() if str(k) == key]
-                if not matches:
-                    raise StationError(
-                        f"{self.name}: {instrument_id} has no channel {key}"
-                    )
-                device = self.instrument(instrument_id).channel(matches[0])
-            else:
-                device = self._build_configured(ref)
-            self._devices[ref] = device
-            return device
+            if ref not in self._devices:
+                part = self._part(ref)
+                guarded = [
+                    q for q in self.quantities(ref) if q.setters and q.kind in NUMBERS
+                ]
+                self._devices[ref] = GuardedPort(
+                    part, self.guard(ref), guarded, self.pause
+                )
+            return self._devices[ref]
+
+    def _part(self, ref: str) -> Any:
+        if ref in self.config.instruments:
+            return self.instrument(ref)
+        if CHANNEL_SEPARATOR in ref:
+            instrument_id, key = ref.split(CHANNEL_SEPARATOR, 1)
+            cls = self.driver_class(instrument_id)
+            matches = [k for k in cls.fixed_channels() if str(k) == key]
+            if not matches:
+                raise StationError(f"{self.name}: {instrument_id} has no channel {key}")
+            return self.instrument(instrument_id).channel(matches[0])
+        return self._build_configured(ref)
 
     def _build_configured(self, device_id: str) -> Any:
         found = self.config.find_device(device_id)
@@ -393,6 +435,26 @@ class Station:
         own = getattr(self.part_class(ref), "quantities", ())
         return quantities_for(self.info(ref).capabilities, own)
 
+    def passport(self, ref: str) -> Mapping[str, Limit]:
+        """What the instrument of a device accepts at all: its real driver's
+        passport, also when it is simulated."""
+        info = self.info(ref)
+        driver = self.registry.get(self._spec(info.instrument).driver).cls
+        return driver.passport(info.channel)
+
+    def guard(self, ref: str) -> Guard:
+        """What a device accepts and how it changes, known without opening it."""
+        return Guard(ref, self.passport(ref), self.config.safety.limits.get(ref, {}))
+
+    def limit_problems(self, ref: str, key: str, values: Iterable[float]) -> List[str]:
+        """Why these values of a quantity cannot be set; empty when they can."""
+        found = [q for q in self.quantities(ref) if q.key == key]
+        if not found:
+            return [f"{ref} has no {key}"]
+        guard = self.guard(ref)
+        problems = (guard.problem(found[0], value) for value in values)
+        return list(dict.fromkeys(p for p in problems if p))
+
     def actions(self, ref: str) -> List[Action]:
         """What a device does on request, known without opening anything: from
         its capabilities, its driver and, for a configured device, its kind."""
@@ -422,9 +484,15 @@ class Station:
         )
 
     def require(
-        self, devices: Mapping[str, str], requirements: Requirements
-    ) -> Dict[str, Any]:
-        """Devices for measurement slots, capabilities checked; every problem at once."""
+        self,
+        devices: Mapping[str, str],
+        requirements: Requirements,
+        pause: Pause,
+        planned: Iterable[Planned] = (),
+    ) -> Dict[str, GuardedPort]:
+        """Devices for measurement slots: capabilities checked, and the values
+        the run sets them to checked against their limits; every problem at
+        once. Their ramps wait with pause (a run's, which a cancel stops)."""
         problems = []
         found = {}
         for slot, capabilities in requirements.items():
@@ -444,22 +512,60 @@ class Station:
                 problems.append(f"{slot}: {self.title(ref)} lacks {', '.join(missing)}")
                 continue
             found[slot] = device
+        for slot, key, values in planned:
+            if slot in found:
+                for problem in self.limit_problems(devices[slot], key, values):
+                    problems.append(f"{slot}: {problem}")
         if problems:
             raise StationError(f"{self.name}: " + "; ".join(problems))
-        return found
+        return {slot: device.pausing(pause) for slot, device in found.items()}
 
     # Lifecycle and metadata
+    def _check_safety(self) -> None:
+        """The safety section guards devices and quantities that exist: a
+        misspelt one would leave a device unguarded."""
+        problems = []
+        safety = self.config.safety
+        for ref in safety.refs():
+            try:
+                settable = {q.key: q for q in self.quantities(ref) if q.settable}
+            except (InstrumentError, StationError) as e:
+                problems.append(f"safety of {ref}: {e}")
+                continue
+            for key in safety.limits.get(ref, {}):
+                quantity = settable.get(key)
+                if quantity is None or quantity.kind not in NUMBERS:
+                    problems.append(f"safety of {ref}: {key} is no number it sets")
+            for key, value in safety.safe_state.get(ref, {}).items():
+                if key not in settable:
+                    problems.append(f"safe state of {ref}: it does not set {key}")
+                    continue
+                try:
+                    settable[key].parse(value)
+                except ValueError as e:
+                    problems.append(f"safe state of {ref}: {e}")
+        if problems:
+            raise StationError(f"{self.name}: " + "; ".join(problems))
+
     def reconfigure(self, config: StationConfig) -> None:
-        """Take an edited profile; instruments whose setup changed are reopened."""
-        config.validate()
+        """Take an edited profile; instruments whose setup changed are reopened,
+        open supplies take changed protection levels."""
+        # A station of the edited profile checks it; it opens nothing
+        Station(
+            config, pause=self.pause, registry=self.registry, simulate=self.simulate
+        )
         with self._lock:
             for instrument_id in list(self._instruments):
                 old = self.config.instruments.get(instrument_id)
                 new = config.instruments.get(instrument_id)
                 if new is None or old is None or _opening_changed(old, new):
                     self.close_instrument(instrument_id)
+            protection_changed = config.safety != self.config.safety
             self.config = config
             self._devices.clear()
+            if protection_changed:
+                for instrument_id in list(self._instruments):
+                    self._protect(instrument_id)
 
     def snapshot(self, refs: Optional[Iterable[str]] = None) -> Dict[str, Any]:
         """Profile plus identities of opened instruments, for measurement metadata.

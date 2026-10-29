@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -104,7 +105,7 @@ class TestStation:
             sis_bias_1={"on": "sis", "kind": "sis_bias", "channel": "DEV4", "title": "b1d4"},
             sis_coil_1={"on": "sis", "kind": "sis_coil", "channel": "DEV3"},
         )  # fmt: skip
-        station = Station(config)
+        station = Station(config, pause=time.sleep)
         refs = {info.ref: info for info in station.devices()}
         assert list(refs) == [
             "supply", "supply:1", "supply:2", "supply:3",
@@ -122,13 +123,14 @@ class TestStation:
             sis_bias_2={"on": "sis", "kind": "sis_bias", "channel": "DEV2"},
         )
         config.instruments["generator"].settings = {"frequency_multiplier": 18}
-        with Station(config) as station:
+        with Station(config, pause=time.sleep) as station:
             assert station["sis_bias_1"] is station.device("sis_bias_1")
             assert station["sis_bias_1"].instrument is station["sis_bias_2"].instrument
             assert station.opened == ("sis",)
             # A simulator starts configured as the profile says
             assert station["generator"].get_frequency_multiplier() == 18
-            assert station["supply:3"] is station.instrument("supply").channel(3)
+            # Handed out guarded, over the instrument's own channel
+            assert station["supply:3"].target is station.instrument("supply").channel(3)
         assert station.opened == ()
 
     def test_two_configs_on_one_channel_keep_their_offsets(self):
@@ -142,7 +144,7 @@ class TestStation:
                 "settings": {"offset_voltage": -1e-5},
             },
         )  # fmt: skip
-        with Station(config) as station:
+        with Station(config, pause=time.sleep) as station:
             one, seven = station["sis_bias_1"], station["sis_bias_7"]
             channel = station.instrument("sis").channel("DEV4")
             seven.get_voltage()
@@ -156,7 +158,7 @@ class TestStation:
             weird={"on": "generator", "kind": "sis_bias"},
             coil={"on": "sis", "kind": "sis_coil"},
         )
-        with Station(config) as station:
+        with Station(config, pause=time.sleep) as station:
             with pytest.raises(StationError, match="no device kind"):
                 station.device("weird")
             with pytest.raises(StationError, match="channel is required"):
@@ -166,9 +168,9 @@ class TestStation:
 
     def test_require_reports_all_problems(self):
         config = sim_station()
-        with Station(config) as station:
+        with Station(config, pause=time.sleep) as station:
             found = station.require(
-                {"if_selector": "supply:2"}, {"if_selector": Switchable}
+                {"if_selector": "supply:2"}, {"if_selector": Switchable}, time.sleep
             )
             assert set(found) == {"if_selector"}
             with pytest.raises(StationError) as error:
@@ -179,6 +181,7 @@ class TestStation:
                         "detector": PowerDetector,
                         "load": LoadSwitch,
                     },
+                    time.sleep,
                 )
             message = str(error.value)
             assert "detector" in message and "PowerDetector" in message
@@ -193,12 +196,12 @@ class TestStation:
                 "bad", instruments={"1st": InstrumentConfig("sim.chopper")}
             ).validate()
         with pytest.raises(StationError):
-            Station(sim_station()).instrument("nope")
+            Station(sim_station(), pause=time.sleep).instrument("nope")
         assert sim_station().next_id("power_supply") == "power_supply_1"
 
     def test_reconfigure_reopens_only_changed_instruments(self):
         config = sim_station()
-        with Station(config) as station:
+        with Station(config, pause=time.sleep) as station:
             supply = station.instrument("supply")
             station.instrument("generator")
             edited = sim_station()
@@ -214,7 +217,9 @@ class TestStation:
         rigol = InstrumentConfig(
             "rigol.dp832a", ConnectionSpec(SOCKET, host="h", port=5555)
         )
-        station = Station(StationConfig("bench", {"rigol": rigol}), pool=pool)
+        station = Station(
+            StationConfig("bench", {"rigol": rigol}), pause=time.sleep, pool=pool
+        )
         assert station["rigol:2"].get_output() is True
         assert station.snapshot()["identities"] == {
             "rigol": "RIGOL TECHNOLOGIES,DP832A"
@@ -249,7 +254,7 @@ class TestStation:
                 "chopper": InstrumentConfig("sim.chopper"),
             },
         )  # fmt: skip
-        with Station(config, pool=pool) as station:
+        with Station(config, pause=time.sleep, pool=pool) as station:
             connections = {c.label: c for c in station.connections()}
             assert set(connections) == {"Socket h:5555", "Prologix 10.0.0.3:1234"}
             assert connections["Prologix 10.0.0.3:1234"].instruments == ("LO", "Tone")
@@ -275,7 +280,7 @@ class TestStation:
                 )
             },
         )
-        with Station(config, simulate=True) as station:
+        with Station(config, pause=time.sleep, simulate=True) as station:
             assert station["power_meter_1"].read_power() == -12.5
 
     def test_failed_instrument_is_reported_by_require(self):
@@ -295,15 +300,17 @@ class TestStation:
             },
         )
         pool = TransportPool(lambda spec: FakeLink())
-        with Station(config, registry=registry, pool=pool) as station:
+        with Station(config, pause=time.sleep, registry=registry, pool=pool) as station:
             with pytest.raises(StationError, match="no route to host"):
-                station.require({"supply": "broken:1"}, {"supply": Switchable})
+                station.require(
+                    {"supply": "broken:1"}, {"supply": Switchable}, time.sleep
+                )
 
 
 class TestStorage:
     def test_example_profile_runs_simulated_2sb_bench(self):
-        with Station(load_station(EXAMPLE), simulate=True) as station:
-            found = station.require(TWO_SB_DEVICES, TWO_SB_REQUIREMENTS)
+        with Station(load_station(EXAMPLE), pause=time.sleep, simulate=True) as station:
+            found = station.require(TWO_SB_DEVICES, TWO_SB_REQUIREMENTS, time.sleep)
             found["lo"].set_frequency(223e9)  # at the mixer: the generator multiplies
             assert found["lo"].get_frequency_multiplier() == 18
             assert found["lo"].get_frequency() == pytest.approx(223e9)
@@ -317,9 +324,9 @@ class TestStorage:
         config = load_station(LAB)
         biases = [d for d, _, spec in config.devices() if spec.kind == "sis_bias"]
         assert len(biases) == 7
-        assert Station(config, simulate=True).info("sis_bias_4").instrument == (
-            "sis_block_2"
-        )
+        assert Station(config, pause=time.sleep, simulate=True).info(
+            "sis_bias_4"
+        ).instrument == ("sis_block_2")
 
     def test_roundtrip_keeps_everything(self):
         config = load_station(EXAMPLE)
@@ -464,7 +471,7 @@ def test_snapshot_asks_only_the_measurement_instruments():
             "chopper": InstrumentConfig("chopper.modbus", simulate=True),
         },
     )
-    station = Station(config)
+    station = Station(config, pause=time.sleep)
     station.instrument("supply")
     chopper = station.instrument("chopper")
     asked = []

@@ -1,11 +1,17 @@
-"""Adapters a configured device puts over an instrument part.
+"""Adapters over an instrument part: the attributes of a configured device,
+the guard every device is handed out in.
 
 An adapter delegates every attribute it doesn't override to the wrapped part.
 """
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+
+from thzdaq_instruments.quantities import Quantity
 
 from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.station.safety import Guard
+
+Pause = Callable[[float], None]  # waits so many seconds
 
 
 class PortAdapter:
@@ -62,3 +68,76 @@ class AttributePort(PortAdapter):
             setattr(self.target, name, value)
         else:
             super().__setattr__(name, value)
+
+
+class GuardedPort(PortAdapter):
+    """A device as the station hands it out. Every call that sets a quantity
+    (its Quantity.setters) is checked by the guard first, so nothing outside
+    the limits reaches the instrument whoever calls; a change larger than the
+    bench step goes in steps, pausing between them for the bench rate.
+
+    The value before a change is the setpoint last written through the device
+    (read once when there is none yet), so a sweep costs no extra query. The
+    ports of one device share it; each waits with its own pause (a run's stops
+    on cancel).
+    """
+
+    def __init__(
+        self,
+        target: Any,
+        guard: Guard,
+        quantities: Iterable[Quantity],
+        pause: Pause,
+        setpoints: Optional[Dict[str, float]] = None,
+    ):
+        super().__init__(target)
+        self.guard = guard
+        self.setters = {name: q for q in quantities for name in q.setters}
+        self.pause = pause
+        self.setpoints: Dict[str, float] = {} if setpoints is None else setpoints
+
+    def pausing(self, pause: Pause) -> "GuardedPort":
+        """The same device, its ramps waiting with another pause."""
+        quantities = set(self.setters.values())
+        return GuardedPort(self.target, self.guard, quantities, pause, self.setpoints)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ("target", "guard", "setters", "pause", "setpoints"):
+            raise AttributeError(name)
+        value = getattr(self.target, name)
+        quantity = self.setters.get(name)
+        if quantity is None:
+            return value
+
+        def guarded(new: float, *args, **kwargs):
+            return self._set(quantity, value, new, args, kwargs)
+
+        return guarded
+
+    def _set(
+        self,
+        quantity: Quantity,
+        method: Callable[..., Any],
+        value: float,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+    ) -> Any:
+        key = quantity.key
+        self.guard.check(quantity, value)
+        before = self._before(quantity) if self.guard.ramps(key) else None
+        plain = getattr(self.target, quantity.setters[0])
+        last = before
+        for step in self.guard.ladder(key, before, value)[:-1]:
+            plain(step)
+            self.setpoints[key] = step
+            self.pause(self.guard.delay(key, step - last))
+            last = step
+        result = method(value, *args, **kwargs)
+        self.setpoints[key] = value
+        return result
+
+    def _before(self, quantity: Quantity) -> Optional[float]:
+        """The setpoint now: the last one written, else read once."""
+        if quantity.key not in self.setpoints and quantity.readable:
+            self.setpoints[quantity.key] = quantity.read(self.target)
+        return self.setpoints.get(quantity.key)

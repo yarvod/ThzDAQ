@@ -1,3 +1,4 @@
+import time
 import json
 
 import pytest
@@ -985,7 +986,7 @@ class TestHangs:
                 "rigol.dp832a", ConnectionSpec(SOCKET, host="h", port=5555), title="Rigol"
             )},
         )  # fmt: skip
-        station = Station(config, pool=pool)
+        station = Station(config, pause=time.sleep, pool=pool)
         group = ConnectionsGroup(station)
         (state,) = group.rows.values()
         assert state.text() == "not connected"
