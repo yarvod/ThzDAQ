@@ -15,6 +15,7 @@ the snapshot knows it too.
 import threading
 import time
 from collections import OrderedDict
+from itertools import islice
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -30,7 +31,7 @@ from thzdaq_api.events import (
     MeasurementStarted,
 )
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
-from thzdaq_api.measurements import PLANNED, RunInfo
+from thzdaq_api.measurements import PLANNED, RunInfo, RunSnapshot
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
@@ -81,6 +82,26 @@ class _Run(RunObserver):
         # What the run set and has not told yet, and when each was last told
         self._unset: Dict[Tuple[str, str], float] = {}
         self._told: Dict[Tuple[str, str], float] = {}
+        # Published rows and state share a boundary with the event stream.
+        self._snapshot_lock = threading.RLock()
+        self._published: Dict[str, int] = {}
+        self._visible: Optional[RunInfo] = None
+        self._plots = ()
+        self._seq = 0
+
+    def snapshot(self) -> RunSnapshot:
+        with self._snapshot_lock:
+            rows = {
+                table: tuple(
+                    encode_values(row)
+                    for row in islice(self.measurement.tables[table].rows(), count)
+                )
+                for table, count in self._published.items()
+            }
+            return RunSnapshot(self._visible, self._plots, rows, self._seq)
+
+    def _publish(self, body) -> None:
+        self._seq = self.events.publish(body).seq
 
     def info(self) -> RunInfo:
         m = self.measurement
@@ -123,7 +144,10 @@ class _Run(RunObserver):
         refs = {slot: use.ref for slot, use in measurement.devices.items()}
         plots = self.procedure.active_plots(lambda slot: station.quantities(refs[slot]))
         self.started = self.info()
-        self.events.publish(MeasurementStarted(self.started, tuple(plots)))
+        with self._snapshot_lock:
+            self._visible = self.started
+            self._plots = tuple(plots)
+            self._publish(MeasurementStarted(self.started, self._plots))
         self.ready.set()
 
     def on_record(self, table: str, record: Dict[str, Any]) -> None:
@@ -150,9 +174,11 @@ class _Run(RunObserver):
         self.events.publish(QuantitySet(ref, key, value, origin=f"#{self.id}"))
 
     def on_progress(self, done: int, total: Optional[int]) -> None:
-        self._flush()
-        self.done, self.total = done, total
-        self.events.publish(MeasurementProgress(self.measurement.id, done, total))
+        with self._snapshot_lock:
+            self._flush()
+            self.done, self.total = done, total
+            self._visible = self.info()
+            self._publish(MeasurementProgress(self.measurement.id, done, total))
 
     def on_log(self, message: str) -> None:
         self._flush()
@@ -161,8 +187,10 @@ class _Run(RunObserver):
     def on_finished(self, measurement: Measurement) -> None:
         for quantity in list(self._unset):
             self._tell(quantity)  # the last values, however recent
-        self._flush()
-        self.events.publish(MeasurementFinished(self.info()))
+        with self._snapshot_lock:
+            self._flush()
+            self._visible = self.info()
+            self._publish(MeasurementFinished(self._visible))
 
     def note(self, key: str, entry: Dict[str, Any]) -> None:
         """Into the measurement's metadata (saved with it): conflicts, interactions."""
@@ -171,12 +199,14 @@ class _Run(RunObserver):
 
     def _flush(self) -> None:
         self._tell_due()
-        batch, self._batch = self._batch, {}
-        self._flushed = time.monotonic()
-        for table, rows in batch.items():
-            self.events.publish(
-                MeasurementRecords(self.measurement.id, table, tuple(rows))
-            )
+        with self._snapshot_lock:
+            batch, self._batch = self._batch, {}
+            self._flushed = time.monotonic()
+            for table, rows in batch.items():
+                self._published[table] = self._published.get(table, 0) + len(rows)
+                self._publish(
+                    MeasurementRecords(self.measurement.id, table, tuple(rows))
+                )
 
 
 def conflicting(error: LeaseConflict) -> LabError:
@@ -361,6 +391,9 @@ class Runs:
 
     def get(self, run_id: int) -> RunInfo:
         return self._run(run_id).info()
+
+    def snapshot(self, run_id: int) -> RunSnapshot:
+        return self._run(run_id).snapshot()
 
     def all(self) -> Tuple[RunInfo, ...]:
         with self._lock:

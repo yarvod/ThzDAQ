@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from lab_helpers import bodies
+from lab_helpers import bodies, wait_for
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import (
     MeasurementFinished,
@@ -14,6 +14,7 @@ from thzdaq_api.events import (
 from thzdaq_api.measurements import (
     CancelMeasurement,
     DescribeProcedure,
+    GetRunSnapshot,
     ListProcedures,
     ListRuns,
     StartMeasurement,
@@ -127,6 +128,38 @@ def test_measurements_run_side_by_side_and_stop(lab):
     assert lab.call(WaitMeasurement(id=monitor.id, timeout=0)).status == "running"
     lab.call(CancelMeasurement(id=monitor.id))
     assert ended(lab, monitor.id).status == "cancelled"
+
+
+def test_run_snapshot_and_later_events_contain_each_row_once(lab):
+    from thzdaq_api.measurement_file import read_measurement
+
+    run = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR))
+    initial = []
+    stop_initial = lab.subscribe(initial.append)
+    wait_for(lambda: len(bodies(initial, MeasurementProgress)) >= 3)
+    snapshot = lab.call(GetRunSnapshot(id=run.id))
+    stop_initial()
+    assert snapshot.run.id == run.id
+    assert {plot.title for plot in snapshot.plots} == {"P-t"}
+    assert snapshot.rows["samples"]
+    heard = []
+    unsubscribe = lab.subscribe(heard.append, since=snapshot.seq)
+    wait_for(lambda: len(bodies(heard, MeasurementRecords)) >= 2)
+    lab.call(CancelMeasurement(id=run.id))
+    done = ended(lab, run.id)
+    final = lab.call(GetRunSnapshot(id=run.id))
+    unsubscribe()
+    rows = list(snapshot.rows.get("samples", ()))
+    rows.extend(
+        row for batch in bodies(heard, MeasurementRecords) for row in batch.rows
+    )
+    assert rows == list(final.rows["samples"])
+    assert len(rows) == read_measurement(done.path).size
+    assert final.run.status == "cancelled"
+    assert final.seq >= snapshot.seq
+    with pytest.raises(LabError) as caught:
+        lab.call(GetRunSnapshot(id=99999))
+    assert caught.value.code == ErrorCode.NOT_FOUND
 
 
 @pytest.mark.parametrize(

@@ -93,6 +93,16 @@ class ListRuns(Handler[api.ListRuns, Tuple[api.RunInfo, ...]]):
         return self.runs.all()
 
 
+class GetRunSnapshot(Handler[api.GetRunSnapshot, api.RunSnapshot]):
+    operation = api.GetRunSnapshot
+
+    def __init__(self, runs: Runs):
+        self.runs = runs
+
+    def handle(self, args, origin):
+        return self.runs.snapshot(args.id)
+
+
 class WaitMeasurement(Handler[api.WaitMeasurement, api.RunInfo]):
     operation = api.WaitMeasurement
 
