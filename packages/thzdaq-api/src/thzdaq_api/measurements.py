@@ -215,6 +215,26 @@ class ListRuns(Operation[Tuple[RunInfo, ...]]):
     lately."""
 
 
+class RunSnapshot(msgspec.Struct, frozen=True):
+    """The published state of a run; follow events after seq to continue it.
+
+    Rows use the same value encoding as MeasurementRecords. Pending batches
+    are excluded: they will arrive in events after this snapshot.
+    """
+
+    run: RunInfo
+    plots: Tuple[PlotInfo, ...]
+    rows: Dict[str, Tuple[Dict[str, Any], ...]]
+    seq: int
+
+
+class GetRunSnapshot(Operation[RunSnapshot]):
+    """Catch up with a running or recently finished measurement, including
+    its published records and the plots of this particular run."""
+
+    id: int
+
+
 class WaitMeasurement(Operation[RunInfo]):
     """Wait until a measurement ends, at most `timeout` seconds (up to 60);
     returns how it stands. Call again while it runs."""

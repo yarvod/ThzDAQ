@@ -23,6 +23,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     measurements.DescribeProcedure,
     measurements.StartMeasurement,
     measurements.ListRuns,
+    measurements.GetRunSnapshot,
     measurements.WaitMeasurement,
     measurements.CancelMeasurement,
     measurements.AbortMeasurement,
