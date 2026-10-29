@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE
-from thzdaq_core.domain.measurements.procedures.monitor import default_quantities
+from thzdaq_api.procedures import default_quantities
 from thzdaq_core.domain.measurements.catalog import get_procedure
 from thzdaq_core.domain.measurements.procedures.common import POWER_DBM, S_DB
 from thzdaq_core.domain.sis.calibration import (

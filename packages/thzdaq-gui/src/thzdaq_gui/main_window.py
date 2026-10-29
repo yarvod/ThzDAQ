@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
         lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
         self.modes = {m.key: m for m in (lite, Pro())}
         self.mode = self.modes.get(mode or self.settings.value(MODE), lite)
-        self.hub = GraphHub(self)
+        self.hub = GraphHub(session.procedures(), self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
 

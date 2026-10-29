@@ -9,7 +9,7 @@ titles and units taken from the measurement's column descriptions.
 import bisect
 import math
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pyqtgraph as pg
@@ -29,9 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_api.measurement_file import Column, Measurement
-from thzdaq_api.measurements import PlotInfo
-from thzdaq_core.domain.measurements.procedures.monitor import plot_for
-from thzdaq_core.domain.measurements.catalog import list_procedures
+from thzdaq_api.measurements import PlotInfo, ProcedureSummary
+from thzdaq_api.procedures import plot_for
 
 from thzdaq_gui import theme
 
@@ -427,14 +426,21 @@ class GraphHub(QObject):
     graph_removed = Signal(object)  # a custom graph to delete
     custom_changed = Signal()  # the custom graphs to remember
 
-    def __init__(self, parent=None):
+    def __init__(self, procedures: Iterable[ProcedureSummary] = (), parent=None):
+        """procedures: the catalog (list_procedures): their plots are the graphs."""
         super().__init__(parent)
         self.graphs: Dict[str, QWidget] = {}
         self.specs: Dict[str, PlotInfo] = {}
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
-        for cls in list_procedures():
-            for spec in cls.plots:
+        self.plots: Dict[str, Tuple[PlotInfo, ...]] = {}
+        for procedure in procedures:
+            self.plots[procedure.name] = procedure.plots
+            for spec in procedure.plots:
                 self.specs.setdefault(spec.title, spec)
+
+    def plots_of(self, procedure: str) -> Tuple[PlotInfo, ...]:
+        """The plots of a procedure; none for one this bench does not know."""
+        return self.plots.get(procedure, ())
 
     def titles(self) -> List[str]:
         return list(self.specs) + [t for t in self.graphs if t not in self.specs]

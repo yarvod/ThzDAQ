@@ -1,10 +1,11 @@
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_api.lab import Lab
+from thzdaq_api.measurements import ListProcedures, ProcedureSummary
 from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station, save_station
 from thzdaq_core.application.assembly import Assembled, assemble
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 # A TCP connection unused this long is closed (reopened on the next command):
 # an R&S instrument stays in remote with a client connected
 IDLE_CONNECTION_S = 5.0
+EMPTY = "bench"  # the profile of the lab before one is loaded
 
 
 class Session(QObject):
@@ -59,9 +61,11 @@ class Session(QObject):
         self.lab: Optional[Lab] = None
         self.bridge = Bridge(self)
         self._assembled: Optional[Assembled] = None
+        self._procedures: Optional[Tuple[ProcedureSummary, ...]] = None
         self.path: Optional[Path] = None
         self.simulate = False
         self.lively = True  # simulators drift and get noisy (tests turn it off)
+        self._open_lab(Station(StationConfig(EMPTY), pause=time.sleep), False)
         self.idleTimer = QTimer(self)
         self.idleTimer.timeout.connect(self.close_idle_connections)
         self.idleTimer.start(1000)
@@ -77,6 +81,13 @@ class Session(QObject):
         run.finished.connect(self.measurements.refresh_item)
         self.runs.append(run)
         return run
+
+    def procedures(self) -> Tuple[ProcedureSummary, ...]:
+        """The procedures the bench runs, with their plots; asked once, they
+        do not change."""
+        if self._procedures is None:
+            self._procedures = self.lab.call(ListProcedures())
+        return self._procedures
 
     def busy(self) -> bool:
         return any(run.running for run in self.runs)
@@ -121,7 +132,8 @@ class Session(QObject):
         """The use cases around this station, in this process; the lanes are
         the worker's, so manual control and the lab take turns per instrument."""
         root = self.data_root
-        bench = Bench(station, self.worker.lanes, str(self.path))
+        path = str(self.path) if self.path is not None else None
+        bench = Bench(station, self.worker.lanes, path)
         workspaces = Workspaces(root.parent, root, MeasurementStore)
         self._assembled = assemble(
             bench, workspaces, YamlProfiles(), LocalControl(simulate)

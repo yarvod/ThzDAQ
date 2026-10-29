@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.measurements.procedure import Procedure
-from thzdaq_core.domain.measurements.procedures.monitor import (
+from thzdaq_api.procedures import (
     KEY_SEPARATOR,
     default_quantities,
     monitor_quantities,

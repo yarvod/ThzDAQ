@@ -11,8 +11,6 @@ from typing import List
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
-from thzdaq_core.domain.errors import ProcedureError
-from thzdaq_core.domain.measurements.catalog import get_procedure
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
@@ -160,10 +158,7 @@ class GraphDocks:
 
     def plot(self, measurement) -> None:
         """A saved measurement on the graphs of its procedure."""
-        try:
-            specs = get_procedure(measurement.procedure).plots
-        except ProcedureError:
-            specs = ()
+        specs = self.hub.plots_of(measurement.procedure)
         for title in self.hub.show_measurement(measurement, specs):
             self.hub.raise_graph(title)
 
