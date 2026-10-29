@@ -18,13 +18,10 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QSettings
+from thzdaq_api.host import frozen, program_dir
 
 ORGANIZATION = "ThzDAQ"
 _file: Optional[str] = None
-
-
-def frozen() -> bool:
-    return bool(getattr(sys, "frozen", False))
 
 
 def scope() -> str:
@@ -97,14 +94,7 @@ def folder_key(kind: str) -> str:
 
 
 def app_dir() -> Path:
-    """Folder of the program: next to the .exe when built, the working folder from sources.
-
-    The working folder of a built program depends on how it was started (a
-    shortcut, the updater), so files are never looked up relative to it.
-    """
-    if frozen():
-        return Path(sys.executable).resolve().parent
-    return Path.cwd()
+    return program_dir()
 
 
 def data_dir() -> Path:
