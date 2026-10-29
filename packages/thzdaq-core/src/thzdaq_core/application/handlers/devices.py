@@ -54,5 +54,5 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
         self.devices = devices
 
     def handle(self, args, origin):
-        value = self.devices.write(args.ref, args.key, args.value)
+        value = self.devices.write(args.ref, args.key, args.value, origin)
         return api.QuantityValue(args.ref, args.key, value)

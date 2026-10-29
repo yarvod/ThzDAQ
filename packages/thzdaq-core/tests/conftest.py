@@ -17,6 +17,8 @@ def lab():
 
     station = Station(load_station(PROFILE), simulate=True)
     lanes = Lanes()
-    yield LocalLab(assemble(Bench(station, lanes)), origin="test")
+    assembled = assemble(Bench(station, lanes))
+    yield LocalLab(assembled, origin="test")
+    assembled.close()
     lanes.stop()
     station.close()

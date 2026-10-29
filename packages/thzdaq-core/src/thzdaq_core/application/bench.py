@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from thzdaq_api.errors import ErrorCode, LabError
 
-from thzdaq_core.application.lanes import Lanes
+from thzdaq_core.application.lanes import Deliver, Lanes
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.station import DeviceInfo, Station
 
@@ -28,4 +28,15 @@ class Bench:
         info = self.info(ref)
         return self.lanes.call(
             info.instrument, lambda: job(self.station.device(ref)), label=info.title
+        )
+
+    def submit(self, ref: str, job: Callable[[Any], Any], deliver: Deliver) -> None:
+        """job(device) in the device's lane, without waiting: deliver(result,
+        error) is called in the lane when it ends."""
+        info = self.info(ref)
+        self.lanes.submit(
+            info.instrument,
+            lambda: job(self.station.device(ref)),
+            deliver,
+            label=info.title,
         )
