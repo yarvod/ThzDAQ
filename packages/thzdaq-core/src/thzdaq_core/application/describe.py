@@ -1,6 +1,6 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
-from typing import Any, Callable, Iterable, Optional, Type
+from typing import Any, Callable, Iterable, Optional, Tuple, Type
 
 from thzdaq_api import devices as api
 from thzdaq_api import measurements, station as station_api
@@ -9,34 +9,35 @@ from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.registry import DriverInfo as Driver
+from thzdaq_instruments.units import prefixes_for
 
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import Parameter
 from thzdaq_core.domain.station.kinds import instrument_type, kinds_for
 from thzdaq_core.domain.station.profile import connection_to_dict
 from thzdaq_core.domain.station.safety import Guard, SafetyLimit
-from thzdaq_core.domain.station.station import (
-    CHANNEL,
-    INSTRUMENT,
-    ConnectionInfo,
-    DeviceInfo,
-    Station,
-)
+from thzdaq_core.domain.station.station import ConnectionInfo, DeviceInfo, Station
 
 
 def device_info(info: DeviceInfo, station: Station) -> api.DeviceInfo:
-    configured = info.kind not in (INSTRUMENT, CHANNEL)
+    configured = info.kind not in (api.INSTRUMENT, api.CHANNEL)
     driver = station.config.instruments[info.instrument].driver
     return api.DeviceInfo(
         ref=info.ref,
         title=info.title,
         instrument=info.instrument,
+        driver=driver,
         kind=info.kind,
         type=info.kind if configured else instrument_type(driver, station.registry),
         capabilities=tuple(c.__name__ for c in info.capabilities),
         channel=None if info.channel is None else str(info.channel),
         configured=info.configured,
     )
+
+
+def prefixes(unit: str) -> Tuple[api.Prefix, ...]:
+    """The SI prefixes a value of this unit is shown in."""
+    return tuple(api.Prefix(*prefix) for prefix in prefixes_for(unit))
 
 
 def quantity_info(quantity: Quantity, guard: Guard) -> api.QuantityInfo:
@@ -59,6 +60,24 @@ def quantity_info(quantity: Quantity, guard: Guard) -> api.QuantityInfo:
         step=bench.step,
         rate=bench.rate,
         danger=quantity.danger,
+        prefixes=prefixes(quantity.unit),
+    )
+
+
+def setting_info(setting: Parameter) -> api.QuantityInfo:
+    """A setting a configured device keeps in the profile, described as a
+    value of the device: neither read from it nor set on it."""
+    described = parameter_info(setting)
+    return api.QuantityInfo(
+        key=described.name,
+        title=described.label,
+        unit=described.unit,
+        kind=described.kind,
+        readable=False,
+        persistent=True,
+        minimum=described.minimum,
+        maximum=described.maximum,
+        prefixes=prefixes(described.unit),
     )
 
 
@@ -72,6 +91,7 @@ def argument_info(argument: Argument) -> api.ArgumentInfo:
         minimum=argument.minimum,
         maximum=argument.maximum,
         choices=tuple(str(c) for c in argument.choices),
+        prefixes=prefixes(argument.unit),
     )
 
 

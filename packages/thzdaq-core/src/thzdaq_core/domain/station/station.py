@@ -33,8 +33,10 @@ from thzdaq_instruments.quantities import (
 from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_instruments.transport.pool import TransportPool, default_pool
 
+from thzdaq_api.devices import CHANNEL, INSTRUMENT
 from thzdaq_api.measurement_file import DeviceUse
 from thzdaq_core.domain.errors import StationError
+from thzdaq_core.domain.parameters import Parameter
 from thzdaq_core.domain.station.config import (
     CHANNEL_SEPARATOR,
     InstrumentConfig,
@@ -54,9 +56,6 @@ Requirements = Mapping[str, Capabilities]
 Planned = Tuple[str, str, Sequence[float]]
 
 NUMBERS = ("float", "int")  # kinds of quantities a guard checks and ramps
-
-INSTRUMENT = "instrument"
-CHANNEL = "channel"
 
 
 def _as_tuple(capabilities: Capabilities) -> Tuple[Type, ...]:
@@ -468,6 +467,16 @@ class Station:
             if kind is not None:
                 own += kind.actions(spec.channel, spec.metadata)
         return actions_for(self.info(ref).capabilities, own)
+
+    def settings(self, ref: str) -> Tuple[Parameter, ...]:
+        """What a configured device keeps in the profile (a SIS bias's offsets);
+        nothing for an instrument or its fixed channel."""
+        found = self.config.find_device(ref)
+        if found is None:
+            return ()
+        instrument_id, spec = found
+        kind = self.kinds(instrument_id).get(spec.kind)
+        return kind.settings if kind is not None else ()
 
     def device_use(self, ref: str) -> DeviceUse:
         """How a device was set up, for measurement metadata."""

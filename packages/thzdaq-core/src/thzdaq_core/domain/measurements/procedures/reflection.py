@@ -1,6 +1,7 @@
 import cmath
 import math
 
+from thzdaq_api.devices import S_DB
 from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.procedures import REFLECTION
 from thzdaq_instruments.capabilities import NetworkAnalyzer, PowerLevel
@@ -17,7 +18,6 @@ from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
-    S_DB,
     VOLTAGE_MV,
     BiasVoltage,
     FirstPointDelay,

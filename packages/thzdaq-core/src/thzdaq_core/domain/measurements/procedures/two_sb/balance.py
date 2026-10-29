@@ -1,5 +1,6 @@
 from itertools import product
 
+from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_IF_BALANCE, TWO_SB_PUMP_BALANCE
 from thzdaq_instruments.capabilities import (
@@ -24,7 +25,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
     FREQUENCY_GHZ,
     IF_GHZ,
-    POWER_DBM,
     IFSweep,
     mv,
     PointDelay,

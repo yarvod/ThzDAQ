@@ -8,6 +8,7 @@ value) and goes to the graph of its unit: dBm to P-t, K to T-t, V to V-t, ...
 
 from typing import Any, Dict, Iterable, List, Sequence
 
+from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import READ
 from thzdaq_api.procedures import (
     COIL_PLOT,
@@ -26,7 +27,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     COIL_CURRENT_MA,
     CURRENT_UA,
     FREQUENCY_GHZ,
-    POWER_DBM,
     VOLTAGE_MV,
 )
 from thzdaq_core.domain.errors import ProcedureError

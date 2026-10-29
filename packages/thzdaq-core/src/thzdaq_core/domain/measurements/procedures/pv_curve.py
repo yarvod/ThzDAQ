@@ -1,3 +1,4 @@
+from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import PV_CURVE, Y_FACTOR_VOLTAGE
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
@@ -13,7 +14,6 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
     CURRENT_UA,
-    POWER_DBM,
     TN_K,
     VOLTAGE_MV,
     Y_DB,

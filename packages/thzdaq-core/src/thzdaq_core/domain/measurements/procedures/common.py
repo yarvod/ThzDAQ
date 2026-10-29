@@ -12,16 +12,14 @@ from thzdaq_core.domain.parameters import FloatParameter, SweepParameter
 
 BIAS = (VoltageSource, VoltageCurrentMeter)
 
-# Axis labels of plots
+# Axis labels of plots; those of traces (POWER_DBM, S_DB) are the contract's
 CURRENT_UA = "Current, μA"
 COIL_CURRENT_MA = "Coil current, mA"
 VOLTAGE_MV = "Voltage, mV"
-POWER_DBM = "Power, dBm"
 IF_GHZ = "IF, GHz"
 FREQUENCY_GHZ = "Frequency, GHz"
 Y_DB = "Y, dB"
 TN_K = "Tn, K"
-S_DB = "|S|, dB"
 
 Range = Tuple[float, float, int]
 

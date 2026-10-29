@@ -29,6 +29,17 @@ def test_a_device_describes_its_quantities(lab):
     quantities = {q.key: q for q in description.quantities}
     assert quantities["voltage_set"].settable and quantities["voltage_set"].unit == "V"
     assert quantities["current"].readable and not quantities["current"].settable
+    # Shown in mV or µA: the prefixes of its unit come with it
+    assert {"m", "µ"} <= {p.name for p in quantities["current"].prefixes}
+    assert quantities["active"].prefixes == ()
+    assert description.device.driver == "scontel.sis_block"
+    # The offsets it keeps in the profile, described as values
+    offsets = {s.key: s for s in description.settings}
+    assert set(offsets) == {"offset_voltage", "offset_current"}
+    assert (
+        offsets["offset_voltage"].unit == "V" and offsets["offset_voltage"].persistent
+    )
+    assert not lab.call(DescribeDevice(ref="power_supply_1:1")).settings
 
 
 def test_a_value_set_with_its_unit_reads_back(lab):

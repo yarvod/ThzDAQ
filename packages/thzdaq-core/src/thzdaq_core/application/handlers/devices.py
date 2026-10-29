@@ -10,6 +10,7 @@ from thzdaq_core.application.describe import (
     action_result,
     device_info,
     quantity_info,
+    setting_info,
 )
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
@@ -42,6 +43,7 @@ class DescribeDevice(Handler[api.DescribeDevice, api.DeviceDescription]):
                 quantity_info(q, guard) for q in self.devices.quantities(args.ref)
             ),
             actions=tuple(action_info(a) for a in self.devices.actions(args.ref)),
+            settings=tuple(setting_info(s) for s in station.settings(args.ref)),
         )
 
 

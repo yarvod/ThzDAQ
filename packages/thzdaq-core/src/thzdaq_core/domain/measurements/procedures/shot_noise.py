@@ -1,3 +1,4 @@
+from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import SHOT_NOISE
 from thzdaq_instruments.capabilities import PowerDetector, TunableFilter
@@ -17,7 +18,6 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
     IF_GHZ,
-    POWER_DBM,
     IFSweep,
     restore_bias_on_exit,
     SettleTime,

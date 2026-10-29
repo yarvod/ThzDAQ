@@ -1,3 +1,4 @@
+from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_SRR, TWO_SB_TN
 from thzdaq_instruments.capabilities import Switchable
@@ -5,7 +6,6 @@ from thzdaq_instruments.units import GHZ
 
 from thzdaq_core.domain.measurements.procedures.common import (
     IF_GHZ,
-    POWER_DBM,
     TN_K,
     Y_DB,
     IFSweep,
