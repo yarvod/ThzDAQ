@@ -8,6 +8,8 @@ import msgspec
 from thzdaq_api.devices import DeviceInfo
 from thzdaq_api.operation import Operation, Rights
 
+DATA = "data"  # the folder of a workspace that holds its measurements
+
 # Items of a list parameter typed as text: "4, 6; 8"
 LIST_SEPARATORS = re.compile(r"[,;\s]+")
 

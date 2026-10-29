@@ -11,7 +11,7 @@ from thzdaq_core.adapters.json_store import MeasurementStore
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
 from thzdaq_core.application.assembly import Assembled, assemble
 from thzdaq_core.application.bench import Bench
-from thzdaq_core.application.lanes import Lanes
+from thzdaq_api.lanes import Lanes
 from thzdaq_core.application.ports import DaemonControl
 from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.station.config import StationConfig

@@ -8,7 +8,7 @@ import logging
 from typing import Any, Callable, Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from thzdaq_core.application.lanes import Lanes
+from thzdaq_api.lanes import Lanes
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ Callback = Optional[Callable[[Any], None]]
 
 class DeviceWorker(QObject):
     """Manual control and polling of instruments in their lanes (one queue and
-    thread per instrument, thzdaq_core.application.lanes); results come back
+    thread per instrument, thzdaq_api.lanes); results come back
     as Qt signals in the GUI thread."""
 
     _done = Signal(object, object, object)  # callback, result, error

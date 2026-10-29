@@ -31,7 +31,7 @@ from thzdaq_api.host import (
 from thzdaq_api.lock import FileLock
 from thzdaq_api.transport import HEARTBEAT_S
 from thzdaq_core.application.clock import wall_time
-from thzdaq_core.application.workspaces import DATA
+from thzdaq_api.measurements import DATA
 
 from thzdaq_daemon.compose import Composed, compose
 from thzdaq_daemon.server import Clients, Server

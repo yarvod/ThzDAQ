@@ -19,6 +19,7 @@ from typing import Optional
 
 from PySide6.QtCore import QSettings
 from thzdaq_api.host import frozen, program_dir
+from thzdaq_api.measurements import DATA
 
 ORGANIZATION = "ThzDAQ"
 _file: Optional[str] = None
@@ -103,7 +104,8 @@ def app_dir() -> Path:
 
 
 def data_dir() -> Path:
-    return app_dir() / "data"
+    """Where the program's own measurements go: the data of its folder."""
+    return app_dir() / DATA
 
 
 def stations_dir() -> Path:

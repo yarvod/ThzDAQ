@@ -24,9 +24,10 @@ class Served:
         from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
         from thzdaq_core.application.assembly import assemble
         from thzdaq_core.application.bench import Bench
-        from thzdaq_core.application.lanes import Lanes
+        from thzdaq_api.lanes import Lanes
         from thzdaq_core.application.local import LocalControl
-        from thzdaq_core.application.workspaces import DATA, Workspaces
+        from thzdaq_api.measurements import DATA
+        from thzdaq_core.application.workspaces import Workspaces
         from thzdaq_core.domain.station.station import Station
         from thzdaq_daemon.server import Clients, Server
 

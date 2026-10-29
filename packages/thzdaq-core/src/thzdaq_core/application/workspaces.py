@@ -12,10 +12,9 @@ from pathlib import Path
 from typing import Callable, Dict, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.measurements import DATA
 
 from thzdaq_core.application.ports import MeasurementRepository
-
-DATA = "data"  # where a workspace keeps its measurements
 
 StoreOf = Callable[[Path], MeasurementRepository]  # the store of a data folder
 

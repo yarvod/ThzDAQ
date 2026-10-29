@@ -5,7 +5,7 @@ from typing import Any, Callable, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
 
-from thzdaq_core.application.lanes import Deliver, Lanes
+from thzdaq_api.lanes import Deliver, Lanes
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.station import DeviceInfo, Station
 

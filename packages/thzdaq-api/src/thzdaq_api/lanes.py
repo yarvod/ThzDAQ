@@ -1,8 +1,10 @@
-"""Lanes: one thread and queue per instrument.
+"""Lanes: one thread and queue per key, an instrument in the daemon.
 
 The jobs of one instrument run in order in its lane; instruments do not wait
 for each other, so a slow or hung power meter does not hold the SIS bias.
-Instruments sharing a connection (a Prologix) still take turns on its lock.
+Instruments sharing a connection (a Prologix) still take turns on its lock. A
+client calls the daemon in lanes too: the calls about one device in order,
+none waiting for a device that hangs.
 """
 
 import logging
