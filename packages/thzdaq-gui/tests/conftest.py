@@ -36,13 +36,16 @@ def exit_answer(monkeypatch):
     """
     from PySide6.QtWidgets import QDialog
 
-    answer = {"result": QDialog.Accepted, "store": None, "dump": None}
+    answer = {"result": QDialog.Accepted, "store": None, "dump": None, "stop": None}
 
     def exec_(dialog):
-        if answer["store"] is not None:
-            dialog.storeState.setChecked(answer["store"])
-        if answer["dump"] is not None:
-            dialog.dumpData.setChecked(answer["dump"])
+        for key, check in (
+            ("store", dialog.storeState),
+            ("dump", dialog.dumpData),
+            ("stop", dialog.stopDaemon),
+        ):
+            if answer[key] is not None:
+                check.setChecked(answer[key])
         return answer["result"]
 
     monkeypatch.setattr("thzdaq_gui.exit_dialog.ExitDialog.exec", exec_)

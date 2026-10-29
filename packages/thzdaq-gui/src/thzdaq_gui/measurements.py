@@ -24,10 +24,10 @@ from thzdaq_gui import theme
 COLUMNS = ("Id", "Measurement", "Comment", "Started", "Finished", "Status", "Points")
 STATUS_COLORS = {
     RUNNING: theme.ACCENT,
-    COMPLETED: "#81c784",
+    COMPLETED: theme.GOOD,
     CANCELLED: theme.MUTED,
-    FAILED: "#e57373",
-    INTERRUPTED: "#e57373",
+    FAILED: theme.BAD,
+    INTERRUPTED: theme.BAD,
 }
 
 

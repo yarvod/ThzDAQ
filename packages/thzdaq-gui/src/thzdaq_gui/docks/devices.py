@@ -769,7 +769,7 @@ class CalibrationDialog(QDialog):
         self.editor = QPlainTextEdit(json.dumps(coefficients, indent=2))
         layout.addWidget(self.editor)
         self.problem = QLabel()
-        self.problem.setStyleSheet("color: #e57373")
+        self.problem.setStyleSheet(f"color: {theme.BAD}")
         layout.addWidget(self.problem)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.check)

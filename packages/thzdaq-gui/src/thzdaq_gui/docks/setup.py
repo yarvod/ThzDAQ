@@ -464,7 +464,7 @@ class InstrumentCard(QGroupBox):
             layout.addLayout(row)
 
     def set_status(self, text: str, ok: bool) -> None:
-        color = "#81c784" if ok else "#e57373"
+        color = theme.GOOD if ok else theme.BAD
         self.status.setText(textwrap.shorten(text, width=60, placeholder="..."))
         self.status.setToolTip(text)
         self.status.setStyleSheet(f"color: {color}")
@@ -520,9 +520,9 @@ class ConnectionsGroup(QGroupBox):
             if state is None or connection.key in self.resetting:
                 continue
             if connection.broken:
-                text, color = "error, reconnects", "#e57373"
+                text, color = "error, reconnects", theme.BAD
             elif connection.open:
-                text, color = "connected", "#81c784"
+                text, color = "connected", theme.GOOD
             else:
                 text, color = "not connected", theme.MUTED
             state.setText(text)

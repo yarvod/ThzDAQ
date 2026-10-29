@@ -10,8 +10,8 @@ from thzdaq_gui import theme
 
 LEVEL_COLORS = {
     logging.WARNING: theme.ACCENT,
-    logging.ERROR: "#e57373",
-    logging.CRITICAL: "#e57373",
+    logging.ERROR: theme.BAD,
+    logging.CRITICAL: theme.BAD,
 }
 
 

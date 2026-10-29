@@ -25,16 +25,19 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSizePolicy,
+    QToolBar,
     QToolButton,
     QWidget,
     QWidgetAction,
 )
 from thzdaq_api.measurements import ProcedureSummary
+from thzdaq_api.daemon import StopMode
 from thzdaq_api.errors import LabError
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.device_docks import DeviceDocks
 from thzdaq_gui.dock_names import (
+    DAEMON,
     DATA,
     DEVICE,
     GRAPH,
@@ -52,10 +55,12 @@ from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.processes import ProcessesWidget
 from thzdaq_gui.docks.setup import SetupWidget
-from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements
+from thzdaq_gui.docks.daemon import DaemonIndicator, DaemonWidget, LostBanner
+from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements, stop_by_default
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
+from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
 from thzdaq_gui.perspectives import Perspectives
@@ -116,10 +121,24 @@ class MainWindow(QMainWindow):
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
 
+        self.daemon = DaemonModel(session, self)
         self.build_menus()
         self.build_toolbar()
         self.stationLabel = QLabel()
         self.statusBar().addPermanentWidget(self.stationLabel)
+        self.daemonIndicator = DaemonIndicator(self.daemon)
+        self.daemonIndicator.clicked.connect(lambda: self.show_dock(DAEMON))
+        self.statusBar().addPermanentWidget(self.daemonIndicator)
+        # A row of its own over the docks while the daemon does not answer
+        self.lostBanner = LostBanner(self.daemon)
+        self.lostBanner.daemon_requested.connect(lambda: self.show_dock(DAEMON))
+        self.bannerBar = QToolBar("Daemon connection")
+        self.bannerBar.setObjectName("daemon_banner")
+        self.bannerBar.setMovable(False)
+        self.bannerBar.addWidget(self.lostBanner)
+        self.addToolBarBreak()
+        self.addToolBar(Qt.TopToolBarArea, self.bannerBar)
+        self.daemon.changed.connect(self.show_daemon)
         session.calls.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
         # Calls of a device wait for it in the daemon: tell when one keeps them waiting
         self.hangWatch = HangWatch(session.calls, DEVICE_HANG_S, self)
@@ -146,6 +165,7 @@ class MainWindow(QMainWindow):
         self.docks.building = False
         self.apply_mode()
         self.enter_mode()
+        self.show_daemon()  # the banner as the daemon is, not as a layout saved it
         # A default layout gets its widths once the window has a size
         self._fit_on_show = not restored
         self.perspectives.refresh()
@@ -279,6 +299,7 @@ class MainWindow(QMainWindow):
         self.logWidget = LogWidget()
         self.processesWidget = ProcessesWidget(self.session.processes)
         self.processesWidget.show_requested.connect(self.show_dock)
+        self.daemonWidget = DaemonWidget(self.daemon)
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
@@ -290,6 +311,7 @@ class MainWindow(QMainWindow):
                 "progress-clock",
                 QtAds.SideBarBottom,
             ),
+            (DAEMON, "Daemon", self.daemonWidget, "server", QtAds.SideBarBottom),
         ):
             dock = self.docks.add(
                 name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
@@ -470,16 +492,36 @@ class MainWindow(QMainWindow):
         self.perspectives.save()
 
     # Closing
+    def show_daemon(self) -> None:
+        self.bannerBar.setVisible(self.daemon.state == LOST)
+
+    def stop_daemon(self, mode: StopMode) -> None:
+        """With the window, as chosen; a daemon that refuses is left running."""
+        try:
+            self.daemon.stop_now(mode)
+        except LabError as e:
+            logger.warning(f"The daemon was not stopped: {e}")
+
     def closeEvent(self, event) -> None:
         store_state, dump = True, False
+        status = self.daemon.ask()
+        running = len(status.runs) if status is not None else 0
+        others = self.daemon.others()
+        stop = status is not None and stop_by_default(running, others)
         if self.confirm_exit:
-            running = sum(run.running for run in self.session.runs)
-            dialog = ExitDialog(running, self.session.measurements.rowCount(), self)
+            dialog = ExitDialog(
+                running,
+                self.session.measurements.rowCount(),
+                others,
+                status is not None,
+                self,
+            )
             if dialog.exec() != QDialog.Accepted:
                 event.ignore()
                 return
             store_state = dialog.storeState.isChecked()
             dump = dialog.dumpData.isChecked()
+            stop = dialog.stopDaemon.isChecked()
         for dock in self.docks.values():
             widget = dock.widget()
             if hasattr(widget, "stop"):
@@ -487,6 +529,8 @@ class MainWindow(QMainWindow):
         if store_state:
             self.save_state()
         self.logWidget.detach()
+        if stop:
+            self.stop_daemon(StopMode.CANCEL if running else StopMode.GRACEFUL)
         self.session.shutdown()
         if dump and self.session.measurements.items:
             try:

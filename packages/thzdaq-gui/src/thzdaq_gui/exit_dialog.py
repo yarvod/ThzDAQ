@@ -1,4 +1,5 @@
-"""Quit confirmation, as in the old app: keep the layout? dump the data?"""
+"""Quit confirmation, as in the old app: keep the layout? dump the data? And
+the daemon: it goes on after the window unless the person stops it."""
 
 from datetime import datetime
 from pathlib import Path
@@ -17,8 +18,22 @@ from thzdaq_api.measurement_file import dumps
 from thzdaq_gui import theme
 
 
+def stop_by_default(running: int, others: int) -> bool:
+    """Stop the daemon with the window when nothing else needs it."""
+    return running == 0 and others == 0
+
+
 class ExitDialog(QDialog):
-    def __init__(self, running: int, measurements: int, parent=None):
+    def __init__(
+        self,
+        running: int,
+        measurements: int,
+        others: int = 0,
+        daemon: bool = True,
+        parent=None,
+    ):
+        """running: measurements the daemon runs; others: its other clients
+        (a window, a CLI); daemon: whether it answers."""
         super().__init__(parent)
         self.setWindowTitle("Exit")
         self.setWindowIcon(theme.icon("exit-run"))
@@ -28,8 +43,10 @@ class ExitDialog(QDialog):
         layout.addWidget(question)
         if running:
             warning = QLabel(
-                f"{running} measurement(s) are running and will be stopped."
+                f"{running} measurement(s) run in the daemon: they go on unless "
+                "the daemon is stopped."
             )
+            warning.setWordWrap(True)
             warning.setStyleSheet(f"color: {theme.ACCENT}")
             layout.addWidget(warning)
         self.storeState = QCheckBox(
@@ -47,7 +64,16 @@ class ExitDialog(QDialog):
         )
         note.setWordWrap(True)
         note.setProperty("role", "muted")
-        for widget in (self.storeState, self.dumpData, note):
+        self.stopDaemon = QCheckBox(
+            "Stop the daemon: end its measurements, set the safe state"
+            if running
+            else "Stop the daemon"
+        )
+        self.stopDaemon.setChecked(daemon and stop_by_default(running, others))
+        self.stopDaemon.setEnabled(daemon)
+        if others:
+            self.stopDaemon.setToolTip(f"{others} other client(s) work with it")
+        for widget in (self.storeState, self.dumpData, note, self.stopDaemon):
             layout.addWidget(widget)
         buttons = QDialogButtonBox()
         buttons.addButton("Exit", QDialogButtonBox.AcceptRole)

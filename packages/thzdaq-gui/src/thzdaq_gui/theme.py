@@ -21,6 +21,8 @@ PANEL = "#333333"
 TEXT = "#e6e6e6"
 MUTED = "#9a9a9a"
 BORDER = "#444444"
+GOOD = "#81c784"  # connected, completed
+BAD = "#e57373"  # an error, no connection
 PLOT_BACKGROUND = "#151515"
 
 # Curves on the dark plots: accent first, then distinct colors

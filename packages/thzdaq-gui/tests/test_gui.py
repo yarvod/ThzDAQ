@@ -457,20 +457,26 @@ def test_the_session_calls_its_lab_and_hears_its_events_in_the_gui_thread(
 
 def test_the_app_works_with_a_daemon_it_starts(app, tmp_path, profile, monkeypatch):
     """No daemon runs: the app starts the simulator's daemon (a process of its
-    own), opens the window on its profile and leaves it running when it quits."""
+    own), opens the window on its profile, and stops it on quitting: nothing
+    else needed it."""
+    import time
+
     from thzdaq_api import host
-    from thzdaq_api.devices import ListDevices
     from thzdaq_gui.app import main
 
     monkeypatch.setenv(host.DIR_ENV, str(tmp_path / "daemon"))
-    arguments = ["--simulate", "--station", str(profile)]
+    files = host.DaemonFiles.of(simulate=True)
     try:
         code = main(
-            [*arguments, "--workspace", str(tmp_path), "--quit-after", "1"]
-            + ["--settings", str(tmp_path / "settings.ini")]
+            ["--simulate", "--station", str(profile), "--workspace", str(tmp_path)]
+            + ["--quit-after", "1", "--settings", str(tmp_path / "settings.ini")]
         )
         assert code == 0
-        lab = host.connect(simulate=True)  # it outlives the window
-        assert "sis_bias_1" in {d.ref for d in lab.call(ListDevices())}
+        deadline = time.monotonic() + 10
+        while host.read_host(files) is not None and time.monotonic() < deadline:
+            time.sleep(0.1)  # the daemon is another process: look again
+        assert host.read_host(files) is None
+        log = files.log.read_text(encoding="utf-8")
+        assert "Serving on port" in log and "Stopping" in log  # told by the window
     finally:
         host.kill(simulate=True)

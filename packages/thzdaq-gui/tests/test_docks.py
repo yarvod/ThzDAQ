@@ -1029,6 +1029,23 @@ class TestExit:
         assert idle.storeState.isChecked() and not idle.dumpData.isEnabled()
         busy = ExitDialog(running=2, measurements=3)
         assert busy.dumpData.isChecked() and "3" in busy.dumpData.text()
+        # The daemon stops with the window only when nothing else needs it
+        assert idle.stopDaemon.isChecked() and not busy.stopDaemon.isChecked()
+        shared = ExitDialog(running=0, measurements=0, others=1)
+        assert not shared.stopDaemon.isChecked()
+        gone = ExitDialog(running=0, measurements=0, daemon=False)
+        assert not gone.stopDaemon.isEnabled() and not gone.stopDaemon.isChecked()
+
+    def test_the_daemon_is_stopped_as_chosen(self, window, exit_answer, monkeypatch):
+        from thzdaq_gui.models.daemon import DaemonModel
+
+        stopped = []
+        monkeypatch.setattr(
+            DaemonModel, "stop_now", lambda self, mode: stopped.append(mode)
+        )
+        exit_answer["stop"] = False
+        window.confirm_exit = True
+        assert window.close() and stopped == []
 
 
 def test_no_stray_windows_flash(app, session, tmp_path):
@@ -1539,3 +1556,45 @@ class TestLite:
         )
         again.confirm_exit = False
         again.close()
+
+
+class TestDaemon:
+    def test_the_window_shows_the_daemon(self, window, wait):
+        from thzdaq_gui.models.daemon import OK
+
+        model = window.daemon
+        wait(lambda: model.state == OK)
+        assert window.daemonIndicator.text() == "Simulator daemon"
+        assert "1 measurement" not in window.daemonIndicator.toolTip()
+        widget = window.daemonWidget
+        sections = [
+            widget.tree.topLevelItem(i).text(0)
+            for i in range(widget.tree.topLevelItemCount())
+        ]
+        assert [s.split(" (")[0] for s in sections] == [
+            "Problems", "Clients", "Measurements", "Queues", "Connections", "Polls",
+        ]  # fmt: skip
+        assert widget.btnStop.isEnabled() and not widget.btnStart.isEnabled()
+
+    def test_a_lost_daemon_is_shown_and_started_again(
+        self, window, session, wait, monkeypatch
+    ):
+        from thzdaq_api.errors import ErrorCode, LabError
+        from thzdaq_gui.models.daemon import LOST, OK
+
+        class Gone:
+            def call(self, operation):
+                raise LabError(ErrorCode.UNREACHABLE, "No simulator daemon runs")
+
+        lab = session.lab
+        monkeypatch.setattr(session, "lab", Gone())
+        window.daemon.look()
+        wait(lambda: window.daemon.state == LOST)
+        assert not window.bannerBar.isHidden()
+        assert "No simulator daemon runs" in window.lostBanner.text.text()
+        assert window.daemonWidget.btnStart.isEnabled()
+        # Start: the session connects again (the lab of the test is there)
+        monkeypatch.setattr(session, "lab", lab)
+        window.daemonWidget.btnStart.click()
+        wait(lambda: window.daemon.state == OK)
+        assert window.bannerBar.isHidden()
