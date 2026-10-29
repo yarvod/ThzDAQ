@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple, Type
 
 import msgspec
 
-from thzdaq_api import devices, events, leases, measurements, station
+from thzdaq_api import analysis, devices, events, leases, measurements, station
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.operation import Operation
 
@@ -33,6 +33,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     station.ListConnections,
     station.ResetConnection,
     leases.ListLeases,
+    analysis.AnalyzeIv,
 )
 BY_NAME: Dict[str, Type[Operation]] = {op.name: op for op in OPERATIONS}
 

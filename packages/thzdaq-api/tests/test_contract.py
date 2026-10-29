@@ -72,3 +72,17 @@ def test_action_results_travel_as_values_or_traces():
     for result in (None, 12.0, "OK", trace):
         done = ActionResult("a", "x", result)
         assert wire.decode_result(op, wire.encode(done)) == done
+
+
+def test_iv_analysis_travels_with_its_options():
+    from thzdaq_api.analysis import AnalyzeIv, IVOptions
+
+    op = AnalyzeIv(
+        voltage=(0.0, 1e-3), current=(0.0, 1e-6), options=IVOptions(rn_from=4e-3)
+    )
+    assert op.name == "analyze_iv"
+    assert wire.decode_arguments(op.name, wire.encode(op)) == op
+    with pytest.raises(LabError):  # a misspelt option is not ignored
+        wire.decode_arguments(
+            op.name, b'{"voltage": [], "current": [], "options": {"rn_form": 1}}'
+        )
