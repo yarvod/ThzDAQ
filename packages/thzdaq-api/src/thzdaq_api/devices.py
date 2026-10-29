@@ -31,6 +31,11 @@ class QuantityInfo(msgspec.Struct, frozen=True):
     rate: Optional[float] = None  # units per second at most between the steps
     danger: str = ""  # what may go wrong when it is set, shown first; empty when safe
 
+    @property
+    def label(self) -> str:
+        """As a form names it: "Power, dBm"."""
+        return f"{self.title}, {self.unit}" if self.unit else self.title
+
 
 class DeviceInfo(msgspec.Struct, frozen=True):
     """A device: an instrument, its fixed channel or a device configured on it."""

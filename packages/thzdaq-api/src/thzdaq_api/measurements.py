@@ -1,10 +1,20 @@
 """Procedures and the measurements running in the daemon."""
 
+import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import msgspec
 
+from thzdaq_api.devices import DeviceInfo
 from thzdaq_api.operation import Operation, Rights
+
+# Items of a list parameter typed as text: "4, 6; 8"
+LIST_SEPARATORS = re.compile(r"[,;\s]+")
+
+
+def split_list(text: str) -> List[str]:
+    """ "4, 6; 8" -> ["4", "6", "8"]"""
+    return [item for item in LIST_SEPARATORS.split(str(text).strip()) if item]
 
 
 class ParameterInfo(msgspec.Struct, frozen=True):
@@ -23,15 +33,27 @@ class ParameterInfo(msgspec.Struct, frozen=True):
     minimum: Optional[float] = None
     maximum: Optional[float] = None
     choices: Tuple[Any, ...] = ()
+    max_points: Optional[int] = None  # of a sweep
 
 
 class SlotInfo(msgspec.Struct, frozen=True):
-    """A device a procedure needs, by the capabilities it must have."""
+    """A device a procedure needs, by the capabilities it must have (none: any
+    device)."""
 
     name: str
     title: str
     capabilities: Tuple[str, ...]
     kind: Optional[str] = None  # the device kind preferred: sis_bias
+
+    def suits(self, device: DeviceInfo) -> bool:
+        return set(self.capabilities) <= set(device.capabilities)
+
+    def candidates(self, devices: Iterable[DeviceInfo]) -> List[DeviceInfo]:
+        """Devices that suit it; only those of the preferred kind when there
+        are any (a SIS bias slot lists SIS biases, not every supply channel)."""
+        suitable = [device for device in devices if self.suits(device)]
+        preferred = [device for device in suitable if device.kind == self.kind]
+        return preferred or suitable
 
 
 GroupKey = Tuple[Any, ...]
@@ -109,12 +131,18 @@ class ProcedureSummary(msgspec.Struct, frozen=True):
 
 
 class ProcedureInfo(msgspec.Struct, frozen=True):
+    """A procedure as a run with the parameters (and devices) described goes:
+    the slots it needs, the plots it fills, its steps (None: no end known) and
+    the seconds of x its live plots keep (None: all of it)."""
+
     name: str
     title: str
     description: str
     parameters: Tuple[ParameterInfo, ...]
     slots: Tuple[SlotInfo, ...]
     plots: Tuple[PlotInfo, ...]
+    steps: Optional[int] = None
+    plot_window: Optional[float] = None
 
 
 class RunInfo(msgspec.Struct, frozen=True):
@@ -141,12 +169,14 @@ class ListProcedures(Operation[Tuple[ProcedureSummary, ...]]):
 
 
 class DescribeProcedure(Operation[ProcedureInfo]):
-    """A procedure's parameters (units, defaults, limits), the devices it needs
-    and its plots. Slots and plots may depend on parameters: pass them to see
-    those of a run."""
+    """A procedure's parameters (units, defaults, limits), the devices it needs,
+    its plots and steps. Slots, plots and steps depend on the parameters, a
+    monitor's plots on its devices (the units they read): pass them to see
+    those of a run. Invalid parameters are refused, each one named."""
 
     procedure: str
     parameters: Dict[str, Any] = {}
+    devices: Dict[str, str] = {}  # slot -> device
 
 
 class StartMeasurement(Operation[RunInfo]):

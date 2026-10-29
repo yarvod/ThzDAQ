@@ -96,3 +96,27 @@ def test_safe_state_says_how_each_value_went():
     report = (SafeValue("sis_bias_1", "voltage_set", 0.0), SafeValue("x", "y", 1, "no"))
     assert wire.decode_result(op, wire.encode(report)) == report
     assert ErrorCode("out_of_limits") is ErrorCode.OUT_OF_LIMITS
+
+
+def test_a_slot_lists_the_devices_that_suit_it():
+    from thzdaq_api.devices import DeviceInfo
+    from thzdaq_api.measurements import SlotInfo
+
+    def device(ref, kind, *capabilities):
+        return DeviceInfo(ref, ref.upper(), "block", kind, kind, capabilities)
+
+    sis = device("sis_bias_1", "sis_bias", "VoltageSource", "VoltageCurrentMeter")
+    supply = device("ps:1", "channel", "VoltageSource", "VoltageCurrentMeter")
+    meter = device("power_meter_1", "instrument", "PowerDetector")
+    bias = SlotInfo("bias", "Bias", ("VoltageSource",), kind="sis_bias")
+    assert bias.candidates([supply, sis, meter]) == [sis]  # the preferred kind
+    assert bias.candidates([supply, meter]) == [supply]  # else any that suits
+    anything = SlotInfo("power_meter_1", "Power meter", ())
+    assert anything.candidates([sis, meter]) == [sis, meter]
+
+
+def test_lists_are_typed_with_commas_semicolons_or_spaces():
+    from thzdaq_api.measurements import split_list
+
+    assert split_list(" 4, 6;8  10 ") == ["4", "6", "8", "10"]
+    assert split_list("") == []
