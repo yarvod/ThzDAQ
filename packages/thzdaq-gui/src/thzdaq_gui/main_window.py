@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 from thzdaq_api.measurements import ProcedureSummary
-from thzdaq_instruments import InstrumentError
+from thzdaq_api.errors import LabError
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.device_docks import DeviceDocks
@@ -120,10 +120,9 @@ class MainWindow(QMainWindow):
         self.build_toolbar()
         self.stationLabel = QLabel()
         self.statusBar().addPermanentWidget(self.stationLabel)
-        for worker in (session.worker, session.calls):
-            worker.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
-        # Manual control runs in one thread: tell when a device keeps it waiting
-        self.hangWatch = HangWatch(session.worker, DEVICE_HANG_S, self)
+        session.calls.error.connect(lambda m: self.statusBar().showMessage(m, 10000))
+        # Calls of a device wait for it in the daemon: tell when one keeps them waiting
+        self.hangWatch = HangWatch(session.calls, DEVICE_HANG_S, self)
         self.hangWatch.message.connect(lambda m: self.statusBar().showMessage(m, 2500))
 
         self.add_base_docks()
@@ -165,7 +164,7 @@ class MainWindow(QMainWindow):
                 self.open_profile,
             ),
             ("New station…", "file-plus-outline", QKeySequence.New, self.new_profile),
-            ("Reload station", "refresh", None, lambda: self.session.reload()),
+            ("Reload station", "refresh", None, self.reload_profile),
         ):
             action = QAction(theme.icon(icon_name), text, self)
             if shortcut is not None:
@@ -337,52 +336,65 @@ class MainWindow(QMainWindow):
         if self.mode.perspectives:
             self.perspectives.add_default()
 
-    # Station
+    # Station: the profile of the lab the window works with
     def show_station(self) -> None:
-        station = self.session.station
-        if station is None:
+        profile = self.session.profile()
+        if profile.path is None:
             self.stationLabel.setText("No station")
-            return
-        mode = "  SIMULATION" if self.session.simulate else ""
-        self.stationLabel.setText(f"Station: {station.name}{mode}")
+        else:
+            mode = "  SIMULATION" if self.session.simulate else ""
+            self.stationLabel.setText(f"Station: {profile.name}{mode}")
         with QSignalBlocker(self.simulateAction):
             self.simulateAction.setChecked(self.session.simulate)
 
-    def on_station_changed(self, station) -> None:
+    def on_station_changed(self) -> None:
         self.show_station()
-        if self.session.path is not None:
-            self.settings.setValue(STATION_PATH, str(self.session.path))
+        path = self.session.profile().path
+        if path is not None:
+            self.settings.setValue(STATION_PATH, path)
 
     def open_profile(self) -> None:
         path = self.session.folders.open_path(
             self, PROFILES, OPEN_PROFILE, "YAML (*.yaml *.yml)"
         )
         if path:
-            self.load_profile(path, self.session.simulate)
+            self.load_profile(path)
 
     def new_profile(self) -> None:
         path = self.session.folders.save_path(
             self, PROFILES, NEW_PROFILE, "", "YAML (*.yaml)"
         )
         if path:
-            try:
-                self.session.new_station(path, Path(path).stem)
-            except (InstrumentError, OSError) as e:
-                QMessageBox.critical(self, STATION_PROFILE, str(e))
+            self.told(lambda: self.session.new_profile(path, Path(path).stem))
 
-    def load_profile(self, path, simulate: bool) -> None:
-        if self.session.busy():
-            QMessageBox.warning(self, "Station", "Stop the running measurements first")
-            return
+    def load_profile(self, path) -> None:
+        self.told(lambda: self.session.load_profile(path))
+
+    def reload_profile(self) -> None:
+        self.told(self.session.reload)
+
+    def told(self, change) -> None:
+        """A change of the profile; a refusal of the lab (measurements run, a
+        broken file) is told."""
         try:
-            self.session.load_station(path, simulate)
-        except (InstrumentError, OSError) as e:
+            change()
+        except LabError as e:
             QMessageBox.critical(self, STATION_PROFILE, str(e))
 
     def set_simulate(self, on: bool) -> None:
-        if self.session.path is not None and on != self.session.simulate:
-            self.load_profile(self.session.path, on)
+        """Work with the simulator's daemon (or the instruments' again), on the
+        same profile."""
+        if on == self.session.simulate:
+            return
+        path = self.session.profile().path
+        try:
+            self.session.open(on)
+        except LabError as e:
+            QMessageBox.critical(self, "Daemon", str(e))
             self.show_station()
+            return
+        if path is not None and self.session.profile().path != path:
+            self.load_profile(path)
 
     # Modes
     def apply_mode(self) -> None:

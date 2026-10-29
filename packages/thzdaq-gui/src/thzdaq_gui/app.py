@@ -1,34 +1,46 @@
+"""The desktop application: a client of the bench daemon. It connects to the
+daemon of the instruments (or of their simulator) and starts it when none
+runs; closing the window leaves the daemon to its measurements."""
+
 import argparse
 import logging
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QLockFile, QStandardPaths, QTimer
-from PySide6.QtWidgets import QApplication, QMessageBox
-from thzdaq_instruments import InstrumentError
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
+from thzdaq_api.errors import LabError
+from thzdaq_api.host import connect_or_start
 
 from thzdaq_gui import theme
 from thzdaq_gui.main_window import MainWindow
 from thzdaq_gui.session import Session
 from thzdaq_gui.settings import (
     STATION_PATH,
-    data_dir,
+    app_dir,
     settings,
     stations_dir,
     use_file,
 )
 from thzdaq_gui.wording import STATION_PROFILE
 
+DAEMON = "ThzDAQ daemon"
+
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="thzdaq-gui", description="ThzDAQ desktop application"
     )
-    parser.add_argument("--station", help="station profile (YAML) to open")
-    parser.add_argument("--simulate", action="store_true", help="use simulators")
     parser.add_argument(
-        "--data", help="measurements folder (default: data next to the program)"
+        "--station", help="station profile (YAML) to work with; the daemon loads it"
+    )
+    parser.add_argument(
+        "--simulate", action="store_true", help="work with the simulator's daemon"
+    )
+    parser.add_argument(
+        "--workspace",
+        help="folder whose data/ keeps the measurements (default: the program's)",
     )
     parser.add_argument(
         "--settings", help="keep settings in this INI file instead of the registry"
@@ -61,50 +73,57 @@ def main(argv: Optional[List[str]] = None) -> int:
     from thzdaq_gui.updates import clean_leftovers
 
     clean_leftovers()
-    session = Session(args.data or str(data_dir()))
-    # The station comes first: its devices get docks the saved layout restores
-    profile = args.station or settings().value(STATION_PATH)
-    if profile and not Path(profile).exists():
-        profile = None
-    default = stations_dir() / "lab.yaml"
-    if not profile and default.exists():
-        profile = str(default)
-    problem = None
-    if profile:
-        try:
-            session.load_station(profile, args.simulate)
-        except (InstrumentError, OSError) as e:
-            problem = str(e)
+    station = start_profile(args.station)
+    session = Session(
+        lambda simulate: connect_or_start(simulate, station, "gui", "gui"),
+        args.workspace or app_dir(),
+    )
+    # The lab comes first: its devices get docks the saved layout restores
+    splash = QSplashScreen(theme.app_icon().pixmap(128, 128))
+    splash.showMessage(
+        "Connecting to the ThzDAQ daemon…", Qt.AlignBottom | Qt.AlignHCenter
+    )
+    splash.show()
+    app.processEvents()
+    try:
+        session.open(args.simulate)
+    except LabError as e:
+        splash.close()
+        QMessageBox.critical(None, DAEMON, f"{e.message}\n\n{e.hint}".strip())
+        return 1
     window = MainWindow(session, check_updates=args.quit_after is None)
     window.show()
-    lock = instance_lock()
-    if lock is None and args.quit_after is None:
-        QMessageBox.warning(
-            window,
-            "ThzDAQ is already running",
-            "Another ThzDAQ (a build or a run from sources) is open. Instruments "
-            "with one connection (Prologix, R&S supplies) can serve only one of "
-            "them: close the other before working with the instruments.",
-        )
-    if problem:
-        QMessageBox.critical(window, STATION_PROFILE, problem)
+    splash.finish(window)
+    if args.station:
+        offer_profile(window, session, args.station)
     if args.quit_after is not None:
         window.confirm_exit = False
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
     return app.exec()
 
 
-_locks = []
+def start_profile(given: Optional[str]) -> Optional[str]:
+    """The profile a daemon this program starts loads: the one given, else the
+    last one worked with, else stations/lab.yaml when it exists."""
+    for candidate in (
+        given,
+        settings().value(STATION_PATH),
+        stations_dir() / "lab.yaml",
+    ):
+        if candidate and Path(candidate).exists():
+            return str(candidate)
+    return None
 
 
-def instance_lock(path: Optional[Path] = None) -> Optional[QLockFile]:
-    """A lock shared by builds and runs from sources; None when another holds it."""
-    if path is None:
-        temp = QStandardPaths.writableLocation(QStandardPaths.TempLocation)
-        path = Path(temp) / "thzdaq.lock"
-    lock = QLockFile(str(path))
-    lock.setStaleLockTime(0)  # held for hours; staleness is by the owner's PID
-    if not lock.tryLock(100):
-        return None
-    _locks.append(lock)  # held until the process ends
-    return lock
+def offer_profile(window: MainWindow, session: Session, path: str) -> None:
+    """The daemon already worked with another profile: switch only when asked."""
+    loaded = session.profile().path
+    if loaded is not None and Path(loaded).resolve() == Path(path).resolve():
+        return
+    answer = QMessageBox.question(
+        window,
+        STATION_PROFILE,
+        f"The daemon works with {loaded or 'no profile'}. Switch it to {path}?",
+    )
+    if answer == QMessageBox.Yes:
+        window.load_profile(path)

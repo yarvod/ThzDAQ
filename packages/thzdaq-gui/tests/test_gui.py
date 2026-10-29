@@ -399,18 +399,6 @@ def test_device_worker_reports_how_long_a_job_waits(app, wait):
     worker.stop()
 
 
-def test_second_instance_is_detected(app, tmp_path):
-    from thzdaq_gui.app import _locks, instance_lock
-
-    path = tmp_path / "thzdaq.lock"
-    first = instance_lock(path)
-    assert first is not None
-    assert instance_lock(path) is None  # the lock is held
-    first.unlock()
-    _locks.remove(first)
-    assert instance_lock(path) is not None
-
-
 def test_app_icon_has_a_drawing_for_every_size(app):
     from thzdaq_gui import theme
 
@@ -465,3 +453,24 @@ def test_the_session_calls_its_lab_and_hears_its_events_in_the_gui_thread(
     (body, thread), *_ = heard
     assert (body.ref, body.origin) == ("sis_bias_1", "gui")
     assert thread is threading.main_thread()
+
+
+def test_the_app_works_with_a_daemon_it_starts(app, tmp_path, profile, monkeypatch):
+    """No daemon runs: the app starts the simulator's daemon (a process of its
+    own), opens the window on its profile and leaves it running when it quits."""
+    from thzdaq_api import host
+    from thzdaq_api.devices import ListDevices
+    from thzdaq_gui.app import main
+
+    monkeypatch.setenv(host.DIR_ENV, str(tmp_path / "daemon"))
+    arguments = ["--simulate", "--station", str(profile)]
+    try:
+        code = main(
+            [*arguments, "--workspace", str(tmp_path), "--quit-after", "1"]
+            + ["--settings", str(tmp_path / "settings.ini")]
+        )
+        assert code == 0
+        lab = host.connect(simulate=True)  # it outlives the window
+        assert "sis_bias_1" in {d.ref for d in lab.call(ListDevices())}
+    finally:
+        host.kill(simulate=True)

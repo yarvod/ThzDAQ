@@ -44,10 +44,10 @@ class Bridge(QObject):
         # Emitted from another thread, delivered in this object's: the GUI's
         self._heard.connect(self._tell)
 
-    def listen(self, lab: Lab) -> None:
-        """Hear this lab from now on (and no other)."""
+    def listen(self, lab: Lab, since: Optional[int] = None) -> None:
+        """Hear this lab (and no other) after event since, from now for None."""
         self.stop()
-        self._stop = lab.subscribe(self._heard.emit)
+        self._stop = lab.subscribe(self._heard.emit, since)
 
     def stop(self) -> None:
         if self._stop is not None:

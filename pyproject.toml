@@ -139,13 +139,6 @@ Add the operation or the data type to thzdaq_api instead of importing core or dr
 analysis too is a daemon operation, so every client gets the same result (scripts and
 notebooks may import thzdaq_analysis themselves).
 """
-# The GUI before milestone M1 step 6 (GUI client): each line goes when its module moves
-# onto thzdaq_api, and an ignore that stops matching fails the check.
-ignore_imports = [
-    "thzdaq_gui.app -> thzdaq_instruments",
-    "thzdaq_gui.main_window -> thzdaq_instruments",
-    "thzdaq_gui.session -> thzdaq_core.**",
-]
 
 [[tool.importlinter.contracts]]
 name = "Clients do not import each other"

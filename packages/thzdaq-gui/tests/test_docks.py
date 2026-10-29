@@ -375,7 +375,9 @@ class TestWindow:
 
 
 class TestDeviceDocks:
-    def test_quantity_panel_reads_and_sets(self, window, session, wait, monkeypatch):
+    def test_quantity_panel_reads_and_sets(
+        self, window, session, wait, monkeypatch, bench
+    ):
         widget = window.docks["device:sis_bias_1"].widget()
         panel = widget.panels[0]
         assert [q.key for q in panel.quantities] == [
@@ -406,7 +408,7 @@ class TestDeviceDocks:
             QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or answer[0]
         )
         active = next(q for q in panel.quantities if q.key == "active")
-        channel = session.station.instrument("sis_block_1").channel("DEV4")
+        channel = bench.station.instrument("sis_block_1").channel("DEV4")
         shorted = channel.get_short()
         panel.write(active, shorted)
         assert asked and active.danger in asked[0]
@@ -420,7 +422,7 @@ class TestDeviceDocks:
         assert channel.get_short()
 
     def test_generator_configuration_from_the_profile(
-        self, window, session, profile, wait
+        self, window, session, profile, wait, bench
     ):
         dock = window.docks["device:signal_generator_1"]
         widget = dock.widget()
@@ -434,7 +436,7 @@ class TestDeviceDocks:
         # Filled from the profile, nothing written yet
         field = config.fields["frequency_multiplier"]
         assert field.value() == 18 and not field.pending
-        generator = session.station.instrument("signal_generator_1")
+        generator = bench.station.instrument("signal_generator_1")
         generator.set_frequency_multiplier(9)  # changed on the front panel
         config.read()
         wait(lambda: not config.notes["frequency_multiplier"].isHidden())
@@ -464,7 +466,9 @@ class TestDeviceDocks:
         assert field.value() == 6 and not field.pending
         assert config.notes["frequency_multiplier"].isHidden()
 
-    def test_fields_take_values_in_the_chosen_prefix(self, window, session, wait):
+    def test_fields_take_values_in_the_chosen_prefix(
+        self, window, session, wait, bench
+    ):
         main = window.docks["device:signal_generator_1"].widget().panels[0]
         field = main.fields["frequency"]
         assert field.prefix.prefix() == "G" and "×10⁹" in field.prefix.currentText()
@@ -473,21 +477,21 @@ class TestDeviceDocks:
         field.prefix.setCurrentIndex(field.prefix.findData("M"))
         assert field.spin.value() == 223500.0 and field.value() == 223.5e9
         field.apply_requested.emit()  # Enter
-        generator = session.station.instrument("signal_generator_1")
+        generator = bench.station.instrument("signal_generator_1")
         wait(lambda: generator.get_frequency() == 223.5e9)
         wait(lambda: not field.pending)
         sis = window.docks["device:sis_bias_1"].widget().panels[0]
         assert sis.fields["voltage_set"].prefix.prefix() == "m"
         assert sis.displays["current"].prefix() == "µ"
 
-    def test_chopper_dock(self, window, session, wait):
+    def test_chopper_dock(self, window, session, wait, bench):
         from thzdaq_gui.docks.devices import START_ROTATION, STOP, TO_HOT, ChopperGroup
 
         widget = window.docks["device:chopper_1"].widget()
         main = widget.panels[0]
         assert [q.key for q in main.quantities] == ["load_state", "running"]
         group = widget.findChildren(ChopperGroup)[0]
-        chopper = session.station.instrument("chopper_1")
+        chopper = bench.station.instrument("chopper_1")
         group.call(TO_HOT)
         wait(lambda: main.values["load_state"].text() == "hot")
         group.arguments[START_ROTATION].editors["frequency"].set(5.5)
@@ -498,7 +502,7 @@ class TestDeviceDocks:
         group.call(STOP)
         wait(lambda: not chopper.running)
 
-    def test_spectrum_dock_applies_and_reads(self, window, session, wait):
+    def test_spectrum_dock_applies_and_reads(self, window, session, wait, bench):
         from thzdaq_api.devices import POWER_DBM
         from thzdaq_gui.docks.devices import CONFIGURE, TraceGroup
 
@@ -508,7 +512,7 @@ class TestDeviceDocks:
             .findChildren(TraceGroup)[0]
         )
         assert group.title() == "Spectrum analyzer"
-        analyzer = session.station.instrument("spectrum_analyzer_1")
+        analyzer = bench.station.instrument("spectrum_analyzer_1")
         sweep = group.arguments[CONFIGURE].editors
         sweep["center"].set(6e9)
         sweep["span"].set(2e9)
@@ -519,10 +523,10 @@ class TestDeviceDocks:
         assert min(group.curve.getData()[0]) == pytest.approx(5e9)
         assert group.graph.getAxis("left").labelText == POWER_DBM
 
-    def test_coil_monitor_shows_the_current(self, window, session, wait):
+    def test_coil_monitor_shows_the_current(self, window, session, wait, bench):
         """The coil had only its setpoint field: Monitor showed nothing new."""
         panel = window.docks["device:sis_coil_1"].widget().panels[0]
-        coil = session.station.device("sis_coil_1")
+        coil = bench.station.device("sis_coil_1")
         coil.set_current(2.5e-3)  # e.g. a demagnetization left it there
         label = panel.values["coil_current"]
         assert label.property("role") == "value"  # orange, as the bias values
@@ -570,7 +574,7 @@ class TestDeviceDocks:
         assert raised == ["P-t"]  # once, not on every reading
 
     def test_sis_bias_offsets_and_calibration(
-        self, window, session, profile, wait, monkeypatch
+        self, window, session, profile, wait, monkeypatch, bench
     ):
         from thzdaq_gui.docks.devices import CalibrationGroup, SettingsGroup
 
@@ -588,9 +592,7 @@ class TestDeviceDocks:
             "sis_bias_2"
         ].settings["offset_voltage"] == pytest.approx(1e-4)
         # The device uses them; the dock is not rebuilt for its own values
-        assert session.station.device("sis_bias_2").offset_voltage == pytest.approx(
-            1e-4
-        )
+        assert bench.station.device("sis_bias_2").offset_voltage == pytest.approx(1e-4)
         assert window.docks["device:sis_bias_2"].widget() is widget
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
@@ -601,7 +603,7 @@ class TestDeviceDocks:
         calibration = widget.findChildren(CalibrationGroup)[0]
         calibration.write_calibration()
         wait(lambda: shown)
-        channel = session.station.instrument("sis_block_1").channel("DEV2")
+        channel = bench.station.instrument("sis_block_1").channel("DEV2")
         assert channel.calibration["VoltageStep"] == pytest.approx(1e-5)
 
         # Edited coefficients: the lab checks them, a refusal stays in the dialog
@@ -845,12 +847,12 @@ class TestMeasureAndData:
 
 
 def restarted(session, tmp_path):
-    """The session of the program started again on the same profile (closing
-    the window ends the session)."""
+    """The session of the program started again: closing the window ends its
+    session, the lab goes on."""
     from thzdaq_gui.session import Session
 
-    again = Session(str(tmp_path / "data"))
-    again.load_station(session.path, simulate=True)
+    again = Session(session.lab_of, tmp_path)
+    again.open(True)
     return again
 
 
@@ -958,8 +960,28 @@ class TestPerspectives:
         assert not window.docks["device:power_meter_1"].widget().attached
 
     def test_settings_keep_the_station_path(self, window, session, tmp_path):
-        window.on_station_changed(session.station)
-        assert window.settings.value(STATION_PATH) == str(session.path)
+        window.on_station_changed()
+        assert window.settings.value(STATION_PATH) == session.profile().path
+
+    def test_the_window_follows_a_profile_another_client_loads(
+        self, window, session, profile, wait
+    ):
+        """A CLI (another client of the same lab) loads a profile: the window
+        rebuilds its docks for it and remembers it."""
+        import shutil
+
+        from thzdaq_api.station import LoadStation
+
+        other = profile.with_name("other.yaml")
+        shutil.copy(profile, other)
+        text = other.read_text(encoding="utf-8")
+        other.write_text(text.replace("name: 2sb", "name: other"), encoding="utf-8")
+        cli = session.lab_of(True)
+        cli.origin = "cli"
+        cli.call(LoadStation(path=str(other)))
+        wait(lambda: window.stationLabel.text().startswith("Station: other"))
+        assert window.settings.value(STATION_PATH) == str(other)
+        assert "device:sis_bias_1" in window.docks
 
 
 def test_measurement_json_is_plain(tmp_path):
@@ -1069,7 +1091,7 @@ class TestHangs:
     def test_device_that_does_not_answer_is_named_once(
         self, window, monkeypatch, caplog
     ):
-        worker = window.session.worker
+        worker = window.session.calls
         monkeypatch.setattr(type(worker), "current", property(lambda s: "Rigol 1"))
         monkeypatch.setattr(type(worker), "started_at", property(lambda s: 1.0))
         monkeypatch.setattr(worker, "busy_for", lambda: 12.0)
@@ -1359,7 +1381,7 @@ class TestProcesses:
         process.stop()
         assert not panel.monitor.isChecked() and processes.items == []
 
-    def test_chopper_rotation_follows_the_chopper(self, window, wait):
+    def test_chopper_rotation_follows_the_chopper(self, window, wait, bench):
         from thzdaq_gui.docks.devices import START_ROTATION, ChopperGroup
 
         group = window.docks["device:chopper_1"].widget().findChildren(ChopperGroup)[0]
@@ -1372,7 +1394,7 @@ class TestProcesses:
         assert process.title == "Rotation · Chopper" and process.status == "7.5 Hz"
         process.stop()
         wait(lambda: not processes.items)
-        assert not window.session.station.instrument("chopper_1").is_running()
+        assert not bench.station.instrument("chopper_1").is_running()
 
     def test_a_layout_saved_before_processes_still_opens_it(
         self, window, session, tmp_path

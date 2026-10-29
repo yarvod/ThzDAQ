@@ -72,12 +72,46 @@ def profile(tmp_path):
 
 
 @pytest.fixture
-def session(app, tmp_path, profile):
+def bench(profile):
+    """The simulated bench of the tests' lab: tests look at its instruments."""
+    from thzdaq_api.lanes import Lanes
+    from thzdaq_core.adapters.yaml_profiles import load_station
+    from thzdaq_core.application.bench import Bench
+    from thzdaq_core.domain.station.station import Station
+
+    station = Station(
+        load_station(profile), pause=time.sleep, simulate=True, lively=False
+    )  # exact simulated values
+    bench = Bench(station, Lanes(), str(profile))
+    yield bench
+    bench.lanes.stop()
+    bench.station.close()
+
+
+@pytest.fixture
+def connect(bench, tmp_path):
+    """What the session connects to: the bench's use cases in this process
+    (LocalLab), called as the daemon serves them; it outlives a session, as a
+    daemon outlives its window."""
+    from thzdaq_api.measurements import DATA
+    from thzdaq_core.adapters.json_store import MeasurementStore
+    from thzdaq_core.adapters.yaml_profiles import YamlProfiles
+    from thzdaq_core.application.assembly import assemble
+    from thzdaq_core.application.local import LocalControl, LocalLab
+    from thzdaq_core.application.workspaces import Workspaces
+
+    workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
+    assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
+    yield lambda simulate: LocalLab(assembled, origin="gui")
+    assembled.close()
+
+
+@pytest.fixture
+def session(app, tmp_path, connect):
     from thzdaq_gui.session import Session
 
-    session = Session(str(tmp_path / "data"))
-    session.lively = False  # exact simulated values
-    session.load_station(profile, simulate=True)
+    session = Session(connect, tmp_path)
+    session.open(True)
     yield session
     session.shutdown()
 

@@ -79,6 +79,7 @@ class RunModel(QObject):
             parameters=dict(parameters),
             devices=dict(devices),
             comment=comment,
+            workspace=str(self.session.workspace),
         )
         lab = self.session.lab
         self.session.calls.submit(
