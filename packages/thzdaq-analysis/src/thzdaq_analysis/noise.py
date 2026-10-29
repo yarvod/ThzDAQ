@@ -2,7 +2,7 @@
 
 import math
 
-from thzdaq_instruments.units import db_to_ratio
+from thzdaq_analysis.decibels import db_to_ratio
 
 
 def y_factor_db(hot_dbm: float, cold_dbm: float) -> float:

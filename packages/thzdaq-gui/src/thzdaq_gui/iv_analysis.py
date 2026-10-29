@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 from thzdaq_gui.settings import IV_ANALYSIS, settings
 from thzdaq_gui.wording import INVALID_PARAMETERS
-from thzdaq_core.domain.analysis.iv import (
+from thzdaq_analysis.iv import (
     IVAnalysisConfig,
     IVAnalysisParameters,
     IVGapConfig,

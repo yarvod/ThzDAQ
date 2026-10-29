@@ -5,6 +5,7 @@ requires-python = "==3.11.*"
 [manifest]
 members = [
     "thzdaq",
+    "thzdaq-analysis",
     "thzdaq-api",
     "thzdaq-cli",
     "thzdaq-core",
@@ -520,12 +521,12 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
-    { name = "thzdaq-core" },
+    { name = "thzdaq-analysis" },
     { name = "thzdaq-daemon" },
     { name = "thzdaq-gui" },
 ]
 analysis = [
-    { name = "thzdaq-core" },
+    { name = "thzdaq-analysis" },
 ]
 daemon = [
     { name = "thzdaq-daemon" },
@@ -536,16 +537,35 @@ gui = [
 
 [package.metadata]
 requires-dist = [
+    { name = "thzdaq-analysis", marker = "extra == 'all'", editable = "packages/thzdaq-analysis" },
+    { name = "thzdaq-analysis", marker = "extra == 'analysis'", editable = "packages/thzdaq-analysis" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-cli", editable = "packages/thzdaq-cli" },
-    { name = "thzdaq-core", marker = "extra == 'all'", editable = "packages/thzdaq-core" },
-    { name = "thzdaq-core", marker = "extra == 'analysis'", editable = "packages/thzdaq-core" },
     { name = "thzdaq-daemon", marker = "extra == 'all'", editable = "packages/thzdaq-daemon" },
     { name = "thzdaq-daemon", marker = "extra == 'daemon'", editable = "packages/thzdaq-daemon" },
     { name = "thzdaq-gui", marker = "extra == 'all'", editable = "packages/thzdaq-gui" },
     { name = "thzdaq-gui", marker = "extra == 'gui'", editable = "packages/thzdaq-gui" },
 ]
 provides-extras = ["analysis", "daemon", "gui", "all"]
+
+[[package]]
+name = "thzdaq-analysis"
+version = "0.1.0"
+source = { editable = "packages/thzdaq-analysis" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy", specifier = ">=1.26,<2" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.2" }]
 
 [[package]]
 name = "thzdaq-api"
@@ -574,8 +594,8 @@ name = "thzdaq-core"
 version = "0.1.0"
 source = { editable = "packages/thzdaq-core" }
 dependencies = [
-    { name = "numpy" },
     { name = "pyyaml" },
+    { name = "thzdaq-analysis" },
     { name = "thzdaq-api" },
     { name = "thzdaq-instruments" },
 ]
@@ -587,8 +607,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=1.26,<2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "thzdaq-analysis", editable = "packages/thzdaq-analysis" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-instruments", editable = "packages/thzdaq-instruments" },
 ]
@@ -682,6 +702,7 @@ version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "thzdaq" },
+    { name = "thzdaq-analysis" },
     { name = "thzdaq-api" },
     { name = "thzdaq-cli" },
     { name = "thzdaq-core" },
@@ -701,6 +722,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "thzdaq", editable = "packages/thzdaq" },
+    { name = "thzdaq-analysis", editable = "packages/thzdaq-analysis" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-cli", editable = "packages/thzdaq-cli" },
     { name = "thzdaq-core", editable = "packages/thzdaq-core" },

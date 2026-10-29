@@ -2,8 +2,8 @@ from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_OPTIMIZATION
 from thzdaq_instruments.units import GHZ, MV
 
-from thzdaq_core.domain.analysis.noise import noise_temperature
-from thzdaq_core.domain.analysis.two_sb import (
+from thzdaq_analysis.noise import noise_temperature
+from thzdaq_analysis.two_sb import (
     SIDE_BANDS,
     sideband_rejection,
     test_tone_frequency,

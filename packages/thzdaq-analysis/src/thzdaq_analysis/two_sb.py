@@ -2,7 +2,7 @@
 
 from typing import Tuple
 
-from thzdaq_instruments.units import db_to_ratio, ratio_to_db
+from thzdaq_analysis.decibels import db_to_ratio, ratio_to_db
 
 SIDE_BANDS = ("upper", "lower")
 

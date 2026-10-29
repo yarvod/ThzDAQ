@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import pytest
-from thzdaq_core.domain.analysis.noise import noise_temperature
+from thzdaq_analysis.noise import noise_temperature
 from thzdaq_core.cli.measure import main
 from thzdaq_core.domain.data.measurement import CANCELLED, COMPLETED, FAILED, DeviceUse
 from thzdaq_core.adapters.json_store import MeasurementStore, read_json

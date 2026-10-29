@@ -3,7 +3,7 @@ from thzdaq_api.procedures import IF_HOT_COLD
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFilter
 from thzdaq_instruments.units import GHZ
 
-from thzdaq_core.domain.analysis.noise import noise_temperature, y_factor_db
+from thzdaq_analysis.noise import noise_temperature, y_factor_db
 from thzdaq_core.domain.measurements.plots import PlotSpec
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (

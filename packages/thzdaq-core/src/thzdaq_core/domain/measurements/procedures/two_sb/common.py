@@ -26,8 +26,8 @@ from thzdaq_instruments.capabilities import (
 )
 from thzdaq_instruments.units import GHZ, KHZ, MV
 
-from thzdaq_core.domain.analysis.noise import noise_temperature
-from thzdaq_core.domain.analysis.two_sb import SIDE_BANDS
+from thzdaq_analysis.noise import noise_temperature
+from thzdaq_analysis.two_sb import SIDE_BANDS
 from thzdaq_core.domain.parameters import (
     BoolParameter,
     ChoiceParameter,

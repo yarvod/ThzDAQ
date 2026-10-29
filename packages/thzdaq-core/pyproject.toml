@@ -5,8 +5,8 @@ description = "ThzDAQ bench model, measurements and data without GUI"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=1.26,<2",
     "pyyaml>=6.0",
+    "thzdaq-analysis",
     "thzdaq-api",
     "thzdaq-instruments",
 ]
@@ -21,6 +21,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+thzdaq-analysis = { workspace = true }
 thzdaq-api = { workspace = true }
 thzdaq-instruments = { workspace = true }
 

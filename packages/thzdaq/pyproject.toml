@@ -10,15 +10,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-analysis = ["thzdaq-core"]
+analysis = ["thzdaq-analysis"]
 daemon = ["thzdaq-daemon"]
 gui = ["thzdaq-gui"]
-all = ["thzdaq-core", "thzdaq-daemon", "thzdaq-gui"]
+all = ["thzdaq-analysis", "thzdaq-daemon", "thzdaq-gui"]
 
 [tool.uv.sources]
+thzdaq-analysis = { workspace = true }
 thzdaq-api = { workspace = true }
 thzdaq-cli = { workspace = true }
-thzdaq-core = { workspace = true }
 thzdaq-daemon = { workspace = true }
 thzdaq-gui = { workspace = true }
 

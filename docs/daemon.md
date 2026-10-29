@@ -220,8 +220,8 @@
 ```
 thzdaq-gui ──┐
 thzdaq-cli ──┼──► thzdaq-api ◄── thzdaq-core ──► thzdaq-instruments
-thzdaq-mcp ──┘          ▲             ▲
-                        └── thzdaq-daemon
+thzdaq-mcp ──┘          ▲             ▲  │
+                        └── thzdaq-daemon └──► thzdaq-analysis ◄── скрипты, ноутбуки
 
 thzdaq (мета, PyPI) ──► thzdaq-cli + thzdaq-api; extras [analysis] [daemon] [mcp] [gui] [all]
 ```
@@ -245,6 +245,12 @@ DTO, поэтому типы на границе одни на всех и пр�
   - Значения с единицами (`"2.3mV"`) клиент передаёт строкой, разбирает их демон теми же
     единицами, что и драйверы: разбора единиц в двух местах нет.
 - **thzdaq-core** — домен и юзкейсы, без сети и Qt.
+- **thzdaq-analysis** — чистые расчёты: анализ I-V (Rn, Rj, Q, щель), шумовая температура по
+  горячей и холодной нагрузке, дробовой шум, подавление боковой полосы 2SB, перевод дБ. На
+  входе массивы и параметры, на выходе dataclass результата; без файлов, станции и единиц
+  отображения. Зависит только от numpy. Core вызывает его в процедурах и в операциях анализа
+  (`analyze_iv`); GUI и CLI получают анализ этими операциями, чтобы у всех клиентов был один
+  результат, а скрипты и ноутбуки могут импортировать его сами (`thzdaq[analysis]`).
 - **thzdaq-instruments** — приборы как сейчас: возможности (`capabilities.py`) — порты домена к
   приборам, драйверы и транспорты — адаптеры к железу.
 - **thzdaq-daemon** — процесс демона. Точка сборки серверной стороны (станция, хранилища,
@@ -890,7 +896,7 @@ curve, экспорт CSV и `thzdaq show` работают как с любым
 чтобы потом менять под себя.
 ```python
 from thzdaq import connect
-from thzdaq_core.domain.analysis.noise import match_hot_cold, noise_temperature  # thzdaq[analysis]
+from thzdaq_analysis.noise import match_hot_cold, noise_temperature  # thzdaq[analysis]
 
 lab = connect()
 bias, pm = lab["sis_bias_1"], lab["power_meter_1"]
@@ -1229,7 +1235,8 @@ class PVGrid(Script):
   - `uv tool install thzdaq` — команда `thzdaq` глобально; клиент без драйверов и numpy;
   - `uv add thzdaq` / `pip install thzdaq==<версия exe>` — в свой проект, Jupyter или conda:
     `from thzdaq import connect`;
-  - `thzdaq[analysis]` — функции анализа для своих расчётов в скрипте (thzdaq-core, numpy);
+  - `thzdaq[analysis]` — функции анализа для своих расчётов в скрипте (thzdaq-analysis,
+    только numpy);
   - `thzdaq[daemon]` — демон с драйверами: стенд на чистом Python без exe (Linux, своё
     окружение);
   - `thzdaq[mcp]` — `thzdaq mcp` для агентов;
@@ -1327,7 +1334,7 @@ MCP лишь передаёт этот список чужой программ�
     слоты `read`), `PlotSpec`, процедуры, `common.py` (общие параметры, подписи осей);
   - `domain/data/` — `Measurement`, колонки; `domain/leases.py` — режимы, конфликты с явным
     намерением, записи `interactions` / `conflict` в оба измерения; `domain/actions.py`;
-    `domain/analysis/`, `domain/sis/`;
+    `domain/sis/`;
   - `application/dispatch.py` (диспетчер и конвейер), `policy.py`, `approvals.py`
     (подтверждения, ответ от любого человеческого клиента, заранее выданные разрешения
     скриптов);

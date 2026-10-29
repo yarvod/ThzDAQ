@@ -10,7 +10,7 @@ from thzdaq_instruments.capabilities import (
 )
 from thzdaq_instruments.units import GHZ, MV, UA
 
-from thzdaq_core.domain.analysis.two_sb import SIDE_BANDS
+from thzdaq_analysis.two_sb import SIDE_BANDS
 from thzdaq_core.domain.parameters import (
     BoolParameter,
     ChoiceParameter,

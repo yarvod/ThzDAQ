@@ -11,7 +11,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     IFSweep,
     PointDelay,
 )
-from thzdaq_core.domain.analysis.two_sb import (
+from thzdaq_analysis.two_sb import (
     SIDE_BANDS,
     power_difference,
     test_tone_frequency,

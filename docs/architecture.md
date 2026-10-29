@@ -78,12 +78,13 @@ packages/
       measurements/      # procedure, plots (PlotSpec), catalog (процедуры по имени),
                          # procedures/ (встроенные, список BUILTIN)
       data/              # measurement (DTO)
-      analysis/          # iv, noise, shot_noise, two_sb — чистые расчёты
       sis/               # калибровка SIS-блока, размагничивание
     application/         # runner (потоки, автосохранение, время), ports (MeasurementRepository)
     adapters/            # json_store (измерения), yaml_profiles (профили), legacy_profiles
                          # (импорт settings.ini)
     cli/                 # measure (thzdaq list | describe | run | show), station (thzdaq-station)
+  thzdaq-analysis/src/thzdaq_analysis/   # чистые расчёты, только numpy: iv, noise,
+                                         # shot_noise, two_sb, decibels
   thzdaq-api/, thzdaq-daemon/, thzdaq-cli/, thzdaq/   # контракт, демон, CLI-клиент, мета для PyPI
                                                      # (docs/daemon.md; пока заготовки)
   thzdaq-gui/src/thzdaq_gui/
@@ -633,7 +634,7 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
 | DIP | Процедуры и интерфейс зависят от интерфейсов; конкретику (станцию, стор, драйверы) собирает `app.py` |
 
 ## 6. Тестирование
-- Чистые расчёты (`analysis`, `sis`) — обычные юнит-тесты.
+- Чистые расчёты (`thzdaq-analysis`, `sis`) — обычные юнит-тесты.
 - Драйверы — на `FakeLink` и эмуляторах протоколов (SCPI-строки и разбор ответов).
 - Контрактные тесты capability: один набор на каждом драйвере-фейке и симуляторе.
 - Станция, профили, импорт старого `settings.ini`, процедуры и раннер — на симуляторах.

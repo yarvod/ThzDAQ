@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "thzdaq",
+    "thzdaq-analysis",
     "thzdaq-api",
     "thzdaq-cli",
     "thzdaq-core",
@@ -30,6 +31,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 thzdaq = { workspace = true }
+thzdaq-analysis = { workspace = true }
 thzdaq-api = { workspace = true }
 thzdaq-cli = { workspace = true }
 thzdaq-core = { workspace = true }
@@ -42,6 +44,7 @@ thzdaq-instruments = { workspace = true }
 # tests/ checks the whole repository (architecture rules)
 testpaths = [
     "tests",
+    "packages/thzdaq-analysis/tests",
     "packages/thzdaq-api/tests",
     "packages/thzdaq-instruments/tests",
     "packages/thzdaq-core/tests",
@@ -55,6 +58,7 @@ addopts = "--import-mode=importlib"
 [tool.importlinter]
 root_packages = [
     "thzdaq",
+    "thzdaq_analysis",
     "thzdaq_api",
     "thzdaq_cli",
     "thzdaq_core",
@@ -70,6 +74,21 @@ type = "forbidden"
 source_modules = ["thzdaq_api"]
 forbidden_modules = [
     "thzdaq",
+    "thzdaq_analysis",
+    "thzdaq_cli",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_gui",
+    "thzdaq_instruments",
+]
+
+[[tool.importlinter.contracts]]
+name = "Analysis is pure calculation: numpy, no ThzDAQ package"
+type = "forbidden"
+source_modules = ["thzdaq_analysis"]
+forbidden_modules = [
+    "thzdaq",
+    "thzdaq_api",
     "thzdaq_cli",
     "thzdaq_core",
     "thzdaq_daemon",
@@ -83,6 +102,7 @@ type = "forbidden"
 source_modules = ["thzdaq_instruments"]
 forbidden_modules = [
     "thzdaq",
+    "thzdaq_analysis",
     "thzdaq_api",
     "thzdaq_cli",
     "thzdaq_core",
@@ -106,10 +126,17 @@ forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
 name = "Clients use only the contract (thzdaq_api)"
 type = "forbidden"
 source_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
-forbidden_modules = ["thzdaq_core", "thzdaq_daemon", "thzdaq_instruments"]
+forbidden_modules = [
+    "thzdaq_analysis",
+    "thzdaq_core",
+    "thzdaq_daemon",
+    "thzdaq_instruments",
+]
 broken_contract_guidance = """
 A client (GUI, CLI, the thzdaq package) talks to the bench only through thzdaq_api.
-Add the operation or the data type to thzdaq_api instead of importing core or drivers.
+Add the operation or the data type to thzdaq_api instead of importing core or drivers;
+analysis too is a daemon operation, so every client gets the same result (scripts and
+notebooks may import thzdaq_analysis themselves).
 """
 # The GUI before milestone M1 step 6 (GUI client): each line goes when its module moves
 # onto thzdaq_api, and an ignore that stops matching fails the check.
@@ -129,7 +156,7 @@ ignore_imports = [
     "thzdaq_gui.forms -> thzdaq_core.**",
     "thzdaq_gui.graph_docks -> thzdaq_core.**",
     "thzdaq_gui.graphs -> thzdaq_core.**",
-    "thzdaq_gui.iv_analysis -> thzdaq_core.**",
+    "thzdaq_gui.iv_analysis -> thzdaq_analysis.**",
     "thzdaq_gui.main_window -> thzdaq_core.**",
     "thzdaq_gui.main_window -> thzdaq_instruments",
     "thzdaq_gui.measurements -> thzdaq_core.**",
@@ -143,9 +170,10 @@ type = "independence"
 modules = ["thzdaq_cli", "thzdaq_daemon", "thzdaq_gui"]
 
 [[tool.importlinter.contracts]]
-name = "Core, instruments, contract, daemon and CLI have no Qt"
+name = "Analysis, core, instruments, contract, daemon and CLI have no Qt"
 type = "forbidden"
 source_modules = [
+    "thzdaq_analysis",
     "thzdaq_api",
     "thzdaq_cli",
     "thzdaq_core",
@@ -171,6 +199,7 @@ that adapters implement.
 name = "No import cycles between sibling modules"
 type = "acyclic_siblings"
 ancestors = [
+    "thzdaq_analysis",
     "thzdaq_api",
     "thzdaq_cli",
     "thzdaq_core",

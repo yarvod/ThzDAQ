@@ -3,7 +3,7 @@ from thzdaq_api.procedures import PV_CURVE, Y_FACTOR_VOLTAGE
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
 from thzdaq_instruments.units import MV, UA
 
-from thzdaq_core.domain.analysis.noise import match_hot_cold, noise_temperature
+from thzdaq_analysis.noise import match_hot_cold, noise_temperature
 from thzdaq_core.domain.parameters import (
     BoolParameter,
     IntParameter,

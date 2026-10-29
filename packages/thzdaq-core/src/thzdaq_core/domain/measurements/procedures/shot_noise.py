@@ -4,7 +4,7 @@ from thzdaq_instruments.capabilities import PowerDetector, TunableFilter
 from thzdaq_instruments.readings import linspace
 from thzdaq_instruments.units import GHZ, MV, dbm_to_watt
 
-from thzdaq_core.domain.analysis.shot_noise import (
+from thzdaq_analysis.shot_noise import (
     amplifier_temperature,
     dynamic_resistance,
     mismatch,

@@ -11,13 +11,7 @@ from thzdaq_instruments.sim import (
     SimSisBlock,
     SimYigFilter,
 )
-from thzdaq_instruments.units import (
-    GHZ,
-    db_to_ratio,
-    dbm_to_watt,
-    ratio_to_db,
-    watt_to_dbm,
-)
+from thzdaq_instruments.units import GHZ, dbm_to_watt, watt_to_dbm
 
 
 class TestUnits:
@@ -25,14 +19,9 @@ class TestUnits:
         assert dbm_to_watt(0) == pytest.approx(1e-3)
         assert watt_to_dbm(dbm_to_watt(-32.5)) == pytest.approx(-32.5)
 
-    def test_db_roundtrip(self):
-        assert db_to_ratio(3) == pytest.approx(1.995, rel=1e-3)
-        assert ratio_to_db(db_to_ratio(2)) == pytest.approx(2)
-
-    @pytest.mark.parametrize("func", [watt_to_dbm, ratio_to_db])
-    def test_non_positive_rejected(self, func):
+    def test_non_positive_rejected(self):
         with pytest.raises(ValueError):
-            func(0)
+            watt_to_dbm(0)
 
     def test_reading_power(self):
         assert ChannelReading(2.0, 0.5).power == 1.0
