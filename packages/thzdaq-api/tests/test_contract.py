@@ -44,3 +44,14 @@ def test_failures_travel():
         "no device 'x'",
         "see list_devices",
     )
+
+
+def test_measurement_values_travel_with_complex_and_nan():
+    import math
+
+    from thzdaq_api.data import decode_values, encode_values
+
+    record = {"s11": complex(0.1, -0.2), "tn": math.nan, "f": [1.0, math.inf]}
+    again = decode_values(msgspec.json.decode(wire.encode(encode_values(record))))
+    assert again["s11"] == complex(0.1, -0.2) and math.isnan(again["tn"])
+    assert again["f"] == [1.0, math.inf]

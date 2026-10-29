@@ -21,11 +21,13 @@ class Rights(str, Enum):
 
     READ = "read"  # looks, changes nothing
     SET = "set"  # changes a device
+    RUN = "run"  # starts or stops measurements
 
 
 class Operation(
     msgspec.Struct, Generic[R], kw_only=True, frozen=True, forbid_unknown_fields=True
 ):
+    # Arguments cannot be called name, rights or long: these describe the class
     name: ClassVar[str] = ""
     rights: ClassVar[Rights] = Rights.READ
     long: ClassVar[bool] = False  # may take minutes: started, then waited for apart

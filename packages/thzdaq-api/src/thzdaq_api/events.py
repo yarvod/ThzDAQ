@@ -5,11 +5,12 @@ the last event), then listens from that number; one that fell behind the
 daemon's buffer gets Resync and takes a new snapshot.
 """
 
-from typing import Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 import msgspec
 
 from thzdaq_api.devices import Value
+from thzdaq_api.measurements import PlotInfo, RunInfo
 from thzdaq_api.operation import Operation
 
 
@@ -37,11 +38,52 @@ class ReadFailed(msgspec.Struct, tag="read_failed", frozen=True):
     message: str
 
 
+class MeasurementStarted(msgspec.Struct, tag="measurement_started", frozen=True):
+    """A measurement started; plots: those it will fill, to show at once."""
+
+    run: RunInfo
+    plots: Tuple[PlotInfo, ...]
+
+
+class MeasurementRecords(msgspec.Struct, tag="measurement_records", frozen=True):
+    """Records of a running measurement, a few at a time. Values are encoded as
+    in measurement files: thzdaq_api.data.decode_values gives them back."""
+
+    id: int
+    table: str
+    rows: Tuple[Dict[str, Any], ...]
+
+
+class MeasurementProgress(msgspec.Struct, tag="measurement_progress", frozen=True):
+    id: int
+    done: int
+    total: Union[int, None] = None
+
+
+class MeasurementLog(msgspec.Struct, tag="measurement_log", frozen=True):
+    id: int
+    message: str
+
+
+class MeasurementFinished(msgspec.Struct, tag="measurement_finished", frozen=True):
+    run: RunInfo
+
+
 class Resync(msgspec.Struct, tag="resync", frozen=True):
     """Events were lost: take a new snapshot."""
 
 
-Body = Union[QuantitySet, Values, ReadFailed, Resync]
+Body = Union[
+    QuantitySet,
+    Values,
+    ReadFailed,
+    MeasurementStarted,
+    MeasurementRecords,
+    MeasurementProgress,
+    MeasurementLog,
+    MeasurementFinished,
+    Resync,
+]
 
 
 class Event(msgspec.Struct, frozen=True):
