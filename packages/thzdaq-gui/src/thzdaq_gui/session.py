@@ -46,12 +46,12 @@ class Session(QObject):
 
     def __init__(self, data_root: str = "data", parent=None):
         super().__init__(parent)
-        self.store = MeasurementStore(data_root)
+        self.data_root = Path(data_root)  # where measurements are written
         self.worker = DeviceWorker(self)
-        self.measurements = MeasurementsModel(self.store, self)
+        self.measurements = MeasurementsModel(self, self)
         # Where file dialogs start until the user picks a folder of a kind
         self.folders = Folders(
-            {MEASUREMENTS: lambda: self.store.root, PROFILES: stations_dir}
+            {MEASUREMENTS: lambda: self.data_root, PROFILES: stations_dir}
         )
         self.runs: List[RunModel] = []
         self.processes = Processes(self)  # what runs now, for the Processes dock
@@ -120,7 +120,7 @@ class Session(QObject):
     def _open_lab(self, station: Station, simulate: bool) -> None:
         """The use cases around this station, in this process; the lanes are
         the worker's, so manual control and the lab take turns per instrument."""
-        root = Path(self.store.root)
+        root = self.data_root
         bench = Bench(station, self.worker.lanes, str(self.path))
         workspaces = Workspaces(root.parent, root, MeasurementStore)
         self._assembled = assemble(

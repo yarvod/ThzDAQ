@@ -588,9 +588,9 @@ class TestMeasureAndData:
         assert model.rowCount() == 1 and model.data(model.index(0, 5)) == COMPLETED
         saved = read_measurement(measurement.metadata["path"])
         assert saved.tables["iv"].data["voltage"][0] == 0.0
-        # Comments edited in the table go to the file at once
+        # Comments edited in the table go to the file (the daemon writes it)
         model.setData(model.index(0, 2), "edited")
-        assert read_measurement(measurement.metadata["path"]).comment == "edited"
+        wait(lambda: read_measurement(measurement.metadata["path"]).comment == "edited")
         # The next start remembers the devices and parameters
         again = type(box)(session, window.hub, box.procedure_class)
         assert again.devices.mapping()["bias"] == "sis_bias_2"
@@ -654,7 +654,7 @@ class TestMeasureAndData:
         monkeypatch.setattr("thzdaq_gui.folders.QFileDialog.getSaveFileName", save)
         # Nothing chosen yet: the data folder of the session, not the program's
         window.dataWidget.save_as()
-        assert starts[0] == Path(session.store.root).resolve()
+        assert starts[0] == session.data_root.resolve()
         assert (results / f"{measurement.id}_sis_iv_curve.json").exists()
         # Then where the last file went, also after a restart
         window.dataWidget.export()

@@ -158,7 +158,6 @@ ignore_imports = [
     "thzdaq_gui.iv_analysis -> thzdaq_analysis.**",
     "thzdaq_gui.main_window -> thzdaq_core.**",
     "thzdaq_gui.main_window -> thzdaq_instruments",
-    "thzdaq_gui.measurements -> thzdaq_core.**",
     "thzdaq_gui.session -> thzdaq_core.**",
     "thzdaq_gui.workers -> thzdaq_core.**",
 ]

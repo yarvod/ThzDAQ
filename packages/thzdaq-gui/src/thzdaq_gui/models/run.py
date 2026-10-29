@@ -129,6 +129,7 @@ class RunModel(QObject):
                 slot: DeviceUse(ref, self.title_of(ref))
                 for slot, ref in run.devices.items()
             },
+            metadata={"path": run.path} if run.path else {},
         )
         self.started.emit(self.measurement)
 

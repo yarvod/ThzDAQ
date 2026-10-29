@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
             self,
             "About ThzDAQ",
             f"ThzDAQ {__version__}<br>SIS mixer control and measurements<br><br>"
-            f"Settings: {where}<br>Data: {Path(self.session.store.root).resolve()}",
+            f"Settings: {where}<br>Data: {self.session.data_root.resolve()}",
         )
 
     def build_toolbar(self) -> None:
@@ -477,7 +477,7 @@ class MainWindow(QMainWindow):
         if dump and self.session.measurements.items:
             try:
                 path = dump_measurements(
-                    self.session.measurements.items, self.session.store.root
+                    self.session.measurements.items, self.session.data_root
                 )
                 logger.info(f"Measurements dumped to {path}")
             except OSError as e:

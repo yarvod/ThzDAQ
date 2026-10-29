@@ -6,7 +6,6 @@ file dialogs start in the folder used last (Session.folders).
 """
 
 import json
-from pathlib import Path
 
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -123,7 +122,7 @@ class DataWidget(QWidget):
                 self, MEASUREMENTS, "Save measurement", name, "JSON (*.json)"
             )
             if path:
-                self.model.save(measurement, path)
+                self.model.save_copy(measurement, path)
 
     def export(self) -> None:
         for measurement in self.selected():
@@ -149,7 +148,7 @@ class DataWidget(QWidget):
             DetailsDialog(measurement, self).exec()
 
     def open_folder(self) -> None:
-        root = Path(self.session.store.root)
+        root = self.session.data_root
         root.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(root.resolve())))
 

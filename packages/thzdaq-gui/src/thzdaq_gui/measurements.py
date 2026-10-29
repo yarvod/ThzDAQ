@@ -1,4 +1,7 @@
-"""Measurements of this session (and files opened) as a table model for the Data dock."""
+"""Measurements of this session (and files opened) as a table model for the Data dock.
+
+A comment goes to the daemon (set_comment): it writes the file, or keeps the
+comment of a running measurement with its data."""
 
 from pathlib import Path
 from typing import List, Optional
@@ -11,9 +14,10 @@ from thzdaq_api.measurement_file import (
     INTERRUPTED,
     RUNNING,
     Measurement,
+    read_measurement,
+    write_measurement,
 )
-from thzdaq_core.adapters.json_store import MeasurementStore
-from thzdaq_api.measurement_file import read_measurement
+from thzdaq_api.measurements import SetComment
 
 from thzdaq_gui import theme
 
@@ -36,9 +40,9 @@ class MeasurementsModel(QAbstractTableModel):
 
     measurement_added = Signal(object)
 
-    def __init__(self, store: MeasurementStore, parent=None):
+    def __init__(self, session, parent=None):
         super().__init__(parent)
-        self.store = store
+        self.session = session  # its lab writes comments, its worker calls it
         self.items: List[Measurement] = []
 
     # Qt model
@@ -87,8 +91,10 @@ class MeasurementsModel(QAbstractTableModel):
             return False
         item = self.items[index.row()]
         item.comment = str(value)
-        if item.status != RUNNING:
-            self.save(item)
+        path = item.metadata.get("path")
+        if path:
+            lab, comment = self.session.lab, SetComment(path=path, comment=item.comment)
+            self.session.worker.submit(lambda: lab.call(comment))
         self.dataChanged.emit(index, index)
         return True
 
@@ -131,5 +137,6 @@ class MeasurementsModel(QAbstractTableModel):
         self.add(measurement)
         return measurement
 
-    def save(self, measurement: Measurement, path=None) -> Path:
-        return self.store.save(measurement, path or measurement.metadata.get("path"))
+    def save_copy(self, measurement: Measurement, path) -> Path:
+        """A copy where a person chose (the daemon keeps the original)."""
+        return write_measurement(measurement, path)
