@@ -1,3 +1,4 @@
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import IF_HOT_COLD
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFilter
 from thzdaq_instruments.units import GHZ
@@ -24,6 +25,7 @@ LOADS = ("cold", "hot")
 
 class IFNoise(Procedure):
     name = IF_HOT_COLD
+    slot_modes = {"if_filter": EXCLUSIVE, "detector": READ}
     title = "IF noise (hot/cold)"
     description = (
         "Sweep the IF filter with the cold and the hot load and compute the "

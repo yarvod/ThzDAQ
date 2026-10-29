@@ -76,7 +76,9 @@ def test_a_measurement_runs_and_is_heard(lab):
     rows = [row for batch in bodies(heard, MeasurementRecords) for row in batch.rows]
     assert len(rows) == 11 and rows[-1]["voltage"] == pytest.approx(2e-3, abs=1e-4)
     assert bodies(heard, MeasurementProgress)[-1].done == 11
-    assert type(heard[-1].body) is MeasurementFinished  # last, after every record
+    kinds = [type(event.body) for event in heard]
+    last_record = max(i for i, kind in enumerate(kinds) if kind is MeasurementRecords)
+    assert kinds.index(MeasurementFinished) > last_record  # after every record
     assert bodies(heard, MeasurementFinished)[0].run.status == "completed"
     assert lab.call(ListRuns())[-1].id == run.id
 

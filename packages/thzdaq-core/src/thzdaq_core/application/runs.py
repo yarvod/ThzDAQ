@@ -1,45 +1,63 @@
 """Measurements running in the daemon.
 
 Each runs in its own thread with its own runner, so measurements run side by
-side; its id is the measurement's number, known as soon as it starts. Clients
-follow it by events (started with the plots it fills, records a few at a time,
-progress, log, finished) or by waiting on its id.
+side; its id is the measurement's number, given before it starts. It takes
+leases on its devices first (thzdaq_core.domain.leases): a conflict without
+share refuses the start, one accepted is noted in both measurements. Clients
+follow a run by events (started with the plots it fills, records a few at a
+time, progress, log, finished) or by waiting on its id.
 """
 
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from thzdaq_api.data import encode_values
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import (
+    LeasesChanged,
     MeasurementFinished,
     MeasurementLog,
     MeasurementProgress,
     MeasurementRecords,
     MeasurementStarted,
 )
+from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
 from thzdaq_api.measurements import RunInfo
 
 from thzdaq_core.application.bench import Bench
+from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.describe import plot_info
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.ports import MeasurementRepository
-from thzdaq_core.application.runner import MeasurementRunner, RunObserver
+from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.domain.data.measurement import RUNNING, Measurement
 from thzdaq_core.domain.errors import ProcedureError, StationError
+from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 BATCH_S = 0.05  # records travel in batches of about this long
 KEPT = 100  # runs that ended, remembered for ListRuns and wait
+STRENGTH = (READ, SHARED, EXCLUSIVE)  # a device in two slots: the stronger use
 
 
 class _Run(RunObserver):
-    def __init__(self, procedure: Procedure, origin: str, events: EventBus):
+    def __init__(
+        self,
+        run_id: int,
+        procedure: Procedure,
+        origin: str,
+        events: EventBus,
+        accepted: Tuple[Lease, ...],
+        ended: Callable[["_Run"], None],
+    ):
+        self.id = run_id
         self.procedure = procedure
         self.origin = origin
         self.events = events
+        self.accepted = accepted  # conflicts started with (share)
+        self._ended = ended
         self.runner: Optional[MeasurementRunner] = None
         self.measurement: Optional[Measurement] = None
         self.refused: Optional[LabError] = None  # failed before it started
@@ -70,18 +88,21 @@ class _Run(RunObserver):
 
     def execute(self, bench: Bench, comment: str, devices: Mapping[str, str]) -> None:
         try:
-            self.runner.run(self.procedure, comment, devices)
+            self.runner.run(self.procedure, comment, devices, self.id)
         except (ProcedureError, StationError) as e:
             self.refused = LabError(ErrorCode.INVALID_ARGUMENTS, str(e))
         except Exception as e:  # the store or the station failed before the start
             self.refused = LabError(ErrorCode.INTERNAL, f"not started: {e}")
         finally:
+            self._ended(self)
             self.ready.set()
             self.ended.set()
 
     # RunObserver: what the runner tells, as events
     def on_started(self, measurement: Measurement) -> None:
         self.measurement = measurement
+        for lease in self.accepted:
+            self.note("conflicts", conflict(lease, self.origin))
         station = self.runner.station
         refs = {slot: use.ref for slot, use in measurement.devices.items()}
         plots = self.procedure.active_plots(lambda slot: station.quantities(refs[slot]))
@@ -109,6 +130,11 @@ class _Run(RunObserver):
         self._flush()
         self.events.publish(MeasurementFinished(self.info()))
 
+    def note(self, key: str, entry: Dict[str, Any]) -> None:
+        """Into the measurement's metadata (saved with it): conflicts, interactions."""
+        if self.measurement is not None:
+            self.measurement.metadata.setdefault(key, []).append(entry)
+
     def _flush(self) -> None:
         batch, self._batch = self._batch, {}
         self._flushed = time.monotonic()
@@ -118,13 +144,32 @@ class _Run(RunObserver):
             )
 
 
+def conflict(lease: Lease, by: str) -> Dict[str, Any]:
+    """A conflict accepted with share, as both measurements note it."""
+    return {
+        "at": wall_time(),
+        "by": by,
+        "device": lease.device,
+        "run": lease.owner,
+        "mode": lease.mode,
+    }
+
+
 class Runs:
-    def __init__(self, bench: Bench, store: MeasurementRepository, events: EventBus):
+    def __init__(
+        self,
+        bench: Bench,
+        store: MeasurementRepository,
+        events: EventBus,
+        leases: Leases,
+    ):
         self.bench = bench
         self.store = store
         self.events = events
+        self.leases = leases
         self._runs: "OrderedDict[int, _Run]" = OrderedDict()
         self._lock = threading.Lock()
+        self._last_id = 0
 
     def start(
         self,
@@ -132,8 +177,31 @@ class Runs:
         devices: Mapping[str, str],
         comment: str,
         origin: str,
+        share: bool = False,
     ) -> RunInfo:
-        run = _Run(procedure, origin, self.events)
+        try:
+            procedure.validate()
+            refs = slot_devices(procedure, devices)
+        except ProcedureError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        modes: Dict[str, str] = {}
+        for slot, device in refs.items():
+            mode = procedure.slot_mode(slot)
+            modes[device] = max(modes.get(device, READ), mode, key=STRENGTH.index)
+        with self._lock:
+            run_id = self._last_id = max(self.store.next_id(), self._last_id + 1)
+        try:
+            accepted = self.leases.acquire(run_id, procedure.title, modes, share)
+        except LeaseConflict as e:
+            raise LabError(
+                ErrorCode.CONFLICT,
+                str(e),
+                "start with share to go on: both measurements note it",
+            ) from None
+        self._leases_changed()
+        for lease in accepted:
+            self.note(lease.owner, "conflicts", conflict(lease, origin))
+        run = _Run(run_id, procedure, origin, self.events, accepted, self._ended)
         run.runner = MeasurementRunner(self.bench.station, self.store, [run])
         threading.Thread(
             target=run.execute,
@@ -148,6 +216,27 @@ class Runs:
             self._runs[run.measurement.id] = run
             self._forget_old()
         return run.started
+
+    def note(self, run_id: int, key: str, entry: Dict[str, Any]) -> None:
+        """Note in a running measurement's metadata (what others did to its
+        devices)."""
+        with self._lock:
+            run = self._runs.get(run_id)
+        if run is not None:
+            run.note(key, entry)
+
+    def leases_now(self) -> Tuple[LeaseInfo, ...]:
+        return tuple(
+            LeaseInfo(lease.device, lease.mode, lease.owner, lease.title)
+            for lease in self.leases.all()
+        )
+
+    def _ended(self, run: _Run) -> None:
+        if self.leases.release(run.id):
+            self._leases_changed()
+
+    def _leases_changed(self) -> None:
+        self.events.publish(LeasesChanged(self.leases_now()))
 
     def _run(self, run_id: int) -> _Run:
         with self._lock:

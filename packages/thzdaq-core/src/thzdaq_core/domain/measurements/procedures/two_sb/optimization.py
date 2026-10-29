@@ -1,3 +1,4 @@
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_OPTIMIZATION
 from thzdaq_instruments.units import GHZ, MV
 
@@ -32,6 +33,7 @@ def _map(column: str) -> PlotSpec:
 
 class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
     name = TWO_SB_OPTIMIZATION
+    slot_modes = {"sis1": EXCLUSIVE, "sis2": EXCLUSIVE, "detector": READ}
     title = "2SB SRR/Tn bias optimization"
     description = (
         "At one IF over a SIS1 x SIS2 bias grid: test tone in both sidebands "

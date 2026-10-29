@@ -8,10 +8,11 @@ in the buffer.
 
 import threading
 from collections import deque
-from datetime import datetime
 from typing import Callable, Deque, List, Optional
 
 from thzdaq_api.events import Body, Event, Resync
+
+from thzdaq_core.application.clock import wall_time
 
 Listener = Callable[[Event], None]
 
@@ -31,7 +32,7 @@ class EventBus:
     def publish(self, body: Body) -> Event:
         with self._lock:
             self._seq += 1
-            event = Event(self._seq, now(), body)
+            event = Event(self._seq, wall_time(), body)
             self._buffer.append(event)
             listeners = list(self._listeners)
         for listener in listeners:
@@ -53,14 +54,10 @@ class EventBus:
             return []
         oldest = self._buffer[0].seq if self._buffer else self._seq + 1
         if since + 1 < oldest:
-            return [Event(self._seq, now(), Resync())]
+            return [Event(self._seq, wall_time(), Resync())]
         return [event for event in self._buffer if event.seq > since]
 
     def _unsubscribe(self, listener: Listener) -> None:
         with self._lock:
             if listener in self._listeners:
                 self._listeners.remove(listener)
-
-
-def now() -> str:
-    return datetime.now().isoformat(timespec="milliseconds")

@@ -1,3 +1,4 @@
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE
 from thzdaq_instruments.capabilities import CurrentSource, VoltageCurrentMeter
 from thzdaq_instruments.units import MA, UA
@@ -14,6 +15,7 @@ from thzdaq_core.domain.sis.demagnetization import demagnetization_currents
 
 class Demagnetize(Procedure):
     name = DEMAGNETIZE
+    slot_modes = {"coil": EXCLUSIVE}
     title = "SIS magnet demagnetization"
     description = (
         "Sweep the coil current over the full range, then swing it around the "
@@ -73,6 +75,7 @@ class Demagnetize(Procedure):
 
 class CLCurve(Procedure):
     name = CL_CURVE
+    slot_modes = {"coil": EXCLUSIVE, "bias": READ}
     title = "SIS I-CL curve"
     description = (
         "Sweep the magnet coil current and read the bias current: finds the "

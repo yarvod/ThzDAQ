@@ -3,7 +3,6 @@ import logging
 import threading
 import time
 import traceback
-from datetime import datetime
 from typing import (
     Any,
     Callable,
@@ -23,15 +22,12 @@ from thzdaq_core.domain.data.measurement import (
     DeviceUse,
     Measurement,
 )
+from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.ports import MeasurementRepository
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.procedure import Capabilities, Procedure
 
 logger = logging.getLogger(__name__)
-
-
-def wall_time() -> str:
-    return datetime.now().isoformat(timespec="milliseconds")
 
 
 # Numbers of measurements that are not saved (no store)
@@ -165,6 +161,16 @@ class Context:
         return errors
 
 
+def slot_devices(procedure: Procedure, devices: Mapping[str, str]) -> Dict[str, str]:
+    """The device of every slot of a run: as given, else the station device
+    named like the slot."""
+    required = procedure.slots()
+    unknown = set(devices) - set(procedure.requires) - set(required)
+    if unknown:
+        raise ProcedureError(f"{procedure.name} has no slots {sorted(unknown)}")
+    return {slot: devices.get(slot) or slot for slot in required}
+
+
 class MeasurementRunner:
     """Runs procedures against a station: devices, measurement, file, cleanup, status.
 
@@ -206,27 +212,31 @@ class MeasurementRunner:
         procedure: Procedure,
         comment: str = "",
         devices: Optional[Mapping[str, str]] = None,
+        measurement_id: Optional[int] = None,
     ) -> Measurement:
         """devices maps procedure slots to station devices, e.g. {"bias": "sis_bias_1"}.
 
         A slot without a device uses the station device of the same name.
+        measurement_id: the number given by whoever took the devices for it;
+        None: the store's next.
         """
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Another measurement is running on this runner")
         try:
-            return self._run(procedure, comment, dict(devices or {}))
+            return self._run(procedure, comment, dict(devices or {}), measurement_id)
         finally:
             self._lock.release()
 
     def _run(
-        self, procedure: Procedure, comment: str, devices: Dict[str, str]
+        self,
+        procedure: Procedure,
+        comment: str,
+        devices: Dict[str, str],
+        measurement_id: Optional[int],
     ) -> Measurement:
         procedure.validate()
         required = procedure.slots()
-        unknown = set(devices) - set(procedure.requires) - set(required)
-        if unknown:
-            raise ProcedureError(f"{procedure.name} has no slots {sorted(unknown)}")
-        refs = {slot: devices.get(slot) or slot for slot in required}
+        refs = slot_devices(procedure, devices)
         # Fails before any file exists when a device is missing or unsuitable
         found = self.station.require(refs, required)
         self._cancel.clear()
@@ -239,7 +249,10 @@ class MeasurementRunner:
             station=self.station.snapshot(refs.values()),
             started=wall_time(),
         )
-        measurement.id = self.store.next_id() if self.store else next(_LOCAL_IDS)
+        if measurement_id is not None:
+            measurement.id = measurement_id
+        else:
+            measurement.id = self.store.next_id() if self.store else next(_LOCAL_IDS)
         self.current = measurement
         saved = [0.0]
 

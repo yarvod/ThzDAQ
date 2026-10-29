@@ -1,22 +1,42 @@
 """Reading and setting device quantities, each in its instrument's lane; what is
-read or set becomes the known value, a set is an event."""
+read or set becomes the known value, a set is an event.
+
+A set of a device a running measurement sweeps needs share; the measurements
+using the device note who changed what (thzdaq_core.domain.leases). Leases
+change only when runs start and end, so the check just before the write holds.
+"""
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import QuantitySet
+from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_core.application.bench import Bench
+from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.domain.leases import LeaseConflict, Leases
+
+# note(run id, metadata key, entry) into a running measurement
+Note = Callable[[int, str, Dict[str, Any]], None]
 
 
 class DeviceAccess:
-    def __init__(self, bench: Bench, known: KnownValues, events: EventBus):
+    def __init__(
+        self,
+        bench: Bench,
+        known: KnownValues,
+        events: EventBus,
+        leases: Leases,
+        note: Note,
+    ):
         self.bench = bench
         self.known = known
         self.events = events
+        self.leases = leases
+        self.note = note
 
     def quantities(self, ref: str) -> List[Quantity]:
         self.bench.info(ref)  # an unknown device is NOT_FOUND
@@ -65,7 +85,9 @@ class DeviceAccess:
 
         self.bench.submit(ref, lambda device: read_values(device, wanted), done)
 
-    def write(self, ref: str, key: str, value: Any, origin: str) -> Any:
+    def write(
+        self, ref: str, key: str, value: Any, origin: str, share: bool = False
+    ) -> Any:
         """Set a quantity; the value as given (a text may carry its unit) is
         parsed by the quantity. Returns the value set."""
         quantity = self.quantity(ref, key)
@@ -75,8 +97,27 @@ class DeviceAccess:
             parsed = quantity.parse(value)
         except ValueError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        users = self.leases.of(ref)
+        swept = [lease for lease in users if lease.mode == EXCLUSIVE]
+        if swept and not share:
+            raise LabError(
+                ErrorCode.CONFLICT,
+                str(LeaseConflict(tuple(swept))),
+                "set with share to go on: the measurement notes it",
+            )
         before = self.known.get(ref, key)
         self.bench.run(ref, lambda device: quantity.write(device, parsed))
         self.known.update(ref, {key: parsed})
         self.events.publish(QuantitySet(ref, key, parsed, before, origin))
+        change = {
+            "at": wall_time(),
+            "by": origin,
+            "device": ref,
+            "key": key,
+            "before": before,
+            "value": parsed,
+        }
+        for lease in users:
+            kind = "conflicts" if lease.mode == EXCLUSIVE else "interactions"
+            self.note(lease.owner, kind, change)
         return parsed

@@ -1,3 +1,4 @@
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_SRR, TWO_SB_TN
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
@@ -51,6 +52,8 @@ NOISE_PLOTS = (
 
 class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
     name = TWO_SB_SRR
+    # The spectrum analyzer is set up (bandwidths, span): shared, not read
+    slot_modes = {"if_filter": EXCLUSIVE, "test_tone": EXCLUSIVE, "detector": READ}
     title = "2SB sideband ratio"
     description = (
         "Test tone in each sideband, power in both IF channels: wanted minus "
@@ -160,6 +163,7 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
 
 class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     name = TWO_SB_TN
+    slot_modes = {"if_filter": EXCLUSIVE, "detector": READ}
     title = "2SB noise temperature"
     description = "Hot/cold Y-factor and Tn of the upper and lower IF channels."
     plots = NOISE_PLOTS

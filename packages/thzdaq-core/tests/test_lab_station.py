@@ -40,7 +40,9 @@ def test_an_edited_profile_is_saved_applied_and_told(lab):
     profile["instruments"]["power_meter_1"]["title"] = "IF detector"
     lab.call(UpdateStation(profile=profile))
     assert titles(lab)["power_meter_1"] == "IF detector"
-    assert load_station(station.path).instruments["power_meter_1"].title == "IF detector"
+    assert (
+        load_station(station.path).instruments["power_meter_1"].title == "IF detector"
+    )
     assert bodies(heard, StationChanged)[0].path == station.path
 
 

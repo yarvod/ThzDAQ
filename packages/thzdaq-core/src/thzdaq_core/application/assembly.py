@@ -13,6 +13,7 @@ from thzdaq_core.application.ports import MeasurementRepository, ProfileReposito
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.domain.leases import Leases
 
 
 @dataclass
@@ -32,9 +33,9 @@ def assemble(
 ) -> Assembled:
     events = EventBus()
     known = KnownValues()
-    access = DeviceAccess(bench, known, events)
+    runs = Runs(bench, store, events, Leases())
+    access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     polling = Polling(access, events)
-    runs = Runs(bench, store, events)
     profile = StationService(bench, profiles, runs, events)
     dispatcher = Dispatcher(
         (
@@ -45,6 +46,7 @@ def assemble(
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
             state.GetSnapshot(events, known),
+            state.ListLeases(runs),
             measurements.ListProcedures(),
             measurements.DescribeProcedure(),
             measurements.StartMeasurement(runs),

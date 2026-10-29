@@ -8,6 +8,7 @@ value) and goes to the graph of its unit: dBm to P-t, K to T-t, V to V-t, ...
 
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from thzdaq_api.leases import READ
 from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
 from thzdaq_instruments.units import GHZ, MA, MV, UA
@@ -122,6 +123,9 @@ class Monitor(Procedure):
 
     def slots(self):
         return {ref: object for ref in self.refs()}
+
+    def slot_mode(self, slot: str) -> str:
+        return READ  # watches, never sets
 
     def estimate_steps(self):
         return int(self.duration / self.interval) + 1 if self.duration else None

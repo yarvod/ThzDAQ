@@ -12,6 +12,7 @@ from typing import (
     Union,
 )
 
+from thzdaq_api.leases import SHARED
 from thzdaq_core.domain.data.measurement import Column
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import Parameter
@@ -44,6 +45,9 @@ class Procedure:
         "if_selector": "channel",
         "yig_power": "channel",
     }
+    # How a slot uses its device while the run lasts (thzdaq_api.leases): read,
+    # exclusive (it sweeps the device) or, unlisted, shared
+    slot_modes: ClassVar[Mapping[str, str]] = {}
     plots: ClassVar[Tuple[PlotSpec, ...]] = ()
     # Record tables: titles, and columns whose title/unit differ from KNOWN_COLUMNS
     table_titles: ClassVar[Mapping[str, str]] = {}
@@ -105,6 +109,10 @@ class Procedure:
     def slots(self) -> Dict[str, Capabilities]:
         """Device slots this run needs; override when they depend on parameters."""
         return dict(self.requires)
+
+    def slot_mode(self, slot: str) -> str:
+        """read, shared or exclusive; override when it depends on parameters."""
+        return self.slot_modes.get(slot, SHARED)
 
     @classmethod
     def slot_title(cls, slot: str) -> str:

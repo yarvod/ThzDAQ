@@ -1,3 +1,4 @@
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import PV_CURVE, Y_FACTOR_VOLTAGE
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
 from thzdaq_instruments.units import MV, UA
@@ -33,6 +34,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
 
 class PVCurve(Procedure):
     name = PV_CURVE
+    slot_modes = {"bias": EXCLUSIVE, "detector": READ}
     title = "SIS P-V curve"
     description = (
         "Sweep the bias and read the IF power; optionally with hot and cold "

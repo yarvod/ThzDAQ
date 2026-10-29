@@ -1,5 +1,6 @@
 from itertools import product
 
+from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_IF_BALANCE, TWO_SB_PUMP_BALANCE
 from thzdaq_instruments.capabilities import (
     PowerDetector,
@@ -39,6 +40,12 @@ from thzdaq_core.domain.measurements.procedures.two_sb.common import (
 
 class IfBalance(IfSwitchProcedure):
     name = TWO_SB_IF_BALANCE
+    slot_modes = {
+        "sis1": EXCLUSIVE,
+        "sis2": EXCLUSIVE,
+        "if_filter": EXCLUSIVE,
+        "detector": READ,
+    }
     title = "2SB IF balance"
     description = (
         "IF power of both channels over the IF band for every SIS1 x SIS2 bias pair."
@@ -114,6 +121,7 @@ class IfBalance(IfSwitchProcedure):
 
 class PumpBalance(TwoSbProcedure):
     name = TWO_SB_PUMP_BALANCE
+    slot_modes = {"sis1": EXCLUSIVE, "sis2": EXCLUSIVE, "detector": READ}
     title = "2SB LO/RF balance"
     description = (
         "Pumped currents of both mixers versus LO or RF frequency for paired "
@@ -154,6 +162,9 @@ class PumpBalance(TwoSbProcedure):
     @property
     def other(self) -> str:
         return "test_tone" if self.source == "lo" else "lo"
+
+    def slot_mode(self, slot: str) -> str:
+        return EXCLUSIVE if slot == self.source else super().slot_mode(slot)
 
     def slots(self):
         slots = {**self.base_slots(), self.source: SOURCE + (PowerLevel,)}
