@@ -53,6 +53,38 @@ def test_slots_follow_the_parameters(lab):
     )
     assert "load" not in {s.name for s in plain.slots}
     assert "load" in {s.name for s in hot_cold.slots}
+    # The Y-factor is drawn only when there is a hot and a cold load
+    assert len(hot_cold.plots) > len(plain.plots)
+
+
+def test_a_run_is_described_with_its_steps_and_plot_window(lab):
+    iv = lab.call(DescribeProcedure(procedure=IV_CURVE, parameters=FAST_IV))
+    assert iv.steps == 11 and iv.plot_window is None
+    voltage = next(p for p in iv.parameters if p.name == "voltage")
+    assert voltage.max_points and voltage.max_points > 11
+    monitor = lab.call(
+        DescribeProcedure(
+            procedure=MONITOR_TIME,
+            parameters={**MONITOR, "watch": ["power_meter_1", "sis_bias_1/voltage"]},
+            devices={"power_meter_1": "power_meter_1", "sis_bias_1": "sis_bias_1"},
+        )
+    )
+    assert monitor.steps is None and monitor.plot_window == 600.0
+    assert [s.capabilities for s in monitor.slots] == [(), ()]  # any device
+    # The graphs of the units its devices read, not every one it may fill
+    assert {p.title for p in monitor.plots} == {"P-t", "V-t"}
+
+
+def test_every_invalid_parameter_is_named(lab):
+    with pytest.raises(LabError) as error:
+        lab.call(
+            DescribeProcedure(
+                procedure=IV_CURVE,
+                parameters={**FAST_IV, "settle_time": -1, "first_point_delay": "x"},
+            )
+        )
+    assert error.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert "Settle time" in str(error.value) and "First point" in str(error.value)
 
 
 def test_a_measurement_runs_and_is_heard(lab):

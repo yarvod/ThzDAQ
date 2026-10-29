@@ -6,6 +6,7 @@ from thzdaq_api import measurements as api
 from thzdaq_api.errors import ErrorCode, LabError
 
 from thzdaq_core.application.describe import procedure_info, procedure_summary
+from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.domain.errors import ProcedureError
@@ -37,8 +38,17 @@ class ListProcedures(Handler[api.ListProcedures, Tuple[api.ProcedureSummary, ...
 class DescribeProcedure(Handler[api.DescribeProcedure, api.ProcedureInfo]):
     operation = api.DescribeProcedure
 
+    def __init__(self, devices: DeviceAccess):
+        self.devices = devices
+
     def handle(self, args, origin):
-        return procedure_info(build(args.procedure, args.parameters))
+        procedure = build(args.procedure, args.parameters)
+
+        def quantities(slot: str):
+            ref = args.devices.get(slot)
+            return self.devices.quantities(ref) if ref else []
+
+        return procedure_info(procedure, quantities if args.devices else None)
 
 
 class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):

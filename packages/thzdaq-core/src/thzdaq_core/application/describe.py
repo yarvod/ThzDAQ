@@ -1,6 +1,6 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
-from typing import Any, Type
+from typing import Any, Callable, Iterable, Optional, Type
 
 from thzdaq_api import devices as api
 from thzdaq_api import measurements, station as station_api
@@ -111,14 +111,20 @@ def procedure_summary(cls: Type[Procedure]) -> measurements.ProcedureSummary:
     )
 
 
-def procedure_info(procedure: Procedure) -> measurements.ProcedureInfo:
-    """With the slots and plots its parameters give."""
+def procedure_info(
+    procedure: Procedure,
+    quantities: Optional[Callable[[str], Iterable[Quantity]]] = None,
+) -> measurements.ProcedureInfo:
+    """As a run with its parameters goes; quantities(slot) lists what the
+    device in a slot reads (a monitor's plots follow them), None: every plot."""
     slots = tuple(
         measurements.SlotInfo(
             name=slot,
             title=procedure.slot_title(slot),
             capabilities=tuple(
-                c.__name__ for c in (needs if isinstance(needs, tuple) else (needs,))
+                c.__name__
+                for c in (needs if isinstance(needs, tuple) else (needs,))
+                if c is not object  # any device: what a monitor watches
             ),
             kind=procedure.slot_kinds.get(slot),
         )
@@ -130,7 +136,9 @@ def procedure_info(procedure: Procedure) -> measurements.ProcedureInfo:
         description=procedure.description,
         parameters=tuple(parameter_info(p) for p in procedure.parameters().values()),
         slots=slots,
-        plots=tuple(procedure.plots),
+        plots=tuple(procedure.active_plots(quantities)),
+        steps=procedure.estimate_steps(),
+        plot_window=procedure.plot_window(),
     )
 
 

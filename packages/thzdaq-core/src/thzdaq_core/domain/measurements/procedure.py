@@ -89,13 +89,20 @@ class Procedure:
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> "Procedure":
+        """Raises ProcedureError naming every invalid parameter."""
         parameters = cls.parameters()
         unknown = set(data) - set(parameters)
         if unknown:
             raise ProcedureError(f"{cls.name}: unknown parameters {sorted(unknown)}")
-        return cls(
-            **{key: parameters[key].from_json(value) for key, value in data.items()}
-        )
+        values, problems = {}, []
+        for key, value in data.items():
+            try:
+                values[key] = parameters[key].from_json(value)
+            except ProcedureError as e:
+                problems.append(f"{parameters[key].label}: {e}")
+        if problems:
+            raise ProcedureError("; ".join(problems))
+        return cls(**values)
 
     def values(self) -> Dict[str, Any]:
         return {key: getattr(self, key) for key in self.parameters()}

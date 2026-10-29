@@ -65,7 +65,7 @@ def assemble(
             state.ListLeases(runs),
             analysis.AnalyzeIv(),
             measurements.ListProcedures(),
-            measurements.DescribeProcedure(),
+            measurements.DescribeProcedure(access),
             measurements.StartMeasurement(runs),
             measurements.ListRuns(runs),
             measurements.WaitMeasurement(runs),

@@ -7,10 +7,10 @@ stays in Hz / V. A parameter that a run sets a device to says where it goes
 of that device before the run starts.
 """
 
-import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from thzdaq_api.measurements import split_list
 from thzdaq_instruments.readings import linspace
 
 from thzdaq_core.domain.errors import ProcedureError
@@ -227,8 +227,8 @@ class FloatListParameter(Parameter):
         return values
 
     def parse(self, text: str) -> Tuple[float, ...]:
-        items = [item for item in re.split(r"[,;\s]+", str(text).strip()) if item]
-        return self.validate([_number(item) * self.display_scale for item in items])
+        scale = self.display_scale
+        return self.validate([_number(item) * scale for item in split_list(text)])
 
     def to_json(self, value) -> List[float]:
         return list(value)
@@ -255,7 +255,7 @@ class StringListParameter(Parameter):
         return values
 
     def parse(self, text: str) -> Tuple[str, ...]:
-        return self.validate(re.split(r"[,;\s]+", str(text).strip()))
+        return self.validate(split_list(text))
 
     def to_json(self, value) -> List[str]:
         return list(value)
@@ -287,9 +287,7 @@ class MultiChoiceParameter(Parameter):
         return values
 
     def parse(self, text: str) -> Tuple[Any, ...]:
-        return self.validate(
-            [item for item in re.split(r"[,;\s]+", str(text).strip()) if item]
-        )
+        return self.validate(split_list(text))
 
     def to_json(self, value) -> List[Any]:
         return list(value)
@@ -341,6 +339,9 @@ class SweepParameter(Parameter):
 
     def to_json(self, value: Sweep) -> Dict[str, Any]:
         return {"start": value.start, "stop": value.stop, "points": value.points}
+
+    def describe(self) -> Dict[str, Any]:
+        return {**super().describe(), "max_points": self.max_points}
 
     def bounds(self, value: Sweep) -> Tuple[float, ...]:
         return (value.start, value.stop)
