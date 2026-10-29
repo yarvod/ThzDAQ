@@ -45,6 +45,18 @@ from thzdaq_instruments.capabilities import (
     NetworkAnalyzer,
     SpectrumAnalyzer,
 )
+from thzdaq_instruments.actions import (
+    CONFIGURE_NETWORK,
+    CONFIGURE_SPECTRUM,
+    READ_TRACE,
+    START_ROTATION,
+    STOP_ROTATION,
+    TO_COLD,
+    TO_HOT,
+    TURN_OFF,
+    TURN_ON,
+    Action,
+)
 from thzdaq_instruments.quantities import Quantity, read_values
 
 from thzdaq_gui import theme
@@ -415,25 +427,42 @@ def _same(a, b) -> bool:
         return str(a).strip().upper() == str(b).strip().upper()
 
 
+def action_button(action: Action, icon_name: str, run, tip: str = "") -> QPushButton:
+    """A button running a device action without arguments; a dangerous one asks
+    first, with its warning."""
+    button = QPushButton(theme.icon(icon_name), action.title)
+    button.setToolTip(tip or action.help or action.danger)
+
+    def clicked():
+        if action.danger:
+            answer = QMessageBox.question(
+                button, action.title, f"{action.danger}. {action.title}?"
+            )
+            if answer != QMessageBox.Yes:
+                return
+        run(action)
+
+    button.clicked.connect(clicked)
+    return button
+
+
 class ActionsGroup(QGroupBox):
-    """Buttons calling device methods in the device thread."""
+    """Buttons running device actions in the device thread."""
 
     def __init__(self, title: str, panel: QuantityPanel, actions, parent=None):
         super().__init__(title, parent)
         layout = QHBoxLayout(self)
         self.panel = panel
-        for text, icon_name, call in actions:
-            button = QPushButton(theme.icon(icon_name), text)
-            button.clicked.connect(lambda _=False, c=call: self.run(c))
-            layout.addWidget(button)
+        for action, icon_name in actions:
+            layout.addWidget(action_button(action, icon_name, self.run))
         self.result = QLabel()
         self.result.setProperty("role", "value")
         layout.addWidget(self.result, 1)
 
-    def run(self, call) -> None:
+    def run(self, action: Action) -> None:
         session = self.panel.session
         session.worker.submit(
-            lambda: call(self.panel.device()),
+            lambda: action.run(self.panel.device(), {}),
             lambda value: self.result.setText("" if value is None else str(value)),
             lambda error: self.result.setText(f"{error}"),
             self.panel.title,
@@ -456,29 +485,27 @@ class ChopperGroup(QGroupBox):
         self.panel = panel
         layout = QVBoxLayout(self)
         moves = QHBoxLayout()
-        for text, icon_name, call, tip in (
-            ("Hot", "fire", lambda d: d.to_hot(), "Turn to the hot load (by the sensors)"),
-            ("Cold", "snowflake", lambda d: d.to_cold(), "Turn to the cold load (by the sensors)"),
-        ):  # fmt: skip
-            button = QPushButton(theme.icon(icon_name), text)
-            button.setToolTip(tip)
-            button.clicked.connect(lambda _=False, c=call: self.run(c))
-            moves.addWidget(button)
+        for action, icon_name in ((TO_HOT, "fire"), (TO_COLD, "snowflake")):
+            tip = f"{action.help} (by the sensors)"
+            moves.addWidget(action_button(action, icon_name, self.run, tip))
         layout.addLayout(moves)
         rotation = QHBoxLayout()
-        rotation.addWidget(QLabel("Frequency"))
+        frequency = START_ROTATION.arguments[0]
+        rotation.addWidget(QLabel(frequency.title))
         self.frequency = CompactDoubleSpinBox()
-        self.frequency.setRange(0.1, 20.0)
+        self.frequency.setRange(frequency.minimum, frequency.maximum)
         self.frequency.setDecimals(2)
         self.frequency.setSingleStep(0.1)
         self.frequency.setSuffix(" Hz")
         saved = settings().value(setpoint_key(panel.ref, CHOPPER_FREQUENCY))
-        self.frequency.setValue(float(saved) if saved is not None else 10.0)
+        self.frequency.setValue(
+            float(saved) if saved is not None else frequency.default
+        )
         self.btnStart = QPushButton(
-            theme.icon("rotate-3d-variant"), "Continuous rotation"
+            theme.icon("rotate-3d-variant"), START_ROTATION.title
         )
         self.btnStart.clicked.connect(self.start)
-        self.btnStop = QPushButton(theme.icon("stop"), "Stop")
+        self.btnStop = QPushButton(theme.icon("stop"), STOP_ROTATION.title)
         self.btnStop.clicked.connect(self.stop)
         for widget in (self.frequency, self.btnStart, self.btnStop):
             rotation.addWidget(widget)
@@ -492,17 +519,17 @@ class ChopperGroup(QGroupBox):
     def start(self) -> None:
         frequency = self.frequency.value()
         settings().setValue(setpoint_key(self.panel.ref, CHOPPER_FREQUENCY), frequency)
-        self.run(lambda d: d.start_rotation(frequency))
+        self.run(START_ROTATION, {"frequency": frequency})
 
     def stop(self) -> None:
-        self.run(lambda d: d.stop())
+        self.run(STOP_ROTATION)
 
-    def run(self, call) -> None:
+    def run(self, action: Action, arguments=None) -> None:
         self.result.setText("working...")
 
         def job():
             device = self.panel.device()
-            call(device)
+            action.run(device, arguments or {})
             return device.is_running() if hasattr(device, "is_running") else False
 
         def done(rotating):
@@ -538,24 +565,21 @@ class CompressorGroup(QGroupBox):
         self.panel = panel
         layout = QVBoxLayout(self)
         row = QHBoxLayout()
-        for text, icon_name, call in (
-            ("Turn on", "power", lambda d: d.turn_on()),
-            ("Turn off", "power-off", lambda d: d.turn_off()),
-            ("Read", "refresh", None),
-        ):
-            button = QPushButton(theme.icon(icon_name), text)
-            button.clicked.connect(lambda _=False, c=call: self.run(c))
-            row.addWidget(button)
+        for action, icon_name in ((TURN_ON, "power"), (TURN_OFF, "power-off")):
+            row.addWidget(action_button(action, icon_name, self.run))
+        read = QPushButton(theme.icon("refresh"), "Read")
+        read.clicked.connect(lambda: self.run(None))
+        row.addWidget(read)
         layout.addLayout(row)
         self.text = QLabel("--")
         self.text.setProperty("role", "value")
         layout.addWidget(self.text)
 
-    def run(self, call) -> None:
+    def run(self, action: Optional[Action]) -> None:
         def job():
             device = self.panel.device()
-            if call is not None:
-                call(device)
+            if action is not None:
+                action.run(device, {})
             return device.read_temperatures(), device.read_pressures()
 
         def show(values):
@@ -600,9 +624,11 @@ class TraceGroup(QGroupBox):
             self.stop.setValue(1e9)
         layout.addLayout(form)
         row = QHBoxLayout()
-        apply_button = QPushButton(theme.icon("check"), "Apply")
+        configure = CONFIGURE_NETWORK if vna else CONFIGURE_SPECTRUM
+        apply_button = QPushButton(theme.icon("check"), configure.title)
+        apply_button.setToolTip(configure.help)
         apply_button.clicked.connect(self.apply)
-        read = QPushButton(theme.icon("chart-line"), "Read trace")
+        read = QPushButton(theme.icon("chart-line"), READ_TRACE.title)
         read.clicked.connect(self.read)
         self.continuous = QCheckBox("Continuous")
         self.continuous.toggled.connect(
@@ -628,15 +654,18 @@ class TraceGroup(QGroupBox):
         start, stop = self.start.value(), self.stop.value()
         points, parameter = self.points.value(), self.parameter.toPlainText().strip()
 
+        if self.vna:
+            action, arguments = CONFIGURE_NETWORK, {
+                "start": start,
+                "stop": stop,
+                "points": points,
+                "parameter": parameter or "S11",
+            }
+        else:
+            action, arguments = CONFIGURE_SPECTRUM, {"center": start, "span": stop}
+
         def job():
-            device = self.panel.device()
-            if self.vna:
-                device.set_frequency_range(start, stop)
-                device.set_points(points)
-                device.select_parameter(parameter or "S11")
-            else:
-                device.set_center_frequency(start)
-                device.set_span(stop)
+            action.run(self.panel.device(), arguments)
 
         self.panel.session.worker.submit(
             job, None, self.panel.failed, self.panel.title, key=self.panel.lane
@@ -647,7 +676,7 @@ class TraceGroup(QGroupBox):
             return
         self.pending = True
         self.panel.session.worker.submit(
-            lambda: self.panel.device().read_trace(),
+            lambda: READ_TRACE.run(self.panel.device(), {}),
             self.show,
             self.error,
             self.panel.title,
@@ -885,13 +914,12 @@ class DeviceWidget(QScrollArea):
         caps = info.capabilities
         groups = []
         driver = self.session.station.driver_class(info.instrument)
-        if LoadSwitch in caps and hasattr(driver, "start_rotation"):
+        if LoadSwitch in caps and START_ROTATION in getattr(driver, "actions", ()):
             groups.append(ChopperGroup(panel))
         elif LoadSwitch in caps:
-            groups.append(ActionsGroup("Calibration load", panel, (
-                ("Hot", "fire", lambda d: d.to_hot()),
-                ("Cold", "snowflake", lambda d: d.to_cold()),
-            )))  # fmt: skip
+            groups.append(ActionsGroup(
+                "Calibration load", panel, ((TO_HOT, "fire"), (TO_COLD, "snowflake"))
+            ))  # fmt: skip
         if Compressor in caps:
             groups.append(CompressorGroup(panel))
         if SpectrumAnalyzer in caps:

@@ -11,12 +11,54 @@ measure()): they share a ``source`` and read_values() calls it once.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from thzdaq_instruments import capabilities as caps
 from thzdaq_instruments.units import parse_value
 
 Kind = Literal["float", "int", "bool", "text"]
+
+
+BOOL_WORDS = {
+    "true": True,
+    "on": True,
+    "1": True,
+    "false": False,
+    "off": False,
+    "0": False,
+}
+
+
+def parse_as(spec: Any, value: Any) -> Any:
+    """A value as given, as a quantity or an action argument takes it: spec has
+    key, kind, unit and choices."""
+    if spec.kind == "bool":
+        if isinstance(value, str):
+            word = value.strip().lower()
+            if word not in BOOL_WORDS:
+                raise ValueError(f"{spec.key}: {value!r} is not on or off")
+            return BOOL_WORDS[word]
+        return bool(value)
+    if spec.kind == "text":
+        text = str(value)
+        if spec.choices and text not in [str(c) for c in spec.choices]:
+            raise ValueError(f"{spec.key}: {text!r} is not one of {list(spec.choices)}")
+        return text
+    number = parse_value(value, spec.unit) if isinstance(value, str) else value
+    if isinstance(number, bool) or not isinstance(number, (int, float)):
+        raise ValueError(f"{spec.key}: {value!r} is not a number")
+    return int(number) if spec.kind == "int" else float(number)
 
 
 @dataclass(frozen=True)
@@ -52,31 +94,7 @@ class Quantity:
     def parse(self, value: Any) -> Any:
         """A value as a person or a client gives it, as this quantity takes it:
         "2.3mV" -> 0.0023 for a V quantity, "on" -> True for a bool one."""
-        if self.kind == "bool":
-            if isinstance(value, str):
-                words = {
-                    "true": True,
-                    "on": True,
-                    "1": True,
-                    "false": False,
-                    "off": False,
-                    "0": False,
-                }
-                if value.strip().lower() not in words:
-                    raise ValueError(f"{self.key}: {value!r} is not on or off")
-                return words[value.strip().lower()]
-            return bool(value)
-        if self.kind == "text":
-            text = str(value)
-            if self.choices and text not in [str(c) for c in self.choices]:
-                raise ValueError(
-                    f"{self.key}: {text!r} is not one of {list(self.choices)}"
-                )
-            return text
-        number = parse_value(value, self.unit) if isinstance(value, str) else value
-        if isinstance(number, bool) or not isinstance(number, (int, float)):
-            raise ValueError(f"{self.key}: {value!r} is not a number")
-        return int(number) if self.kind == "int" else float(number)
+        return parse_as(self, value)
 
     def read(self, target: Any) -> Any:
         if self.source is not None:
@@ -267,29 +285,45 @@ GENERATOR_QUANTITIES = (
 )  # fmt: skip
 
 
+def by_key(
+    table: Mapping[type, Iterable[Any]],
+    capabilities: Iterable[type],
+    extra: Iterable[Any],
+) -> List[Any]:
+    """What the capabilities give in the table (quantities, actions), then the
+    extra (driver) ones; an extra one replaces a capability's with its key."""
+    found: Dict[str, Any] = {}
+    for capability in capabilities:
+        for item in table.get(capability, ()):
+            found.setdefault(item.key, item)
+    for item in extra:
+        found[item.key] = item
+    return list(found.values())
+
+
 def quantities_for(
     capabilities: Iterable[type], extra: Iterable[Quantity] = ()
 ) -> List[Quantity]:
     """Quantities of the given capabilities, then the extra (driver) ones."""
-    found: Dict[str, Quantity] = {}
-    for capability in capabilities:
-        for quantity in CAPABILITY_QUANTITIES.get(capability, ()):
-            found.setdefault(quantity.key, quantity)
-    for quantity in extra:
-        found[quantity.key] = quantity
-    return list(found.values())
+    return by_key(CAPABILITY_QUANTITIES, capabilities, extra)
+
+
+def declared(target: Any, attribute: str) -> Tuple[List[type], Tuple[Any, ...]]:
+    """Capabilities of a device part and what its class declares under the
+    attribute (quantities, actions); a port adapter counts what it delegates."""
+    if hasattr(target, "target"):
+        capabilities = [c for c in caps.ALL_CAPABILITIES if isinstance(target, c)]
+    else:
+        capabilities = caps.capabilities_of(type(target))
+    own = getattr(type(target), attribute, None) or getattr(
+        getattr(target, "target", None), attribute, ()
+    )
+    return capabilities, tuple(own)
 
 
 def quantities_of(target: Any) -> List[Quantity]:
     """Quantities of a device part: from its capabilities, then its own ones."""
-    if hasattr(target, "target"):  # a port adapter: delegated abilities count too
-        capabilities = [c for c in caps.ALL_CAPABILITIES if isinstance(target, c)]
-    else:
-        capabilities = caps.capabilities_of(type(target))
-    extra = getattr(type(target), "quantities", None) or getattr(
-        getattr(target, "target", None), "quantities", ()
-    )
-    return quantities_for(capabilities, extra)
+    return quantities_for(*declared(target, "quantities"))
 
 
 def read_values(

@@ -1,5 +1,6 @@
 from typing import Literal, Optional
 
+from thzdaq_instruments.actions import CHOPPER_ACTIONS
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.quantities import CHOPPER_QUANTITIES
 
@@ -13,6 +14,7 @@ class SimChopper(Instrument):
     device_type = "chopper"
 
     quantities = CHOPPER_QUANTITIES
+    actions = CHOPPER_ACTIONS
 
     def __init__(self, *, name: Optional[str] = None, position: LoadPosition = "cold"):
         super().__init__(name=name)

@@ -4,6 +4,7 @@ import time
 from typing import Optional, Tuple
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentError
+from thzdaq_instruments.actions import CHOPPER_ACTIONS
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.quantities import CHOPPER_QUANTITIES
 from thzdaq_instruments.transport.base import MODBUS_TCP, ConnectionSpec
@@ -61,6 +62,7 @@ class ModbusChopper(Instrument):
     device_type = "chopper"
 
     quantities = CHOPPER_QUANTITIES
+    actions = CHOPPER_ACTIONS
 
     def __init__(
         self,

@@ -393,6 +393,8 @@ class TestDeviceDocks:
         assert sis.displays["current"].prefix() == "µ"
 
     def test_chopper_dock(self, window, session, wait):
+        from thzdaq_instruments.actions import TO_HOT
+
         from thzdaq_gui.docks.devices import ChopperGroup
 
         widget = window.docks["device:chopper_1"].widget()
@@ -400,7 +402,7 @@ class TestDeviceDocks:
         assert [q.key for q in main.quantities] == ["load_state", "running"]
         group = widget.findChildren(ChopperGroup)[0]
         chopper = session.station.instrument("chopper_1")
-        group.run(lambda d: d.to_hot())
+        group.run(TO_HOT)
         wait(lambda: main.values["load_state"].text() == "hot")
         group.frequency.setValue(5.5)
         group.start()
@@ -409,6 +411,23 @@ class TestDeviceDocks:
         assert chopper.frequency == 5.5
         group.btnStop.click()
         wait(lambda: not chopper.running)
+
+    def test_spectrum_dock_applies_and_reads(self, window, session, wait):
+        from thzdaq_gui.docks.devices import TraceGroup
+
+        group = (
+            window.docks["device:spectrum_analyzer_1"]
+            .widget()
+            .findChildren(TraceGroup)[0]
+        )
+        analyzer = session.station.instrument("spectrum_analyzer_1")
+        group.start.setValue(6e9)
+        group.stop.setValue(2e9)
+        group.apply()
+        wait(lambda: (analyzer.center, analyzer.span) == (6e9, 2e9))
+        group.read()
+        wait(lambda: group.curve.getData()[0] is not None and not group.pending)
+        assert min(group.curve.getData()[0]) == pytest.approx(5e9)
 
     def test_coil_monitor_shows_the_current(self, window, session, wait):
         """The coil had only its setpoint field: Monitor showed nothing new."""
