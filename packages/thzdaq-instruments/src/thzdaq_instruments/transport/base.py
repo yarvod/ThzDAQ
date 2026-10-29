@@ -28,6 +28,28 @@ MODBUS_RTU = "modbus_rtu"
 MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB, VISA)
 KINDS = MESSAGE_KINDS + (HTTP, MODBUS_TCP, MODBUS_RTU)
 
+# How people name each kind, and the fields of ConnectionSpec it uses, in form order
+KIND_TITLES = {
+    SOCKET: "TCP socket",
+    PROLOGIX: "Prologix GPIB-Ethernet",
+    PROLOGIX_USB: "Prologix GPIB-USB",
+    SERIAL: "Serial (COM)",
+    VISA: "VISA",
+    HTTP: "HTTP",
+    MODBUS_TCP: "Modbus TCP",
+    MODBUS_RTU: "Modbus RTU",
+}
+KIND_FIELDS = {
+    SOCKET: ("host", "port", "timeout", "read_delay"),
+    PROLOGIX: ("host", "port", "gpib", "timeout", "read_delay"),
+    PROLOGIX_USB: ("serial_port", "gpib", "timeout", "read_delay"),
+    SERIAL: ("serial_port", "baudrate", "timeout", "read_delay"),
+    VISA: ("resource", "timeout", "read_delay"),
+    HTTP: ("host", "port", "timeout"),
+    MODBUS_TCP: ("host", "port", "timeout"),
+    MODBUS_RTU: ("serial_port", "baudrate", "timeout"),
+}
+
 PROLOGIX_DEFAULT_PORT = 1234
 PROLOGIX_HOST = "169.254.156.103"  # the GPIB-Ethernet adapter of the bench
 

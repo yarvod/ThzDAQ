@@ -275,6 +275,8 @@ class Station:
         ]  # fmt: skip
 
     def reset_connection(self, key: tuple) -> bool:
+        """Break a command that hangs on the connection, then reconnect it."""
+        self.transport_pool.abort(key)  # a command blocked on it holds its lock
         return self.transport_pool.reset(key)
 
     def close_idle_connections(self, max_idle: float) -> List[tuple]:

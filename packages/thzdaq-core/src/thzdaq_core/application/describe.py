@@ -1,5 +1,6 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
+from dataclasses import fields
 from typing import Any, Callable, Iterable, Optional, Tuple, Type
 
 from thzdaq_api import devices as api
@@ -9,6 +10,12 @@ from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.registry import DriverInfo as Driver
+from thzdaq_instruments.transport.base import (
+    KIND_FIELDS,
+    KIND_TITLES,
+    KINDS,
+    ConnectionSpec,
+)
 from thzdaq_instruments.units import prefixes_for
 
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -187,6 +194,19 @@ def driver_info(driver: Driver) -> station_api.DriverInfo:
         ),
         channels=tuple(str(k) for k in cls.fixed_channels()),
         connection=connection,
+    )
+
+
+def connection_kinds() -> Tuple[station_api.ConnectionKindInfo, ...]:
+    defaults = {f.name: f.default for f in fields(ConnectionSpec)}
+    return tuple(
+        station_api.ConnectionKindInfo(
+            key=kind,
+            title=KIND_TITLES[kind],
+            fields=KIND_FIELDS[kind],
+            defaults={name: defaults[name] for name in KIND_FIELDS[kind]},
+        )
+        for kind in KINDS
     )
 
 

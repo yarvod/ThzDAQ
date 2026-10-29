@@ -40,15 +40,10 @@ from thzdaq_core.domain.station.config import (
 from thzdaq_core.domain.station.kinds import instrument_type
 from thzdaq_instruments import ConfigurationError, InstrumentError, default_registry
 from thzdaq_instruments.transport.base import (
-    HTTP,
+    KIND_FIELDS,
+    KIND_TITLES,
     KINDS,
-    MODBUS_RTU,
-    MODBUS_TCP,
-    PROLOGIX,
-    PROLOGIX_USB,
-    SERIAL,
     SOCKET,
-    VISA,
     ConnectionSpec,
 )
 
@@ -58,28 +53,6 @@ from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 
 # How often the Connections group shows the state of the links
 REFRESH_MS = 2000
-
-# Fields each connection kind uses, in form order
-CONNECTION_FIELDS = {
-    SOCKET: ("host", "port", "timeout", "read_delay"),
-    PROLOGIX: ("host", "port", "gpib", "timeout", "read_delay"),
-    PROLOGIX_USB: ("serial_port", "gpib", "timeout", "read_delay"),
-    SERIAL: ("serial_port", "baudrate", "timeout", "read_delay"),
-    VISA: ("resource", "timeout", "read_delay"),
-    HTTP: ("host", "port", "timeout"),
-    MODBUS_TCP: ("host", "port", "timeout"),
-    MODBUS_RTU: ("serial_port", "baudrate", "timeout"),
-}
-KIND_TITLES = {
-    SOCKET: "TCP socket",
-    PROLOGIX: "Prologix GPIB-Ethernet",
-    PROLOGIX_USB: "Prologix GPIB-USB",
-    SERIAL: "Serial port",
-    VISA: "VISA",
-    HTTP: "HTTP",
-    MODBUS_TCP: "Modbus TCP",
-    MODBUS_RTU: "Modbus RTU",
-}
 
 
 def breakable_path(path) -> str:
@@ -144,7 +117,7 @@ class ConnectionEditor(QWidget):
         self.set_spec(None)
 
     def update_rows(self) -> None:
-        used = CONNECTION_FIELDS.get(self.kind.currentData(), ())
+        used = KIND_FIELDS.get(self.kind.currentData(), ())
         for name, label in self.rows.items():
             label.setVisible(name in used)
             getattr(self, name).setVisible(name in used)
@@ -173,7 +146,7 @@ class ConnectionEditor(QWidget):
 
     def spec(self) -> ConnectionSpec:
         kind = self.kind.currentData()
-        used = CONNECTION_FIELDS.get(kind, ())
+        used = KIND_FIELDS.get(kind, ())
         values = {
             "host": self.host.text().strip() or None,
             "port": self.port.value() or None,

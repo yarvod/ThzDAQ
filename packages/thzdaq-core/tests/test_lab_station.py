@@ -10,12 +10,16 @@ from thzdaq_api.events import StationChanged
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement, WaitMeasurement
 from thzdaq_api.procedures import MONITOR_TIME
 from thzdaq_api.station import (
+    ConnectInstrument,
+    GetSisCalibration,
     GetStation,
+    ListConnectionKinds,
     ListConnections,
     ListDrivers,
     LoadStation,
     NewStation,
     ResetConnection,
+    SetSisCalibration,
     UpdateStation,
 )
 from thzdaq_core.adapters.yaml_profiles import load_station
@@ -92,3 +96,34 @@ def test_drivers_say_what_a_profile_may_hold(lab):
 def test_connections_are_listed_and_reset(lab):
     assert lab.call(ListConnections()) == ()  # simulators share no connection
     assert lab.call(ResetConnection(key=("socket", "10.0.0.1", 1))) is False
+
+
+def test_connection_kinds_name_their_fields(lab):
+    kinds = {k.key: k for k in lab.call(ListConnectionKinds())}
+    assert kinds["prologix"].fields[:3] == ("host", "port", "gpib")
+    assert kinds["socket"].defaults["timeout"] == 2.0
+    assert "gpib" not in kinds["socket"].fields
+
+
+def test_an_instrument_is_opened_and_says_who_it_is(lab):
+    assert "SimSisBlock" in lab.call(ConnectInstrument(instrument="sis_block_1"))
+    with pytest.raises(LabError) as error:
+        lab.call(ConnectInstrument(instrument="sis_block_9"))
+    assert error.value.code == ErrorCode.NOT_FOUND
+
+
+def test_a_sis_calibration_is_checked_and_kept_in_the_profile(lab):
+    defaults = lab.call(GetSisCalibration(ref="sis_bias_1"))
+    assert defaults["CurrentMonitorResistance"] == 20  # of DEV4
+    with pytest.raises(LabError) as error:
+        lab.call(SetSisCalibration(ref="sis_bias_1", coefficients={"VoltageStep": 1}))
+    assert error.value.code == ErrorCode.INVALID_ARGUMENTS
+    changed = {**defaults, "VoltageStep": "1e-5 / 2"}
+    station = lab.call(SetSisCalibration(ref="sis_bias_1", coefficients=changed))
+    devices = station.profile["instruments"]["sis_block_1"]["devices"]
+    stored = devices["sis_bias_1"]["metadata"]["calibration_coefficients"]
+    assert stored["VoltageStep"] == "1e-5 / 2"  # the expression as it was typed
+    assert lab.call(GetSisCalibration(ref="sis_bias_1")) == stored
+    with pytest.raises(LabError) as error:
+        lab.call(GetSisCalibration(ref="power_supply_1:1"))
+    assert error.value.code == ErrorCode.NOT_ALLOWED

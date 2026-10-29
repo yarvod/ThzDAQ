@@ -1,6 +1,6 @@
 """Operations on the profile, the drivers it can use and the connections."""
 
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 from thzdaq_api import station as api
 
@@ -56,6 +56,48 @@ class ListDrivers(Handler[api.ListDrivers, Tuple[api.DriverInfo, ...]]):
 
     def handle(self, args, origin):
         return self.station.drivers()
+
+
+class ListConnectionKinds(
+    Handler[api.ListConnectionKinds, Tuple[api.ConnectionKindInfo, ...]]
+):
+    operation = api.ListConnectionKinds
+
+    def __init__(self, station: StationService):
+        self.station = station
+
+    def handle(self, args, origin):
+        return self.station.connection_kinds()
+
+
+class ConnectInstrument(Handler[api.ConnectInstrument, str]):
+    operation = api.ConnectInstrument
+
+    def __init__(self, station: StationService):
+        self.station = station
+
+    def handle(self, args, origin):
+        return self.station.connect(args.instrument)
+
+
+class GetSisCalibration(Handler[api.GetSisCalibration, Dict[str, Any]]):
+    operation = api.GetSisCalibration
+
+    def __init__(self, station: StationService):
+        self.station = station
+
+    def handle(self, args, origin):
+        return self.station.sis_calibration(args.ref)
+
+
+class SetSisCalibration(Handler[api.SetSisCalibration, api.StationProfile]):
+    operation = api.SetSisCalibration
+
+    def __init__(self, station: StationService):
+        self.station = station
+
+    def handle(self, args, origin):
+        return self.station.set_sis_calibration(args.ref, args.coefficients)
 
 
 class ListConnections(Handler[api.ListConnections, Tuple[api.ConnectionInfo, ...]]):

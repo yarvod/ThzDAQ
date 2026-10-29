@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Hashable, Iterator, List, Optional, Tuple
 
+from thzdaq_api.station import free_id
 from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.domain.errors import StationError
@@ -100,8 +101,4 @@ class StationConfig:
 
     def next_id(self, prefix: str) -> str:
         """Free id like power_supply_3 or sis_bias_2."""
-        taken = set(self.instruments) | {d for d, _, _ in self.devices()}
-        number = 1
-        while f"{prefix}_{number}" in taken:
-            number += 1
-        return f"{prefix}_{number}"
+        return free_id([*self.instruments, *(d for d, _, _ in self.devices())], prefix)
