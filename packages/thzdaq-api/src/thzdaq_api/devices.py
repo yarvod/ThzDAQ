@@ -207,7 +207,7 @@ class SafeState(Operation[Tuple[SafeValue, ...]]):
     measurement sweeps (unless share is true), does not stop the others: each
     value says how it went."""
 
-    rights = Rights.SET
+    rights = Rights.STOP
     share: bool = False
 
 

@@ -248,7 +248,7 @@ class CancelMeasurement(Operation[RunInfo]):
     """Stop a measurement: it ends after the step it is in and restores what
     it changed."""
 
-    rights = Rights.RUN
+    rights = Rights.STOP
     id: int
 
 
@@ -265,5 +265,5 @@ class AbortMeasurement(Operation[RunInfo]):
     """Stop a measurement that waits for a device that does not answer: breaks
     the connections of its devices (they reconnect on the next command)."""
 
-    rights = Rights.RUN
+    rights = Rights.STOP
     id: int

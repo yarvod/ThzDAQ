@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import msgspec
 
+from thzdaq_api.approvals import Answer, Approval
 from thzdaq_api.devices import Value
 from thzdaq_api.leases import LeaseInfo
 from thzdaq_api.measurements import PlotInfo, RunInfo
@@ -92,6 +93,19 @@ class LeasesChanged(msgspec.Struct, tag="leases_changed", frozen=True):
     leases: Tuple[LeaseInfo, ...]
 
 
+class ApprovalRequested(msgspec.Struct, tag="approval_requested", frozen=True):
+    """Something waits for a person: an agent's operation, or its question."""
+
+    approval: Approval
+
+
+class ApprovalAnswered(msgspec.Struct, tag="approval_answered", frozen=True):
+    """What waited is answered (by "timeout" when nobody did): it is gone."""
+
+    id: int
+    answer: Answer
+
+
 class Resync(msgspec.Struct, tag="resync", frozen=True):
     """Events were lost: take a new snapshot."""
 
@@ -108,6 +122,8 @@ Body = Union[
     MeasurementFinished,
     StationChanged,
     LeasesChanged,
+    ApprovalRequested,
+    ApprovalAnswered,
     Resync,
 ]
 

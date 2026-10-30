@@ -14,6 +14,7 @@ class ErrorCode(str, Enum):
     # Outside the passport of the instrument or the bench limits: nothing was sent
     OUT_OF_LIMITS = "out_of_limits"
     CONFLICT = "conflict"  # a device in exclusive use: repeat with share to go on
+    DENIED = "denied"  # a person said no, or the caller may not do it: read why
     INTERNAL = "internal"  # a fault of the daemon: its log has the details
     UNREACHABLE = "unreachable"  # no daemon answers: not running, or gone
     UNAUTHORIZED = "unauthorized"  # the token is not this daemon's (a stale host file)

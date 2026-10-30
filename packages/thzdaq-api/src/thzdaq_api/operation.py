@@ -21,9 +21,11 @@ class Rights(str, Enum):
 
     READ = "read"  # looks, changes nothing
     SET = "set"  # changes a device
-    RUN = "run"  # starts or stops measurements
+    RUN = "run"  # starts measurements, notes on them
+    STOP = "stop"  # ends measurements, brings devices to their safe state
     STATION = "station"  # changes the profile
     DAEMON = "daemon"  # stops or restarts the daemon
+    ANSWER = "answer"  # answers for a person what waits for one
 
 
 class Operation(
