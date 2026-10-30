@@ -46,6 +46,12 @@ jobs:
           $p = Start-Process dist\ThzDAQ\ThzDAQ.exe -ArgumentList '--quit-after', '5' -PassThru
           if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "ThzDAQ.exe did not quit" }
           if ($p.ExitCode -ne 0) { throw "ThzDAQ.exe exited with $($p.ExitCode)" }
+          # thzdaq-cli.exe starts the build's daemon (ThzDAQ.exe --serve), asks it, stops it
+          $cli = "dist\ThzDAQ\thzdaq-cli.exe"
+          foreach ($action in "start", "status", "stop") {
+            & $cli --simulate daemon $action
+            if ($LASTEXITCODE -ne 0) { throw "thzdaq-cli daemon $action exited with $LASTEXITCODE" }
+          }
 
       - name: Archive
         run: Compress-Archive -Path dist\ThzDAQ -DestinationPath $env:ASSET

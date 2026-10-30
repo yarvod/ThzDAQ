@@ -3,9 +3,23 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
+import pytest
+from thzdaq_api import host
 from thzdaq_api.daemon import API_VERSION, HostInfo
-from thzdaq_api.host import DaemonFiles, pid_alive, read_host, remove_host, write_host
+from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.host import (
+    SERVE,
+    DaemonFiles,
+    note_installation,
+    pid_alive,
+    program_file,
+    read_host,
+    remove_host,
+    start_command,
+    write_host,
+)
 from thzdaq_api.lock import FileLock
 from thzdaq_api.transport import frame, frames
 
@@ -59,3 +73,39 @@ def test_frames_of_the_event_stream():
         ("values", '{"a": 1}', "7"),
         ("heartbeat", "{}", None),
     ]
+
+
+def test_a_build_starts_its_own_daemon_whichever_program_starts_it(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "thzdaq-cli.exe"))
+    program = Path(start_command()[0])
+    assert start_command() == [str(program_file()), SERVE]
+    assert program.parent == tmp_path and program.stem == "ThzDAQ"
+
+
+def test_a_client_without_the_daemon_starts_the_build_that_started_last(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        host, "install_file", lambda: tmp_path / "user" / "install.json"
+    )
+    monkeypatch.setattr(host.util, "find_spec", lambda name: None)  # thzdaq from PyPI
+    with pytest.raises(LabError) as caught:
+        start_command()
+    assert caught.value.code == ErrorCode.UNREACHABLE
+    assert "thzdaq[daemon]" in caught.value.hint
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "build" / "ThzDAQ.exe"))
+    note_installation()  # from sources: nothing is noted
+    assert not host.install_file().exists()
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    program = program_file()
+    program.parent.mkdir()
+    program.write_bytes(b"")
+    note_installation()  # the build at its start
+    monkeypatch.delattr(sys, "frozen")
+    assert start_command() == [str(program), SERVE]
+    program.unlink()  # the build was deleted since
+    with pytest.raises(LabError):
+        start_command()

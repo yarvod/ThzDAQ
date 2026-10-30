@@ -145,3 +145,16 @@ def test_a_daemon_that_hangs_is_killed(home):
     assert kill(True) == lab.host.pid
     gone(lab.host.pid, DaemonFiles.of(True))
     assert kill(True) is None
+
+
+def test_a_windowed_build_says_what_it_says_into_its_log(tmp_path, monkeypatch):
+    from thzdaq_daemon.__main__ import streams_to_log
+
+    files = DaemonFiles(tmp_path / "files", "thzdaq")
+    monkeypatch.setattr(sys, "stdout", None)  # ThzDAQ.exe --serve, started by hand
+    monkeypatch.setattr(sys, "stderr", None)
+    streams_to_log(files)
+    print("serving")
+    sys.stderr.write("a traceback\n")
+    sys.stderr.close()
+    assert files.log.read_text(encoding="utf-8") == "serving\na traceback\n"

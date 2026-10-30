@@ -27,6 +27,14 @@ class HostInfo(msgspec.Struct, frozen=True):
     simulate: bool
 
 
+class Installation(msgspec.Struct, frozen=True):
+    """The build that started last (the install file): a client from PyPI
+    without the daemon package starts that build's daemon."""
+
+    program: str  # its ThzDAQ.exe, which runs the daemon with --serve
+    app_version: str
+
+
 class Health(msgspec.Struct, frozen=True):
     """What /health answers: enough to know it is the daemon a client expects."""
 

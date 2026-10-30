@@ -33,6 +33,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="seconds without clients and measurements before it ends; 0: never",
     )
     args = parser.parse_args(argv)
+    files = DaemonFiles.of(args.simulate)
+    streams_to_log(files)
     logging.basicConfig(
         level=logging.INFO,
         # Lanes and runs are threads: the log names them
@@ -41,7 +43,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     options = Options(
         home=Path(args.home) if args.home else program_dir(),
-        files=DaemonFiles.of(args.simulate),
+        files=files,
         station=args.station,
         data=Path(args.data) if args.data else None,
         simulate=args.simulate,
@@ -49,6 +51,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         idle_timeout=args.idle_timeout,
     )
     return Daemon(options).run()
+
+
+def streams_to_log(files: DaemonFiles) -> None:
+    """A windowed build (ThzDAQ.exe --serve) started by hand has no stdout and
+    stderr: what it says goes to its log, as when a client starts it."""
+    if sys.stderr is not None:
+        return
+    files.directory.mkdir(parents=True, exist_ok=True)
+    sys.stdout = sys.stderr = open(files.log, "a", encoding="utf-8", buffering=1)
 
 
 if __name__ == "__main__":

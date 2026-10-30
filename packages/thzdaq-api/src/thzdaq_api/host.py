@@ -5,6 +5,10 @@ removes it when it ends; a lock the operating system holds keeps it the only
 one. The simulator daemon is another daemon with its own files, so it runs
 next to the real one. The files live in the temp folder, or in
 THZDAQ_DAEMON_DIR (tests, a second bench on one machine).
+
+A build runs its daemon as ThzDAQ.exe --serve, whichever of its programs
+starts it; it notes itself in the install file of the user at each start, so
+a client from PyPI without the daemon package starts that build's daemon.
 """
 
 import ctypes
@@ -16,13 +20,13 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from importlib import metadata
+from importlib import metadata, util
 from pathlib import Path
 from typing import List, Optional, Sequence
 
 import msgspec
 
-from thzdaq_api.daemon import API_VERSION, HostInfo
+from thzdaq_api.daemon import API_VERSION, HostInfo, Installation
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lock import FileLock
 from thzdaq_api.remote import RemoteLab, health
@@ -34,6 +38,7 @@ NO_AUTOSTART_ENV = "THZDAQ_NO_AUTOSTART"  # report "not running" instead of star
 START_S = 15.0  # how long a client waits for a daemon it started
 LOG_KEEP = 5_000_000  # bytes of log kept before the next start moves it aside
 SERVE = "--serve"  # how a built program runs as the daemon
+PROGRAM = "ThzDAQ"  # the built program: the window, and the daemon with SERVE
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,45 @@ def program_dir() -> Path:
     if frozen():
         return Path(sys.executable).resolve().parent
     return Path.cwd()
+
+
+def program_file() -> Path:
+    """The built program of this installation (ThzDAQ.exe next to
+    thzdaq-cli.exe; no suffix on macOS and Linux)."""
+    return program_dir() / (PROGRAM + (".exe" if sys.platform == "win32" else ""))
+
+
+def install_file() -> Path:
+    """Where the build that started last notes itself, per user."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library/Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    return base / PROGRAM / "install.json"
+
+
+def note_installation() -> None:
+    """A build notes itself at each start; from sources nothing is noted."""
+    if not frozen():
+        return
+    path = install_file()
+    noted = Installation(str(program_file()), app_version())
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        partial = path.with_suffix(".partial")
+        partial.write_bytes(msgspec.json.encode(noted))
+        os.replace(partial, path)
+    except OSError as e:  # the build works without it: only PyPI clients need it
+        logger.warning(f"{path} not written: {e}")
+
+
+def read_installation() -> Optional[Installation]:
+    try:
+        return msgspec.json.decode(install_file().read_bytes(), type=Installation)
+    except (FileNotFoundError, msgspec.DecodeError, msgspec.ValidationError):
+        return None
 
 
 def app_version() -> str:
@@ -149,11 +193,21 @@ def terminate(pid: int) -> None:
 
 
 def start_command() -> List[str]:
-    """How this installation runs the daemon: the built program with --serve,
-    else this Python with the daemon package."""
+    """How the daemon starts: the built program of this installation with
+    --serve; else this Python with the daemon package; else the build the
+    install file names. LabError when there is none of them."""
     if frozen():
-        return [sys.executable, SERVE]
-    return [sys.executable, "-m", "thzdaq_daemon"]
+        return [str(program_file()), SERVE]
+    if util.find_spec("thzdaq_daemon") is not None:
+        return [sys.executable, "-m", "thzdaq_daemon"]
+    installed = read_installation()
+    if installed is not None and Path(installed.program).exists():
+        return [installed.program, SERVE]
+    raise LabError(
+        ErrorCode.UNREACHABLE,
+        "No daemon runs and none can be started here",
+        "install thzdaq[daemon], or start the ThzDAQ build once",
+    )
 
 
 def spawn(command: Sequence[str], files: DaemonFiles) -> subprocess.Popen:

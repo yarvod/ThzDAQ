@@ -16,8 +16,8 @@ if exist "%app_dir%\stations" xcopy /E /I /Y "%app_dir%\stations" "%stations_bac
 
 uv sync --locked
 if errorlevel 1 exit /b %errorlevel%
-rem The icon is drawn by assets\make_icon.py: every size in thzdaq.ico
-uv run pyinstaller main.py -n "%app_name%" --onedir --icon=".\assets\thzdaq.ico" --noconsole --windowed -y --add-data "assets;assets" --collect-data thzdaq_gui --collect-data qtawesome
+rem ThzDAQ.exe (the window; --serve: the daemon) and thzdaq-cli.exe in one folder
+uv run pyinstaller ThzDAQ.spec -y -- --folder "%app_name%"
 if errorlevel 1 exit /b %errorlevel%
 
 rem Updater for in-app updates: standard library only, so a small one-file exe
