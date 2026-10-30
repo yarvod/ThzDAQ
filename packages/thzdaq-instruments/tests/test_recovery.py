@@ -168,6 +168,51 @@ def test_idle_prologix_is_set_up_again_and_busy_links_stay():
     assert link.written.count("++mode 1") == 2 and link.written.count("++addr 19") == 2
 
 
+def test_gpib_instruments_go_local_before_an_idle_prologix_closes():
+    """Behind a Prologix an instrument stays in remote, its panel locked, after
+    the socket closes: each address talked to gets ++loc first."""
+    links, factory = tcp_links(lambda line: "ok" if line == "*IDN?" else None)
+    pool = TransportPool(factory)
+    generator = pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=19))
+    analyzer = pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=20))
+    pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=21))  # never talked to
+    generator.query("*IDN?")
+    analyzer.write("*CLS")
+    link = links[0]
+    link.last_used -= 10
+    before = len(link.written)
+    assert pool.close_idle(5.0) and not link.is_open
+    assert link.written[before:] == ["++addr 19", "++loc", "++addr 20", "++loc"]
+    generator.query("*IDN?")  # back to remote with the next command
+    link.last_used -= 10
+    before = len(link.written)
+    assert pool.close_idle(5.0)
+    assert link.written[before:] == ["++loc"]  # 19 is addressed already
+
+
+def test_gpib_instruments_go_local_when_the_last_one_closes():
+    links, factory = tcp_links(None)
+    pool = TransportPool(factory)
+    generator = pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=19))
+    generator.write("*CLS")
+    generator.close()
+    assert links[0].written[-2:] == ["*CLS", "++loc"] and not links[0].is_open
+
+
+def test_a_prologix_that_does_not_take_loc_still_closes():
+    links, factory = tcp_links(None)
+    pool = TransportPool(factory)
+    generator = pool.acquire(ConnectionSpec(PROLOGIX, host="h", gpib=19))
+    generator.write("*CLS")
+
+    def refuse(line):
+        raise InstrumentConnectionError("peer gone")
+
+    links[0].write_line = refuse
+    generator.close()
+    assert not links[0].is_open
+
+
 def test_serial_links_are_never_closed_for_idling():
     pool = TransportPool(lambda spec: FakeLink({"*IDN?": "x"}))  # not idle_closable
     pool.acquire(ConnectionSpec(SOCKET, host="h", port=1)).query("*IDN?")

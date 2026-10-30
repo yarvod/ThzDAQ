@@ -1,16 +1,18 @@
-from typing import Optional
+from typing import Optional, Set
 
 from thzdaq_instruments.transport.base import Link, Transport
 
 
 class PrologixController:
-    """Prologix GPIB controller state on one link: setup once, current address."""
+    """Prologix GPIB controller state on one link: setup once, current address,
+    the addresses talked to."""
 
     def __init__(self, link: Link, timeout: float = 2.0):
         self.link = link
         self.timeout = timeout
         self._address: Optional[int] = None
         self._configured = False
+        self._used: Set[int] = set()
 
     def setup(self) -> None:
         with self.link.lock:
@@ -37,6 +39,17 @@ class PrologixController:
             if self._address != address:
                 self.link.write_line(f"++addr {int(address)}")
                 self._address = address
+            self._used.add(address)
+
+    def go_local(self) -> None:
+        """Before the link closes: a GPIB instrument stays in remote, its panel
+        locked, after the socket is gone. Each one talked to goes to local; the
+        next command takes it back to remote."""
+        with self.link.lock:
+            for address in sorted(self._used):
+                self.select(address)
+                self.link.write_line("++loc")
+            self._used.clear()
 
     def read(self) -> str:
         self.link.write_line("++read eoi")

@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
-from thzdaq_instruments.errors import ConfigurationError
+from thzdaq_instruments.errors import ConfigurationError, InstrumentError
 from thzdaq_instruments.transport.base import (
     PROLOGIX,
     SOCKET,
@@ -63,6 +63,17 @@ class _Entry:
     prologix: bool
     controller: Optional[PrologixController]
     refs: int = 0
+
+    def close(self) -> None:
+        """Close the link (its lock held); GPIB instruments behind a Prologix
+        go to local first."""
+        link = self.link
+        if self.controller is not None and link.is_open and not link.broken:
+            try:
+                self.controller.go_local()
+            except InstrumentError as e:  # the link closes all the same
+                logger.warning(f"[TransportPool] {link!r}: no go-to-local: {e}")
+        link.close()
 
 
 class TransportPool:
@@ -126,7 +137,7 @@ class TransportPool:
                     return
                 del self._entries[key]
             with entry.link.lock:
-                entry.link.close()
+                entry.close()
             logger.info(f"[TransportPool] closed {entry.link!r}")
 
         return release
@@ -174,7 +185,7 @@ class TransportPool:
             try:
                 if time.monotonic() - link.last_used < max_idle:
                     continue
-                link.close()
+                entry.close()
                 link.idle = True
                 if entry.controller is not None:
                     entry.controller.invalidate()
@@ -210,7 +221,7 @@ class TransportPool:
             self._entries.clear()
         for entry in entries:
             with entry.link.lock:
-                entry.link.close()
+                entry.close()
 
 
 default_pool = TransportPool()
