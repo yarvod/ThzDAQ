@@ -1047,6 +1047,53 @@ class TestExit:
         window.confirm_exit = True
         assert window.close() and stopped == []
 
+    def test_dialog_offers_the_daemon_left_at_a_switch(self, app):
+        from thzdaq_gui.exit_dialog import ExitDialog
+        from thzdaq_gui.models.daemon import LeftDaemon
+
+        assert ExitDialog(running=0, measurements=0).stopLeft is None
+        idle = ExitDialog(0, 0, left=LeftDaemon(simulate=False, running=0, others=0))
+        assert idle.stopLeft.isChecked() and "instruments'" in idle.stopLeft.text()
+        busy = ExitDialog(0, 0, left=LeftDaemon(simulate=True, running=1, others=0))
+        assert not busy.stopLeft.isChecked() and "simulator's" in busy.stopLeft.text()
+        shared = ExitDialog(0, 0, left=LeftDaemon(simulate=False, running=0, others=1))
+        assert not shared.stopLeft.isChecked()
+
+    def test_the_daemon_left_at_a_switch_stops_with_the_window(
+        self, window, session, monkeypatch
+    ):
+        from thzdaq_api.daemon import StopMode
+        from thzdaq_gui.models.daemon import DaemonModel
+
+        stopped = []
+        for name in ("stop_now", "stop_left"):
+            monkeypatch.setattr(
+                DaemonModel,
+                name,
+                lambda self, mode, name=name: stopped.append((name, mode)),
+            )
+        assert session.left is None
+        window.set_simulate(False)  # the simulator's daemon goes on
+        assert session.left is not None and not session.simulate
+        window.confirm_exit = True
+        assert window.close()
+        assert stopped == [
+            ("stop_now", StopMode.GRACEFUL),
+            ("stop_left", StopMode.GRACEFUL),
+        ]
+
+    def test_a_left_daemon_that_ended_is_not_offered(self, window, session):
+        from thzdaq_api.errors import ErrorCode, LabError
+
+        class Ended:  # its idle timeout ended it
+            origin = "gui"
+
+            def call(self, operation):
+                raise LabError(ErrorCode.UNREACHABLE, "no daemon")
+
+        session.left = Ended()
+        assert window.daemon.ask_left() is None
+
 
 def test_no_stray_windows_flash(app, session, tmp_path):
     """Widgets shown before they have a parent pop up as small windows."""

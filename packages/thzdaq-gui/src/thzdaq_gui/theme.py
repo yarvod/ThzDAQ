@@ -133,6 +133,12 @@ def apply(app: QApplication) -> None:
     app.setPalette(palette())
     app.setStyleSheet(STYLE)
     pg.setConfigOptions(antialias=True, background=PLOT_BACKGROUND, foreground=TEXT)
+    import qtawesome as qta
+
+    # qtawesome keeps every icon it made in a QObject of its module: Python
+    # frees them at its exit, after the application, and a QIcon freed then
+    # crashes it (SIGBUS in the destructor). They go while the application lives.
+    app.aboutToQuit.connect(qta.reset_cache)
     from thzdaq_gui import wheel
 
     wheel.install(app)

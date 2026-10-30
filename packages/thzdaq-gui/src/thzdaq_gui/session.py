@@ -82,6 +82,8 @@ class Session(QObject):
         self.processes = Processes(self)  # what runs now, for the Processes dock
         self.lab: Optional[Lab] = None
         self.simulate = False
+        # The other daemon (instruments or simulator) after a switch: it goes on
+        self.left: Optional[Lab] = None
         self.bridge = Bridge(self)
         self.run_events = RunEvents(self)
         self.values = {}
@@ -104,6 +106,7 @@ class Session(QObject):
         self.bridge.stop()
         if self.lab is not None and simulate != self.simulate:
             self.run_events.detach()
+            self.left = self.lab
         self.lab, self.simulate = lab, simulate
         # Events from the snapshot on: nothing between them is missed
         snapshot = lab.call(GetSnapshot())

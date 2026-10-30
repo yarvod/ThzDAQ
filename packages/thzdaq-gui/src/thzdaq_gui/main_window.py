@@ -14,7 +14,7 @@ toolbar, and keeps the layout of each mode; the parts live apart:
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
@@ -56,7 +56,12 @@ from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.processes import ProcessesWidget
 from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.docks.daemon import DaemonIndicator, DaemonWidget, LostBanner
-from thzdaq_gui.exit_dialog import ExitDialog, dump_measurements, stop_by_default
+from thzdaq_gui.exit_dialog import (
+    ExitDialog,
+    dump_measurements,
+    stop_by_default,
+    stop_mode,
+)
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
@@ -503,10 +508,10 @@ class MainWindow(QMainWindow):
     def show_daemon(self) -> None:
         self.bannerBar.setVisible(self.daemon.state == LOST)
 
-    def stop_daemon(self, mode: StopMode) -> None:
+    def stop_daemon(self, stop: Callable[[StopMode], None], running: int) -> None:
         """With the window, as chosen; a daemon that refuses is left running."""
         try:
-            self.daemon.stop_now(mode)
+            stop(stop_mode(running))
         except LabError as e:
             logger.warning(f"The daemon was not stopped: {e}")
 
@@ -516,12 +521,15 @@ class MainWindow(QMainWindow):
         running = len(status.runs) if status is not None else 0
         others = self.daemon.others()
         stop = status is not None and stop_by_default(running, others)
+        left = self.daemon.ask_left()
+        stop_left = left is not None and stop_by_default(left.running, left.others)
         if self.confirm_exit:
             dialog = ExitDialog(
                 running,
                 self.session.measurements.rowCount(),
                 others,
                 status is not None,
+                left,
                 self,
             )
             if dialog.exec() != QDialog.Accepted:
@@ -530,6 +538,7 @@ class MainWindow(QMainWindow):
             store_state = dialog.storeState.isChecked()
             dump = dialog.dumpData.isChecked()
             stop = dialog.stopDaemon.isChecked()
+            stop_left = dialog.stopLeft is not None and dialog.stopLeft.isChecked()
         for dock in self.docks.values():
             widget = dock.widget()
             if hasattr(widget, "stop"):
@@ -538,7 +547,9 @@ class MainWindow(QMainWindow):
             self.save_state()
         self.logWidget.detach()
         if stop:
-            self.stop_daemon(StopMode.CANCEL if running else StopMode.GRACEFUL)
+            self.stop_daemon(self.daemon.stop_now, running)
+        if stop_left:
+            self.stop_daemon(self.daemon.stop_left, left.running)
         self.session.shutdown()
         if dump and self.session.measurements.items:
             try:

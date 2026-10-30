@@ -1,11 +1,13 @@
 """The daemon the window works with, as it says about itself (get_daemon_status,
 asked every couple of seconds): alive, alive with problems, or not answering;
-and what a person does with it: restart, stop, kill, start again.
+and what a person does with it: restart, stop, kill, start again. The daemon
+left at a switch to the simulator (or back) goes on: the exit may stop it too.
 
 Its calls have a queue of their own: a device that hangs does not hold them.
 """
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -19,12 +21,22 @@ from thzdaq_api.daemon import (
     StopMode,
 )
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
 
 LOOK_MS = 2000
 LANE = "daemon"  # the queue of its calls
 
 CONNECTING, OK, PROBLEMS, LOST = "connecting", "ok", "problems", "lost"
+
+
+@dataclass(frozen=True)
+class LeftDaemon:
+    """The daemon left at a switch to the simulator or back: it goes on."""
+
+    simulate: bool  # the simulator's, or the instruments'
+    running: int  # measurements it runs
+    others: int  # its clients other than this program
 
 
 class DaemonModel(QObject):
@@ -64,18 +76,28 @@ class DaemonModel(QObject):
 
     def ask(self) -> Optional[DaemonStatus]:
         """The status now, waiting for it; None when the daemon does not answer."""
-        try:
-            self.status = self.session.call(GetDaemonStatus())
-        except LabError:
-            return None
-        return self.status
+        status = asked(self.session.lab)
+        if status is not None:
+            self.status = status
+        return status
 
     # What it serves now
     def others(self) -> int:
         """Clients of the daemon other than this program (another window, a CLI)."""
-        if self.status is None:
-            return 0
-        return sum(1 for client in self.status.clients if client.pid != os.getpid())
+        return other_clients(self.status)
+
+    # The daemon left at a switch
+    def ask_left(self) -> Optional[LeftDaemon]:
+        """How it stands now; None when there is none or it ended (idle, stopped)."""
+        status = None if self.session.left is None else asked(self.session.left)
+        if status is None:
+            return None
+        return LeftDaemon(
+            not self.session.simulate, len(status.runs), other_clients(status)
+        )
+
+    def stop_left(self, mode: StopMode) -> None:
+        self.session.left.call(StopDaemon(mode=mode))
 
     def log(self) -> Path:
         return host.DaemonFiles.of(self.session.simulate).log
@@ -108,3 +130,18 @@ class DaemonModel(QObject):
         self.session.calls.submit(
             lambda: lab.call(operation), done, failed, "daemon", key=LANE
         )
+
+
+def asked(lab: Lab) -> Optional[DaemonStatus]:
+    """A daemon's status, waiting for it; None when it does not answer."""
+    try:
+        return lab.call(GetDaemonStatus())
+    except LabError:
+        return None
+
+
+def other_clients(status: Optional[DaemonStatus]) -> int:
+    """Clients of a daemon other than this program (another window, a CLI)."""
+    if status is None:
+        return 0
+    return sum(1 for client in status.clients if client.pid != os.getpid())

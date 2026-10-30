@@ -410,6 +410,40 @@ def test_app_icon_has_a_drawing_for_every_size(app):
     assert pixmap.width() == 16 and pixmap.pixelColor(8, 0).alpha() == 255
 
 
+QUIT = """
+import qtawesome as qta
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
+from thzdaq_gui import theme
+
+app = QApplication([])
+theme.apply(app)
+theme.icon("chart-line").pixmap(16, 16)
+QTimer.singleShot(0, app.quit)
+app.exec()
+print(len(qta._instance().icon_cache))
+"""
+
+
+def test_no_icon_outlives_the_application(tmp_path):
+    """qtawesome keeps the icons it made; Python frees them at its own exit,
+    after the application, and a QIcon freed then crashes (SIGBUS)."""
+    import subprocess
+    import sys
+
+    script = tmp_path / "quit.py"
+    script.write_text(QUIT, encoding="utf-8")
+    done = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split()[-1] == "0"  # icons kept after quit
+
+
 class TestDockBody:
     def test_built_on_first_open_and_kept_while_closed(self, app):
         from PySide6.QtWidgets import QLabel
