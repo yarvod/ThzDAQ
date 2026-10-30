@@ -217,3 +217,27 @@ def test_snapshot_values_appear_in_device_docks(session, cli, window, wait):
     assert panel.values["voltage"].text() == "2.5 mV"
     cli.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1.5mV"))
     wait(lambda: panel.fields["voltage_set"].value() == pytest.approx(0.0015))
+
+
+def test_known_values_are_not_readings(session, cli, window, wait):
+    """What the lab knows is shown, but ends no read and goes on no graph."""
+    cli.call(ReadDevice(ref="sis_bias_1"))
+    session.open(True)
+    from thzdaq_gui.graphs import GraphWidget
+
+    panel = window.docks["device:sis_bias_1"].widget().panels[0]
+    panel.plot.setChecked(True)
+    panel.pending = True  # a read of the panel on its way
+    panel.show_observed(panel.model.known_values)
+    assert panel.values["voltage"].text() != "--"
+    cli.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1.5mV"))
+    wait(lambda: panel.fields["voltage_set"].value() == pytest.approx(0.0015))
+    assert panel.pending
+    monitored = [
+        key
+        for graph in window.hub.graphs.values()
+        if isinstance(graph, GraphWidget)
+        for key in graph.points
+        if key[0] == "monitor"
+    ]
+    assert monitored == []

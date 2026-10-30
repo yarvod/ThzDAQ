@@ -336,12 +336,15 @@ class QuantityPanel(QWidget):
             self.process.update(status=f"every {self.interval.value():g} s")
 
     def show_observed(self, values) -> None:
-        """Known setpoints update idle fields, without writing profile settings."""
-        for key, value in values.items():
-            field = self.fields.get(key)
-            if field is not None and not field.pending and not self.config:
-                field.set_value(value)
-        self.show_values(values)
+        """What the lab knows, set or read by anyone: idle setpoint fields follow
+        it (profile settings are not written). Not a reading: it ends no read
+        and goes on no graph, it may be old."""
+        if not self.config:
+            for key, value in values.items():
+                field = self.fields.get(key)
+                if field is not None and value is not None and not field.pending:
+                    field.set_value(value)
+        self.show_held(values)
 
     def show_values(self, values) -> None:
         """A reading of the device: what it holds of this panel's values."""
@@ -349,6 +352,17 @@ class QuantityPanel(QWidget):
         now = time.monotonic() - self.started
         first = not self.read_once
         self.read_once = True
+        self.show_held(values)
+        for key, field in self.fields.items():
+            if first and key in values and not field.pending:
+                if self.remembered(key) is None:
+                    field.set_value(values[key])
+        if self.plot.isChecked():
+            self.plot_values(values, now)
+
+    def show_held(self, values) -> None:
+        """What the device holds of this panel's values: readouts, switches and,
+        for a configuration, how it differs from the profile."""
         for quantity in self.quantities:
             if quantity.key not in values:
                 continue
@@ -365,14 +379,8 @@ class QuantityPanel(QWidget):
             if toggle is not None and value is not None:
                 toggle.setChecked(bool(value))
                 toggle.setText("On" if value else "Off")
-            field = self.fields.get(quantity.key)
-            if first and field is not None and not field.pending:
-                if self.remembered(quantity.key) is None:
-                    field.set_value(value)
             if self.config and value is not None:
                 self.compare(quantity, value)
-        if self.plot.isChecked():
-            self.plot_values(values, now)
 
     def plot_toggled(self, on: bool) -> None:
         self.raised = not on

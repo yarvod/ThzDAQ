@@ -34,7 +34,7 @@ class RunEvents(QObject):
         if model is not None:
             model.hear(event)
         elif isinstance(event.body, events.MeasurementStarted) and (
-            event.body.run.origin != "gui" or not self._pending()
+            event.body.run.origin != self.session.lab.origin or not self._pending()
         ):
             self._observe(number).hear(event)
         elif self._pending():

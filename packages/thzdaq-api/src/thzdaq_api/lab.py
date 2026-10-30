@@ -14,6 +14,8 @@ R = TypeVar("R")
 
 
 class Lab(Protocol):
+    origin: str  # who calls (gui, cli, mcp:<name>); the runs it starts carry it
+
     def call(self, operation: Operation[R]) -> R:
         ...
 

@@ -26,6 +26,7 @@ from thzdaq_gui.settings import (
 from thzdaq_gui.wording import STATION_PROFILE
 
 DAEMON = "ThzDAQ daemon"
+ORIGIN = KIND = "gui"  # who this program is to the daemon
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -75,7 +76,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     clean_leftovers()
     station = start_profile(args.station)
     session = Session(
-        lambda simulate: connect_or_start(simulate, station, "gui", "gui"),
+        lambda simulate: connect_or_start(simulate, station, ORIGIN, KIND),
         args.workspace or app_dir(),
     )
     # The lab comes first: its devices get docks the saved layout restores
