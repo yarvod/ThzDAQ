@@ -98,6 +98,22 @@ def lab(served):
 
 
 @pytest.fixture
+def lab_as(served):
+    """The served daemon called as another client: lab_as("gui"), lab_as("mcp:x")."""
+    from thzdaq_api.remote import RemoteLab
+
+    labs = []
+
+    def remote(origin):
+        labs.append(RemoteLab(served.host, origin=origin, kind=origin.split(":")[0]))
+        return labs[-1]
+
+    yield remote
+    for opened in labs:
+        opened.close()
+
+
+@pytest.fixture
 def home(tmp_path, monkeypatch):
     """A daemon's folder with the example profile; its files live there too,
     apart from any daemon of the machine, and its daemons end with the test."""

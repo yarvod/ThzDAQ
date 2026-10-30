@@ -4,6 +4,9 @@ connections go) to stop at the end."""
 
 from dataclasses import dataclass
 
+from thzdaq_api.origins import GUI
+
+from thzdaq_core.application.approvals import Approvals
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.connections import IdleConnections
 from thzdaq_core.application.daemon import DaemonService
@@ -12,12 +15,14 @@ from thzdaq_core.application.dispatch import Dispatcher
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.handlers import (
     analysis,
+    approvals,
     daemon,
     devices,
     measurements,
     state,
     station,
 )
+from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
 from thzdaq_core.application.ports import DaemonControl, ProfileRepository
 from thzdaq_core.application.runs import Runs
@@ -35,6 +40,7 @@ class Assembled:
     runs: Runs
     daemon: DaemonService
     idle: IdleConnections
+    control: DaemonControl
 
     def close(self) -> None:
         self.runs.stop()
@@ -55,6 +61,8 @@ def assemble(
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
     service = DaemonService(bench, runs, polling, events, access, control)
+    # A person answers in a window that listens to the daemon
+    waiting = Approvals(events, lambda: any(c.kind == GUI for c in control.clients()))
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -68,6 +76,10 @@ def assemble(
             state.GetSnapshot(events, known),
             state.ListLeases(runs),
             analysis.AnalyzeIv(),
+            approvals.ListApprovals(waiting),
+            approvals.AnswerApproval(waiting),
+            approvals.AskUser(waiting),
+            approvals.WaitAnswer(waiting),
             measurements.ListProcedures(),
             measurements.DescribeProcedure(access),
             measurements.StartMeasurement(runs),
@@ -95,6 +107,10 @@ def assemble(
             daemon.ResetLane(service),
             daemon.StopDaemon(service),
             daemon.RestartDaemon(service),
-        )
+        ),
+        Policy(),
+        waiting,
     )
-    return Assembled(dispatcher, events, polling, runs, service, IdleConnections(bench))
+    return Assembled(
+        dispatcher, events, polling, runs, service, IdleConnections(bench), control
+    )

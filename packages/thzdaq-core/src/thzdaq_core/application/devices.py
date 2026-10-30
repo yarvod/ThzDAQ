@@ -18,7 +18,9 @@ from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS
 from thzdaq_instruments.actions import Action
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.quantities import Quantity, read_values
+from thzdaq_instruments.units import format_value
 
+from thzdaq_core.application.approvals import Ask
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.events import EventBus
@@ -27,6 +29,29 @@ from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 
 # note(run id, metadata key, entry) into a running measurement
 Note = Callable[[int, str, Dict[str, Any]], None]
+JUMP = 10.0  # a set that changes a value this many times is pointed out
+
+
+def shown(spec: Any, value: Any) -> str:
+    """A value of a quantity or an action argument as people read it."""
+    if value is None:
+        return "unknown"
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, (int, float)):
+        return format_value(value, spec.unit)
+    return str(value)
+
+
+def jump(before: Any, after: Any) -> str:
+    """ " (×1000)" for a change by a factor of JUMP or more (a mV given as V)."""
+    numbers = all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in (before, after)
+    )
+    if not numbers or before == 0 or after == 0:
+        return ""
+    factor = after / before
+    return f" (×{factor:.6g})" if not 1 / JUMP < abs(factor) < JUMP else ""
 
 
 class DeviceAccess:
@@ -110,6 +135,51 @@ class DeviceAccess:
         self.events.publish(QuantitySet(ref, key, parsed, before, origin))
         self._note(users, origin, ref, key=key, before=before, value=parsed)
         return parsed
+
+    def proposed(self, ref: str, key: str, value: Any) -> Ask:
+        """A set as a person reads it before allowing it: from what to what in
+        the unit of the quantity, a jump, the danger, a sweep it disturbs."""
+        quantity = self.quantity(ref, key)
+        if not quantity.settable:
+            raise LabError(ErrorCode.NOT_ALLOWED, f"{ref}: {key} cannot be set")
+        try:
+            after = quantity.parse(value)
+        except ValueError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        before = self.known.get(ref, key)
+        return Ask(
+            f"{ref} · {quantity.title}",
+            f"{shown(quantity, before)} → {shown(quantity, after)}"
+            + jump(before, after),
+            self._warning(ref, quantity.danger),
+            ref if quantity.danger else "",
+            shown(quantity, after),
+        )
+
+    def proposed_action(self, ref: str, key: str, arguments: Dict[str, Any]) -> Ask:
+        action = self.action(ref, key)
+        try:
+            bound = action.bind(arguments)
+        except ValueError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        given = [
+            f"{argument.title} {shown(argument, bound[argument.key])}"
+            for argument in action.arguments
+            if argument.key in bound
+        ]
+        return Ask(
+            f"{ref} · {action.title}",
+            ", ".join(given) or "no arguments",
+            self._warning(ref, action.danger),
+            ref if action.danger else "",
+        )
+
+    def _warning(self, ref: str, danger: str) -> str:
+        """The danger of a step and the sweep of another measurement it disturbs
+        (allowing it shares the device)."""
+        swept = tuple(lease for lease in self.leases.of(ref) if lease.mode == EXCLUSIVE)
+        sweeps = f"{LeaseConflict(swept)}: it notes the change" if swept else ""
+        return "; ".join(filter(None, (danger, sweeps)))
 
     def safe_state(self, origin: str, share: bool = False) -> Tuple[SafeValue, ...]:
         """Every value of the profile's safe state, in its order; one that

@@ -73,6 +73,19 @@ def parse_value(text: str, unit: str) -> float:
     return number * prefix_factor(prefix)
 
 
+def format_value(value: float, unit: str) -> str:
+    """An SI value as people read it, with the prefix that keeps it from 1 to
+    999: 0.0023 V -> "2.3 mV"; parse_value reads it back."""
+    choices = prefixes_for(unit)
+    if not choices or value == 0:
+        return f"{value:.6g} {unit}".strip()
+    prefix, factor, _ = next(
+        (choice for choice in reversed(choices) if abs(value) >= choice[1]),
+        choices[0],
+    )
+    return f"{value / factor:.6g} {prefix}{unit}"
+
+
 def dbm_to_watt(dbm: float) -> float:
     return 1e-3 * 10 ** (dbm / 10)
 

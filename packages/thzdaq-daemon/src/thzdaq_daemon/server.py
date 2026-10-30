@@ -55,6 +55,7 @@ HTTP_STATUS = {
     ErrorCode.INSTRUMENT: 502,
     ErrorCode.OUT_OF_LIMITS: 422,
     ErrorCode.CONFLICT: 409,
+    ErrorCode.DENIED: 403,
     ErrorCode.INTERNAL: 500,
     ErrorCode.UNREACHABLE: 503,
     ErrorCode.UNAUTHORIZED: 401,

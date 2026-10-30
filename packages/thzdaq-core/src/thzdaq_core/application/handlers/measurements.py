@@ -4,7 +4,9 @@ from typing import Any, Mapping, Tuple
 
 from thzdaq_api import measurements as api
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.operation import Rights
 
+from thzdaq_core.application.approvals import Ask
 from thzdaq_core.application.describe import procedure_info, procedure_summary
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
@@ -71,6 +73,25 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
             args.workspace,
             args.dry_run,
         )
+
+    def needs(self, args):
+        """A dry run changes nothing."""
+        return Rights.READ if args.dry_run else self.operation.rights
+
+    def approval(self, args):
+        """The run it would be, checked as a dry run: one that could not start
+        is refused before anybody is asked."""
+        procedure = build(args.procedure, args.parameters, args.typed)
+        planned = self.runs.start(
+            procedure, args.devices, args.comment, "", args.share, args.workspace,
+            dry_run=True,
+        )  # fmt: skip
+        devices = ", ".join(f"{slot} {ref}" for slot, ref in planned.devices.items())
+        given = args.typed or args.parameters
+        parameters = ", ".join(f"{key} {value}" for key, value in given.items())
+        steps = f"{planned.total} points" if planned.total else "runs until cancelled"
+        text = "; ".join(filter(None, (devices, parameters, steps, args.comment)))
+        return Ask(f"Start {planned.title}", text)
 
 
 class SetComment(Handler[api.SetComment, None]):

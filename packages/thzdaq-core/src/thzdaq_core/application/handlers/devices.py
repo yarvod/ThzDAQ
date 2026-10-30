@@ -2,7 +2,9 @@
 
 from typing import Tuple
 
+import msgspec
 from thzdaq_api import devices as api
+from thzdaq_api.operation import Rights
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.describe import (
@@ -67,6 +69,14 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
         value = self.devices.write(args.ref, args.key, args.value, origin, args.share)
         return api.QuantityValue(args.ref, args.key, value)
 
+    def approval(self, args):
+        return self.devices.proposed(args.ref, args.key, args.value)
+
+    def amended(self, args, answer):
+        """The value the person allowed; the sweep it showed is shared."""
+        value = args.value if answer.value is None else answer.value
+        return msgspec.structs.replace(args, value=value, share=True)
+
 
 class CallAction(Handler[api.CallAction, api.ActionResult]):
     operation = api.CallAction
@@ -79,6 +89,17 @@ class CallAction(Handler[api.CallAction, api.ActionResult]):
             args.ref, args.action, args.arguments, origin, args.share
         )
         return api.ActionResult(args.ref, args.action, action_result(result))
+
+    def needs(self, args):
+        """A read (a trace) changes nothing."""
+        changes = self.devices.action(args.ref, args.action).changes
+        return self.operation.rights if changes else Rights.READ
+
+    def approval(self, args):
+        return self.devices.proposed_action(args.ref, args.action, args.arguments)
+
+    def amended(self, args, answer):
+        return msgspec.structs.replace(args, share=True)
 
 
 class SafeState(Handler[api.SafeState, Tuple[api.SafeValue, ...]]):
