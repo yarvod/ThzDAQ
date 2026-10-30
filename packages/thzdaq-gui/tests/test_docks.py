@@ -1059,6 +1059,17 @@ class TestExit:
         shared = ExitDialog(0, 0, left=LeftDaemon(simulate=False, running=0, others=1))
         assert not shared.stopLeft.isChecked()
 
+    def test_dialog_stops_the_daemons_an_update_replaces(self, app):
+        from thzdaq_gui.exit_dialog import ExitDialog
+        from thzdaq_gui.models.daemon import LeftDaemon
+
+        left = LeftDaemon(simulate=False, running=1, others=0)
+        dialog = ExitDialog(0, 0, others=1, left=left, updating=True)
+        for check in (dialog.stopDaemon, dialog.stopLeft):
+            assert check.isChecked() and not check.isEnabled()
+        gone = ExitDialog(0, 0, daemon=False, updating=True)  # nothing to stop
+        assert not gone.stopDaemon.isChecked()
+
     def test_the_daemon_left_at_a_switch_stops_with_the_window(
         self, window, session, monkeypatch
     ):

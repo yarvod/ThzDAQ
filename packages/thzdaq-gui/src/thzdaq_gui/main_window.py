@@ -520,9 +520,13 @@ class MainWindow(QMainWindow):
         status = self.daemon.ask()
         running = len(status.runs) if status is not None else 0
         others = self.daemon.others()
-        stop = status is not None and stop_by_default(running, others)
+        # An update replaces the files of the daemons: they stop with the window
+        updating = self.updates.pending is not None
+        stop = status is not None and (updating or stop_by_default(running, others))
         left = self.daemon.ask_left()
-        stop_left = left is not None and stop_by_default(left.running, left.others)
+        stop_left = left is not None and (
+            updating or stop_by_default(left.running, left.others)
+        )
         if self.confirm_exit:
             dialog = ExitDialog(
                 running,
@@ -530,6 +534,7 @@ class MainWindow(QMainWindow):
                 others,
                 status is not None,
                 left,
+                updating,
                 self,
             )
             if dialog.exec() != QDialog.Accepted:
@@ -537,8 +542,9 @@ class MainWindow(QMainWindow):
                 return
             store_state = dialog.storeState.isChecked()
             dump = dialog.dumpData.isChecked()
-            stop = dialog.stopDaemon.isChecked()
-            stop_left = dialog.stopLeft is not None and dialog.stopLeft.isChecked()
+            if not updating:  # an update stops them whatever the boxes say
+                stop = dialog.stopDaemon.isChecked()
+                stop_left = dialog.stopLeft is not None and dialog.stopLeft.isChecked()
         for dock in self.docks.values():
             widget = dock.widget()
             if hasattr(widget, "stop"):

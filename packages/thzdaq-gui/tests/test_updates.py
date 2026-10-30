@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -232,6 +233,7 @@ class TestUpdater:
         finished = subprocess.Popen([sys.executable, "-c", "pass"])
         finished.wait()
         started = []
+        monkeypatch.setattr(updater, "running_from", lambda folder: [])
         monkeypatch.setattr(
             updater.subprocess, "Popen", lambda cmd, **k: started.append(cmd)
         )
@@ -242,6 +244,69 @@ class TestUpdater:
         assert code == 0 and started == [[str(target / "ThzDAQ.exe")]]
         assert (target / "ThzDAQ.exe").read_text() == "new exe"
         assert not source.exists() and (target / updater.LOG).exists()
+
+    def test_programs_still_running_from_the_build_end_when_agreed(
+        self, tmp_path, monkeypatch
+    ):
+        """Windows replaces no file of a running program: thzdaq-cli.exe that an
+        agent holds for MCP, another window, a daemon that did not stop."""
+        target = make_build(tmp_path / "app", self.OLD)
+        # Not a child of this process (as for the updater): nothing waits to reap it
+        launcher = subprocess.run(
+            [sys.executable, "-c", "import subprocess, sys; print(subprocess.Popen("
+             "[sys.executable, '-c', 'import time; time.sleep(60)'], "
+             "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid)"],
+            capture_output=True, text=True, check=True,
+        )  # fmt: skip
+        held = int(launcher.stdout)
+        elsewhere = tmp_path / "other" / "ThzDAQ.exe"  # another installation
+        listing = [
+            (held, str(target / "thzdaq-cli.exe")),
+            (os.getpid(), str(elsewhere)),
+        ]
+
+        def alive(pid):
+            return not updater.wait_for_exit(pid, 0.01)
+
+        monkeypatch.setattr(
+            updater, "processes", lambda: [p for p in listing if alive(p[0])]
+        )
+        monkeypatch.setattr(updater, "STOPPING_S", 0.5)
+        try:
+            assert updater.running_from(target) == [listing[0]]
+            assert not updater.let_go(target, ask=lambda question: False)
+            assert alive(held)  # not agreed: it runs, the update waits
+            asked = []
+            assert updater.let_go(target, ask=lambda q: asked.append(q) or True)
+            assert not alive(held) and "thzdaq-cli.exe" in asked[0]
+            assert updater.running_from(target) == []
+        finally:
+            if alive(held):
+                os.kill(held, 9)
+
+    def test_processes_are_listed_with_their_programs(self):
+        found = dict(updater.processes())
+        assert os.getpid() in found
+        if sys.platform != "linux":  # ps there names a program without its folder
+            program = Path(found[os.getpid()]).resolve()
+            assert program == Path(sys.executable).resolve()
+
+    def test_main_leaves_the_build_while_its_programs_run(self, tmp_path, monkeypatch):
+        target = make_build(tmp_path / "app", self.OLD)
+        source = make_build(tmp_path / "new", self.NEW)
+        finished = subprocess.Popen([sys.executable, "-c", "pass"])
+        finished.wait()
+        monkeypatch.setattr(updater, "let_go", lambda folder, ask: False)
+        told = []
+        monkeypatch.setattr(updater, "show_error", told.append)
+        code = updater.main(
+            ["--pid", str(finished.pid), "--source", str(source),
+             "--target", str(target), "--exe", str(target / "ThzDAQ.exe")]
+        )  # fmt: skip
+        kept = {
+            name: text for name, text in tree(target).items() if name != updater.LOG
+        }
+        assert code == 1 and kept == self.OLD and "still run" in told[0]
 
     def test_updater_needs_only_the_standard_library(self):
         code = (
@@ -360,6 +425,7 @@ class TestCleanup:
     def test_updater_removes_the_download_whatever_happens(self, tmp_path, monkeypatch):
         finished = subprocess.Popen([sys.executable, "-c", "pass"])
         finished.wait()
+        monkeypatch.setattr(updater, "running_from", lambda folder: [])
         monkeypatch.setattr(updater.subprocess, "Popen", lambda cmd, **k: None)
         for ok in (True, False):
             download = tmp_path / f"{updates.DOWNLOAD_PREFIX}{ok}"
@@ -426,3 +492,22 @@ def test_update_installs_when_the_window_really_closes(
     exit_answer["result"] = QDialog.Accepted
     window.close()
     assert launched == [build]
+
+
+def test_an_update_stops_the_daemons_whose_files_it_replaces(
+    window, session, exit_answer, monkeypatch
+):
+    from thzdaq_gui.models.daemon import DaemonModel
+
+    stopped = []
+    for name in ("stop_now", "stop_left"):
+        monkeypatch.setattr(
+            DaemonModel, name, lambda self, mode, name=name: stopped.append(name)
+        )
+    monkeypatch.setattr("thzdaq_gui.updates.launch_updater", lambda build: None)
+    window.set_simulate(False)  # the simulator's daemon is left running
+    window.confirm_exit = True
+    exit_answer["stop"] = False  # unchecking does not keep it: it is disabled
+    window.updates.pending = Path("/tmp/thzdaq_update_x/unpacked/ThzDAQ")
+    window.close()
+    assert stopped == ["stop_now", "stop_left"]

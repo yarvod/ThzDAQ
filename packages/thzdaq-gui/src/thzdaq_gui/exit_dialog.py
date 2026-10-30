@@ -40,11 +40,13 @@ class ExitDialog(QDialog):
         others: int = 0,
         daemon: bool = True,
         left: Optional[LeftDaemon] = None,
+        updating: bool = False,
         parent=None,
     ):
         """running: measurements the daemon runs; others: its other clients
         (a window, a CLI); daemon: whether it answers; left: the daemon left
-        at a switch, when it still runs."""
+        at a switch, when it still runs; updating: an update installs after the
+        window, and it replaces the daemons' files, so they stop."""
         super().__init__(parent)
         self.setWindowTitle("Exit")
         self.setWindowIcon(theme.icon("exit-run"))
@@ -97,6 +99,12 @@ class ExitDialog(QDialog):
             self.stopLeft.setChecked(stop_by_default(left.running, left.others))
             shared(self.stopLeft, left.others)
             layout.addWidget(self.stopLeft)
+        if updating:
+            for check in (self.stopDaemon, self.stopLeft):
+                if check is not None and check.isEnabled():
+                    check.setChecked(True)
+                    check.setEnabled(False)
+                    check.setToolTip("The update replaces its files")
         buttons = QDialogButtonBox()
         buttons.addButton("Exit", QDialogButtonBox.AcceptRole)
         buttons.addButton(QDialogButtonBox.Cancel)

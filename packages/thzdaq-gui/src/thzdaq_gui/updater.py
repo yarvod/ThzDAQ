@@ -2,7 +2,10 @@
 
 Runs from a temporary copy after the application quits. Old files go to a
 backup folder first and come back if anything fails. Bench profiles edited
-in stations/ are kept; only profiles missing there are added.
+in stations/ are kept; only profiles missing there are added. Windows does
+not replace the files of a running program: what still runs from the
+installation (another window, a daemon, thzdaq-cli.exe that an agent holds
+for MCP) ends first, when the person agrees; otherwise the update waits.
 Standard library only, so the frozen updater stays small.
 """
 
@@ -10,12 +13,13 @@ import argparse
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 BACKUP = ".update_backup"
 KEEP_EDITED = {"stations"}
@@ -27,6 +31,8 @@ logger = logging.getLogger("thzdaq.updater")
 # The updater starts once the application has decided to quit; what is left
 # (stopping threads, a dump of the measurements) may still take a while
 EXIT_TIMEOUT_S = 300.0
+# A daemon the application stopped ends a moment later: waited for this long
+STOPPING_S = 10.0
 
 
 def wait_for_exit(pid: int, timeout: float = EXIT_TIMEOUT_S) -> bool:
@@ -50,6 +56,97 @@ def wait_for_exit(pid: int, timeout: float = EXIT_TIMEOUT_S) -> bool:
             return True
         time.sleep(0.2)
     return False
+
+
+def processes() -> Iterator[Tuple[int, str]]:
+    """Every process this user may look at, with the program it runs.
+    On Linux ps names a program without its folder: none is found there."""
+    if sys.platform == "win32":
+        yield from _windows_processes()
+        return
+    listing = subprocess.run(
+        ["ps", "-axo", "pid=,comm="], capture_output=True, text=True, check=True
+    ).stdout
+    for line in listing.splitlines():
+        pid, _, program = line.strip().partition(" ")
+        yield int(pid), program.strip()
+
+
+def _windows_processes() -> Iterator[Tuple[int, str]]:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+    size = 1024
+    while True:
+        pids = (wintypes.DWORD * size)()
+        needed = wintypes.DWORD()
+        psapi.EnumProcesses(pids, ctypes.sizeof(pids), ctypes.byref(needed))
+        if needed.value < ctypes.sizeof(pids):
+            break
+        size *= 2
+    limited_query = 0x1000
+    for pid in pids[: needed.value // ctypes.sizeof(wintypes.DWORD)]:
+        handle = kernel32.OpenProcess(limited_query, False, pid)
+        if not handle:
+            continue  # gone, or another user's
+        try:
+            length = wintypes.DWORD(32768)
+            name = ctypes.create_unicode_buffer(length.value)
+            if kernel32.QueryFullProcessImageNameW(
+                handle, 0, name, ctypes.byref(length)
+            ):
+                yield pid, name.value
+        finally:
+            kernel32.CloseHandle(handle)
+
+
+def running_from(folder: Path) -> List[Tuple[int, str]]:
+    """Processes that run a program of the installation in folder."""
+    folder = Path(folder).resolve()
+    return [
+        (pid, program)
+        for pid, program in processes()
+        if pid != os.getpid() and folder in Path(program).resolve().parents
+    ]
+
+
+def ask(question: str) -> bool:
+    """Yes or no from the person; without a window to ask in, no."""
+    logger.info(question)
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    yes, yes_no_warning = 6, 0x04 | 0x30
+    answer = ctypes.windll.user32.MessageBoxW(
+        None, question, "ThzDAQ update", yes_no_warning
+    )
+    return answer == yes
+
+
+def let_go(folder: Path, ask: Callable[[str], bool]) -> bool:
+    """Nothing runs from folder any more: a daemon the application stopped
+    ends by itself, the rest is ended when the person agrees. False: it runs."""
+    deadline = time.monotonic() + STOPPING_S
+    for pid, _ in running_from(folder):
+        wait_for_exit(pid, max(0.0, deadline - time.monotonic()))
+    running = running_from(folder)
+    if not running:
+        return True
+    names = "\n".join(f"{Path(program).name} (pid {pid})" for pid, program in running)
+    if not ask(
+        f"These programs of ThzDAQ still run:\n\n{names}\n\nEnd them and install "
+        "the update? An agent that uses thzdaq-cli.exe connects again later."
+    ):
+        return False
+    for pid, program in running:
+        logger.info("ending %s (pid %s)", program, pid)
+        try:
+            os.kill(pid, signal.SIGTERM)  # TerminateProcess on Windows
+        except OSError:
+            pass  # it ended meanwhile
+    return all(wait_for_exit(pid, STOPPING_S) for pid, _ in running)
 
 
 def retry(action: Callable[[], None], attempts: int = 10, delay: float = 0.5) -> None:
@@ -170,6 +267,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not wait_for_exit(args.pid):
         cleanup(args)
         show_error(f"ThzDAQ (pid {args.pid}) did not quit, update cancelled.")
+        return 1
+    if not let_go(args.target, ask):
+        cleanup(args)
+        show_error(
+            "Programs of ThzDAQ still run, update cancelled. Close them (an "
+            "agent's thzdaq-cli.exe too) and install the update again."
+        )
         return 1
     try:
         install(args.source, args.target)
