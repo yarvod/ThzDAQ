@@ -17,6 +17,8 @@ class Bridge(QObject):
     read_failed = Signal(object)  # ReadFailed
     station_changed = Signal(object)  # StationChanged
     leases_changed = Signal(object)  # LeasesChanged
+    approval_requested = Signal(object)  # ApprovalRequested
+    approval_answered = Signal(object)  # ApprovalAnswered
     resync = Signal(object)  # Resync: events were lost, take a new snapshot
     _heard = Signal(int, object)  # subscription generation, Event
 
@@ -31,6 +33,8 @@ class Bridge(QObject):
             events.ReadFailed: self.read_failed,
             events.StationChanged: self.station_changed,
             events.LeasesChanged: self.leases_changed,
+            events.ApprovalRequested: self.approval_requested,
+            events.ApprovalAnswered: self.approval_answered,
             events.Resync: self.resync,
         }
         # Emitted from another thread, delivered in this object's: the GUI's

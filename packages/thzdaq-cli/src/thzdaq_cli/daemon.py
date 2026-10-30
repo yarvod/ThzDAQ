@@ -26,7 +26,7 @@ from thzdaq_api.measurements import ListRuns
 from thzdaq_api.measurement_file import RUNNING
 
 from thzdaq_cli import show
-from thzdaq_cli.client import FAILED, KIND, OK, ORIGIN, Client
+from thzdaq_cli.client import FAILED, KIND, OK, Client, origin
 
 FOLLOW_S = 0.5  # how often a followed log is looked at
 
@@ -133,7 +133,7 @@ def start_daemon(args, client: Client) -> int:
     except LabError as e:
         if e.code != ErrorCode.UNREACHABLE:
             raise
-        lab = host.connect_or_start(client.simulate, args.station, ORIGIN, KIND)
+        lab = host.connect_or_start(client.simulate, args.station, origin(), KIND)
         print("the daemon started")
     client.out(
         lab.call(GetDaemonStatus()).process, lambda p: f"pid {p.pid}, port {p.port}"

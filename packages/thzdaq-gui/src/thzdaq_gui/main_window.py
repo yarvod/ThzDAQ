@@ -56,6 +56,7 @@ from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.processes import ProcessesWidget
 from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.docks.daemon import DaemonIndicator, DaemonWidget, LostBanner
+from thzdaq_gui.approval_dialog import ApprovalPrompts
 from thzdaq_gui.exit_dialog import (
     ExitDialog,
     dump_measurements,
@@ -66,6 +67,7 @@ from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
+from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
@@ -129,6 +131,8 @@ class MainWindow(QMainWindow):
         self.devices = DeviceDocks(session, self.hub, self.docks)
 
         self.daemon = DaemonModel(session, self)
+        self.approvals = ApprovalsModel(session, self)
+        self.approvalPrompts = ApprovalPrompts(self.approvals, self)
         self.build_menus()
         self.build_toolbar()
         self.stationLabel = QLabel()

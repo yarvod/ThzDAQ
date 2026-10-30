@@ -127,3 +127,16 @@ def test_the_command_starts_the_daemon_it_needs(tmp_path):
         assert thzdaq("daemon", "stop").returncode == 0
     finally:
         thzdaq("daemon", "kill")
+
+
+def test_a_command_in_an_agents_shell_waits_for_a_person(thzdaq, lab, monkeypatch):
+    """Claude Code runs thzdaq in its shell: --yes does not stand for a person."""
+    from thzdaq_api.origins import AGENT_CLI, CLI
+    from thzdaq_cli.client import origin
+
+    assert origin() == CLI
+    monkeypatch.setenv("CLAUDECODE", "1")
+    assert origin() == AGENT_CLI
+    lab.origin = origin()
+    code, _, err = thzdaq("--yes", "set", "sis_bias_1", "voltage_set", "1mV")
+    assert code == 1 and "window" in err

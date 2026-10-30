@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from thzdaq_api.errors import LabError
 from thzdaq_api.host import connect_or_start
+from thzdaq_api.origins import GUI
 
 from thzdaq_gui import theme
 from thzdaq_gui.main_window import MainWindow
@@ -26,7 +27,7 @@ from thzdaq_gui.settings import (
 from thzdaq_gui.wording import STATION_PROFILE
 
 DAEMON = "ThzDAQ daemon"
-ORIGIN = KIND = "gui"  # who this program is to the daemon
+ORIGIN = KIND = GUI  # who this program is to the daemon
 
 
 def main(argv: Optional[List[str]] = None) -> int:

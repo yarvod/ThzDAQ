@@ -2,6 +2,7 @@
 in the terminal, output as text or JSON, and the exit codes."""
 
 import argparse
+import os
 import sys
 from typing import Any, Callable, Optional, TypeVar
 
@@ -9,12 +10,21 @@ from thzdaq_api import host
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
+from thzdaq_api.origins import AGENT_CLI, CLI
 
 from thzdaq_cli import show
 
 R = TypeVar("R")
-ORIGIN = KIND = "cli"
+KIND = CLI
 OK, FAILED, USAGE, NO_DAEMON = 0, 1, 2, 3
+# Set in the shells agents run commands in (Claude Code, Codex): a command
+# there is the agent's, so what it changes waits for a person in the window
+AGENT_SHELLS = ("CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED")
+
+
+def origin() -> str:
+    """cli in a person's terminal, cli:agent in an agent's shell."""
+    return AGENT_CLI if any(os.environ.get(name) for name in AGENT_SHELLS) else CLI
 
 
 class Mistyped(Exception):
@@ -28,11 +38,11 @@ Connect = Callable[[bool, bool], Lab]
 def reach(simulate: bool, autostart: bool) -> Lab:
     """The running daemon; started when none runs and autostart allows it."""
     try:
-        return host.connect(simulate, ORIGIN, KIND)
+        return host.connect(simulate, origin(), KIND)
     except LabError as e:
         if e.code != ErrorCode.UNREACHABLE or not autostart:
             raise
-    lab = host.connect_or_start(simulate, None, ORIGIN, KIND)
+    lab = host.connect_or_start(simulate, None, origin(), KIND)
     print(f"daemon started (pid {lab.host.pid})", file=sys.stderr)
     return lab
 
