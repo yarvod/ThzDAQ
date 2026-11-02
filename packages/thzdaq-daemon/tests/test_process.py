@@ -158,3 +158,19 @@ def test_a_windowed_build_says_what_it_says_into_its_log(tmp_path, monkeypatch):
     sys.stderr.write("a traceback\n")
     sys.stderr.close()
     assert files.log.read_text(encoding="utf-8") == "serving\na traceback\n"
+
+
+def test_the_rights_of_agents_are_kept_for_the_next_start(tmp_path):
+    """Changing them keeps the idle timeout it was started with to itself."""
+    from thzdaq_api.daemon import DaemonSettings
+    from thzdaq_api.operation import Rights
+    from thzdaq_api.rights import Decision
+    from thzdaq_daemon.process import IDLE_S, Daemon, Options
+
+    files = DaemonFiles(tmp_path / "files", "thzdaq")
+    started = Daemon(Options(tmp_path, files, simulate=True, idle_timeout=0.0))
+    started.change(DaemonSettings(0.0, {Rights.SET: Decision.ALLOW}))
+    assert started.idle_timeout == 0.0
+    again = Daemon(Options(tmp_path, files, simulate=True))
+    assert again.settings() == DaemonSettings(IDLE_S, {Rights.SET: Decision.ALLOW})
+    assert '"set": "allow"' in (tmp_path / "daemon-sim.json").read_text()

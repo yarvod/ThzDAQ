@@ -31,7 +31,7 @@ def lab(tmp_path):
     bench = Bench(station, lanes, str(profile))
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
     assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
-    yield LocalLab(assembled, origin="test")
+    yield LocalLab(assembled, origin="test", kind="test")
     assembled.close()
     lanes.stop()
     bench.station.close()
@@ -39,7 +39,11 @@ def lab(tmp_path):
 
 @pytest.fixture
 def lab_as(lab):
-    """The same bench called as another client: lab_as("gui"), lab_as("mcp:x")."""
+    """The same bench called as another client: lab_as("gui"), lab_as("mcp:x");
+    it listens as the kind its origin names unless given (lab_as("cli",
+    "cli:answers"))."""
     from thzdaq_core.application.local import LocalLab
 
-    return lambda origin: LocalLab(lab.assembled, origin=origin)
+    return lambda origin, kind=None: LocalLab(
+        lab.assembled, origin, kind or origin.split(":")[0]
+    )

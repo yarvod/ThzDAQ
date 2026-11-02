@@ -6,6 +6,7 @@ needs a person waits for the answer (outside every lock) and goes on as the
 person allowed it, perhaps with another value.
 """
 
+import functools
 import logging
 from typing import Any, Dict, Iterable, Type
 
@@ -13,11 +14,12 @@ from thzdaq_api import catalog, wire
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lanes import LaneReset
 from thzdaq_api.operation import Operation
+from thzdaq_api.rights import Decision
 from thzdaq_instruments.errors import InstrumentError, LimitError
 
 from thzdaq_core.application.approvals import Approvals
 from thzdaq_core.application.handlers import Handler
-from thzdaq_core.application.policy import Decision, Policy
+from thzdaq_core.application.policy import Policy
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,8 @@ class Dispatcher:
 
     def _allowed(self, handler: Handler, args: Operation, origin: str) -> Operation:
         """The call as it may go, or LabError DENIED with the reason."""
-        decision = self.policy.decide(handler.needs(args), origin)
+        ask = functools.cache(lambda: handler.approval(args))  # made once, if needed
+        decision = self.policy.decide(handler.needs(args), origin, lambda: ask().risky)
         if decision is Decision.DENY:
             raise LabError(
                 ErrorCode.DENIED,
@@ -61,7 +64,7 @@ class Dispatcher:
             )
         if decision is Decision.ALLOW:
             return args
-        answer = self.approvals.ask(handler.approval(args), args.name, origin)
+        answer = self.approvals.ask(ask(), args.name, origin)
         if not answer.allowed:
             raise LabError(
                 ErrorCode.DENIED,

@@ -9,5 +9,6 @@ from test_lab_devices import *  # noqa: F401,F403
 from test_lab_events import *  # noqa: F401,F403
 from test_lab_leases import *  # noqa: F401,F403
 from test_lab_measurements import *  # noqa: F401,F403
+from test_lab_rights import *  # noqa: F401,F403
 from test_lab_safety import *  # noqa: F401,F403
 from test_lab_station import *  # noqa: F401,F403

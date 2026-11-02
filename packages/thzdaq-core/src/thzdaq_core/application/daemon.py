@@ -5,8 +5,9 @@ what they changed) and then sets the profile's safe state; graceful is
 refused while measurements run.
 """
 
-from typing import Tuple
+from typing import Mapping, Optional, Tuple
 
+import msgspec
 from thzdaq_api.daemon import (
     DaemonSettings,
     DaemonStatus,
@@ -16,11 +17,14 @@ from thzdaq_api.daemon import (
     StopMode,
 )
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.operation import Rights
+from thzdaq_api.rights import Decision
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.describe import connection_info
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.events import EventBus
+from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
 from thzdaq_core.application.ports import DaemonControl
 from thzdaq_core.application.runs import Runs
@@ -38,6 +42,7 @@ class DaemonService:
         events: EventBus,
         devices: DeviceAccess,
         control: DaemonControl,
+        policy: Policy,
     ):
         self.bench = bench
         self.runs = runs
@@ -45,6 +50,7 @@ class DaemonService:
         self.events = events
         self.devices = devices
         self.control = control
+        self.policy = policy
 
     def status(self) -> DaemonStatus:
         station = self.bench.station
@@ -81,15 +87,26 @@ class DaemonService:
         return Heartbeat(seq, len(status.clients), len(status.runs), status.problems)
 
     def settings(self) -> DaemonSettings:
-        return self.control.settings()
+        """As kept, with what agents may do by every rights."""
+        kept = self.control.settings()
+        return msgspec.structs.replace(kept, agents=self.policy.agents())
 
-    def change(self, idle_timeout: float) -> DaemonSettings:
-        if idle_timeout < 0:
+    def change(
+        self, idle_timeout: Optional[float], agents: Mapping[Rights, Decision]
+    ) -> DaemonSettings:
+        """What is given changes, the rest stays."""
+        if idle_timeout is not None and idle_timeout < 0:
             raise LabError(
                 ErrorCode.INVALID_ARGUMENTS, "idle_timeout is 0 (never) or more s"
             )
-        self.control.change(DaemonSettings(idle_timeout=idle_timeout))
-        return self.control.settings()
+        kept = self.control.settings()
+        self.control.change(
+            DaemonSettings(
+                kept.idle_timeout if idle_timeout is None else idle_timeout,
+                self.policy.changed(agents),
+            )
+        )
+        return self.settings()
 
     def log(self, lines: int) -> Tuple[str, ...]:
         if lines <= 0:

@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Mapping, Optional
 from thzdaq_instruments.errors import LimitError
 from thzdaq_instruments.limits import Limit
 from thzdaq_instruments.quantities import Quantity
+from thzdaq_instruments.units import format_value
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,21 @@ class Guard:
         lows = [limit.minimum for limit in limits if limit.minimum is not None]
         highs = [limit.maximum for limit in limits if limit.maximum is not None]
         return Limit(max(lows, default=None), min(highs, default=None))
+
+    def unusual(self, quantity: Quantity, value: float) -> Optional[str]:
+        """Why a value the limits take is still asked for: it leaves the warn
+        range ("above warn_max 4 mV"); None inside."""
+        limit = self.bench.get(quantity.key)
+        if limit is None:
+            return None
+        if limit.warn_minimum is not None and value < limit.warn_minimum:
+            beyond, edge = "below warn_min", limit.warn_minimum
+        elif limit.warn_maximum is not None and value > limit.warn_maximum:
+            beyond, edge = "above warn_max", limit.warn_maximum
+        else:
+            return None
+        shown = format_value(edge, quantity.unit)
+        return f"{self.device} {quantity.key}: {beyond} {shown}"
 
     def check(self, quantity: Quantity, value: float) -> None:
         problem = self.problem(quantity, value)

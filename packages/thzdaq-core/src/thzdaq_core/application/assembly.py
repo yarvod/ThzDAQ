@@ -4,7 +4,7 @@ connections go) to stop at the end."""
 
 from dataclasses import dataclass
 
-from thzdaq_api.origins import GUI
+from thzdaq_api.origins import answers
 
 from thzdaq_core.application.approvals import Approvals
 from thzdaq_core.application.bench import Bench
@@ -60,9 +60,12 @@ def assemble(
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
-    service = DaemonService(bench, runs, polling, events, access, control)
-    # A person answers in a window that listens to the daemon
-    waiting = Approvals(events, lambda: any(c.kind == GUI for c in control.clients()))
+    policy = Policy(lambda: control.settings().agents)
+    service = DaemonService(bench, runs, polling, events, access, control, policy)
+    # A person answers in a window or a terminal that listens to the daemon
+    waiting = Approvals(
+        events, lambda: any(answers(c.kind, c.origin) for c in control.clients())
+    )
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -108,7 +111,7 @@ def assemble(
             daemon.StopDaemon(service),
             daemon.RestartDaemon(service),
         ),
-        Policy(),
+        policy,
         waiting,
     )
     return Assembled(

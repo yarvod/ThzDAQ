@@ -1,16 +1,14 @@
 """What an agent changes waits for a person; people answer it (contract: LocalLab
 and RemoteLab)."""
 
-import threading
-
 import pytest
-from lab_helpers import bodies, wait_for
+from lab_helpers import Window, bodies, calling, wait_for
 from thzdaq_api.approvals import AnswerApproval, AskUser, WaitAnswer
 from thzdaq_api.devices import CallAction, ListDevices, SafeState, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.events import ApprovalAnswered, ApprovalRequested
+from thzdaq_api.events import ApprovalAnswered
 from thzdaq_api.measurements import StartMeasurement
-from thzdaq_api.origins import GUI
+from thzdaq_api.origins import AGENT_CLI, ANSWERING_CLI, CLI, GUI
 from thzdaq_api.procedures import IV_CURVE
 from thzdaq_api.station import GetStation, UpdateStation
 
@@ -24,37 +22,6 @@ IV = dict(
     },
     devices={"bias": "sis_bias_1"},
 )
-
-
-class Window:
-    """A person's window: it listens to the daemon and answers what waits."""
-
-    def __init__(self, lab):
-        self.lab = lab
-        self.heard = []
-        self.stop = lab.subscribe(self.heard.append)
-
-    def asked(self):
-        wait_for(lambda: bodies(self.heard, ApprovalRequested))
-        return bodies(self.heard, ApprovalRequested)[-1].approval
-
-    def answer(self, **answer):
-        self.lab.call(AnswerApproval(id=self.asked().id, **answer))
-
-
-def calling(lab, operation):
-    """The call in a thread: it waits for a person."""
-    done = {}
-
-    def call():
-        try:
-            done["result"] = lab.call(operation)
-        except LabError as e:
-            done["error"] = e
-
-    thread = threading.Thread(target=call)
-    thread.start()
-    return thread, done
 
 
 @pytest.fixture
@@ -179,3 +146,44 @@ def test_nobody_answering_withdraws_the_request(lab_as, window, monkeypatch):
     wait_for(lambda: bodies(window.heard, ApprovalAnswered))  # another client's stream
     (answered,) = bodies(window.heard, ApprovalAnswered)
     assert answered.answer.by == approvals.TIMEOUT
+
+
+def test_a_terminal_that_asks_answers_as_a_window_does(lab_as):
+    terminal = Window(lab_as(CLI, ANSWERING_CLI))
+    try:
+        thread, done = calling(
+            lab_as(AGENT), SetQuantity(ref="sis_bias_1", key="voltage_set", value=0)
+        )
+        terminal.answer(allowed=True)
+        thread.join(5)
+        assert done["result"].value == 0
+    finally:
+        terminal.stop()
+
+
+def test_a_cli_that_does_not_ask_and_an_agents_one_are_nobody(lab_as):
+    """A person's CLI that only listens cannot answer; an agent's never can."""
+    for origin, kind in ((CLI, CLI), (AGENT_CLI, ANSWERING_CLI)):
+        listening = Window(lab_as(origin, kind))
+        try:
+            with pytest.raises(LabError) as caught:
+                lab_as(AGENT).call(
+                    SetQuantity(ref="sis_bias_1", key="voltage_set", value=0)
+                )
+            assert caught.value.code == ErrorCode.DENIED
+            assert "approvals watch" in caught.value.message
+        finally:
+            listening.stop()
+
+
+def test_an_agents_cli_cannot_answer(lab_as, window):
+    thread, done = calling(
+        lab_as(AGENT), SetQuantity(ref="sis_bias_1", key="voltage_set", value=0)
+    )
+    approval = window.asked()
+    with pytest.raises(LabError) as caught:
+        lab_as(AGENT_CLI).call(AnswerApproval(id=approval.id, allowed=True))
+    assert caught.value.code == ErrorCode.DENIED
+    window.answer(allowed=False, text="not yet")
+    thread.join(5)
+    assert "not yet" in done["error"].message

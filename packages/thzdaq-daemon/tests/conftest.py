@@ -99,13 +99,14 @@ def lab(served):
 
 @pytest.fixture
 def lab_as(served):
-    """The served daemon called as another client: lab_as("gui"), lab_as("mcp:x")."""
+    """The served daemon called as another client: lab_as("gui"), lab_as("mcp:x");
+    it listens as the kind its origin names unless given."""
     from thzdaq_api.remote import RemoteLab
 
     labs = []
 
-    def remote(origin):
-        labs.append(RemoteLab(served.host, origin=origin, kind=origin.split(":")[0]))
+    def remote(origin, kind=None):
+        labs.append(RemoteLab(served.host, origin, kind or origin.split(":")[0]))
         return labs[-1]
 
     yield remote

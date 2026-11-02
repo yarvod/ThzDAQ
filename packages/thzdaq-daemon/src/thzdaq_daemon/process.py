@@ -15,7 +15,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import msgspec
 from thzdaq_api.daemon import (
@@ -37,6 +37,8 @@ from thzdaq_api.host import (
     write_host,
 )
 from thzdaq_api.lock import FileLock
+from thzdaq_api.operation import Rights
+from thzdaq_api.rights import Decision
 from thzdaq_api.transport import HEARTBEAT_S
 from thzdaq_core.application.clock import wall_time
 from thzdaq_api.measurements import DATA
@@ -56,6 +58,7 @@ class Settings(msgspec.Struct):
 
     station: Optional[str] = None  # the last profile it worked with
     idle_timeout: float = IDLE_S
+    agents: Dict[Rights, Decision] = {}  # what agents may do, as a person set it
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
@@ -233,12 +236,14 @@ class Daemon:
         self._stopping.set()
 
     def settings(self) -> DaemonSettings:
-        return DaemonSettings(idle_timeout=self.idle_timeout)
+        return DaemonSettings(self.idle_timeout, dict(self.saved.agents))
 
     def change(self, settings: DaemonSettings) -> None:
-        self.saved.idle_timeout = settings.idle_timeout
+        if settings.idle_timeout != self.idle_timeout:
+            self.saved.idle_timeout = settings.idle_timeout
+            self.options.idle_timeout = None  # what it was started with gives way
+        self.saved.agents = dict(settings.agents)
         self.saved.save(self.options.settings_path)
-        self.options.idle_timeout = None  # what it was started with gives way
 
     def log(self, lines: int) -> Tuple[str, ...]:
         return tuple(log_tail(self.options.files, lines).splitlines())

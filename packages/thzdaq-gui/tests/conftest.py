@@ -105,7 +105,7 @@ def connect(bench, tmp_path):
 
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
     assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
-    yield lambda simulate: LocalLab(assembled, origin="gui")
+    yield lambda simulate: LocalLab(assembled, origin="gui", kind="gui")
     assembled.close()
 
 

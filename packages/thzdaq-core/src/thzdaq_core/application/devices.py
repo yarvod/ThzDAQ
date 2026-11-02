@@ -147,13 +147,16 @@ class DeviceAccess:
         except ValueError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
         before = self.known.get(ref, key)
+        leap = jump(before, after)
+        unusual = self.bench.station.guard(ref).unusual(quantity, after)
+        warning = self._warning(ref, quantity.danger, unusual)
         return Ask(
             f"{ref} · {quantity.title}",
-            f"{shown(quantity, before)} → {shown(quantity, after)}"
-            + jump(before, after),
-            self._warning(ref, quantity.danger),
+            f"{shown(quantity, before)} → {shown(quantity, after)}{leap}",
+            warning,
             ref if quantity.danger else "",
             shown(quantity, after),
+            risky=bool(leap or warning),
         )
 
     def proposed_action(self, ref: str, key: str, arguments: Dict[str, Any]) -> Ask:
@@ -167,19 +170,21 @@ class DeviceAccess:
             for argument in action.arguments
             if argument.key in bound
         ]
+        warning = self._warning(ref, action.danger)
         return Ask(
             f"{ref} · {action.title}",
             ", ".join(given) or "no arguments",
-            self._warning(ref, action.danger),
+            warning,
             ref if action.danger else "",
+            risky=bool(warning),
         )
 
-    def _warning(self, ref: str, danger: str) -> str:
-        """The danger of a step and the sweep of another measurement it disturbs
-        (allowing it shares the device)."""
+    def _warning(self, ref: str, danger: str, unusual: Optional[str] = None) -> str:
+        """The danger of a step, a value beyond the warn range and the sweep of
+        another measurement it disturbs (allowing it shares the device)."""
         swept = tuple(lease for lease in self.leases.of(ref) if lease.mode == EXCLUSIVE)
         sweeps = f"{LeaseConflict(swept)}: it notes the change" if swept else ""
-        return "; ".join(filter(None, (danger, sweeps)))
+        return "; ".join(filter(None, (danger, unusual, sweeps)))
 
     def safe_state(self, origin: str, share: bool = False) -> Tuple[SafeValue, ...]:
         """Every value of the profile's safe state, in its order; one that

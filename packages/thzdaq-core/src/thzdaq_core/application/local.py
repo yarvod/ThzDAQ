@@ -19,11 +19,15 @@ R = TypeVar("R")
 
 
 class LocalLab:
-    def __init__(self, assembled: Assembled, origin: str = "local"):
+    def __init__(
+        self, assembled: Assembled, origin: str = "local", kind: str = "local"
+    ):
+        """kind: the kind of client it listens as (gui, cli, cli:answers, ...)."""
         self.assembled = assembled
         self.dispatcher = assembled.dispatcher
         self.events = assembled.events
         self.origin = origin
+        self.kind = kind
 
     def call(self, operation: Operation[R]) -> R:
         data = self.dispatcher.dispatch_json(
@@ -38,7 +42,7 @@ class LocalLab:
         stop = self.events.subscribe(
             lambda event: listener(wire.decode_event(wire.encode(event))), since
         )
-        leave = self.assembled.control.listen(self.origin)
+        leave = self.assembled.control.listen(self.kind, self.origin)
 
         def unsubscribe() -> None:
             stop()
@@ -70,12 +74,10 @@ class LocalControl:
     def clients(self) -> Tuple[ClientInfo, ...]:
         return tuple(self._clients.values())
 
-    def listen(self, origin: str) -> Callable[[], None]:
-        """A client of the kind its origin names (gui, cli, mcp, ...) until
-        what this returns is called."""
+    def listen(self, kind: str, origin: str) -> Callable[[], None]:
+        """A client of this kind until what this returns is called."""
         self._last += 1
         key = self._last
-        kind = origin.split(":")[0]
         self._clients[key] = ClientInfo(kind, os.getpid(), origin, wall_time())
         return lambda: self._clients.pop(key, None)
 

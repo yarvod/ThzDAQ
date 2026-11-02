@@ -16,7 +16,7 @@ from thzdaq_api.events import ApprovalAnswered, ApprovalRequested
 from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.events import EventBus
 
-NOBODY = "no person can answer now: open the ThzDAQ window"
+NOBODY = "no person can answer now: open the ThzDAQ window or thzdaq approvals watch"
 TIMEOUT = "timeout"  # Answer.by when nobody answered
 KEPT = 100  # answers kept for wait_answer after their question closed
 
@@ -30,6 +30,9 @@ class Ask:
     warning: str = ""
     confirm: str = ""  # typed to allow it: a dangerous step
     value: Optional[str] = None  # the value asked for, in its unit: may be changed
+    # It may harm the bench (a danger, a jump, beyond the warn range, another's
+    # sweep): a person allows it even where an agent may do it alone
+    risky: bool = False
 
 
 class _Waiting:
