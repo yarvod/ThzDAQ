@@ -86,6 +86,7 @@ class GraphWidget(QWidget):
     is renamed; graphs of the procedures are keyed by their title.
     """
 
+    icon = "chart-line"  # of its dock
     curves_changed = Signal()
     add_curve_clicked = Signal(object)  # this graph
     edit_clicked = Signal(object)
@@ -161,6 +162,16 @@ class GraphWidget(QWidget):
 
             self.analysis = IVAnalysisBar(self, call)
             layout.addWidget(self.analysis)
+
+    @classmethod
+    def of_plot(cls, spec: PlotInfo, call: Callable[[Any], Any]) -> "GraphWidget":
+        return cls(
+            spec.title,
+            Axis(spec.x_label, scale=spec.x_scale),
+            Axis(spec.y_label, scale=spec.y_scale),
+            analysis=spec.analysis,
+            call=call,
+        )
 
     def _tool(self, icon_name: str, tip: str, slot) -> QToolButton:
         button = QToolButton()
@@ -297,6 +308,12 @@ class GraphWidget(QWidget):
 class MapGraphWidget(QWidget):
     """z over an x/y grid (2SB bias optimization)."""
 
+    icon = "grid"
+
+    @classmethod
+    def of_plot(cls, spec: PlotInfo, call=None) -> "MapGraphWidget":
+        return cls(spec)
+
     def __init__(self, spec: PlotInfo, parent=None):
         super().__init__(parent)
         self.title = spec.title
@@ -402,16 +419,13 @@ def close_plots() -> None:
     pg.ViewBox.NamedViews.clear()
 
 
+def graph_type(spec: Optional[PlotInfo]) -> type:
+    """What draws a plot: z over x and y, else curves (also of no plot)."""
+    return MapGraphWidget if spec is not None and spec.kind == "map" else GraphWidget
+
+
 def graph_for_spec(spec: PlotInfo, call: Callable[[Any], Any]):
-    if spec.kind == "map":
-        return MapGraphWidget(spec)
-    return GraphWidget(
-        spec.title,
-        Axis(spec.x_label, scale=spec.x_scale),
-        Axis(spec.y_label, scale=spec.y_scale),
-        analysis=spec.analysis,
-        call=call,
-    )
+    return graph_type(spec).of_plot(spec, call)
 
 
 class GraphHub(QObject):
@@ -481,6 +495,10 @@ class GraphHub(QObject):
                 widget = GraphWidget(title, Axis(), Axis())
             self._add(widget)
         return self.graphs[title]
+
+    def type_of(self, title: str) -> type:
+        """What draws a graph, built or not (the icon of its dock)."""
+        return graph_type(self.specs.get(title))
 
     def _add(self, widget) -> None:
         if isinstance(widget, GraphWidget):

@@ -1,8 +1,10 @@
 """Graph docks: one per graph of the GraphHub.
 
-A graph made later (New graph…, a new unit of a monitor) opens with the
-graphs; the graphs of a starting run all come on screen, as a 2 x 2 grid at
-most; custom graphs are kept in the settings.
+A graph of the procedures is built when its dock first opens or it gets
+data: most never do in a session. A graph made later (New graph…, a new
+unit of a monitor) opens with the graphs; the graphs of a starting run all
+come on screen, as a 2 x 2 grid at most; custom graphs are kept in the
+settings.
 """
 
 import json
@@ -15,7 +17,8 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
 from thzdaq_gui.docking import DockSpace, even_out
-from thzdaq_gui.graphs import AddCurveDialog, GraphHub, MapGraphWidget
+from thzdaq_gui.docks.body import DockBody
+from thzdaq_gui.graphs import AddCurveDialog, GraphHub
 from thzdaq_gui.settings import CUSTOM_GRAPHS
 
 DEFAULT_GRAPHS = ("I-V", "P-V", "Y-V", "P-IF")  # the centre of a default layout
@@ -57,27 +60,45 @@ class GraphDocks:
         hub.graph_removed.connect(self.delete)
 
     def add_all(self) -> None:
-        """Docks of the graphs of the procedures and of the custom ones."""
+        """Docks of the graphs of the procedures, not built yet, and of the
+        custom ones."""
         for title in self.hub.titles():
-            self.hub.graph(title)
+            self.add_dock(
+                dock_name(GRAPH, title),
+                title,
+                lambda title=title: self.hub.graph(title),
+                self.hub.type_of(title).icon,
+            )
         self.load_custom()
         self.hub.custom_changed.connect(self.save_custom)
 
     def add(self, widget) -> None:
+        """A graph the hub built, held by its dock from then on: one of the
+        procedures (its dock opened, or it got data), or one made later (New
+        graph…, a monitor's new unit), whose dock is added now."""
         name = graph_dock(widget)
-        if name in self.docks:
-            return
-        icon = theme.icon(
-            "grid" if isinstance(widget, MapGraphWidget) else "chart-line"
-        )
+        if name not in self.docks:
+            custom = getattr(widget, "custom", False)
+            self.add_dock(
+                name,
+                widget.title,
+                lambda: widget,
+                widget.icon,
+                group="Custom" if custom else "",
+            )
+        self.docks[name].widget().hold(widget)
+
+    def add_dock(
+        self, name: str, title: str, build, icon: str, group: str = ""
+    ) -> None:
         dock = self.docks.add(
             name,
-            widget.title,
-            widget,
+            title,
+            DockBody(build),
             "Graphs",
-            icon,
+            theme.icon(icon),
             QtAds.CenterDockWidgetArea,
-            group="Custom" if getattr(widget, "custom", False) else "",
+            group=group,
             hint=name,
         )
         if not self.docks.building:

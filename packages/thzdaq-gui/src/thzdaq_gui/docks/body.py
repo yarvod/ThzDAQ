@@ -1,11 +1,12 @@
-"""Content of a heavy dock (a device, a measurement), held in the dock only while open.
+"""Content of a heavy dock (a device, a measurement, a graph), held only while open.
 
 Opening a perspective, ADS moves every dock, closed ones too, into new areas,
 and Qt restyles the whole widget tree of each moved dock (the application
 style sheet): with every device and measurement dock built that took most of
 a second. A DockBody detaches its content while the dock is closed, so a
-switch costs only the open docks. The content is built on the first open and
-keeps working while detached (monitors, running measurements).
+switch costs only the open docks. The content is built on the first open (a
+graph also for its first data) and keeps working while detached (monitors,
+running measurements).
 """
 
 from typing import Callable, Optional
@@ -37,6 +38,11 @@ class DockBody(QWidget):
         if self._content is None:
             self._content = self._factory()
         return self._content
+
+    def hold(self, content: QWidget) -> None:
+        """Content built before the dock opened (a graph built for its data):
+        shown when the dock opens, deleted with the dock."""
+        self._content = content
 
     def set_open(self, open_: bool) -> None:
         if open_:

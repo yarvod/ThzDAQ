@@ -206,6 +206,21 @@ class TestWindow:
         assert hub.custom_graphs() == []
         assert not hasattr(hub.graph("I-V"), "btnDelete")  # built-in graphs stay
 
+    def test_a_graph_is_built_when_shown_or_fed(self, window):
+        from thzdaq_gui.graph_docks import DEFAULT_GRAPHS
+
+        hub = window.hub
+        assert set(hub.graphs) == set(DEFAULT_GRAPHS)  # those on screen
+        body = window.docks["graph:Tn-V"].widget()
+        assert not body.built and "graph:Tn-V" in window.docks.entries  # listed
+        window.show_dock("graph:Tn-V")
+        assert body.attached and body.content() is hub.graphs["Tn-V"]
+        graph = hub.graph("P-t")  # for a value of a monitor: its dock holds it
+        body = window.docks["graph:P-t"].widget()
+        assert body.built and not body.attached
+        window.show_dock("graph:P-t")
+        assert body.attached and body.content() is graph
+
     def test_area_close_button_closes_one_tab(self, window):
         import PySide6QtAds as QtAds
 
