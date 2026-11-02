@@ -83,6 +83,10 @@ class DaemonModel(QObject):
         self.state = PROBLEMS if reachable else LOST
         self.changed.emit()
 
+    def close(self) -> None:
+        """The window goes: no more looks."""
+        self.timer.stop()
+
     def ask(self) -> Optional[DaemonStatus]:
         """The status now, waiting for it; None when the daemon does not answer."""
         status = asked(self.session.lab)

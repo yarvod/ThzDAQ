@@ -1,3 +1,4 @@
+import gc
 import os
 import shutil
 import sys
@@ -7,6 +8,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
+from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
@@ -26,6 +28,22 @@ def app(tmp_path_factory):
 
     theme.apply(application)
     return application
+
+
+@pytest.fixture(autouse=True)
+def freed(app):
+    """Frees what a test deleted, after it (and when the test calls it), in
+    the GUI thread: Qt deletes an object deleted outside of an event (a
+    closed window, a session) only in an event loop, and the tests run none;
+    then the collector frees the Python side of the deleted widgets
+    (pyqtgraph's menus have no parent), held in cycles through their signals."""
+
+    def free():
+        app.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
+
+    yield free
+    free()
 
 
 @pytest.fixture(autouse=True)
@@ -110,13 +128,28 @@ def connect(bench, tmp_path):
 
 
 @pytest.fixture
-def session(app, tmp_path, connect):
+def new_session(app, tmp_path, connect):
+    """Sessions of the program (started again after its window closed),
+    shut down and deleted after the test."""
     from thzdaq_gui.session import Session
 
-    session = Session(connect, tmp_path)
-    session.open(True)
-    yield session
-    session.shutdown()
+    made = []
+
+    def started():
+        session = Session(connect, tmp_path)
+        session.open(True)
+        made.append(session)
+        return session
+
+    yield started
+    for session in made:
+        session.shutdown()
+        session.deleteLater()
+
+
+@pytest.fixture
+def session(new_session):
+    return new_session()
 
 
 @pytest.fixture

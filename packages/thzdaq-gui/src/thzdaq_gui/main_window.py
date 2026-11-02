@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Dict, Optional
 
 import PySide6QtAds as QtAds
-from PySide6.QtCore import QSettings, QSignalBlocker, Qt, QTimer
+from PySide6.QtCore import QMetaObject, QSettings, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
@@ -98,6 +98,8 @@ class MainWindow(QMainWindow):
         parent=None,
     ):
         super().__init__(parent)
+        # Closed, it is deleted with its docks, graphs and timers
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.session = session
         # The registry of this build (or of runs from sources), or an INI file
         self.settings = (
@@ -451,8 +453,12 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if self._fit_on_show:
             self._fit_on_show = False
-            QTimer.singleShot(0, self.fit_columns)
+            # Queued to the window, dropped with it: PySide's QTimer.singleShot
+            # holds the method in a timer of its own, keeping a window closed
+            # before the timer fires alive
+            QMetaObject.invokeMethod(self, "fit_columns", Qt.QueuedConnection)
 
+    @Slot()
     def fit_columns(self) -> None:
         """After a default layout: the device and measurement columns as wide
         as their docks want, the graphs the rest; the layout was made before
@@ -549,12 +555,11 @@ class MainWindow(QMainWindow):
             if not updating:  # an update stops them whatever the boxes say
                 stop = dialog.stopDaemon.isChecked()
                 stop_left = dialog.stopLeft is not None and dialog.stopLeft.isChecked()
-        for dock in self.docks.values():
-            widget = dock.widget()
-            if hasattr(widget, "stop"):
-                widget.stop()
         if store_state:
             self.save_state()
+        # Before the session stops calling the lab: monitors cancel their polls
+        self.docks.close()
+        self.daemon.close()
         self.logWidget.detach()
         if stop:
             self.stop_daemon(self.daemon.stop_now, running)
@@ -570,7 +575,6 @@ class MainWindow(QMainWindow):
             except OSError as e:
                 QMessageBox.warning(self, "Dump", f"Could not dump measurements: {e}")
         close_plots()
-        self.dock_manager.deleteLater()
         # Last: the updater waits for this process to end, then replaces the files
         self.updates.install_pending()
         event.accept()

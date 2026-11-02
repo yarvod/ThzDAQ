@@ -846,18 +846,8 @@ class TestMeasureAndData:
         assert sorted(tree.entries()) == ["power_meter_1/power", "sis_bias_1/voltage"]
 
 
-def restarted(session, tmp_path):
-    """The session of the program started again: closing the window ends its
-    session, the lab goes on."""
-    from thzdaq_gui.session import Session
-
-    again = Session(session.lab_of, tmp_path)
-    again.open(True)
-    return again
-
-
 class TestPerspectives:
-    def test_create_save_and_restore(self, session, tmp_path, monkeypatch):
+    def test_create_save_and_restore(self, session, new_session, tmp_path, monkeypatch):
         from thzdaq_gui.main_window import MainWindow
 
         settings = str(tmp_path / "layout.ini")
@@ -878,12 +868,12 @@ class TestPerspectives:
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
 
-        again = MainWindow(restarted(session, tmp_path), settings, check_updates=False)
+        again = MainWindow(new_session(), settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) >= {"Default", "Noise"}
         assert not again.docks["graph:Tn-V"].isClosed()
         again.close()
 
-    def test_rename_keeps_the_layout(self, session, tmp_path, monkeypatch):
+    def test_rename_keeps_the_layout(self, session, new_session, tmp_path, monkeypatch):
         from thzdaq_gui.main_window import MainWindow
 
         settings = str(tmp_path / "layout.ini")
@@ -912,7 +902,7 @@ class TestPerspectives:
         window.perspectives.open("Tn")  # the layout saved as Noise
         assert not window.docks["graph:Tn-V"].isClosed()
         window.close()
-        again = MainWindow(restarted(session, tmp_path), settings, check_updates=False)
+        again = MainWindow(new_session(), settings, check_updates=False)
         assert set(again.dock_manager.perspectiveNames()) == {"Default", "Tn"}
         assert again.perspectives.combo.currentText() == "Tn"
         again.close()
@@ -1104,6 +1094,46 @@ class TestExit:
 
         session.left = Ended()
         assert window.daemon.ask_left() is None
+
+
+def test_closed_windows_leave_nothing_alive(app, connect, tmp_path, freed):
+    """A closed window is deleted with its docks, graphs and timers, the
+    content of a closed dock too (it has no parent); each window of the tests
+    stayed alive, and the run grew slower and bigger with every test."""
+    from PySide6.QtCore import QTimer
+    from thzdaq_gui.main_window import MainWindow
+    from thzdaq_gui.session import Session
+
+    def alive():
+        freed()
+        timers = {t for w in app.topLevelWidgets() for t in w.findChildren(QTimer)}
+        return len(app.allWidgets()), len(timers)
+
+    def open_and_close():
+        session = Session(connect, tmp_path)
+        session.open(True)
+        window = MainWindow(
+            session, str(tmp_path / "s.ini"), restore_layout=False,
+            check_updates=False, mode="pro",
+        )  # fmt: skip
+        window.show()
+        window.docks.open("device:power_meter_1")
+        window.docks.toggle("device:power_meter_1")
+        assert not window.docks["device:power_meter_1"].widget().attached
+        assert window.close()  # shuts the session down
+        session.deleteLater()
+
+    before = alive()
+    for _ in range(2):
+        open_and_close()
+        assert alive() == before
+
+
+def test_a_removed_dock_is_not_built_again(window):
+    body = window.docks["device:power_meter_1"].widget()
+    window.docks.open("device:power_meter_1")
+    window.docks.remove("device:power_meter_1")
+    assert not body.built  # deleted, not built again for a last look at its plots
 
 
 def test_no_stray_windows_flash(app, session, tmp_path):

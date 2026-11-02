@@ -114,6 +114,18 @@ def even_out(areas) -> None:
         splitter.setSizes(sizes)
 
 
+def free(widget: Optional[QWidget]) -> None:
+    """Stop a dock's content and close its plots before it is deleted."""
+    if isinstance(widget, DockBody):
+        # Not close_views(body): asked for its children, a body builds its
+        # content again
+        widget.dispose()
+    elif widget is not None:
+        if hasattr(widget, "stop"):
+            widget.stop()
+        close_views(widget)
+
+
 @contextmanager
 def one_repaint(window: QWidget) -> Iterator[None]:
     """A wait cursor and one repaint for a new layout instead of every step
@@ -190,16 +202,21 @@ class DockSpace(Mapping):
         dock = self._docks.pop(name, None)
         if dock is None:
             return
-        widget = dock.widget()
-        if isinstance(widget, DockBody):
-            widget.dispose()
-        elif hasattr(widget, "stop"):
-            widget.stop()
-        if widget is not None:
-            close_views(widget)
+        free(dock.widget())
         self.entries.pop(name, None)
         self.manager.removeDockWidget(dock)
         dock.deleteLater()
+
+    def close(self) -> None:
+        """The window goes: the content of every dock stops and is deleted,
+        then the docks. Qt deletes a widget's children with it, but the
+        content of a closed DockBody has no parent (detached so layouts
+        switch fast): it would outlive the window with its timers and plots.
+        ADS closes its floating windows only when the dock manager is
+        deleted (its README deletes it as the window closes)."""
+        for dock in self._docks.values():
+            free(dock.widget())
+        self.manager.deleteLater()
 
     def retitle(self, name: str, title: str) -> None:
         """On its tab, its toolbar button and in the menus."""
