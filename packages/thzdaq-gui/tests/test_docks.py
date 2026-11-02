@@ -1634,6 +1634,30 @@ class TestDaemon:
         ]  # fmt: skip
         assert widget.btnStop.isEnabled() and not widget.btnStart.isEnabled()
 
+    def test_a_person_chooses_what_agents_may_do(self, window, session, wait):
+        from thzdaq_api.daemon import GetDaemonSettings
+        from thzdaq_api.operation import Rights
+        from thzdaq_api.rights import Decision
+
+        agents = window.daemonWidget.agents
+        wait(lambda: window.daemon.settings is not None)
+        choices = agents.choices
+        assert choices[Rights.SET].currentData() == Decision.ASK
+        assert not choices[Rights.STATION].isEnabled()
+        assert not choices[Rights.ANSWER].isEnabled()
+        assert choices[Rights.RUN].isEnabled()
+        set_choice = choices[Rights.SET]
+        set_choice.setCurrentIndex(set_choice.findData(Decision.ALLOW))
+        set_choice.activated.emit(set_choice.currentIndex())  # as a person picks
+        kept = lambda: session.call(GetDaemonSettings()).agents[Rights.SET]  # noqa
+        wait(lambda: kept() == Decision.ALLOW)
+        wait(lambda: "set" in agents.summary.text())
+        # The daemon refuses what it never changes: the choice shows what it keeps
+        window.daemon.let_agents(Rights.STATION, Decision.ALLOW)
+        wait(lambda: not agents.status.isHidden())
+        assert "stay deny" in agents.status.text()
+        assert choices[Rights.STATION].currentData() == Decision.DENY
+
     def test_a_lost_daemon_is_shown_and_started_again(
         self, window, session, wait, monkeypatch
     ):

@@ -1,12 +1,13 @@
 """thzdaq daemon …: the daemon itself — what it holds, starting it (in the
 background, or in this terminal with its log here), stopping and restarting
 it, killing one that does not answer, its log, its clients, a queue that
-hangs, its settings. thzdaq serve runs it in this terminal."""
+hangs, its settings (and what agents may do). thzdaq serve runs it in this
+terminal."""
 
 import subprocess
 import sys
 import time
-from typing import List
+from typing import Dict, List
 
 from thzdaq_api import host
 from thzdaq_api.daemon import (
@@ -24,9 +25,12 @@ from thzdaq_api.daemon import (
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import ListRuns
 from thzdaq_api.measurement_file import RUNNING
+from thzdaq_api.operation import Rights
+from thzdaq_api.rights import FIXED, MEANS, Decision
 
 from thzdaq_cli import show
-from thzdaq_cli.client import FAILED, KIND, OK, Client, origin
+from thzdaq_cli.client import FAILED, KIND, OK, Client, Mistyped, origin
+from thzdaq_cli.devices import assignments
 
 FOLLOW_S = 0.5  # how often a followed log is looked at
 
@@ -75,6 +79,11 @@ def add(commands) -> None:
         metavar="SECONDS",
         help="how long it waits with no client and no measurement; 0: never",
     )
+    settings.add_argument(
+        "--agents", action="append", default=[], metavar="RIGHTS=DECISION",
+        help="what agents may do: set=allow, run=ask, read=deny "
+        f"({', '.join(r.value for r in Rights)}; {', '.join(d.value for d in Decision)})",
+    )  # fmt: skip
     settings.set_defaults(run=change_settings)
     serve = commands.add_parser(
         "serve", help="the daemon in this terminal (daemon start --foreground)"
@@ -220,14 +229,35 @@ def reset_lane(args, client: Client) -> int:
 
 def change_settings(args, client: Client) -> int:
     lab = client.running_lab()
-    if args.idle_timeout is None:
+    agents = rights_given(args.agents)
+    if args.idle_timeout is None and not agents:
         found = lab.call(GetDaemonSettings())
     else:
-        found = lab.call(SetDaemonSettings(idle_timeout=args.idle_timeout))
+        found = lab.call(
+            SetDaemonSettings(idle_timeout=args.idle_timeout, agents=agents)
+        )
     client.out(found, settings_text)
     return OK
 
 
+def rights_given(typed: List[str]) -> Dict[Rights, Decision]:
+    """set=allow, run=ask as the settings take them."""
+    given = {}
+    for name, decision in assignments(typed).items():
+        try:
+            given[Rights(name)] = Decision(decision)
+        except ValueError:
+            raise Mistyped(
+                f"--agents {name}={decision}: see daemon settings -h"
+            ) from None
+    return given
+
+
 def settings_text(settings: DaemonSettings) -> str:
     idle = settings.idle_timeout
-    return f"idle timeout: {f'{idle:g} s' if idle else 'never'}"
+    rights = show.table(
+        ("rights", "agents", "what"),
+        [(r.value, d.value, MEANS[r] + (" (always)" if r in FIXED else ""))
+         for r, d in settings.agents.items()],
+    )  # fmt: skip
+    return f"idle timeout: {f'{idle:g} s' if idle else 'never'}\n\n{rights}"

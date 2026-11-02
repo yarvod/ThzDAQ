@@ -4,10 +4,21 @@ import json
 import os
 import subprocess
 import sys
+import time
 
+import pytest
+from thzdaq_api.devices import SetQuantity
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement
 
+AGENT = "mcp:claude"
+
 FAST = ["--set", "settle_time=0", "--set", "first_point_delay=0"]
+
+
+def bias(value):
+    return SetQuantity(ref="sis_bias_1", key="voltage_set", value=value)
+
+
 SLOW_IV = {
     "voltage": {"start": 0.0, "stop": 5e-3, "points": 2000},
     "settle_time": 0.01,
@@ -99,7 +110,7 @@ def test_the_daemon_is_asked_about_itself(thzdaq):
     code, out, _ = thzdaq("daemon", "status")
     assert code == 0 and "daemon (simulator)" in out and "profile 2sb" in out
     code, out, _ = thzdaq("daemon", "settings", "--idle-timeout", "0")
-    assert out.strip() == "idle timeout: never"
+    assert out.splitlines()[0] == "idle timeout: never"
     code, out, _ = thzdaq("--yes", "daemon", "reset-lane", "sis_block_1")
     assert code == 0
     code, out, _ = thzdaq("station", "show")
@@ -140,3 +151,143 @@ def test_a_command_in_an_agents_shell_waits_for_a_person(thzdaq, lab, monkeypatc
     lab.origin = origin()
     code, _, err = thzdaq("--yes", "set", "sis_bias_1", "voltage_set", "1mV")
     assert code == 1 and "window" in err
+
+
+def test_people_set_what_agents_may_do(thzdaq):
+    code, out, _ = thzdaq("daemon", "settings")
+    assert "set      ask" in out and "station  deny" in out and "(always)" in out
+    code, out, _ = thzdaq("daemon", "settings", "--agents", "set=allow")
+    assert code == 0 and "set      allow" in out and "idle timeout" in out
+    code, _, err = thzdaq("daemon", "settings", "--agents", "answer=allow")
+    assert code == 1 and "stay deny" in err
+    code, _, err = thzdaq("daemon", "settings", "--agents", "set=maybe")
+    assert code == 2 and "set=maybe" in err
+
+
+def agent_asks(lab, operation):
+    """An agent's call in a thread: it waits for a person (a window here)."""
+    import threading
+
+    from thzdaq_api.errors import LabError
+    from thzdaq_core.application.local import LocalLab
+
+    done = {}
+
+    def call():
+        try:
+            done["result"] = LocalLab(lab.assembled, AGENT).call(operation)
+        except LabError as e:
+            done["error"] = e
+
+    thread = threading.Thread(target=call)
+    thread.start()
+    return thread, done
+
+
+@pytest.fixture
+def window(lab):
+    """A person's window listens: what agents change waits for an answer."""
+    from thzdaq_api.origins import GUI
+    from thzdaq_core.application.local import LocalLab
+
+    stop = LocalLab(lab.assembled, GUI, GUI).subscribe(lambda event: None)
+    yield
+    stop()
+
+
+def waiting(lab, count):
+    from thzdaq_api.approvals import ListApprovals
+
+    deadline = time.monotonic() + 5
+    while len(lab.call(ListApprovals())) < count:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    return lab.call(ListApprovals())
+
+
+def test_what_waits_is_listed_and_answered(thzdaq, lab, window):
+    code, out, _ = thzdaq("approvals")
+    assert code == 0 and out.strip() == "nothing waits"
+    thread, done = agent_asks(lab, bias("2mV"))
+    (approval,) = waiting(lab, 1)
+    code, out, _ = thzdaq("approvals")
+    assert f"#{approval.id} {AGENT}: sis_bias_1" in out and "2 mV" in out
+    code, out, _ = thzdaq(
+        "approvals", "answer", str(approval.id), "--allow", "--value", "1.5 mV"
+    )
+    thread.join(5)
+    assert code == 0 and done["result"].value == pytest.approx(1.5e-3)
+    thread, done = agent_asks(lab, bias("3mV"))
+    (approval,) = waiting(lab, 1)
+    thzdaq("approvals", "answer", str(approval.id), "--deny", "--text", "too high")
+    thread.join(5)
+    assert "too high" in done["error"].message
+
+
+def test_an_agents_shell_does_not_answer(thzdaq, lab, window, monkeypatch):
+    from thzdaq_api.approvals import AnswerApproval
+    from thzdaq_api.origins import AGENT_CLI
+
+    thread, done = agent_asks(lab, bias("2mV"))
+    (approval,) = waiting(lab, 1)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    lab.origin = AGENT_CLI
+    code, _, err = thzdaq("approvals", "answer", str(approval.id), "--allow")
+    assert code == 1 and "not for cli:agent" in err
+    code, _, err = thzdaq("approvals", "watch")
+    assert code == 1 and "agent's shell" in err
+    lab.origin = "cli"
+    lab.call(AnswerApproval(id=approval.id, allowed=False))
+    thread.join(5)
+
+
+def test_watch_asks_only_in_a_terminal(thzdaq):
+    code, _, err = thzdaq("approvals", "watch")
+    assert code == 1 and "terminal" in err
+
+
+def test_watch_asks_the_person_at_the_terminal(thzdaq, lab, window, monkeypatch):
+    """Each one as the window's dialog asks it: another value, the device
+    typed for a dangerous step, words, a question's choice; Ctrl+C ends."""
+    from thzdaq_api.approvals import AnswerApproval, AskUser, WaitAnswer
+    from thzdaq_api.origins import ANSWERING_CLI
+    from thzdaq_core.application.local import LocalLab
+
+    set_bias, set_to = agent_asks(lab, bias("2mV"))
+    waiting(lab, 1)
+    switch_off, switched = agent_asks(
+        lab, SetQuantity(ref="sis_bias_1", key="active", value=False)
+    )
+    waiting(lab, 2)
+    agent = LocalLab(lab.assembled, AGENT)
+    question = agent.call(
+        AskUser(question="Cooled down?", options=("yes", "no"), timeout=0)
+    )
+    last = agent.call(AskUser(question="Anything else?", timeout=0))
+    typed = iter(
+        ["y", "1.5 mV", "",  # another value
+         "y", "", "sis_bias", "", "y", "", "sis_bias_1", "careful",  # mistyped
+         "1", "at 4.2 K"]  # the choice and words
+    )  # fmt: skip
+    kinds = []
+
+    def person(prompt=""):
+        kinds.append({c.kind for c in lab.assembled.control.clients()})
+        try:
+            return next(typed)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    monkeypatch.setattr("builtins.input", person)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code, out, err = thzdaq("approvals", "watch")
+    assert code == 0 and ANSWERING_CLI in kinds[0]
+    assert "Type sis_bias_1 to allow this" in err and "): again" in err
+    assert "Cooled down?" in out and "Anything else?" in out
+    set_bias.join(5)
+    switch_off.join(5)
+    assert set_to["result"].value == pytest.approx(1.5e-3)
+    assert switched["result"].value is False
+    answered = agent.call(WaitAnswer(id=question.id, timeout=1)).answer
+    assert (answered.choice, answered.text, answered.by) == ("yes", "at 4.2 K", "cli")
+    lab.call(AnswerApproval(id=last.id, allowed=False))

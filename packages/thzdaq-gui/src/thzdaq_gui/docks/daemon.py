@@ -1,15 +1,19 @@
 """The daemon in the window: an indicator in the status bar, a banner while it
 does not answer, and the Daemon dock with what it is and holds (its status, a
-couple of seconds old) and the controls a person needs when it misbehaves.
+couple of seconds old), the controls a person needs when it misbehaves and
+what agents may do.
 
 All of them show a DaemonModel and call its methods.
 """
+
+from typing import Dict
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -22,8 +26,11 @@ from PySide6.QtWidgets import (
 )
 from thzdaq_api.daemon import StopMode
 from thzdaq_api.errors import LabError
+from thzdaq_api.operation import Rights
+from thzdaq_api.rights import FIXED, MEANS, Decision
 
 from thzdaq_gui import theme
+from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.models.daemon import CONNECTING, LOST, OK, PROBLEMS, DaemonModel
 
 COLORS = {
@@ -43,6 +50,13 @@ MODES = (
     (StopMode.GRACEFUL, "Only when no measurement runs"),
     (StopMode.CANCEL, "End the measurements (they restore, then the safe state)"),
     (StopMode.ABORT, "End them and break the reads that hang"),
+)
+# What the daemon asks a person whatever agents may do
+ALWAYS_ASKED = (
+    "Agents never change the profile or answer for a person. A dangerous step "
+    "is always asked, and a set agents may do alone is still asked for a jump "
+    "×10, a value beyond warn min..max or another measurement's sweep. People "
+    "(this window, a terminal) are not limited."
 )
 
 
@@ -158,11 +172,13 @@ class DaemonWidget(QWidget):
         for widget in (self.btnRestart, self.btnStop, self.btnStart, self.btnKill, log):
             controls.addWidget(widget)
         controls.addStretch()
+        self.agents = AgentRights(model)
         layout.addWidget(self.state)
         layout.addWidget(self.details)
         layout.addWidget(self.mode)
         layout.addLayout(controls)
         layout.addWidget(self.tree, 1)
+        layout.addWidget(self.agents)
         model.changed.connect(self.refresh)
         self.refresh()
 
@@ -247,3 +263,62 @@ def lane_state(lane) -> str:
     if lane.current:
         text += f" · {lane.current} for {lane.busy_for:.0f} s"
     return text + (" · STUCK" if lane.stuck else "")
+
+
+class AgentRights(Collapsible):
+    """What agents may do, by the rights a call needs: allow, ask or deny,
+    chosen here and kept by the daemon; the fixed ones are shown, not chosen."""
+
+    def __init__(self, model: DaemonModel, parent=None):
+        super().__init__("Agents may", "daemon/agents", expanded=False, parent=parent)
+        self.model = model
+        table = QWidget()
+        grid = QGridLayout(table)
+        grid.setContentsMargins(0, 0, 0, 0)
+        self.choices: Dict[Rights, QComboBox] = {}
+        for row, rights in enumerate(Rights):
+            choice = QComboBox()
+            for decision in Decision:
+                choice.addItem(decision.value, decision)
+            choice.setEnabled(rights not in FIXED)
+            choice.activated.connect(
+                lambda _, r=rights, c=choice: self.choose(r, c.currentData())
+            )
+            means = QLabel(MEANS[rights])
+            means.setProperty("role", "muted")
+            means.setWordWrap(True)
+            grid.addWidget(QLabel(rights.value.capitalize()), row, 0)
+            grid.addWidget(choice, row, 1)
+            grid.addWidget(means, row, 2)
+            self.choices[rights] = choice
+        grid.setColumnStretch(2, 1)
+        self.addWidget(table)
+        rules = QLabel(ALWAYS_ASKED)
+        rules.setWordWrap(True)
+        rules.setProperty("role", "muted")
+        self.addWidget(rules)
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        self.status.setStyleSheet(f"color: {theme.ACCENT}")
+        self.status.hide()
+        self.addWidget(self.status)
+        model.changed.connect(self.refresh)
+        model.refused.connect(self.refused)
+        self.refresh()
+
+    def refresh(self) -> None:
+        settings = self.model.settings
+        if settings is None:
+            return
+        for rights, choice in self.choices.items():
+            choice.setCurrentIndex(choice.findData(settings.agents[rights]))
+        allowed = [r.value for r, d in settings.agents.items() if d == Decision.ALLOW]
+        self.set_summary(f"alone: {', '.join(allowed) or 'nothing'}")
+
+    def choose(self, rights: Rights, decision: Decision) -> None:
+        self.status.hide()
+        self.model.let_agents(rights, decision)
+
+    def refused(self, why: str) -> None:
+        self.status.setText(why)
+        self.status.show()

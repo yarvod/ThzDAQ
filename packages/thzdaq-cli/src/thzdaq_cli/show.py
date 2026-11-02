@@ -3,6 +3,7 @@
 from typing import Any, Iterable, Optional, Sequence
 
 import msgspec
+from thzdaq_api.approvals import Answer, Approval
 
 
 NO_FILE = "no file"  # a profile, or a run, not kept in a file
@@ -38,3 +39,20 @@ def value(found: Any, unit: str = "") -> str:
     if isinstance(found, float):
         return f"{found:.6g} {unit}".strip()
     return f"{found} {unit}".strip()
+
+
+def approval(asked: Approval) -> str:
+    """What waits for a person, as the window's dialog shows it."""
+    lines = [f"#{asked.id} {asked.origin}: {asked.title}", asked.text]
+    if asked.warning:
+        lines.append(f"warning: {asked.warning}")
+    if asked.options:
+        lines.append(f"options: {', '.join(asked.options)}")
+    return "\n".join(lines)
+
+
+def answer(id: int, given: Answer) -> str:
+    """How what waited was answered."""
+    verdict = "allowed" if given.allowed else "denied"
+    words = f": {given.text}" if given.text else ""
+    return f"#{id} {verdict} by {given.by}{words}"

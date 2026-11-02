@@ -31,18 +31,19 @@ class Mistyped(Exception):
     """What was typed does not fit (exit 2, as argparse does)."""
 
 
-# The lab of the bench, or of its simulator; started when none runs (autostart)
-Connect = Callable[[bool, bool], Lab]
+# The lab of the bench, or of its simulator, listened to as a kind of client;
+# started when none runs (autostart)
+Connect = Callable[[bool, bool, str], Lab]
 
 
-def reach(simulate: bool, autostart: bool) -> Lab:
+def reach(simulate: bool, autostart: bool, kind: str) -> Lab:
     """The running daemon; started when none runs and autostart allows it."""
     try:
-        return host.connect(simulate, origin(), KIND)
+        return host.connect(simulate, origin(), kind)
     except LabError as e:
         if e.code != ErrorCode.UNREACHABLE or not autostart:
             raise
-    lab = host.connect_or_start(simulate, None, origin(), KIND)
+    lab = host.connect_or_start(simulate, None, origin(), kind)
     print(f"daemon started (pid {lab.host.pid})", file=sys.stderr)
     return lab
 
@@ -55,19 +56,20 @@ class Client:
         self.json: bool = args.json
         self.yes: bool = args.yes
         self.autostart: bool = not args.no_autostart
+        self.kind: str = args.kind  # cli; cli:answers while a person answers here
         self._connect = connect
         self._lab: Optional[Lab] = None
 
     @property
     def lab(self) -> Lab:
         if self._lab is None:
-            self._lab = self._connect(self.simulate, self.autostart)
+            self._lab = self._connect(self.simulate, self.autostart, self.kind)
         return self._lab
 
     def running_lab(self) -> Lab:
         """The daemon only when it runs already: LabError UNREACHABLE otherwise."""
         if self._lab is None:
-            self._lab = self._connect(self.simulate, False)
+            self._lab = self._connect(self.simulate, False, self.kind)
         return self._lab
 
     def call(self, operation: Operation[R]) -> R:

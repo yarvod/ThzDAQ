@@ -302,6 +302,8 @@ LINES: Dict[type, Callable[[Any], str]] = {
     events.StationChanged: lambda b: f"profile {show.profile(b.name, b.path)}",
     events.LeasesChanged: lambda b: "in use: "
     + (", ".join(f"{l.device} {l.mode} by #{l.run}" for l in b.leases) or "nothing"),
+    events.ApprovalRequested: lambda b: show.approval(b.approval),
+    events.ApprovalAnswered: lambda b: show.answer(b.id, b.answer),
     events.Resync: lambda b: "events were lost (the daemon restarted)",
 }
 

@@ -1,7 +1,8 @@
 """The daemon the window works with, as it says about itself (get_daemon_status,
 asked every couple of seconds): alive, alive with problems, or not answering;
-and what a person does with it: restart, stop, kill, start again. The daemon
-left at a switch to the simulator (or back) goes on: the exit may stop it too.
+and what a person does with it: restart, stop, kill, start again, choose what
+agents may do (its settings). The daemon left at a switch to the simulator (or
+back) goes on: the exit may stop it too.
 
 Its calls have a queue of their own: a device that hangs does not hold them.
 """
@@ -14,15 +15,19 @@ from typing import Optional
 from PySide6.QtCore import QObject, QTimer, Signal
 from thzdaq_api import host
 from thzdaq_api.daemon import (
+    DaemonSettings,
     DaemonStatus,
+    GetDaemonSettings,
     GetDaemonStatus,
     RestartDaemon,
+    SetDaemonSettings,
     StopDaemon,
     StopMode,
 )
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Lab
-from thzdaq_api.operation import Operation
+from thzdaq_api.operation import Operation, Rights
+from thzdaq_api.rights import Decision
 
 LOOK_MS = 2000
 LANE = "daemon"  # the queue of its calls
@@ -40,20 +45,24 @@ class LeftDaemon:
 
 
 class DaemonModel(QObject):
-    changed = Signal()  # state, status or why it is lost
+    changed = Signal()  # state, status, settings or why it is lost
+    refused = Signal(str)  # why the daemon did not take a change of its settings
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
         self.session = session
         self.state = CONNECTING
         self.status: Optional[DaemonStatus] = None
+        self.settings: Optional[DaemonSettings] = None
         self.why = ""  # what went wrong when it is lost
         self._asking = False
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.look)
         self.timer.start(LOOK_MS)
         session.station_changed.connect(self.look)  # another lab: ask at once
+        session.station_changed.connect(self.load_settings)
         self.look()
+        self.load_settings()
 
     def look(self, *_) -> None:
         if self._asking:
@@ -118,6 +127,25 @@ class DaemonModel(QObject):
         """Connect again, starting it when none runs; LabError when it fails."""
         self.session.open(self.session.simulate)
         self.look()
+
+    def load_settings(self, *_) -> None:
+        self._call(GetDaemonSettings(), self._settings_heard, self._lost)
+
+    def let_agents(self, rights: Rights, decision: Decision) -> None:
+        """What agents may do with calls of these rights, kept by the daemon."""
+        self._call(
+            SetDaemonSettings(agents={rights: decision}),
+            self._settings_heard,
+            self._refused,
+        )
+
+    def _settings_heard(self, settings: DaemonSettings) -> None:
+        self.settings = settings
+        self.changed.emit()
+
+    def _refused(self, error: BaseException) -> None:
+        self.refused.emit(str(error))
+        self.load_settings()  # what it keeps, not what was chosen
 
     def kill(self) -> Optional[int]:
         """End a daemon that does not answer; its pid, None when none ran."""

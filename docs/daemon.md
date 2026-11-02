@@ -514,7 +514,8 @@ import-linter, контракты в корневом `pyproject.toml`, запу
   уходит, когда чтение прервётся.
 - `connections.reset(key)` — как сейчас Reset в Setup → Connections.
 - `daemon.logs(tail, follow)` — лог через API.
-- `daemon.settings` — таймаут простоя, уровень лога; хранятся в `daemon.json`.
+- `daemon.settings` — таймаут простоя и права агентов (класс прав → allow/ask/deny); хранятся
+  в `daemon.json`.
 
 ### В GUI
 - Индикатор демона в строке состояния:
@@ -530,7 +531,9 @@ import-linter, контракты в корневом `pyproject.toml`, запу
   - Kill (если не отвечает);
   - Reset у полос и соединений;
   - Open log (файл и хвост в доке);
-  - настройки таймаута.
+  - настройки таймаута;
+  - «Agents may» — права агентов по классам: allow, ask или deny; station и answer
+    показаны, но не меняются.
 - Потеря связи: баннер «Нет связи с демоном», управляющие кнопки отключаются, графики и
   данные остаются. Переподключение с нарастающей паузой (0.5 → 5 с). Если процесс умер —
   кнопка «Запустить демон» и, по настройке, автоматический перезапуск. После
@@ -547,6 +550,11 @@ import-linter, контракты в корневом `pyproject.toml`, запу
 - `thzdaq daemon logs [-n 100] [-f]`.
 - `thzdaq daemon clients`.
 - `thzdaq daemon reset-lane INSTRUMENT`, `thzdaq connections [reset KEY]`.
+- `thzdaq daemon settings [--idle-timeout S] [--agents set=allow ...]` — таймаут простоя и
+  права агентов.
+- `thzdaq approvals` — что ждёт человека; `approvals answer ID --allow|--deny [--value V]
+  [--text T] [--confirm REF] [--choice C]`; `approvals watch` — в интерактивном терминале
+  спрашивает про каждое, пока не нажат Ctrl+C.
 - `thzdaq serve` — синоним `daemon start --foreground` (так его запускает автозапуск).
 - Остальные команды (`run`, `set`, ...) подключаются через `connect_or_start()`; одна строка
   в stderr «демон запущен (pid …)», когда его пришлось запустить.
@@ -794,8 +802,10 @@ import-linter, контракты в корневом `pyproject.toml`, запу
 
 ### Подтверждения
 - Кто отвечает: любой **человеческий** клиент — окно GUI (карточка) или CLI в интерактивном
-  терминале (вопрос в терминале у того, кто вызвал). Агенты и скрипты отвечать на
-  подтверждения не могут. Ответ первого ответившего закрывает запрос у остальных.
+  терминале (`thzdaq approvals watch`, клиент вида `cli:answers`; `approvals answer` — без
+  терминала). Агенты и скрипты отвечать на подтверждения не могут: их слушающий клиент не
+  считается человеком, а `answer_approval` им — deny. Ответ первого ответившего закрывает
+  запрос у остальных.
 - Скрипт, запущенный без человека рядом (`thzdaq script start`), может заранее получить
   разрешения при запуске: `--allow set:sis_bias_1`, `--allow call:chopper_1`. Человек
   подтверждает их один раз при старте, и они записываются в метаданные измерения. Опасные
@@ -1620,10 +1630,18 @@ MCP лишь передаёт этот список чужой программ�
      слова агенту, ввод имени для опасного шага), `ask_user` / `wait_answer`; нет окна —
      отказ сразу «open the ThzDAQ window»; модальный диалог в GUI (`approval_dialog.py`),
      по одному, закрывается, если ответили в другом окне;
-   - [ ] ответ из GUI или интерактивного CLI: GUI — готово, CLI отвечать на чужие
-     подтверждения пока не умеет;
+   - [x] ответ из GUI или интерактивного CLI: `thzdaq approvals` (список), `approvals
+     answer ID --allow|--deny [--value] [--text] [--confirm] [--choice]`, `approvals watch`
+     — в интерактивном терминале спрашивает про каждое (allow/deny, другое значение, слова,
+     имя устройства для опасного шага) и, пока слушает, считается человеком (вид клиента
+     `cli:answers`, `origins.ANSWERING`); в оболочке агента — отказ;
    - [ ] заранее выданные разрешения скриптов;
-   - [ ] настройки прав в GUI.
+   - [x] настройки прав: таблица агентов (`thzdaq_api/rights.py`: `AGENTS`, `FIXED`) — в
+     `daemon.json` (`DaemonSettings.agents`, `set_daemon_settings(agents=…)`), правится в
+     доке Daemon («Agents may») и `thzdaq daemon settings --agents set=allow`. Не меняются:
+     station и answer для агентов — deny (и менять права агентов — класс station);
+     опасный шаг, скачок ×10, значение за `warn_min/warn_max` и чужая развёртка
+     спрашиваются даже при allow (`Ask.risky`).
 2. **MCP:**
    - [ ] `thzdaq mcp`: инструменты из каталога, ресурсы;
    - [ ] `start/wait_measurement` с прогрессом;

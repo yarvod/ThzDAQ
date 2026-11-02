@@ -15,9 +15,10 @@ from typing import List, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
 
-from thzdaq_cli import daemon, devices, measurements, station
+from thzdaq_cli import approvals, daemon, devices, measurements, station
 from thzdaq_cli.client import (
     FAILED,
+    KIND,
     NO_DAEMON,
     USAGE,
     Client,
@@ -44,8 +45,9 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not start the daemon when none runs",
     )
+    found.set_defaults(kind=KIND)
     commands = found.add_subparsers(dest="command", required=True, metavar="COMMAND")
-    for area in (daemon, devices, measurements, station):
+    for area in (daemon, devices, measurements, station, approvals):
         area.add(commands)
     return found
 

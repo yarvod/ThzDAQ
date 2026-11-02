@@ -38,7 +38,7 @@ def lab(tmp_path):
     bench = Bench(station, Lanes(), str(profile))
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
     assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
-    yield LocalLab(assembled, origin="cli")
+    yield LocalLab(assembled, origin="cli", kind="cli")
     assembled.close()
     bench.lanes.stop()
     station.close()
@@ -46,14 +46,18 @@ def lab(tmp_path):
 
 @pytest.fixture
 def thzdaq(lab, capsys, tmp_path, monkeypatch):
-    """thzdaq ARGS on the lab, in tmp_path (the workspace of its runs): (exit
-    code, stdout, stderr)."""
+    """thzdaq ARGS on the lab, in tmp_path (the workspace of its runs), as the
+    lab's origin, listening as the command's kind: (exit code, stdout, stderr)."""
     from thzdaq_cli.app import main
+    from thzdaq_core.application.local import LocalLab
 
     monkeypatch.chdir(tmp_path)
 
+    def connect(simulate, autostart, kind):
+        return LocalLab(lab.assembled, lab.origin, kind)
+
     def run(*argv):
-        code = main(list(argv), connect=lambda simulate, autostart: lab)
+        code = main(list(argv), connect=connect)
         out, err = capsys.readouterr()
         return code, out, err
 
