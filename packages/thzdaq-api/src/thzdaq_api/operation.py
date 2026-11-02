@@ -23,7 +23,7 @@ class Rights(str, Enum):
     SET = "set"  # changes a device
     RUN = "run"  # starts measurements, notes on them
     STOP = "stop"  # ends measurements, brings devices to their safe state
-    STATION = "station"  # changes the profile
+    STATION = "station"  # changes the profile, or what agents may do
     DAEMON = "daemon"  # stops or restarts the daemon
     ANSWER = "answer"  # answers for a person what waits for one
 

@@ -9,7 +9,17 @@ ASSISTANT = "assistant"  # the chat in the window
 MCP = "mcp:"  # mcp:<the agent's name> (Claude Code, Codex)
 SCRIPT = "script:"  # script:<its name>
 
+# The kind of a CLI that asks a person in its terminal what waits (approvals watch)
+ANSWERING_CLI = "cli:answers"
+ANSWERING = (GUI, ANSWERING_CLI)  # the kinds of client a person answers in
+
 
 def agent(origin: str) -> bool:
     """An agent or a script: what it changes waits for a person."""
     return origin in (AGENT_CLI, ASSISTANT) or origin.startswith((MCP, SCRIPT))
+
+
+def answers(kind: str, origin: str) -> bool:
+    """A client a person answers in: a window, or a terminal that asks; never
+    one an agent runs."""
+    return kind in ANSWERING and not agent(origin)

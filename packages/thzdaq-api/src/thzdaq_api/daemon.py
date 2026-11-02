@@ -1,12 +1,13 @@
 """The daemon itself: what it is and holds, how it is stopped or restarted."""
 
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import msgspec
 
 from thzdaq_api.measurements import RunInfo
 from thzdaq_api.operation import Operation, Rights
+from thzdaq_api.rights import Decision
 from thzdaq_api.station import ConnectionInfo
 
 # Changes with the contract: a client and a daemon of other versions do not talk
@@ -57,7 +58,7 @@ class ProcessInfo(msgspec.Struct, frozen=True):
 class ClientInfo(msgspec.Struct, frozen=True):
     """A client listening to the events: a GUI window, a CLI, an agent."""
 
-    kind: str  # gui, cli, mcp, assistant, script
+    kind: str  # gui, cli, cli:answers, mcp, assistant, script
     pid: int
     origin: str
     since: str  # wall time, ISO
@@ -126,17 +127,23 @@ class DaemonSettings(msgspec.Struct, frozen=True):
     """What the daemon keeps in its daemon.json."""
 
     idle_timeout: float  # s with no client and no measurement before it ends; 0: never
+    # What agents may do by the rights a call needs (rights.AGENTS until changed)
+    agents: Dict[Rights, Decision] = {}
 
 
 class GetDaemonSettings(Operation[DaemonSettings]):
-    """The daemon's settings: how long it waits idle before it ends."""
+    """The daemon's settings: how long it waits idle before it ends, and what
+    agents may do by the rights a call needs (allow, ask, deny)."""
 
 
 class SetDaemonSettings(Operation[DaemonSettings]):
-    """Change the daemon's settings; they are kept for its next starts."""
+    """Change the daemon's settings, those given; they are kept for its next
+    starts. agents changes what agents may do by rights (allow, ask, deny):
+    station and answer stay deny, and only people change it."""
 
     rights = Rights.DAEMON
-    idle_timeout: float
+    idle_timeout: Optional[float] = None
+    agents: Dict[Rights, Decision] = {}
 
 
 class ReadDaemonLog(Operation[Tuple[str, ...]]):
