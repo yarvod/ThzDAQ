@@ -13,6 +13,7 @@ dependencies = [
     "thzdaq-daemon",
     "thzdaq-gui",
     "thzdaq-instruments",
+    "thzdaq-mcp",
 ]
 
 [dependency-groups]
@@ -38,6 +39,7 @@ thzdaq-core = { workspace = true }
 thzdaq-daemon = { workspace = true }
 thzdaq-gui = { workspace = true }
 thzdaq-instruments = { workspace = true }
+thzdaq-mcp = { workspace = true }
 
 [tool.pytest.ini_options]
 # Each package keeps its own tests; conftest files put helpers on sys.path.
@@ -48,8 +50,10 @@ testpaths = [
     "packages/thzdaq-api/tests",
     "packages/thzdaq-instruments/tests",
     "packages/thzdaq-core/tests",
+    "packages/thzdaq-cli/tests",
     "packages/thzdaq-daemon/tests",
     "packages/thzdaq-gui/tests",
+    "packages/thzdaq-mcp/tests",
 ]
 addopts = "--import-mode=importlib"
 
@@ -66,6 +70,7 @@ root_packages = [
     "thzdaq_daemon",
     "thzdaq_gui",
     "thzdaq_instruments",
+    "thzdaq_mcp",
 ]
 include_external_packages = true
 
@@ -81,6 +86,7 @@ forbidden_modules = [
     "thzdaq_daemon",
     "thzdaq_gui",
     "thzdaq_instruments",
+    "thzdaq_mcp",
 ]
 
 [[tool.importlinter.contracts]]
@@ -95,6 +101,7 @@ forbidden_modules = [
     "thzdaq_daemon",
     "thzdaq_gui",
     "thzdaq_instruments",
+    "thzdaq_mcp",
 ]
 
 [[tool.importlinter.contracts]]
@@ -109,24 +116,25 @@ forbidden_modules = [
     "thzdaq_core",
     "thzdaq_daemon",
     "thzdaq_gui",
+    "thzdaq_mcp",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Core knows no daemon, no clients"
 type = "forbidden"
 source_modules = ["thzdaq_core"]
-forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_daemon", "thzdaq_gui"]
+forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_daemon", "thzdaq_gui", "thzdaq_mcp"]
 
 [[tool.importlinter.contracts]]
 name = "The daemon serves no client's code"
 type = "forbidden"
 source_modules = ["thzdaq_daemon"]
-forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
+forbidden_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui", "thzdaq_mcp"]
 
 [[tool.importlinter.contracts]]
 name = "Clients use only the contract (thzdaq_api)"
 type = "forbidden"
-source_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui"]
+source_modules = ["thzdaq", "thzdaq_cli", "thzdaq_gui", "thzdaq_mcp"]
 forbidden_modules = [
     "thzdaq_analysis",
     "thzdaq_core",
@@ -134,7 +142,7 @@ forbidden_modules = [
     "thzdaq_instruments",
 ]
 broken_contract_guidance = """
-A client (GUI, CLI, the thzdaq package) talks to the bench only through thzdaq_api.
+A client (GUI, CLI, MCP, the thzdaq package) talks to the bench only through thzdaq_api.
 Add the operation or the data type to thzdaq_api instead of importing core or drivers;
 analysis too is a daemon operation, so every client gets the same result (scripts and
 notebooks may import thzdaq_analysis themselves).
@@ -143,10 +151,10 @@ notebooks may import thzdaq_analysis themselves).
 [[tool.importlinter.contracts]]
 name = "Clients do not import each other"
 type = "independence"
-modules = ["thzdaq_cli", "thzdaq_daemon", "thzdaq_gui"]
+modules = ["thzdaq_cli", "thzdaq_daemon", "thzdaq_gui", "thzdaq_mcp"]
 
 [[tool.importlinter.contracts]]
-name = "Analysis, core, instruments, contract, daemon and CLI have no Qt"
+name = "Analysis, core, instruments, contract, daemon, CLI and MCP have no Qt"
 type = "forbidden"
 source_modules = [
     "thzdaq_analysis",
@@ -155,6 +163,7 @@ source_modules = [
     "thzdaq_core",
     "thzdaq_daemon",
     "thzdaq_instruments",
+    "thzdaq_mcp",
 ]
 forbidden_modules = ["PySide6", "PySide6QtAds", "pyqtgraph", "qtawesome"]
 # Settings of the old program are QVariant-encoded: only Qt reads them (one importer)
@@ -182,4 +191,5 @@ ancestors = [
     "thzdaq_daemon",
     "thzdaq_gui",
     "thzdaq_instruments",
+    "thzdaq_mcp",
 ]

@@ -347,3 +347,13 @@ def test_agent_setup_keeps_what_a_person_wrote(thzdaq, tmp_path, monkeypatch):
         and "our rules" not in (tmp_path / "AGENTS.md").read_text()
     )
 
+
+def test_mcp_is_served_by_its_package_or_says_what_to_install(thzdaq, monkeypatch):
+    from thzdaq_cli import agents
+    from thzdaq_mcp.server import serve
+
+    (found,) = agents.entry_points(group=agents.PLUGINS, name=agents.MCP)
+    assert found.load() is serve
+    monkeypatch.setattr(agents, "entry_points", lambda **_: ())
+    code, _, err = thzdaq("mcp")
+    assert code == 1 and "thzdaq[mcp]" in err

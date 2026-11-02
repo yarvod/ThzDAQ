@@ -13,7 +13,8 @@ dependencies = [
 analysis = ["thzdaq-analysis"]
 daemon = ["thzdaq-daemon"]
 gui = ["thzdaq-gui"]
-all = ["thzdaq-analysis", "thzdaq-daemon", "thzdaq-gui"]
+mcp = ["thzdaq-mcp"]
+all = ["thzdaq-analysis", "thzdaq-daemon", "thzdaq-gui", "thzdaq-mcp"]
 
 [tool.uv.sources]
 thzdaq-analysis = { workspace = true }
@@ -21,6 +22,7 @@ thzdaq-api = { workspace = true }
 thzdaq-cli = { workspace = true }
 thzdaq-daemon = { workspace = true }
 thzdaq-gui = { workspace = true }
+thzdaq-mcp = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.27"]

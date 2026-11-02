@@ -13,7 +13,7 @@ daemon by its name); the folder takes the name given after --:
 import argparse
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_entry_point
 
 options = argparse.ArgumentParser()
 options.add_argument("--folder", default="ThzDAQ")
@@ -26,7 +26,15 @@ datas += collect_data_files("thzdaq_gui")
 datas += collect_data_files("qtawesome")
 
 window = Analysis(["main.py"], datas=datas)
-cli = Analysis(["cli_main.py"])
+# Commands that packages add to the command line (thzdaq mcp) are found by
+# their entry points: their metadata and modules go in with the guides for
+# agents that thzdaq_api keeps
+commands, modules = collect_entry_point("thzdaq.cli")
+cli = Analysis(
+    ["cli_main.py"],
+    datas=commands + collect_data_files("thzdaq_api"),
+    hiddenimports=modules,
+)
 
 
 def program(analysis, name, console):

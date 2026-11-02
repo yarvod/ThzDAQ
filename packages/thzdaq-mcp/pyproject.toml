@@ -1,0 +1,24 @@
+[project]
+name = "thzdaq-mcp"
+version = "0.1.0"
+description = "ThzDAQ MCP server: the bench's tools for agents (Claude Code, Codex), a client of the daemon"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<2.4",
+    "thzdaq-api",
+]
+
+# thzdaq mcp: the command line serves it when this package is installed
+[project.entry-points."thzdaq.cli"]
+mcp = "thzdaq_mcp.server:serve"
+
+[tool.uv.sources]
+thzdaq-api = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq_mcp"]
