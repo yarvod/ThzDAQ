@@ -1,6 +1,7 @@
 """Devices of the bench: what they are, what they read and what can be set."""
 
-from typing import Dict, Optional, Tuple, Union
+import math
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import msgspec
 
@@ -23,6 +24,25 @@ class Prefix(msgspec.Struct, frozen=True):
     name: str
     factor: float
     note: str
+
+
+def shown(value: Value, unit: str = "", prefixes: Sequence[Prefix] = ()) -> str:
+    """A value as people read it: an SI number with the prefix that keeps it
+    from 1 to 999 ("2.3 mV"), a switch as on or off. The daemon reads it back
+    in a text with its unit."""
+    if value is None:
+        return "--"
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if not isinstance(value, (int, float)):
+        return f"{value} {unit}".strip()
+    if not prefixes or value == 0 or not math.isfinite(value):
+        return f"{value:.6g} {unit}".strip()
+    ascending = sorted(prefixes, key=lambda p: p.factor)
+    prefix = next(
+        (p for p in reversed(ascending) if abs(value) >= p.factor), ascending[0]
+    )
+    return f"{value / prefix.factor:.6g} {prefix.name}{unit}"
 
 
 class QuantityInfo(msgspec.Struct, frozen=True):

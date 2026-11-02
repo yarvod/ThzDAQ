@@ -89,6 +89,7 @@ def assemble(
             measurements.ListRuns(runs),
             measurements.GetRunSnapshot(runs),
             measurements.WaitMeasurement(runs),
+            measurements.SummarizeMeasurement(runs),
             measurements.CancelMeasurement(runs),
             measurements.AbortMeasurement(runs),
             measurements.SetComment(runs),

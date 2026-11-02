@@ -18,6 +18,7 @@ from thzdaq_api.measurements import (
     ListProcedures,
     ListRuns,
     StartMeasurement,
+    SummarizeMeasurement,
     WaitMeasurement,
 )
 from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME, PV_CURVE
@@ -159,6 +160,25 @@ def test_run_snapshot_and_later_events_contain_each_row_once(lab):
     assert final.seq >= snapshot.seq
     with pytest.raises(LabError) as caught:
         lab.call(GetRunSnapshot(id=99999))
+    assert caught.value.code == ErrorCode.NOT_FOUND
+
+
+def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
+    run = lab.call(
+        StartMeasurement(
+            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+        )
+    )
+    assert ended(lab, run.id).status == "completed"
+    summary = lab.call(SummarizeMeasurement(id=run.id))
+    assert summary.run.id == run.id and summary.run.status == "completed"
+    (iv,) = summary.tables
+    assert iv.records == 11
+    voltage = next(c for c in iv.columns if c.key == "voltage_set")
+    assert (voltage.unit, voltage.minimum, voltage.maximum) == ("V", 0.0, 2e-3)
+    assert "m" in {p.name for p in voltage.prefixes}
+    with pytest.raises(LabError) as caught:
+        lab.call(SummarizeMeasurement(id=99999))
     assert caught.value.code == ErrorCode.NOT_FOUND
 
 

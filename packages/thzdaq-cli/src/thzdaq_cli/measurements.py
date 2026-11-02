@@ -24,7 +24,6 @@ from thzdaq_api.measurements import (
     DescribeProcedure,
     ListProcedures,
     ListRuns,
-    ParameterInfo,
     ProcedureInfo,
     RunInfo,
     StartMeasurement,
@@ -96,27 +95,13 @@ def list_procedures(args, client: Client) -> int:
     return OK
 
 
-def shown(parameter: ParameterInfo, value: Any) -> str:
-    """A value as --set takes it: in the display unit, a sweep start:stop:points."""
-    scale = parameter.display_scale
-    if value is None:
-        return "--"
-    if isinstance(value, dict):
-        return f"{value['start'] / scale:g}:{value['stop'] / scale:g}:{value['points']}"
-    if isinstance(value, list):
-        return ", ".join(shown(parameter, item) for item in value)
-    if isinstance(value, float):
-        return f"{value / scale:g}"
-    return f"{value}"
-
-
 def procedure_text(info: ProcedureInfo) -> str:
     steps = f"{info.steps} steps" if info.steps else "no step count"
     lines = [f"{info.title} ({info.name}): {steps}", info.description, ""]
     lines.append(
         show.table(
             ("parameter", "label", "default", "unit"),
-            [(p.name, p.label, shown(p, p.default), p.display_unit) for p in info.parameters],
+            [(p.name, p.label, p.typed(p.default), p.display_unit) for p in info.parameters],
         )
     )  # fmt: skip
     slots = show.table(

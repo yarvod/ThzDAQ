@@ -140,6 +140,16 @@ class WaitMeasurement(Handler[api.WaitMeasurement, api.RunInfo]):
         return self.runs.wait(args.id, args.timeout)
 
 
+class SummarizeMeasurement(Handler[api.SummarizeMeasurement, api.MeasurementSummary]):
+    operation = api.SummarizeMeasurement
+
+    def __init__(self, runs: Runs):
+        self.runs = runs
+
+    def handle(self, args, origin):
+        return self.runs.summary(args.id)
+
+
 class CancelMeasurement(Handler[api.CancelMeasurement, api.RunInfo]):
     operation = api.CancelMeasurement
 

@@ -34,6 +34,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     measurements.ListRuns,
     measurements.GetRunSnapshot,
     measurements.WaitMeasurement,
+    measurements.SummarizeMeasurement,
     measurements.CancelMeasurement,
     measurements.AbortMeasurement,
     measurements.SetComment,
@@ -79,3 +80,21 @@ def operation(name: str) -> Type[Operation]:
 def schema(op: Type[Operation]) -> Dict[str, Any]:
     """JSON schema of the arguments; its description is the operation's docstring."""
     return msgspec.json.schema(op)
+
+
+def description(op: Type[Operation]) -> str:
+    """What the operation does, for a model: its docstring in one paragraph."""
+    return " ".join((op.__doc__ or "").split())
+
+
+def tool_schema(op: Type[Operation]) -> Dict[str, Any]:
+    """The arguments as a tool takes them (MCP, a model's tools): the object at
+    the top, the types it refers to under $defs; the description goes apart."""
+    found = schema(op)
+    types = dict(found.get("$defs", {}))
+    arguments = dict(types.pop(op.__name__))
+    arguments.pop("title", None)
+    arguments.pop("description", None)
+    if types:
+        arguments["$defs"] = types
+    return arguments

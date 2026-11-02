@@ -15,6 +15,7 @@ from thzdaq_api.origins import AGENT_CLI, CLI
 from thzdaq_cli import show
 
 R = TypeVar("R")
+PROG = "thzdaq"  # the command, as people type it
 KIND = CLI
 OK, FAILED, USAGE, NO_DAEMON = 0, 1, 2, 3
 # Set in the shells agents run commands in (Claude Code, Codex): a command

@@ -31,10 +31,16 @@ from thzdaq_api.events import (
     MeasurementStarted,
 )
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
-from thzdaq_api.measurements import PLANNED, RunInfo, RunSnapshot
+from thzdaq_api.measurements import (
+    PLANNED,
+    MeasurementSummary,
+    RunInfo,
+    RunSnapshot,
+)
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
+from thzdaq_core.application.describe import measurement_summary, table_summary
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.application.values import KnownValues
@@ -99,6 +105,15 @@ class _Run(RunObserver):
                 for table, count in self._published.items()
             }
             return RunSnapshot(self._visible, self._plots, rows, self._seq)
+
+    def summary(self) -> MeasurementSummary:
+        """What it published so far, without the arrays."""
+        with self._snapshot_lock:
+            tables = tuple(
+                table_summary(self.measurement.tables[table], count)
+                for table, count in self._published.items()
+            )
+        return measurement_summary(self.info(), tables, self.measurement.results)
 
     def _publish(self, body) -> None:
         self._seq = self.events.publish(body).seq
@@ -394,6 +409,9 @@ class Runs:
 
     def snapshot(self, run_id: int) -> RunSnapshot:
         return self._run(run_id).snapshot()
+
+    def summary(self, run_id: int) -> MeasurementSummary:
+        return self._run(run_id).summary()
 
     def all(self) -> Tuple[RunInfo, ...]:
         with self._lock:

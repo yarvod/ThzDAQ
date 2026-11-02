@@ -15,11 +15,12 @@ from typing import List, Optional
 
 from thzdaq_api.errors import ErrorCode, LabError
 
-from thzdaq_cli import approvals, daemon, devices, measurements, station
+from thzdaq_cli import agents, approvals, daemon, devices, measurements, station
 from thzdaq_cli.client import (
     FAILED,
     KIND,
     NO_DAEMON,
+    PROG,
     USAGE,
     Client,
     Connect,
@@ -30,7 +31,7 @@ from thzdaq_cli.client import (
 
 def parser() -> argparse.ArgumentParser:
     found = argparse.ArgumentParser(
-        prog="thzdaq",
+        prog=PROG,
         description="The ThzDAQ bench from the terminal (a client of its daemon)",
         epilog="Exit codes: 0 done, 1 refused or failed, 2 wrong arguments, "
         "3 no daemon runs.",
@@ -47,7 +48,7 @@ def parser() -> argparse.ArgumentParser:
     )
     found.set_defaults(kind=KIND)
     commands = found.add_subparsers(dest="command", required=True, metavar="COMMAND")
-    for area in (daemon, devices, measurements, station, approvals):
+    for area in (daemon, devices, measurements, station, approvals, agents):
         area.add(commands)
     return found
 
@@ -58,10 +59,10 @@ def main(argv: Optional[List[str]] = None, connect: Connect = reach) -> int:
     try:
         return args.run(args, client)
     except LabError as e:
-        print(f"thzdaq: {e}", file=sys.stderr)
+        print(f"{PROG}: {e}", file=sys.stderr)
         return NO_DAEMON if e.code == ErrorCode.UNREACHABLE else FAILED
     except Mistyped as e:
-        print(f"thzdaq: {e}", file=sys.stderr)
+        print(f"{PROG}: {e}", file=sys.stderr)
         return USAGE
     except KeyboardInterrupt:
         return 130

@@ -1,10 +1,12 @@
 """The domain's devices, quantities and procedures as the contract describes them."""
 
+import math
 from dataclasses import fields
-from typing import Any, Callable, Iterable, Optional, Tuple, Type
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Type
 
 from thzdaq_api import devices as api
 from thzdaq_api import measurements, station as station_api
+from thzdaq_api.measurement_file import Column, Table
 from thzdaq_instruments.actions import Action, Argument
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
@@ -166,6 +168,57 @@ def procedure_info(
         plots=tuple(procedure.active_plots(quantities)),
         steps=procedure.estimate_steps(),
         plot_window=procedure.plot_window(),
+    )
+
+
+def column_summary(column: Column, values: Sequence[Any]) -> measurements.ColumnSummary:
+    numbers = [
+        value
+        for value in values
+        if isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    ]
+    return measurements.ColumnSummary(
+        key=column.key,
+        title=column.title,
+        unit=column.unit,
+        minimum=min(numbers, default=None),
+        maximum=max(numbers, default=None),
+        prefixes=prefixes(column.unit),
+    )
+
+
+def table_summary(table: Table, records: int) -> measurements.TableSummary:
+    """Its first records (those published), each column by its range."""
+    return measurements.TableSummary(
+        name=table.name,
+        title=table.title,
+        records=records,
+        columns=tuple(
+            column_summary(column, table.data.get(column.key, [])[:records])
+            for column in list(table.columns)  # a run may add one meanwhile
+        ),
+    )
+
+
+def measurement_summary(
+    run: measurements.RunInfo,
+    tables: Tuple[measurements.TableSummary, ...],
+    results: Mapping[str, Any],
+) -> measurements.MeasurementSummary:
+    """Results as single values; a list (a fitted curve) only by its length."""
+    given = dict(results)  # the run's thread may add one meanwhile
+    single = (bool, int, float, str)
+    return measurements.MeasurementSummary(
+        run=run,
+        tables=tables,
+        results={k: v for k, v in given.items() if isinstance(v, single)},
+        series={
+            k: len(v)
+            for k, v in given.items()
+            if isinstance(v, (list, tuple)) and not isinstance(v, single)
+        },
     )
 
 

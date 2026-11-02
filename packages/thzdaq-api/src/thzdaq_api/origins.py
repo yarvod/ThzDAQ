@@ -7,6 +7,7 @@ CLI = "cli"  # the command line in a terminal of a person
 AGENT_CLI = "cli:agent"  # the command line in a shell an agent runs
 ASSISTANT = "assistant"  # the chat in the window
 MCP = "mcp:"  # mcp:<the agent's name> (Claude Code, Codex)
+MCP_CLIENT = "mcp"  # the kind of client an MCP server listens as
 SCRIPT = "script:"  # script:<its name>
 
 # The kind of a CLI that asks a person in its terminal what waits (approvals watch)

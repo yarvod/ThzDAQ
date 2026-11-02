@@ -291,3 +291,59 @@ def test_watch_asks_the_person_at_the_terminal(thzdaq, lab, window, monkeypatch)
     answered = agent.call(WaitAnswer(id=question.id, timeout=1)).answer
     assert (answered.choice, answered.text, answered.by) == ("yes", "at 4.2 K", "cli")
     lab.call(AnswerApproval(id=last.id, allowed=False))
+
+
+def test_agent_setup_writes_what_agents_read_in_a_folder(thzdaq, tmp_path):
+    import tomllib
+
+    from thzdaq_api import guides
+
+    folder = tmp_path / "experiment"
+    code, out, err = thzdaq("--simulate", "agent-setup", str(folder))
+    assert code == 0, err
+    started = [sys.executable, "-m", "thzdaq_cli"]  # this Python: not a thzdaq script
+    args = ["--simulate", "mcp", "--workspace", str(folder)]
+    claude = json.loads((folder / ".mcp.json").read_text())
+    assert claude["mcpServers"]["thzdaq"] == {
+        "command": started[0],
+        "args": started[1:] + args,
+    }
+    codex = tomllib.loads((folder / ".codex" / "config.toml").read_text())
+    assert codex["mcp_servers"]["thzdaq"]["args"] == started[1:] + args
+    assert codex["mcp_servers"]["thzdaq"]["tool_timeout_sec"] >= 60
+    assert (folder / "AGENTS.md").read_text() == guides.guide(guides.AGENTS)
+    assert (folder / "CLAUDE.md").read_text() == "@AGENTS.md\n"
+    assert "written .mcp.json" in out and " ".join(started + args) in out
+
+
+def test_agent_setup_keeps_what_a_person_wrote(thzdaq, tmp_path, monkeypatch):
+    """Their servers, their guide and their notes stay; ours is added. The
+    command named is the thzdaq that runs, from any folder."""
+    script = tmp_path / "bin" / "thzdaq"
+    script.parent.mkdir()
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr(sys, "argv", [str(script)])
+    (tmp_path / ".mcp.json").write_text('{"mcpServers": {"other": {"command": "x"}}}')
+    (tmp_path / "AGENTS.md").write_text("our rules\n")
+    (tmp_path / "CLAUDE.md").write_text("notes\n")
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text('model = "o4"\n')
+    code, out, _ = thzdaq("agent-setup")
+    assert code == 0
+    servers = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
+    assert set(servers) == {"other", "thzdaq"}
+    assert servers["thzdaq"]["command"] == str(script)
+    assert (tmp_path / "AGENTS.md").read_text() == "our rules\n"
+    assert (tmp_path / "CLAUDE.md").read_text() == "notes\n\n@AGENTS.md\n"
+    codex = (tmp_path / ".codex" / "config.toml").read_text()
+    assert codex.startswith('model = "o4"\n') and "[mcp_servers.thzdaq]" in codex
+    code, out, _ = thzdaq("agent-setup")  # again: nothing twice
+    assert "kept .codex/config.toml" in out and "kept CLAUDE.md" in out
+    assert (tmp_path / ".codex" / "config.toml").read_text() == codex
+    code, out, _ = thzdaq("agent-setup", "--force")
+    assert (
+        "written AGENTS.md" in out
+        and "our rules" not in (tmp_path / "AGENTS.md").read_text()
+    )
+

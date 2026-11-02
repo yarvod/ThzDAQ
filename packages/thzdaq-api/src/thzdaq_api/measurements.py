@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import msgspec
 
-from thzdaq_api.devices import DeviceInfo
+from thzdaq_api.devices import DeviceInfo, Prefix, Value
 from thzdaq_api.operation import Operation, Rights
 
 DATA = "data"  # the folder of a workspace that holds its measurements
@@ -37,6 +37,20 @@ class ParameterInfo(msgspec.Struct, frozen=True):
     maximum: Optional[float] = None
     choices: Tuple[Any, ...] = ()
     max_points: Optional[int] = None  # of a sweep
+
+    def typed(self, value: Any) -> str:
+        """A value as people type it (typed): in the display unit, a sweep
+        start:stop:points, a list comma separated."""
+        scale = self.display_scale
+        if value is None:
+            return "--"
+        if isinstance(value, dict):
+            return f"{value['start'] / scale:g}:{value['stop'] / scale:g}:{value['points']}"
+        if isinstance(value, list):
+            return ", ".join(self.typed(item) for item in value)
+        if isinstance(value, float):
+            return f"{value / scale:g}"
+        return f"{value}"
 
 
 class SlotInfo(msgspec.Struct, frozen=True):
@@ -249,6 +263,47 @@ class CancelMeasurement(Operation[RunInfo]):
     it changed."""
 
     rights = Rights.STOP
+    id: int
+
+
+class ColumnSummary(msgspec.Struct, frozen=True):
+    """A column of a table: what it holds and the range of its numbers (SI)."""
+
+    key: str
+    title: str
+    unit: str = ""
+    minimum: Optional[float] = None  # None when it holds no number
+    maximum: Optional[float] = None
+    prefixes: Tuple[Prefix, ...] = ()  # to show it in
+
+    @property
+    def label(self) -> str:
+        return f"{self.title}, {self.unit}" if self.unit else self.title
+
+
+class TableSummary(msgspec.Struct, frozen=True):
+    name: str
+    title: str
+    records: int
+    columns: Tuple[ColumnSummary, ...]
+
+
+class MeasurementSummary(msgspec.Struct, frozen=True):
+    """What a measurement holds, without its arrays: each table with its number
+    of records and the range of each column, the results that are single
+    values, and the length of those that are lists (the file has them)."""
+
+    run: RunInfo
+    tables: Tuple[TableSummary, ...]
+    results: Dict[str, Value] = {}
+    series: Dict[str, int] = {}  # a list result -> its length
+
+
+class SummarizeMeasurement(Operation[MeasurementSummary]):
+    """What a running or ended measurement holds so far, without its arrays:
+    the records of each table, the range of each column with its unit, and its
+    results. The full data are in its file (run.path)."""
+
     id: int
 
 
