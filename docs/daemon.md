@@ -758,34 +758,50 @@ import-linter, контракты в корневом `pyproject.toml`, запу
 обработчик. Добавили операцию — она сразу появилась везде.
 
 ### Набор инструментов
+Инструмент — операция каталога под её именем (`thzdaq_mcp/tools.py`); набор выбран:
 - Стенд:
   - `list_devices`;
   - `describe_device(ref)` — величины с единицами и пределами, действия;
   - `read_device(ref)`;
-  - `set_quantity(ref, key, value, unit?)`;
-  - `call_action(ref, action, args)`;
-  - `connections`.
+  - `set_quantity(ref, key, value)` — значение с единицей в строке («2.3mV»);
+  - `call_action(ref, action, arguments)`;
+  - `list_connections`.
 - Измерения:
-  - `list_procedures`, `describe_procedure(name)` — схема из `Parameter.describe()`;
-  - `start_measurement(procedure, parameters, devices, comment)` — один общий инструмент,
-    а не по инструменту на процедуру;
+  - `list_procedures`, `describe_procedure(procedure)` — параметры в единицах показа и
+    устройства, подходящие каждому слоту;
+  - `start_measurement(procedure, typed | parameters, devices, comment)` — один общий
+    инструмент, а не по инструменту на процедуру; без `workspace` — папка агента;
   - `wait_measurement(id, timeout)`, `cancel_measurement(id)`;
-  - `list_measurements`, `measurement_summary(id)` — results, число точек, характерные
-    значения, без массивов.
-- Диалог: `ask_user(question, options, allow_text)`, `wait_answer(id)`.
-- Интерфейс: `ui_state`, `ui_open`, `ui_fill_measurement`, `ui_highlight`.
-- Демон: `daemon_status`.
+  - `list_runs`, `summarize_measurement(id)` — results, число точек, диапазоны колонок с
+    единицами, без массивов (операция каталога: её получит и ассистент).
+- Диалог: `ask_user(question, options, timeout)`, `wait_answer(id)`.
+- Интерфейс (М4): `ui_state`, `ui_open`, `ui_fill_measurement`, `ui_highlight`.
+- Демон: `get_daemon_status`.
+
+Не даём: правку профиля, ответы за человека и остановку демона (это дело человека, демон
+их агенту и так не разрешит), опросы и потоки записей (агент их не прочтёт).
 
 ### Ресурсы
 - `thzdaq://procedures` — каталог;
-- `thzdaq://procedures/{name}` — описание и `guide`;
-- `thzdaq://station` — профиль без секретов;
-- `thzdaq://guide/{topic}` — методика из `docs/assistant/`.
+- `thzdaq://procedures/{name}` — описание (и `guide` процедуры — М4);
+- `thzdaq://station` — профиль без секретов: соединение только видом, без адресов;
+- `thzdaq://guide/{topic}` — методика (`thzdaq_api.guides`). Файлы лежат в пакете —
+  `packages/thzdaq-api/src/thzdaq_api/assistant/*.md`, а не в `docs/assistant/`: так они
+  есть в сборке, в установке с PyPI и в исходниках, и их читают MCP, `agent-setup` и
+  ассистент GUI (М4).
 
 ### Транспорт и процесс
 - stdio, отдельный процесс `thzdaq mcp`: Claude Code и Codex запускают его сами по
-  `.mcp.json` / `~/.codex/config.toml`. Он вызывает `connect_or_start()` и работает как
-  обычный клиент демона с origin `mcp:<имя клиента из initialize>`.
+  `.mcp.json` / `.codex/config.toml`. При первом вызове агента он вызывает
+  `connect_or_start()` и работает как обычный клиент демона с origin `mcp:<имя клиента из
+  initialize>` (в протоколе 2026-07-28 без initialize — из конверта запроса). Он слушает
+  события как клиент вида `mcp`: окно и `thzdaq daemon clients` видят агента, а демон не
+  уходит по таймауту простоя, пока агент работает.
+- SDK `mcp` 2.3 (`mcp>=2.3,<2.4`): низкоуровневый `Server(on_call_tool=…)`, прогресс —
+  `ctx.session.report_progress`, оба протокола (с initialize и 2026-07-28).
+- CLI не импортирует `thzdaq_mcp` (клиенты друг друга не импортируют): пакет добавляет
+  команду точкой входа `thzdaq.cli` → `mcp = thzdaq_mcp.server:serve`; сборка берёт её
+  метаданные и модули через `collect_entry_point`.
 - MCP внутри демона (Streamable HTTP) не делаем: SDK построен на asyncio/ASGI, а демон — на
   потоках и stdlib. asyncio и зависимость `mcp` живут только в `thzdaq-mcp`.
 - `RemoteLab` синхронный (stdlib `http.client`), поэтому вызовы оборачиваются в
@@ -796,7 +812,8 @@ import-linter, контракты в корневом `pyproject.toml`, запу
 - `start_measurement` сразу возвращает run id. `wait_measurement(id, timeout ≤ 60 с)`
   возвращает статус, прогресс и краткие результаты; агент вызывает его в цикле.
 - Пока `wait_measurement` ждёт, прогресс уходит через MCP progress notifications (если
-  клиент передал `progressToken`).
+  клиент передал `progressToken`); закончилось — ответ со сводкой `summarize_measurement`.
+- Codex по умолчанию даёт инструменту 60 с: `agent-setup` пишет `tool_timeout_sec = 120`.
 - `cancel_measurement` доступен всегда. Отмена MCP-запроса клиентом (`notifications/
   cancelled`) прерывает ожидание, но не само измерение.
 
@@ -834,26 +851,37 @@ import-linter, контракты в корневом `pyproject.toml`, запу
 - Ответы короткие: сводки, а не массивы. Полные данные — в файле измерения (путь в ответе).
 
 ### Подключение агентов
-- `thzdaq mcp` — подкоманда CLI. Она работает, если установлен пакет `thzdaq-mcp`; иначе
-  пишет, что его поставить. В сборке он уже есть.
-- `.mcp.json` для Claude Code пишет `agent-setup` — абсолютный путь к тому CLI, который его
-  вызвал:
-  - из исходников:
-    `{"mcpServers": {"thzdaq": {"command": "uv", "args": ["run", "thzdaq", "mcp"]}}}`;
-  - из сборки: `{"command": "C:\\ThzDAQ\\thzdaq-cli.exe", "args": ["mcp"]}`;
-  - из PyPI: путь к `thzdaq` в окружении.
-- Пример `config.toml` для Codex — в `docs/assistant/agents.md`.
-- `docs/assistant/agents.md`: как мерить через MCP и CLI, правила (не задавать значения вне
-  рабочих диапазонов, сначала `describe_*`, долгие измерения через `wait_measurement`).
+- `thzdaq mcp [--workspace <папка>]` — подкоманда CLI. Она работает, если установлен пакет
+  `thzdaq-mcp`; иначе пишет, что его поставить. В сборке он уже есть.
+- `thzdaq [--simulate] agent-setup [<папка>] [--force]` пишет в папку `.mcp.json` (Claude
+  Code), `.codex/config.toml` (Codex), `AGENTS.md` (методика `agents`) и `CLAUDE.md` с
+  `@AGENTS.md`. Сервер запускается абсолютным путём к тому CLI, который его вызвал, с
+  `mcp --workspace <папка>`:
+  - из сборки: `thzdaq-cli.exe`;
+  - из исходников (`uv run thzdaq`) и из PyPI: `thzdaq` окружения (`.venv/bin/thzdaq`) —
+    `uv run thzdaq mcp` из рабочей папки агента не нашёл бы проект ThzDAQ;
+  - иначе — `python -m thzdaq_cli` этого Python.
+
+  Файлы человека остаются: сервер добавляется в его `.mcp.json` и `config.toml`,
+  `@AGENTS.md` — в его `CLAUDE.md`; свой `AGENTS.md` не заменяется без `--force`.
+- Codex читает `.codex/config.toml` только у доверенного (trusted) проекта; иначе таблицу
+  `[mcp_servers.thzdaq]` переносят в `~/.codex/config.toml` (пример — в методике `agents`).
+- Методика `agents`: как мерить через MCP и CLI, правила (не задавать значения вне рабочих
+  диапазонов, сначала `describe_*`, единицы, опасные шаги, долгие измерения через
+  `wait_measurement`, отказы человека).
 
 ### Тесты
-Клиент-сервер в памяти из SDK + демон в потоке на симуляторах:
-- список инструментов совпадает с каталогом;
-- вызов `start/wait` доходит до `completed`;
-- отказ по лимиту; конфликт на `exclusive` → вопрос человеку, а `shared` → выполняется
-  с записью в оба измерения;
-- `ask` с ответом из «GUI» (тестовый клиент отвечает на `approval_requested`);
-- прогресс приходит.
+Клиент-сервер в памяти из SDK + демон в потоке на симуляторах
+(`packages/thzdaq-mcp/tests`):
+- список инструментов — выбранная часть каталога, схемы и описания из него;
+- вызов `start/wait` доходит до `completed` со сводкой, файл — в папке агента;
+- отказ по лимиту;
+- `ask` с ответом из «GUI» (окно отвечает на `approval_requested`, в том числе другим
+  значением), отказ словами человека доходит до агента текстом;
+- прогресс приходит; отменённое ожидание не отменяет измерение;
+- origin — имя агента в обоих протоколах; ресурсы без адресов.
+
+Конфликт на `exclusive` проверяют тесты core и CLI.
 
 ## Python-библиотека и свои скрипты
 
@@ -1330,8 +1358,8 @@ class PVGrid(Script):
   - `AGENTS.md` (и `CLAUDE.md` со ссылкой на него) — что такое ThzDAQ, правила (пределы,
     опасные действия, единицы), как мерить через MCP и когда писать скрипт на клиенте;
   - `.mcp.json` для Claude Code;
-  - пример блока для `~/.codex/config.toml`. Проверить, поддерживает ли Codex конфиг на
-    уровне проекта.
+  - `.codex/config.toml` — Codex читает его только у доверенного проекта; для остальных
+    тот же блок — в `~/.codex/config.toml`.
 - Пользователь пишет агенту: «сними I-V на sis_bias_1 и найди щель».
   1. Агент вызывает MCP-инструменты, а для длинной логики пишет скрипт на клиенте и
      запускает его через `thzdaq script start`.
@@ -1359,7 +1387,7 @@ MCP лишь передаёт этот список чужой программ�
   - роль и правила (единицы, пределы, опасные действия, «сначала describe»);
   - устройства с возможностями и статусом соединений;
   - краткий каталог процедур (имя, что меряет, слоты);
-  - методика из `docs/assistant/`.
+  - методика (`thzdaq_api.guides`).
 
   Подробности модель запрашивает инструментами (`describe_procedure`, `describe_device`).
 - В чате каждый вызов — свёрнутая карточка («set_quantity sis_bias_1 voltage_set 2.3 mV →
@@ -1435,7 +1463,9 @@ MCP лишь передаёт этот список чужой программ�
   stop/restart).
 - `thzdaq-cli` (новый): команда `thzdaq` — команды совпадают с клиентскими функциями api;
   группы `daemon`, `script`, `station`, `agent-setup`; вопросы подтверждения в терминале.
-- `thzdaq-mcp` (новый, `mcp`): `thzdaq mcp` по stdio — клиент демона.
+- `thzdaq-mcp` (новый, `mcp`): `thzdaq mcp` по stdio — клиент демона: `server.py`
+  (сервер, точка входа `thzdaq.cli`), `tools.py` (набор инструментов из каталога),
+  `present.py` (короткие ответы с единицами), `resources.py`, `bench.py` (связь с демоном).
 - `thzdaq-gui`:
   - `models/` — модели вида на QtCore: запуск измерения, устройство, измерения (Data),
     процессы, демон;
@@ -1643,10 +1673,13 @@ MCP лишь передаёт этот список чужой программ�
      опасный шаг, скачок ×10, значение за `warn_min/warn_max` и чужая развёртка
      спрашиваются даже при allow (`Ask.risky`).
 2. **MCP:**
-   - [ ] `thzdaq mcp`: инструменты из каталога, ресурсы;
-   - [ ] `start/wait_measurement` с прогрессом;
-   - [ ] `agent-setup` с абсолютным путём к CLI;
-   - [ ] `docs/assistant/agents.md`.
+   - [x] `thzdaq mcp`: инструменты из каталога, ресурсы (`packages/thzdaq-mcp`, SDK `mcp`
+     2.3; `summarize_measurement` — новая операция каталога);
+   - [x] `start/wait_measurement` с прогрессом;
+   - [x] `agent-setup` с абсолютным путём к CLI (`.mcp.json`, `.codex/config.toml`,
+     `AGENTS.md`, `CLAUDE.md`);
+   - [x] методика для агентов — `thzdaq_api/assistant/agents.md` (а не
+     `docs/assistant/`: она нужна каждой установке).
 
 **Готово, когда** Claude Code или Codex в рабочей папке снимают I-V, подтверждение приходит в
 GUI, а отказ доходит до агента текстом.
@@ -1679,7 +1712,7 @@ GUI, а отказ доходит до агента текстом.
 
 ### М4 — ассистент и редактор
 1. [ ] **Ассистент:** провайдеры (ключ в `keyring`), док чата, цикл с инструментами,
-   системный промпт, `docs/assistant/`, `guide` у процедур.
+   системный промпт, методика (`thzdaq_api/assistant/`), `guide` у процедур.
 2. [ ] **Подсказки:** подсветка поверх окна (`OverlayGuide`), UI-операции с адресацией окну.
 3. **Встроенный редактор:**
    - [ ] подсветка, jedi, наши подсказки;
