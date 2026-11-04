@@ -22,6 +22,7 @@ from thzdaq_api.measurement_file import (
     COMPLETED,
     FAILED,
     INTERRUPTED,
+    PLOTS,
     DeviceUse,
     Measurement,
 )
@@ -36,9 +37,6 @@ logger = logging.getLogger(__name__)
 
 # Numbers of measurements that are not saved (no store)
 _LOCAL_IDS = itertools.count(1)
-
-
-PLOTS = "plots"  # metadata: plots a run added while it ran
 
 
 class Cancelled(Exception):
