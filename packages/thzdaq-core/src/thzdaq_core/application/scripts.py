@@ -370,6 +370,13 @@ class Sessions:
             )
         return session
 
+    def interrupt(self, origin: str, why: str) -> None:
+        """The sessions of a script that ended or was stopped end now."""
+        with self._lock:
+            found = [s for s in self._sessions.values() if s.origin == origin]
+        for session in found:
+            session.end(INTERRUPTED, Interrupted(why))
+
     def found(self, id: Optional[int]) -> Within:
         """Where a call is made, as a person reads it before allowing it."""
         return self.devices.outside if id is None else self._found(id)

@@ -1,7 +1,7 @@
 """The daemon's process: one per machine (the simulator's is another), found by
 its host file, ended by a stop, an idle timeout or a signal.
 
-It lives while clients listen or measurements run; after the last of them it
+It lives while clients listen, measurements or scripts run; after the last of them it
 waits idle_timeout seconds (0: forever) and ends. A client that finds it gone
 starts it again (thzdaq_api.host.connect_or_start).
 """
@@ -203,8 +203,11 @@ class Daemon:
         quiet_since: Optional[float] = None
         while not self._stopping.wait(HEARTBEAT_S):
             timeout = self.idle_timeout
+            assembled = self.composed.assembled
             busy = (
-                self.composed.assembled.runs.active() or not self.listening.idle_for()
+                assembled.runs.active()
+                or assembled.scripts.running()
+                or not self.listening.idle_for()
             )
             if busy or timeout <= 0:
                 quiet_since = None

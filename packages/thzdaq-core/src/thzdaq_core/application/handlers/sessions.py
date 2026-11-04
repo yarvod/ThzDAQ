@@ -1,36 +1,51 @@
 """Operations of a script's session: its start, its records, progress, plots,
 what it restores at its end, and its end. Calls of the session's own script
-were allowed with it (granted), but for a dangerous step."""
+were allowed with it (granted), but for a dangerous step; a script the daemon
+runs starts a session without asking when every device it names was allowed
+to it in advance, and its sessions share what it was told to share."""
+
+from typing import ClassVar
 
 import msgspec
 from thzdaq_api import sessions as api
 from thzdaq_api.devices import QuantityValue
+from thzdaq_api.scripts import CALL, SET
 
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.scripts import Sessions, sweep_values
 
 
 class _OfSession(Handler):
     """An operation of a session: its own script was allowed it at the start."""
 
-    def __init__(self, sessions: Sessions):
+    def __init__(self, sessions: Sessions, scripts: ScriptProcesses):
         self.sessions = sessions
+        self.scripts = scripts
 
     def granted(self, args, origin):
         return self.sessions.owns(args.id, origin)
 
 
-class StartSession(Handler[api.StartSession, api.RunInfo]):
+class StartSession(_OfSession):
     operation = api.StartSession
 
-    def __init__(self, sessions: Sessions):
-        self.sessions = sessions
-
     def handle(self, args, origin):
-        return self.sessions.start(args, origin)
+        started = self.sessions.start(self._shared(args, origin), origin)
+        self.scripts.note(started.id, origin)
+        return started
 
-    def approval(self, args):
-        return self.sessions.approval(args)
+    def _shared(self, args, origin):
+        """With the devices its script shares (thzdaq script start --share)."""
+        shared = args.share + self.scripts.shared(origin)
+        return msgspec.structs.replace(args, share=shared)
+
+    def granted(self, args, origin):
+        """Every device it names was allowed to its script in advance."""
+        return self.scripts.allows_devices(origin, args.devices + args.exclusive)
+
+    def approval(self, args, origin):
+        return self.sessions.approval(self._shared(args, origin))
 
     def amended(self, args, answer):
         """The sweeps the person saw are shared."""
@@ -75,30 +90,38 @@ class PlotSession(_OfSession):
         return self.sessions.plot(args.id, origin, args.plot)
 
 
-class RestoreOnExit(_OfSession):
+class _AtExit(_OfSession):
+    """What the session does to a device at its end: allowed as the change it
+    makes (kind: set or call), in the session or to its script in advance."""
+
+    kind: ClassVar[str]
+
+    def granted(self, args, origin):
+        return self.sessions.grants(args.id, origin, args.ref) or self.scripts.allows(
+            origin, self.kind, args.ref
+        )
+
+
+class RestoreOnExit(_AtExit):
     operation = api.RestoreOnExit
+    kind = SET
 
     def handle(self, args, origin):
         value = self.sessions.restore(args.id, origin, args.ref, args.key)
         return QuantityValue(args.ref, args.key, value)
 
-    def granted(self, args, origin):
-        return self.sessions.grants(args.id, origin, args.ref)
-
-    def approval(self, args):
+    def approval(self, args, origin):
         return self.sessions.restore_ask(args.id, args.ref, args.key)
 
 
-class CallOnExit(_OfSession):
+class CallOnExit(_AtExit):
     operation = api.CallOnExit
+    kind = CALL
 
     def handle(self, args, origin):
         self.sessions.on_exit(args.id, origin, args.ref, args.action, args.arguments)
 
-    def granted(self, args, origin):
-        return self.sessions.grants(args.id, origin, args.ref)
-
-    def approval(self, args):
+    def approval(self, args, origin):
         return self.sessions.on_exit_ask(args.id, args.ref, args.action, args.arguments)
 
 

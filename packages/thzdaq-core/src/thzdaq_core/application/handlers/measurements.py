@@ -9,7 +9,10 @@ from thzdaq_api.operation import Rights
 from thzdaq_core.application.approvals import Ask
 from thzdaq_core.application.describe import procedure_info, procedure_summary
 from thzdaq_core.application.devices import DeviceAccess
+from thzdaq_api.scripts import RUN
+
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.catalog import get_procedure, list_procedures
@@ -59,12 +62,13 @@ class DescribeProcedure(Handler[api.DescribeProcedure, api.ProcedureInfo]):
 class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
     operation = api.StartMeasurement
 
-    def __init__(self, runs: Runs):
+    def __init__(self, runs: Runs, scripts: ScriptProcesses):
         self.runs = runs
+        self.scripts = scripts
 
     def handle(self, args, origin):
         procedure = build(args.procedure, args.parameters, args.typed)
-        return self.runs.start(
+        started = self.runs.start(
             procedure,
             args.devices,
             args.comment,
@@ -72,19 +76,27 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
             args.share,
             args.workspace,
             args.dry_run,
+            self.scripts.shared(origin),
         )
+        if not args.dry_run:
+            self.scripts.note(started.id, origin)
+        return started
 
     def needs(self, args):
         """A dry run changes nothing."""
         return Rights.READ if args.dry_run else self.operation.rights
 
-    def approval(self, args):
+    def granted(self, args, origin):
+        """Allowed to its script in advance."""
+        return self.scripts.allows(origin, RUN, args.procedure)
+
+    def approval(self, args, origin):
         """The run it would be, checked as a dry run: one that could not start
         is refused before anybody is asked."""
         procedure = build(args.procedure, args.parameters, args.typed)
         planned = self.runs.start(
             procedure, args.devices, args.comment, "", args.share, args.workspace,
-            dry_run=True,
+            dry_run=True, shares=self.scripts.shared(origin),
         )  # fmt: skip
         devices = ", ".join(f"{slot} {ref}" for slot, ref in planned.devices.items())
         given = args.typed or args.parameters

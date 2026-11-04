@@ -1,6 +1,6 @@
 """Operations on devices: list, describe, read, set, run an action, go safe."""
 
-from typing import Tuple
+from typing import ClassVar, Tuple
 
 import msgspec
 from thzdaq_api import devices as api
@@ -16,7 +16,10 @@ from thzdaq_core.application.describe import (
     setting_info,
 )
 from thzdaq_core.application.devices import DeviceAccess
+from thzdaq_api.scripts import CALL, SET
+
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.scripts import Sessions
 
 
@@ -63,12 +66,28 @@ class ReadDevice(Handler[api.ReadDevice, api.Reading]):
         return api.Reading(args.ref, self.devices.read(args.ref, args.keys))
 
 
-class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
-    operation = api.SetQuantity
+class _Change(Handler):
+    """A change of a device, which a person may have allowed already: in the
+    caller's session, or to its script in advance (as kind: set or call)."""
 
-    def __init__(self, devices: DeviceAccess, sessions: Sessions):
+    kind: ClassVar[str]
+
+    def __init__(
+        self, devices: DeviceAccess, sessions: Sessions, scripts: ScriptProcesses
+    ):
         self.devices = devices
         self.sessions = sessions
+        self.scripts = scripts
+
+    def granted(self, args, origin):
+        return self.sessions.grants(
+            args.session, origin, args.ref
+        ) or self.scripts.allows(origin, self.kind, args.ref)
+
+
+class SetQuantity(_Change):
+    operation = api.SetQuantity
+    kind = SET
 
     def handle(self, args, origin):
         within = self.sessions.within(args.session, origin, args.ref, SHARED)
@@ -77,10 +96,7 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
         )
         return api.QuantityValue(args.ref, args.key, value)
 
-    def granted(self, args, origin):
-        return self.sessions.grants(args.session, origin, args.ref)
-
-    def approval(self, args):
+    def approval(self, args, origin):
         within = self.sessions.found(args.session)
         return self.devices.proposed(args.ref, args.key, args.value, within)
 
@@ -90,12 +106,9 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
         return msgspec.structs.replace(args, value=value, share=True)
 
 
-class CallAction(Handler[api.CallAction, api.ActionResult]):
+class CallAction(_Change):
     operation = api.CallAction
-
-    def __init__(self, devices: DeviceAccess, sessions: Sessions):
-        self.devices = devices
-        self.sessions = sessions
+    kind = CALL
 
     def handle(self, args, origin):
         changes = self.devices.action(args.ref, args.action).changes
@@ -111,10 +124,7 @@ class CallAction(Handler[api.CallAction, api.ActionResult]):
         changes = self.devices.action(args.ref, args.action).changes
         return self.operation.rights if changes else Rights.READ
 
-    def granted(self, args, origin):
-        return self.sessions.grants(args.session, origin, args.ref)
-
-    def approval(self, args):
+    def approval(self, args, origin):
         within = self.sessions.found(args.session)
         return self.devices.proposed_action(
             args.ref, args.action, args.arguments, within

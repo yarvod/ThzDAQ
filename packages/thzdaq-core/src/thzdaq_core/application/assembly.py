@@ -19,13 +19,15 @@ from thzdaq_core.application.handlers import (
     daemon,
     devices,
     measurements,
+    scripts,
     sessions,
     state,
     station,
 )
 from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
-from thzdaq_core.application.ports import DaemonControl, ProfileRepository
+from thzdaq_core.application.ports import DaemonControl, Launcher, ProfileRepository
+from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.scripts import Sessions
 from thzdaq_core.application.station import StationService
@@ -43,8 +45,10 @@ class Assembled:
     daemon: DaemonService
     idle: IdleConnections
     control: DaemonControl
+    scripts: ScriptProcesses
 
     def close(self) -> None:
+        self.scripts.stop_all()
         self.runs.stop()
         self.polling.stop()
         self.idle.stop()
@@ -55,16 +59,24 @@ def assemble(
     workspaces: Workspaces,
     profiles: ProfileRepository,
     control: DaemonControl,
+    launcher: Launcher,
 ) -> Assembled:
+    """launcher: how scripts the daemon runs are started (adapters.processes)."""
     events = EventBus()
     known = KnownValues()
     runs = Runs(bench, workspaces, events, Leases(), known)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
-    scripts = Sessions(runs, access)
+    script_sessions = Sessions(runs, access)
+    processes = ScriptProcesses(
+        bench, workspaces, runs, script_sessions, launcher,
+        lambda: control.process().simulate,
+    )  # fmt: skip
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
     policy = Policy(lambda: control.settings().agents)
-    service = DaemonService(bench, runs, polling, events, access, control, policy)
+    service = DaemonService(
+        bench, runs, polling, events, access, control, policy, processes
+    )
     # A person answers in a window or a terminal that listens to the daemon
     waiting = Approvals(
         events, lambda: any(answers(c.kind, c.origin) for c in control.clients())
@@ -73,9 +85,9 @@ def assemble(
         (
             devices.ListDevices(bench),
             devices.DescribeDevice(bench, access),
-            devices.ReadDevice(access, scripts),
-            devices.SetQuantity(access, scripts),
-            devices.CallAction(access, scripts),
+            devices.ReadDevice(access, script_sessions),
+            devices.SetQuantity(access, script_sessions, processes),
+            devices.CallAction(access, script_sessions, processes),
             devices.SafeState(access),
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
@@ -88,7 +100,7 @@ def assemble(
             approvals.WaitAnswer(waiting),
             measurements.ListProcedures(),
             measurements.DescribeProcedure(access),
-            measurements.StartMeasurement(runs),
+            measurements.StartMeasurement(runs, processes),
             measurements.ListRuns(runs),
             measurements.GetRunSnapshot(runs),
             measurements.WaitMeasurement(runs),
@@ -96,16 +108,20 @@ def assemble(
             measurements.CancelMeasurement(runs),
             measurements.AbortMeasurement(runs),
             measurements.SetComment(runs),
-            sessions.StartSession(scripts),
-            sessions.KeepSession(scripts),
-            sessions.RecordSession(scripts),
-            sessions.AdvanceSession(scripts),
-            sessions.LogSession(scripts),
-            sessions.PlotSession(scripts),
-            sessions.RestoreOnExit(scripts),
-            sessions.CallOnExit(scripts),
-            sessions.EndSession(scripts),
+            sessions.StartSession(script_sessions, processes),
+            sessions.KeepSession(script_sessions, processes),
+            sessions.RecordSession(script_sessions, processes),
+            sessions.AdvanceSession(script_sessions, processes),
+            sessions.LogSession(script_sessions, processes),
+            sessions.PlotSession(script_sessions, processes),
+            sessions.RestoreOnExit(script_sessions, processes),
+            sessions.CallOnExit(script_sessions, processes),
+            sessions.EndSession(script_sessions, processes),
             sessions.ParseSweep(),
+            scripts.StartScript(processes),
+            scripts.ListScripts(processes),
+            scripts.ReadScriptLog(processes),
+            scripts.StopScript(processes),
             station.GetStation(profile),
             station.LoadStation(profile),
             station.NewStation(profile),
@@ -129,5 +145,6 @@ def assemble(
         waiting,
     )
     return Assembled(
-        dispatcher, events, polling, runs, service, IdleConnections(bench), control
-    )
+        dispatcher, events, polling, runs, service, IdleConnections(bench), control,
+        processes,
+    )  # fmt: skip

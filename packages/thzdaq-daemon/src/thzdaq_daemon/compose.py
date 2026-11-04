@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_core.adapters.processes import Processes
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
 from thzdaq_core.application.assembly import Assembled, assemble
 from thzdaq_core.application.bench import Bench
@@ -49,5 +50,5 @@ def compose(
     lanes = Lanes()
     bench = Bench(bench_station, lanes, station)
     workspaces = Workspaces(home, data, MeasurementStore)
-    assembled = assemble(bench, workspaces, YamlProfiles(), control)
+    assembled = assemble(bench, workspaces, YamlProfiles(), control, Processes())
     return Composed(bench, lanes, assembled)

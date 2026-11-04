@@ -34,9 +34,9 @@ class Handler(Generic[A, R]):
         script session, which a person allowed when it started."""
         return False
 
-    def approval(self, args: A) -> Ask:
-        """What a person reads to allow this call; it may refuse a call that
-        could not go anyway, before anybody is asked."""
+    def approval(self, args: A, origin: str) -> Ask:
+        """What a person reads to allow this call of origin; it may refuse a
+        call that could not go anyway, before anybody is asked."""
         given = msgspec.structs.asdict(args)
         return Ask(
             args.name.replace("_", " ").capitalize(),

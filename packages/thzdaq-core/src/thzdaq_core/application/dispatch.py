@@ -57,7 +57,7 @@ class Dispatcher:
     def _allowed(self, handler: Handler, args: Operation, origin: str) -> Operation:
         """The call as it may go, or LabError DENIED with the reason."""
         # Each made once, if needed
-        ask = functools.cache(lambda: handler.approval(args))
+        ask = functools.cache(lambda: handler.approval(args, origin))
         granted = functools.cache(lambda: handler.granted(args, origin))
         decision = self.policy.decide(
             handler.needs(args),

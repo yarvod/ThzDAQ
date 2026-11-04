@@ -64,7 +64,7 @@ class SetDaemonSettings(Handler[api.SetDaemonSettings, api.DaemonSettings]):
         """What agents may do is not theirs to change."""
         return Rights.STATION if args.agents else self.operation.rights
 
-    def approval(self, args):
+    def approval(self, args, origin):
         before = self.daemon.settings().idle_timeout
         after = before if args.idle_timeout is None else args.idle_timeout
         return Ask("Daemon settings", f"idle timeout {before:g} s → {after:g} s")

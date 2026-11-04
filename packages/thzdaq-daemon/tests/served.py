@@ -18,6 +18,7 @@ class Served:
     def __init__(self, tmp_path: Path):
         from thzdaq_api.daemon import API_VERSION, Health, HostInfo
         from thzdaq_core.adapters.json_store import MeasurementStore
+        from thzdaq_core.adapters.processes import Processes
         from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
         from thzdaq_core.application.assembly import assemble
         from thzdaq_core.application.bench import Bench
@@ -45,6 +46,7 @@ class Served:
             Workspaces(tmp_path, tmp_path / DATA, MeasurementStore),
             YamlProfiles(),
             ServedControl(True),
+            Processes(),
         )
         self.server = Server(
             self.assembled.dispatcher,

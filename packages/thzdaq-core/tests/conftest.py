@@ -15,6 +15,7 @@ def lab(tmp_path):
     """The use cases of the simulated example bench (a copy of its profile),
     called as a client would."""
     from thzdaq_core.adapters.json_store import MeasurementStore
+    from thzdaq_core.adapters.processes import Processes
     from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
     from thzdaq_core.application.assembly import assemble
     from thzdaq_core.application.bench import Bench
@@ -30,7 +31,9 @@ def lab(tmp_path):
     lanes = Lanes()
     bench = Bench(station, lanes, str(profile))
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
-    assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
+    assembled = assemble(
+        bench, workspaces, YamlProfiles(), LocalControl(True), Processes()
+    )
     yield LocalLab(assembled, origin="test", kind="test")
     assembled.close()
     lanes.stop()

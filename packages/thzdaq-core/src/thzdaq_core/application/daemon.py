@@ -1,8 +1,8 @@
 """The daemon as the use cases see it: what it holds now, and how it ends.
 
-Stopping with cancel or abort ends the measurements (their on_exit restores
-what they changed) and then sets the profile's safe state; graceful is
-refused while measurements run.
+Stopping with cancel or abort ends the scripts and measurements (their
+on_exit restores what they changed) and then sets the profile's safe state;
+graceful is refused while they run.
 """
 
 from typing import Mapping, Optional, Tuple
@@ -27,6 +27,7 @@ from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
 from thzdaq_core.application.ports import DaemonControl
+from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runs import Runs
 
 STUCK_S = 5.0  # a job running longer hangs: its device does not answer
@@ -43,8 +44,10 @@ class DaemonService:
         devices: DeviceAccess,
         control: DaemonControl,
         policy: Policy,
+        scripts: ScriptProcesses,
     ):
         self.bench = bench
+        self.scripts = scripts
         self.runs = runs
         self.polling = polling
         self.events = events
@@ -79,6 +82,7 @@ class DaemonService:
             ),
             seq=self.events.seq,
             problems=tuple(problems),
+            scripts=self.scripts.running(),
         )
 
     def heartbeat(self, seq: int) -> Heartbeat:
@@ -124,14 +128,17 @@ class DaemonService:
     def stop(self, mode: StopMode, origin: str, restart: bool = False) -> None:
         running = self.runs.active()
         if mode == StopMode.GRACEFUL:
-            if running:
-                titles = ", ".join(f"#{run.id} {run.title}" for run in running)
+            busy = [f"#{run.id} {run.title}" for run in running] + [
+                f"script {script.id} {script.name}" for script in self.scripts.running()
+            ]
+            if busy:
                 raise LabError(
                     ErrorCode.CONFLICT,
-                    f"Measurements run: {titles}",
+                    f"Measurements or scripts run: {', '.join(busy)}",
                     "stop with cancel to end them, or wait for them",
                 )
         else:
+            self.scripts.stop_all()
             if mode == StopMode.ABORT:
                 for run in running:
                     self.runs.abort(run.id)
