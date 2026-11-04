@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from importlib import metadata, util
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import msgspec
 
@@ -210,20 +210,24 @@ def start_command() -> List[str]:
     )
 
 
+def apart() -> Dict[str, Any]:
+    """Popen options that start a process apart from this one: without its
+    console or terminal session, so it outlives them."""
+    if sys.platform == "win32":
+        return dict(
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NO_WINDOW
+        )
+    return dict(start_new_session=True)
+
+
 def spawn(command: Sequence[str], files: DaemonFiles) -> subprocess.Popen:
     """Start the daemon apart from this process (it outlives the client); its
     output goes to its log."""
     files.directory.mkdir(parents=True, exist_ok=True)
     if files.log.exists() and files.log.stat().st_size > LOG_KEEP:
         os.replace(files.log, files.log.with_suffix(".log.1"))
-    if sys.platform == "win32":
-        apart = dict(
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-            | subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NO_WINDOW
-        )
-    else:
-        apart = dict(start_new_session=True)
     with open(files.log, "ab") as log:
         return subprocess.Popen(
             list(command),
@@ -231,7 +235,7 @@ def spawn(command: Sequence[str], files: DaemonFiles) -> subprocess.Popen:
             stdout=log,
             stderr=subprocess.STDOUT,
             close_fds=True,
-            **apart,
+            **apart(),
         )
 
 

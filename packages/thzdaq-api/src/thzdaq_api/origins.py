@@ -3,6 +3,7 @@ that listens. People do what they ask and answer for agents; agents and
 scripts ask a person before they change the bench (thzdaq_core's Policy)."""
 
 import os
+from typing import Optional
 
 GUI = "gui"  # a window: people answer in it
 CLI = "cli"  # the command line in a terminal of a person
@@ -11,6 +12,7 @@ ASSISTANT = "assistant"  # the chat in the window
 MCP = "mcp:"  # mcp:<the agent's name> (Claude Code, Codex)
 MCP_CLIENT = "mcp"  # the kind of client an MCP server listens as
 SCRIPT = "script:"  # script:<its name>
+NUMBERED = "@"  # script:<its name>@<number>: one the daemon runs
 SCRIPT_CLIENT = "script"  # the kind of client a script listens as
 
 # The kind of a CLI that asks a person in its terminal what waits (approvals watch)
@@ -33,9 +35,18 @@ def answers(kind: str, origin: str) -> bool:
     return kind in ANSWERING and not agent(origin)
 
 
-def script(name: str) -> str:
-    """The origin of a script: script:<its name>."""
-    return f"{SCRIPT}{name}"
+def script(name: str, number: Optional[int] = None) -> str:
+    """The origin of a script: script:<its name>, and @<number> for one the
+    daemon runs (thzdaq script start)."""
+    return f"{SCRIPT}{name}" + ("" if number is None else f"{NUMBERED}{number}")
+
+
+def script_number(origin: str) -> Optional[int]:
+    """The number of a script the daemon runs, by its origin; None for others."""
+    head, numbered, number = origin.rpartition(NUMBERED)
+    if not head.startswith(SCRIPT) or not numbered or not number.isdigit():
+        return None
+    return int(number)
 
 
 def agent_shell() -> bool:

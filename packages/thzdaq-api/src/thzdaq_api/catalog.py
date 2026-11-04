@@ -13,6 +13,7 @@ from thzdaq_api import (
     events,
     leases,
     measurements,
+    scripts,
     sessions,
     station,
 )
@@ -49,6 +50,10 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     sessions.CallOnExit,
     sessions.EndSession,
     sessions.ParseSweep,
+    scripts.StartScript,
+    scripts.ListScripts,
+    scripts.ReadScriptLog,
+    scripts.StopScript,
     station.GetStation,
     station.LoadStation,
     station.NewStation,

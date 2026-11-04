@@ -24,6 +24,7 @@ Readings are Measured: floats in SI units that know their unit, title and
 device. Values to set are SI numbers or texts with their unit.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import (
@@ -77,6 +78,7 @@ from thzdaq_api.script import (
     ref_of,
     script_source,
 )
+from thzdaq_api.scripts import SCRIPT_ID_ENV, SIMULATE_ENV
 from thzdaq_api.sessions import SILENT_S, StartSession
 from thzdaq_api.terminal import person_here
 
@@ -406,17 +408,23 @@ class Bench:
 
 
 def connect(
-    simulate: bool = False,
+    simulate: Optional[bool] = None,
     name: Optional[str] = None,
     workspace: Union[str, Path, None] = None,
 ) -> Bench:
     """The bench of this machine (its simulator with simulate) as this script
     uses it, as script:<name> (the script's file name by default); the daemon
     is started when none runs. A person at this terminal is asked here too
-    what a measurement's start needs allowed."""
+    what a measurement's start needs allowed. A script the daemon started
+    (thzdaq script start) finds that daemon and its own number by its
+    environment, and is allowed what it was started with."""
     path = getattr(sys.modules["__main__"], "__file__", None)  # none in a notebook
     name = name or (Path(path).stem if path else "interactive")
-    lab = host.connect_or_start(simulate, None, script(name), SCRIPT_CLIENT)
+    number = os.environ.get(SCRIPT_ID_ENV)
+    if simulate is None:
+        simulate = os.environ.get(SIMULATE_ENV) == "1"
+    origin = script(name, int(number) if number else None)
+    lab = host.connect_or_start(simulate, None, origin, SCRIPT_CLIENT)
     folder = Path(workspace or Path.cwd()).resolve()
     approve = None
     if person_here():

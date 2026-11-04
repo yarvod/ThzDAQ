@@ -8,6 +8,7 @@ import msgspec
 from thzdaq_api.measurements import RunInfo
 from thzdaq_api.operation import Operation, Rights
 from thzdaq_api.rights import Decision
+from thzdaq_api.scripts import ScriptInfo
 from thzdaq_api.station import ConnectionInfo
 
 # Changes with the contract: a client and a daemon of other versions do not talk
@@ -92,6 +93,7 @@ class DaemonStatus(msgspec.Struct, frozen=True):
     polls: Tuple[PollInfo, ...]
     seq: int  # the last event
     problems: Tuple[str, ...]  # stuck lanes, broken connections
+    scripts: Tuple[ScriptInfo, ...] = ()  # scripts running
 
 
 class Heartbeat(msgspec.Struct, frozen=True):
@@ -111,13 +113,15 @@ class StopMode(str, Enum):
 
 class GetDaemonStatus(Operation[DaemonStatus]):
     """What the daemon is and holds now: its process, the profile, clients,
-    running measurements, instrument queues, connections, polls and problems."""
+    running measurements and scripts, instrument queues, connections, polls
+    and problems."""
 
 
 class StopDaemon(Operation[None]):
-    """Stop the daemon. graceful is refused while measurements run; cancel ends
-    them (their on_exit restores what they changed) and sets the profile's safe
-    state; abort also breaks reads that hang. Clients lose the connection."""
+    """Stop the daemon. graceful is refused while measurements or scripts run;
+    cancel ends them (their on_exit restores what they changed) and sets the
+    profile's safe state; abort also breaks reads that hang. Clients lose the
+    connection."""
 
     rights = Rights.DAEMON
     mode: StopMode = StopMode.GRACEFUL
