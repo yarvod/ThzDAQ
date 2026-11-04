@@ -19,6 +19,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
+import msgspec
 from thzdaq_api.data import encode_values
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import (
@@ -46,8 +47,10 @@ from thzdaq_core.application.describe import measurement_summary, table_summary
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_devices
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.application.ports import ProfileRepository
 from thzdaq_core.application.workspaces import Workspaces
-from thzdaq_api.measurement_file import CONFLICTS, RUNNING, Measurement
+from thzdaq_api.measurement_file import CONFLICTS, PROFILE, RUNNING, Measurement
+from thzdaq_api.workspace import profile_name
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -144,9 +147,14 @@ class _Run(RunObserver):
             conflicts=tuple(m.metadata.get(CONFLICTS, ())),
         )
 
-    def execute(self, bench: Bench, comment: str, devices: Mapping[str, str]) -> None:
+    def execute(
+        self,
+        comment: str,
+        devices: Mapping[str, str],
+        noted: Mapping[str, Any],
+    ) -> None:
         try:
-            self.runner.run(self.procedure, comment, devices, self.id)
+            self.runner.run(self.procedure, comment, devices, self.id, noted)
         except (ProcedureError, StationError) as e:
             self.refused = LabError(ErrorCode.INVALID_ARGUMENTS, str(e))
         except Exception as e:  # the store or the station failed before the start
@@ -267,9 +275,13 @@ class Runs:
         events: EventBus,
         leases: Leases,
         known: KnownValues,
+        profiles: ProfileRepository,
     ):
+        """profiles: how the profile is written, for the copy a workspace
+        keeps."""
         self.bench = bench
         self.workspaces = workspaces
+        self.profiles = profiles
         self.events = events
         self.leases = leases
         self.known = known
@@ -305,6 +317,7 @@ class Runs:
         if dry_run:
             return self._plan(procedure, refs, modes, comment, origin, shared, folder)
         store = self.workspaces.store(folder)
+        noted = self._profile_copy(folder)
         with self._lock:
             run_id = self._last_id = max(store.next_id(), self._last_id + 1)
         try:
@@ -321,7 +334,7 @@ class Runs:
         run.runner = MeasurementRunner(self.bench.station, store, [run])
         threading.Thread(
             target=run.execute,
-            args=(self.bench, comment, dict(devices)),
+            args=(comment, dict(devices), noted),
             name=f"run {procedure.name}",
             daemon=True,
         ).start()
@@ -332,6 +345,22 @@ class Runs:
             self._runs[run.measurement.id] = run
             self._forget_old()
         return run.started
+
+    def _profile_copy(self, folder: Path) -> Dict[str, Any]:
+        """What a measurement in folder notes of the profile: its copy in a
+        workspace (nothing elsewhere, or for a profile without a file)."""
+        path = self.bench.path
+        if path is None:
+            return {}
+        text = self.profiles.text(self.bench.station.config)
+        try:
+            copy = self.workspaces.copy_profile(folder, profile_name(path), text)
+        except OSError as e:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"The profile's copy in {folder} is not written: {e}",
+            ) from None
+        return {} if copy is None else {PROFILE: msgspec.to_builtins(copy)}
 
     def _plan(
         self,

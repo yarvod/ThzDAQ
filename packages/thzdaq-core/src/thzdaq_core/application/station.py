@@ -22,6 +22,7 @@ from thzdaq_core.application.describe import (
 from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.ports import ProfileRepository
 from thzdaq_core.application.runs import Runs
+from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.sis.calibration import (
     CALIBRATION_KEY,
@@ -37,12 +38,20 @@ from thzdaq_instruments.capabilities import Identifiable, capabilities_of
 
 class StationService:
     def __init__(
-        self, bench: Bench, profiles: ProfileRepository, runs: Runs, events: EventBus
+        self,
+        bench: Bench,
+        profiles: ProfileRepository,
+        runs: Runs,
+        events: EventBus,
+        workspaces: Workspaces,
     ):
+        """workspaces: where a profile named by its bare name is (the
+        program's stations/)."""
         self.bench = bench
         self.profiles = profiles
         self.runs = runs
         self.events = events
+        self.workspaces = workspaces
 
     def profile(self) -> api.StationProfile:
         station = self.bench.station
@@ -55,6 +64,7 @@ class StationService:
 
     def load(self, path: str) -> api.StationProfile:
         self._refuse_while_running()
+        path = self.workspaces.profile(path)
         try:
             config = self.profiles.load(path)
         except (StationError, OSError) as e:
@@ -64,6 +74,7 @@ class StationService:
 
     def new(self, path: str, title: str) -> api.StationProfile:
         self._refuse_while_running()
+        path = self.workspaces.profile(path)
         config = StationConfig(title)
         try:
             self.profiles.save(config, path)

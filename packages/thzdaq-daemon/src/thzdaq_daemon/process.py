@@ -146,6 +146,7 @@ class Daemon:
         self.composed = compose(
             station, options.home, data, options.simulate, self, options.lively
         )
+        station = self.composed.bench.path  # a name given is a file of home
         if station:
             self.saved.station = station
             self.saved.save(options.settings_path)

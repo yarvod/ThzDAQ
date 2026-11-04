@@ -37,6 +37,9 @@ class ProfileRepository(Protocol):
     def save(self, config: StationConfig, path: str) -> None:
         ...
 
+    def text(self, config: StationConfig) -> str:
+        """The profile as its file holds it (a workspace keeps a copy)."""
+
 
 class DaemonControl(Protocol):
     """The process the use cases run in: what it is, who listens, its end."""

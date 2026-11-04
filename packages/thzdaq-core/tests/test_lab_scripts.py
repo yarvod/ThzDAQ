@@ -78,6 +78,7 @@ def test_a_script_runs_apart_and_prints_into_its_log(lab, tmp_path):
         "import os, sys\n"
         "print('hello', sys.argv[1:], os.getcwd())\n"
         "print(os.environ['THZDAQ_SCRIPT_ID'], os.environ['THZDAQ_SIMULATE'])\n"
+        "print(os.environ['THZDAQ_WORKSPACE'])\n"
     )
     started = run(lab, tmp_path, "hello.py", text, arguments=("a", "b"))
     assert started.status == "running" and started.pid
@@ -90,6 +91,7 @@ def test_a_script_runs_apart_and_prints_into_its_log(lab, tmp_path):
     assert log.text.splitlines() == [
         f"hello ['a', 'b'] {tmp_path.resolve()}",
         f"{started.id} 1",  # its daemon simulates
+        str(tmp_path.resolve()),  # where its measurements go
     ]
     rest = lab.call(ReadScriptLog(id=started.id, since=log.next))
     assert rest.text == "" and rest.next == log.next

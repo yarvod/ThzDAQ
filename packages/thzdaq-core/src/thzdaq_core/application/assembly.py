@@ -64,7 +64,7 @@ def assemble(
     """launcher: how scripts the daemon runs are started (adapters.processes)."""
     events = EventBus()
     known = KnownValues()
-    runs = Runs(bench, workspaces, events, Leases(), known)
+    runs = Runs(bench, workspaces, events, Leases(), known, profiles)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     script_sessions = Sessions(runs, access)
     processes = ScriptProcesses(
@@ -72,7 +72,7 @@ def assemble(
         lambda: control.process().simulate,
     )  # fmt: skip
     polling = Polling(access, events)
-    profile = StationService(bench, profiles, runs, events)
+    profile = StationService(bench, profiles, runs, events, workspaces)
     policy = Policy(lambda: control.settings().agents)
     service = DaemonService(
         bench, runs, polling, events, access, control, policy, processes

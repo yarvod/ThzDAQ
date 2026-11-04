@@ -64,3 +64,6 @@ class YamlProfiles:
 
     def save(self, config: StationConfig, path: PathLike) -> None:
         save_station(config, path)
+
+    def text(self, config: StationConfig) -> str:
+        return dump_station(config)

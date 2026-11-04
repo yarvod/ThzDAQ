@@ -41,14 +41,16 @@ def compose(
     control: DaemonControl,
     lively: bool = True,
 ) -> Composed:
-    """home: the daemon's own workspace, its measurements in data; lively:
-    simulators drift and get noisy as a bench does (tests keep exact values)."""
-    config = load_station(station) if station else StationConfig(UNNAMED)
+    """station: a profile's file, or a name of home's stations/; home: the
+    daemon's own workspace, its measurements in data; lively: simulators
+    drift and get noisy as a bench does (tests keep exact values)."""
+    workspaces = Workspaces(home, data, MeasurementStore)
+    path = workspaces.profile(station) if station else None
+    config = load_station(path) if path else StationConfig(UNNAMED)
     bench_station = Station(
         config, pause=time.sleep, simulate=simulate, lively=simulate and lively
     )
     lanes = Lanes()
-    bench = Bench(bench_station, lanes, station)
-    workspaces = Workspaces(home, data, MeasurementStore)
+    bench = Bench(bench_station, lanes, path)
     assembled = assemble(bench, workspaces, YamlProfiles(), control, Processes())
     return Composed(bench, lanes, assembled)

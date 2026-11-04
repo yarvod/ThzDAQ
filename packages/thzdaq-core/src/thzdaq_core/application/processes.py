@@ -27,6 +27,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurement_file import ALLOWED
 from thzdaq_api.measurements import DATA
 from thzdaq_api.origins import script, script_number
+from thzdaq_api.workspace import WORKSPACE_ENV
 from thzdaq_api.scripts import (
     CALL,
     EXITED,
@@ -117,6 +118,7 @@ class ScriptProcesses:
             environment = {
                 SCRIPT_ID_ENV: str(number),
                 SIMULATE_ENV: "1" if self.simulate() else "0",
+                WORKSPACE_ENV: str(folder),
                 **UNBUFFERED,
             }
             try:

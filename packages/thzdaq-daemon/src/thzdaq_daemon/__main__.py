@@ -21,7 +21,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--home",
         help="its folder: daemon.json and data/ (default: the program's folder)",
     )
-    parser.add_argument("--station", help="the bench profile to work with, a YAML file")
+    parser.add_argument(
+        "--station",
+        help="the bench profile to work with: a YAML file, or a name in stations/",
+    )
     parser.add_argument("--data", help="measurements folder (default: data/ in home)")
     parser.add_argument(
         "--simulate", action="store_true", help="the simulator daemon: no instruments"

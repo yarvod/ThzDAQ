@@ -15,3 +15,4 @@ from test_lab_script import *  # noqa: F401,F403
 from test_lab_scripts import *  # noqa: F401,F403
 from test_lab_sessions import *  # noqa: F401,F403
 from test_lab_station import *  # noqa: F401,F403
+from test_lab_workspaces import *  # noqa: F401,F403

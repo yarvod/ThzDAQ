@@ -285,17 +285,21 @@ class MeasurementRunner:
         comment: str = "",
         devices: Optional[Mapping[str, str]] = None,
         measurement_id: Optional[int] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
     ) -> Measurement:
         """devices maps procedure slots to station devices, e.g. {"bias": "sis_bias_1"}.
 
         A slot without a device uses the station device of the same name.
         measurement_id: the number given by whoever took the devices for it;
-        None: the store's next.
+        None: the store's next. metadata: what the measurement notes from its
+        start (the copy of the profile in its workspace).
         """
         if not self._lock.acquire(blocking=False):
             raise RuntimeError("Another measurement is running on this runner")
         try:
-            return self._run(procedure, comment, dict(devices or {}), measurement_id)
+            return self._run(
+                procedure, comment, dict(devices or {}), measurement_id, metadata
+            )
         finally:
             self._lock.release()
 
@@ -305,6 +309,7 @@ class MeasurementRunner:
         comment: str,
         devices: Dict[str, str],
         measurement_id: Optional[int],
+        metadata: Optional[Mapping[str, Any]],
     ) -> Measurement:
         procedure.validate()
         required = procedure.slots()
@@ -324,6 +329,7 @@ class MeasurementRunner:
             devices={slot: self.station.device_use(ref) for slot, ref in refs.items()},
             station=self.station.snapshot(refs.values()),
             started=wall_time(),
+            metadata=dict(metadata or {}),
         )
         if measurement_id is not None:
             measurement.id = measurement_id
