@@ -8,7 +8,7 @@ goes on, and the conflict is returned so both measurements record it.
 
 import threading
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Collection, Dict, List, Mapping, Optional, Tuple
 
 from thzdaq_api.leases import EXCLUSIVE, READ
 
@@ -43,14 +43,20 @@ class Leases:
         self._lock = threading.Lock()
 
     def acquire(
-        self, owner: int, title: str, modes: Mapping[str, str], share: bool
+        self,
+        owner: int,
+        title: str,
+        modes: Mapping[str, str],
+        shared: Collection[str] = (),
     ) -> Tuple[Lease, ...]:
-        """Take the devices (device -> mode) for a measurement; returns the
-        conflicts accepted with share, raises LeaseConflict without it."""
+        """Take the devices (device -> mode) for a measurement, or take them
+        anew (a device joins it); returns the conflicts accepted on the devices
+        it shares, raises LeaseConflict for the others."""
         with self._lock:
             clashes = self._clashes(owner, modes)
-            if clashes and not share:
-                raise LeaseConflict(clashes)
+            refused = tuple(lease for lease in clashes if lease.device not in shared)
+            if refused:
+                raise LeaseConflict(refused)
             self._leases[owner] = tuple(
                 Lease(device, mode, owner, title) for device, mode in modes.items()
             )
@@ -73,6 +79,11 @@ class Leases:
     def release(self, owner: int) -> bool:
         with self._lock:
             return self._leases.pop(owner, None) is not None
+
+    def held(self, owner: int) -> Dict[str, str]:
+        """The devices a measurement holds: device -> mode."""
+        with self._lock:
+            return {lease.device: lease.mode for lease in self._leases.get(owner, ())}
 
     def of(self, device: str) -> List[Lease]:
         with self._lock:

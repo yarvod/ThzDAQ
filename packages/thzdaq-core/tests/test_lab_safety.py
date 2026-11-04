@@ -64,7 +64,7 @@ def test_the_safe_state_goes_on_past_a_device_that_refuses(guarded):
     guarded.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="3 mV"))
     guarded.call(SetQuantity(ref="signal_generator_1", key="output", value=True))
     leases = guarded.assembled.runs.leases
-    leases.acquire(7, "a sweep", {"sis_bias_1": EXCLUSIVE}, share=False)
+    leases.acquire(7, "a sweep", {"sis_bias_1": EXCLUSIVE})
     report = guarded.call(SafeState())
     assert [(v.ref, v.key) for v in report] == [
         ("sis_bias_1", "voltage_set"),

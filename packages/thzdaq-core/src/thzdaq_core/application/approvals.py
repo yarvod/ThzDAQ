@@ -33,6 +33,9 @@ class Ask:
     # It may harm the bench (a danger, a jump, beyond the warn range, another's
     # sweep): a person allows it even where an agent may do it alone
     risky: bool = False
+    # A dangerous step or another measurement's sweep: a person allows it even
+    # inside a session a person allowed (granted)
+    grave: bool = False
 
 
 class _Waiting:

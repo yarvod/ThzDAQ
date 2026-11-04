@@ -11,4 +11,6 @@ from test_lab_leases import *  # noqa: F401,F403
 from test_lab_measurements import *  # noqa: F401,F403
 from test_lab_rights import *  # noqa: F401,F403
 from test_lab_safety import *  # noqa: F401,F403
+from test_lab_script import *  # noqa: F401,F403
+from test_lab_sessions import *  # noqa: F401,F403
 from test_lab_station import *  # noqa: F401,F403

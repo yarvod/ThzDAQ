@@ -3,8 +3,8 @@
 A handler is stateless: what it needs comes in its constructor, so the
 dispatcher may call it from many threads at once. It also tells what a call
 needs (the rights of its operation, fewer for one that changes nothing) and,
-when an agent's call waits for a person, what the person reads and what the
-call becomes once allowed.
+when an agent's call waits for a person, what the person reads, what the call
+becomes once allowed, and whether a person allowed it already.
 """
 
 from typing import ClassVar, Generic, Type, TypeVar
@@ -28,6 +28,11 @@ class Handler(Generic[A, R]):
 
     def needs(self, args: A) -> Rights:
         return self.operation.rights
+
+    def granted(self, args: A, origin: str) -> bool:
+        """A person allowed this call already: it belongs to the caller's own
+        script session, which a person allowed when it started."""
+        return False
 
     def approval(self, args: A) -> Ask:
         """What a person reads to allow this call; it may refuse a call that

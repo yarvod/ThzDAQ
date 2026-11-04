@@ -19,6 +19,7 @@ from thzdaq_core.application.handlers import (
     daemon,
     devices,
     measurements,
+    sessions,
     state,
     station,
 )
@@ -26,6 +27,7 @@ from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
 from thzdaq_core.application.ports import DaemonControl, ProfileRepository
 from thzdaq_core.application.runs import Runs
+from thzdaq_core.application.scripts import Sessions
 from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
 from thzdaq_core.application.workspaces import Workspaces
@@ -58,6 +60,7 @@ def assemble(
     known = KnownValues()
     runs = Runs(bench, workspaces, events, Leases(), known)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
+    scripts = Sessions(runs, access)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events)
     policy = Policy(lambda: control.settings().agents)
@@ -70,9 +73,9 @@ def assemble(
         (
             devices.ListDevices(bench),
             devices.DescribeDevice(bench, access),
-            devices.ReadDevice(access),
-            devices.SetQuantity(access),
-            devices.CallAction(access),
+            devices.ReadDevice(access, scripts),
+            devices.SetQuantity(access, scripts),
+            devices.CallAction(access, scripts),
             devices.SafeState(access),
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
@@ -93,6 +96,16 @@ def assemble(
             measurements.CancelMeasurement(runs),
             measurements.AbortMeasurement(runs),
             measurements.SetComment(runs),
+            sessions.StartSession(scripts),
+            sessions.KeepSession(scripts),
+            sessions.RecordSession(scripts),
+            sessions.AdvanceSession(scripts),
+            sessions.LogSession(scripts),
+            sessions.PlotSession(scripts),
+            sessions.RestoreOnExit(scripts),
+            sessions.CallOnExit(scripts),
+            sessions.EndSession(scripts),
+            sessions.ParseSweep(),
             station.GetStation(profile),
             station.LoadStation(profile),
             station.NewStation(profile),

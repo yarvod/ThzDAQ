@@ -96,6 +96,18 @@ def test_values_typed_with_units():
             parse_value(bad, unit)
 
 
+def test_a_unit_people_type_is_an_si_unit_and_a_factor():
+    from thzdaq_instruments.units import unit_scale
+
+    assert unit_scale("mV") == ("V", pytest.approx(1e-3))
+    assert unit_scale("uA") == ("A", pytest.approx(1e-6))
+    assert unit_scale("GHz") == ("Hz", 1e9)
+    assert unit_scale("V") == ("V", 1.0)
+    assert unit_scale("mK") == ("K", pytest.approx(1e-3))
+    for plain in ("dBm", "deg", "dB", ""):
+        assert unit_scale(plain) == (plain, 1.0)
+
+
 def test_quantity_parses_what_a_client_sends():
     voltage = Quantity("voltage_set", "Voltage setpoint", "V", set=lambda t, v: None)
     output = Quantity("output", "Output", kind="bool", set=lambda t, v: None)

@@ -158,19 +158,18 @@ async def test_a_refusal_reaches_the_agent_in_the_persons_words(connect, window)
     assert text(result).startswith("denied:") and "check the pump first" in text(result)
 
 
-async def test_a_value_beyond_the_limits_is_refused(connect, window):
+async def test_a_value_beyond_the_limits_is_refused_before_anybody_is_asked(
+    connect, window
+):
     profile = copy.deepcopy(window.lab.call(GetStation()).profile)
     window.lab.call(UpdateStation(profile={**profile, "safety": SAFETY}))
     async with connect() as client:
-        result = await answering(
-            window,
-            client.call_tool(
-                "set_quantity",
-                {"ref": "sis_bias_1", "key": "voltage_set", "value": "6 mV"},
-            ),
-            allowed=True,
+        result = await client.call_tool(
+            "set_quantity",
+            {"ref": "sis_bias_1", "key": "voltage_set", "value": "6 mV"},
         )
     assert result.is_error and text(result).startswith("out_of_limits:")
+    assert not window.waiting()
 
 
 async def test_mistakes_are_told_as_results(connect):

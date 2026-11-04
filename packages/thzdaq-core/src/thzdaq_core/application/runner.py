@@ -16,13 +16,16 @@ from typing import (
     Tuple,
 )
 
+import msgspec
 from thzdaq_api.measurement_file import (
     CANCELLED,
     COMPLETED,
     FAILED,
+    INTERRUPTED,
     DeviceUse,
     Measurement,
 )
+from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.ports import MeasurementRepository
 from thzdaq_core.domain.errors import ProcedureError
@@ -35,8 +38,25 @@ logger = logging.getLogger(__name__)
 _LOCAL_IDS = itertools.count(1)
 
 
+PLOTS = "plots"  # metadata: plots a run added while it ran
+
+
 class Cancelled(Exception):
     """Raised inside run() when the measurement is stopped."""
+
+
+class Interrupted(Exception):
+    """Raised inside run() when what drives it is gone (a script that fell
+    silent): it ends interrupted, and restores what it changed."""
+
+
+class Failed(Exception):
+    """Raised inside run() for a failure told by what drives it (a script's
+    error): it ends failed with this message and the given traceback."""
+
+    def __init__(self, message: str, traceback: str = ""):
+        super().__init__(message)
+        self.traceback = traceback
 
 
 class StationLike(Protocol):
@@ -84,8 +104,14 @@ class RunObserver:
     def on_record(self, table: str, record: Dict[str, Any]) -> None:
         ...
 
+    def on_flush(self) -> None:
+        """Records held back to go together go now."""
+
     def on_set(self, ref: str, key: str, value: float) -> None:
         """The run set a quantity of a device (a point of its sweep)."""
+
+    def on_plot(self, plot: PlotInfo) -> None:
+        """The run draws another plot from now on."""
 
     def on_progress(self, done: int, total: Optional[int]) -> None:
         ...
@@ -123,7 +149,7 @@ class Context:
     def __getitem__(self, slot: str) -> Any:
         return self.devices[slot]
 
-    def record(self, table: str, **values: Any) -> Dict[str, Any]:
+    def record(self, table: str, /, **values: Any) -> Dict[str, Any]:
         record = dict(values)
         if table not in self.measurement.tables and self.procedure is not None:
             self.measurement.table(table, self.procedure.table_titles.get(table, ""))
@@ -133,6 +159,24 @@ class Context:
             self._autosave()
         self._emit("on_record", table, record)
         return record
+
+    def flush(self) -> None:
+        """The records so far are told now, not with the next ones (the end of
+        a script's call of records)."""
+        self._emit("on_flush")
+
+    def plot(self, plot: PlotInfo) -> None:
+        """Another plot of the run's records, drawn from now on and kept in
+        its metadata."""
+        self.measurement.metadata.setdefault(PLOTS, []).append(
+            msgspec.to_builtins(plot)
+        )
+        self._emit("on_plot", plot)
+
+    def told(self, ref: str, key: str, value: float) -> None:
+        """The run set a quantity another way than through its devices (a
+        script's set through the daemon)."""
+        self._emit("on_set", ref, key, value)
 
     def result(self, key: str, value: Any) -> None:
         """Final values of the run (fit results, summary)."""
@@ -309,6 +353,11 @@ class MeasurementRunner:
             procedure.run(ctx)
         except Cancelled:
             status = CANCELLED
+        except Interrupted as e:
+            status, error = INTERRUPTED, str(e)
+        except Failed as e:
+            status, error = FAILED, str(e)
+            measurement.metadata["traceback"] = e.traceback
         except Exception as e:
             logger.exception(f"[{procedure.name}] failed")
             status, error = FAILED, f"{e.__class__.__name__}: {e}"

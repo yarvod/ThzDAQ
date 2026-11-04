@@ -6,9 +6,13 @@ A set or an action that changes a device a running measurement sweeps needs
 share; the measurements using the device note who changed what
 (thzdaq_core.domain.leases). Leases change only when runs start and end, so the
 check just before the write holds.
+
+A call may be made within a measurement (a script's session, Within): its own
+leases do not conflict, the devices it agreed to share are shared, and what it
+sets is told as its run's sets are.
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple
 
 from thzdaq_api.devices import SafeValue
 from thzdaq_api.errors import ErrorCode, LabError
@@ -30,6 +34,33 @@ from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 # note(run id, metadata key, entry) into a running measurement
 Note = Callable[[int, str, Dict[str, Any]], None]
 JUMP = 10.0  # a set that changes a value this many times is pointed out
+
+
+class Within(Protocol):
+    """Where a call is made: outside any measurement, or within one."""
+
+    owner: Optional[int]  # the measurement whose leases are the caller's own
+
+    def shares(self, ref: str) -> bool:
+        """It agreed to share the device while another measurement sweeps it."""
+
+    def tell(self, ref: str, key: str, value: Any, before: Any, origin: str) -> None:
+        """What a set set."""
+
+
+class Outside:
+    """A call outside any measurement: a set is an event of its own."""
+
+    owner = None
+
+    def __init__(self, events: EventBus):
+        self.events = events
+
+    def shares(self, ref: str) -> bool:
+        return False
+
+    def tell(self, ref: str, key: str, value: Any, before: Any, origin: str) -> None:
+        self.events.publish(QuantitySet(ref, key, value, before, origin))
 
 
 def shown(spec: Any, value: Any) -> str:
@@ -68,6 +99,7 @@ class DeviceAccess:
         self.events = events
         self.leases = leases
         self.note = note
+        self.outside = Outside(events)
 
     def quantities(self, ref: str) -> List[Quantity]:
         self.bench.info(ref)  # an unknown device is NOT_FOUND
@@ -117,10 +149,30 @@ class DeviceAccess:
         self.bench.submit(ref, lambda device: read_values(device, wanted), done)
 
     def write(
-        self, ref: str, key: str, value: Any, origin: str, share: bool = False
+        self,
+        ref: str,
+        key: str,
+        value: Any,
+        origin: str,
+        share: bool = False,
+        within: Optional[Within] = None,
     ) -> Any:
         """Set a quantity; the value as given (a text may carry its unit) is
         parsed by the quantity. Returns the value set."""
+        within = within or self.outside
+        quantity, parsed = self.checked(ref, key, value)
+        users = self._users(ref, share or within.shares(ref), within.owner)
+        before = self.known.get(ref, key)
+        self.bench.run(ref, lambda device: quantity.write(device, parsed))
+        self.known.update(ref, {key: parsed})
+        within.tell(ref, key, parsed, before, origin)
+        self._note(users, origin, ref, key=key, before=before, value=parsed)
+        return parsed
+
+    def checked(self, ref: str, key: str, value: Any) -> Tuple[Quantity, Any]:
+        """The quantity and the value it would be set to (a text may carry its
+        unit); one outside the limits of the device is refused before anything
+        is sent or anybody asked."""
         quantity = self.quantity(ref, key)
         if not quantity.settable:
             raise LabError(ErrorCode.NOT_ALLOWED, f"{ref}: {key} cannot be set")
@@ -128,28 +180,23 @@ class DeviceAccess:
             parsed = quantity.parse(value)
         except ValueError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
-        users = self._users(ref, share)
-        before = self.known.get(ref, key)
-        self.bench.run(ref, lambda device: quantity.write(device, parsed))
-        self.known.update(ref, {key: parsed})
-        self.events.publish(QuantitySet(ref, key, parsed, before, origin))
-        self._note(users, origin, ref, key=key, before=before, value=parsed)
-        return parsed
+        if quantity.kind in ("float", "int"):
+            problems = self.bench.station.limit_problems(ref, key, [parsed])
+            if problems:
+                raise LabError(ErrorCode.OUT_OF_LIMITS, "; ".join(problems))
+        return quantity, parsed
 
-    def proposed(self, ref: str, key: str, value: Any) -> Ask:
+    def proposed(
+        self, ref: str, key: str, value: Any, within: Optional[Within] = None
+    ) -> Ask:
         """A set as a person reads it before allowing it: from what to what in
         the unit of the quantity, a jump, the danger, a sweep it disturbs."""
-        quantity = self.quantity(ref, key)
-        if not quantity.settable:
-            raise LabError(ErrorCode.NOT_ALLOWED, f"{ref}: {key} cannot be set")
-        try:
-            after = quantity.parse(value)
-        except ValueError as e:
-            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        quantity, after = self.checked(ref, key, value)
         before = self.known.get(ref, key)
         leap = jump(before, after)
         unusual = self.bench.station.guard(ref).unusual(quantity, after)
-        warning = self._warning(ref, quantity.danger, unusual)
+        sweeps = self._sweeps(ref, within or self.outside)
+        warning = "; ".join(filter(None, (quantity.danger, unusual, sweeps)))
         return Ask(
             f"{ref} · {quantity.title}",
             f"{shown(quantity, before)} → {shown(quantity, after)}{leap}",
@@ -157,34 +204,44 @@ class DeviceAccess:
             ref if quantity.danger else "",
             shown(quantity, after),
             risky=bool(leap or warning),
+            grave=bool(quantity.danger or sweeps),
         )
 
-    def proposed_action(self, ref: str, key: str, arguments: Dict[str, Any]) -> Ask:
-        action = self.action(ref, key)
-        try:
-            bound = action.bind(arguments)
-        except ValueError as e:
-            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+    def proposed_action(
+        self,
+        ref: str,
+        key: str,
+        arguments: Dict[str, Any],
+        within: Optional[Within] = None,
+    ) -> Ask:
+        action, bound = self.bound(ref, key, arguments)
         given = [
             f"{argument.title} {shown(argument, bound[argument.key])}"
             for argument in action.arguments
             if argument.key in bound
         ]
-        warning = self._warning(ref, action.danger)
+        sweeps = self._sweeps(ref, within or self.outside) if action.changes else ""
+        warning = "; ".join(filter(None, (action.danger, sweeps)))
         return Ask(
             f"{ref} · {action.title}",
             ", ".join(given) or "no arguments",
             warning,
             ref if action.danger else "",
             risky=bool(warning),
+            grave=bool(warning),
         )
 
-    def _warning(self, ref: str, danger: str, unusual: Optional[str] = None) -> str:
-        """The danger of a step, a value beyond the warn range and the sweep of
-        another measurement it disturbs (allowing it shares the device)."""
-        swept = tuple(lease for lease in self.leases.of(ref) if lease.mode == EXCLUSIVE)
-        sweeps = f"{LeaseConflict(swept)}: it notes the change" if swept else ""
-        return "; ".join(filter(None, (danger, unusual, sweeps)))
+    def _sweeps(self, ref: str, within: Within) -> str:
+        """The sweep of another measurement a change disturbs (allowing it
+        shares the device); none where the caller shares it already."""
+        if within.shares(ref):
+            return ""
+        swept = tuple(
+            lease
+            for lease in self.leases.of(ref)
+            if lease.mode == EXCLUSIVE and lease.owner != within.owner
+        )
+        return f"{LeaseConflict(swept)}: it notes the change" if swept else ""
 
     def safe_state(self, origin: str, share: bool = False) -> Tuple[SafeValue, ...]:
         """Every value of the profile's safe state, in its order; one that
@@ -213,6 +270,24 @@ class DeviceAccess:
             ErrorCode.NOT_FOUND, f"{ref} has no action {key!r}", f"it has: {keys}"
         )
 
+    def bound(
+        self, ref: str, key: str, arguments: Dict[str, Any]
+    ) -> Tuple[Action, Dict[str, Any]]:
+        """An action and its arguments as given (a text may carry its unit),
+        parsed by the action."""
+        action = self.action(ref, key)
+        try:
+            return action, action.bind(arguments)
+        except ValueError as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+
+    def current(self, ref: str, key: str) -> Any:
+        """The value a quantity has now: the last one set or read, else read."""
+        value = self.known.get(ref, key)
+        if value is None:
+            value = self.read(ref, [key])[key]
+        return value
+
     def act(
         self,
         ref: str,
@@ -220,24 +295,27 @@ class DeviceAccess:
         arguments: Dict[str, Any],
         origin: str,
         share: bool = False,
+        within: Optional[Within] = None,
     ) -> Any:
         """Run an action; its arguments as given (a text may carry its unit) are
         parsed by the action. Returns what the action returns (a trace)."""
-        action = self.action(ref, key)
-        try:
-            bound = action.bind(arguments)
-        except ValueError as e:
-            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
-        users = self._users(ref, share) if action.changes else []
+        within = within or self.outside
+        action, bound = self.bound(ref, key, arguments)
+        users = (
+            self._users(ref, share or within.shares(ref), within.owner)
+            if action.changes
+            else []
+        )
         result = self.bench.run(ref, lambda device: action.call(device, **bound))
         if action.changes:
             self.events.publish(ActionDone(ref, key, bound, origin))
             self._note(users, origin, ref, action=key, arguments=bound)
         return result
 
-    def _users(self, ref: str, share: bool) -> List[Lease]:
-        """The runs using a device; one sweeping it refuses a change without share."""
-        users = self.leases.of(ref)
+    def _users(self, ref: str, share: bool, owner: Optional[int] = None) -> List[Lease]:
+        """The other runs using a device; one sweeping it refuses a change
+        without share."""
+        users = [lease for lease in self.leases.of(ref) if lease.owner != owner]
         swept = [lease for lease in users if lease.mode == EXCLUSIVE]
         if swept and not share:
             raise LabError(

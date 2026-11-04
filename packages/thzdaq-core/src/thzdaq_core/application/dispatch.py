@@ -3,7 +3,9 @@ goes wrong comes back as a LabError with a code clients can act on.
 
 The policy comes first: a call its origin may not make is denied, one that
 needs a person waits for the answer (outside every lock) and goes on as the
-person allowed it, perhaps with another value.
+person allowed it, perhaps with another value. A call a person allowed already
+(inside a script's session) is asked again only for a dangerous step or
+another measurement's sweep.
 """
 
 import functools
@@ -54,8 +56,15 @@ class Dispatcher:
 
     def _allowed(self, handler: Handler, args: Operation, origin: str) -> Operation:
         """The call as it may go, or LabError DENIED with the reason."""
-        ask = functools.cache(lambda: handler.approval(args))  # made once, if needed
-        decision = self.policy.decide(handler.needs(args), origin, lambda: ask().risky)
+        # Each made once, if needed
+        ask = functools.cache(lambda: handler.approval(args))
+        granted = functools.cache(lambda: handler.granted(args, origin))
+        decision = self.policy.decide(
+            handler.needs(args),
+            origin,
+            lambda: ask().grave if granted() else ask().risky,
+            granted,
+        )
         if decision is Decision.DENY:
             raise LabError(
                 ErrorCode.DENIED,

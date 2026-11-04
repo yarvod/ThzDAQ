@@ -5,6 +5,7 @@ import copy
 
 import pytest
 from lab_helpers import Window, calling
+from thzdaq_api.approvals import AnswerApproval
 from thzdaq_api.daemon import GetDaemonSettings, SetDaemonSettings
 from thzdaq_api.devices import ListDevices, SafeState, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
@@ -96,3 +97,19 @@ def test_people_choose_any_rights_but_the_fixed_ones(lab, lab_as):
     assert agent.call(SetDaemonSettings(idle_timeout=5.0)).idle_timeout == 5.0
     raise_own = SetDaemonSettings(agents={Rights.SET: Decision.ALLOW})
     assert refused(lambda: agent.call(raise_own)).code == ErrorCode.DENIED
+
+
+def test_a_set_beyond_the_limits_is_refused_before_a_person_is_asked(
+    lab, lab_as, window
+):
+    profile = copy.deepcopy(lab.call(GetStation()).profile)
+    profile["safety"] = {"limits": LIMITS}
+    lab.call(UpdateStation(profile=profile))
+    thread, done = calling(lab_as(AGENT), bias("6mV"))
+    thread.join(2)
+    asked_meanwhile = window.waiting()
+    for approval in asked_meanwhile:  # the old way: asked, refused only after
+        window.lab.call(AnswerApproval(id=approval.id, allowed=False))
+    thread.join(5)
+    assert not asked_meanwhile
+    assert done["error"].code == ErrorCode.OUT_OF_LIMITS

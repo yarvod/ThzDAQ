@@ -4,6 +4,7 @@ from typing import Tuple
 
 import msgspec
 from thzdaq_api import devices as api
+from thzdaq_api.leases import READ, SHARED
 from thzdaq_api.operation import Rights
 
 from thzdaq_core.application.bench import Bench
@@ -16,6 +17,7 @@ from thzdaq_core.application.describe import (
 )
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.scripts import Sessions
 
 
 class ListDevices(Handler[api.ListDevices, Tuple[api.DeviceInfo, ...]]):
@@ -52,25 +54,35 @@ class DescribeDevice(Handler[api.DescribeDevice, api.DeviceDescription]):
 class ReadDevice(Handler[api.ReadDevice, api.Reading]):
     operation = api.ReadDevice
 
-    def __init__(self, devices: DeviceAccess):
+    def __init__(self, devices: DeviceAccess, sessions: Sessions):
         self.devices = devices
+        self.sessions = sessions
 
     def handle(self, args, origin):
+        self.sessions.within(args.session, origin, args.ref, READ)
         return api.Reading(args.ref, self.devices.read(args.ref, args.keys))
 
 
 class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
     operation = api.SetQuantity
 
-    def __init__(self, devices: DeviceAccess):
+    def __init__(self, devices: DeviceAccess, sessions: Sessions):
         self.devices = devices
+        self.sessions = sessions
 
     def handle(self, args, origin):
-        value = self.devices.write(args.ref, args.key, args.value, origin, args.share)
+        within = self.sessions.within(args.session, origin, args.ref, SHARED)
+        value = self.devices.write(
+            args.ref, args.key, args.value, origin, args.share, within
+        )
         return api.QuantityValue(args.ref, args.key, value)
 
+    def granted(self, args, origin):
+        return self.sessions.grants(args.session, origin, args.ref)
+
     def approval(self, args):
-        return self.devices.proposed(args.ref, args.key, args.value)
+        within = self.sessions.found(args.session)
+        return self.devices.proposed(args.ref, args.key, args.value, within)
 
     def amended(self, args, answer):
         """The value the person allowed; the sweep it showed is shared."""
@@ -81,12 +93,16 @@ class SetQuantity(Handler[api.SetQuantity, api.QuantityValue]):
 class CallAction(Handler[api.CallAction, api.ActionResult]):
     operation = api.CallAction
 
-    def __init__(self, devices: DeviceAccess):
+    def __init__(self, devices: DeviceAccess, sessions: Sessions):
         self.devices = devices
+        self.sessions = sessions
 
     def handle(self, args, origin):
+        changes = self.devices.action(args.ref, args.action).changes
+        mode = SHARED if changes else READ
+        within = self.sessions.within(args.session, origin, args.ref, mode)
         result = self.devices.act(
-            args.ref, args.action, args.arguments, origin, args.share
+            args.ref, args.action, args.arguments, origin, args.share, within
         )
         return api.ActionResult(args.ref, args.action, action_result(result))
 
@@ -95,8 +111,14 @@ class CallAction(Handler[api.CallAction, api.ActionResult]):
         changes = self.devices.action(args.ref, args.action).changes
         return self.operation.rights if changes else Rights.READ
 
+    def granted(self, args, origin):
+        return self.sessions.grants(args.session, origin, args.ref)
+
     def approval(self, args):
-        return self.devices.proposed_action(args.ref, args.action, args.arguments)
+        within = self.sessions.found(args.session)
+        return self.devices.proposed_action(
+            args.ref, args.action, args.arguments, within
+        )
 
     def amended(self, args, answer):
         return msgspec.structs.replace(args, share=True)

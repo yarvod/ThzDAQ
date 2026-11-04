@@ -5,6 +5,7 @@ Scale factors convert UI values at the boundary: ``5 * GHZ`` -> Hz, ``hz / GHZ``
 
 import math
 import re
+from typing import Tuple
 
 GHZ = 1e9
 MHZ = 1e6
@@ -46,6 +47,17 @@ def prefix_factor(prefix: str) -> float:
         if name == prefix:
             return factor
     raise ValueError(f"Unknown SI prefix {prefix!r}")
+
+
+def unit_scale(unit: str) -> Tuple[str, float]:
+    """A unit as people type it, as the SI unit and the factor to it: "mV" ->
+    ("V", 1e-3), "GHz" -> ("Hz", 1e9); one without a prefix stays ("dBm", 1.0)."""
+    typed = unit.strip().replace("u", "µ")
+    for base in PREFIXED_UNITS:
+        prefix = typed[: -len(base)]
+        if typed.endswith(base) and any(p[0] == prefix for p in prefixes_for(base)):
+            return base, prefix_factor(prefix)
+    return unit.strip(), 1.0
 
 
 def parse_value(text: str, unit: str) -> float:

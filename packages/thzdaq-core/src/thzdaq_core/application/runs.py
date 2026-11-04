@@ -17,7 +17,7 @@ import time
 from collections import OrderedDict
 from itertools import islice
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
 from thzdaq_api.data import encode_values
 from thzdaq_api.errors import ErrorCode, LabError
@@ -26,6 +26,7 @@ from thzdaq_api.events import (
     QuantitySet,
     MeasurementFinished,
     MeasurementLog,
+    MeasurementPlotted,
     MeasurementProgress,
     MeasurementRecords,
     MeasurementStarted,
@@ -34,6 +35,7 @@ from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
 from thzdaq_api.measurements import (
     PLANNED,
     MeasurementSummary,
+    PlotInfo,
     RunInfo,
     RunSnapshot,
 )
@@ -67,6 +69,7 @@ class _Run(RunObserver):
         accepted: Tuple[Lease, ...],
         ended: Callable[["_Run"], None],
         workspace: Path,
+        shared: Collection[str] = (),
     ):
         self.id = run_id
         self.procedure = procedure
@@ -75,6 +78,7 @@ class _Run(RunObserver):
         self.events = events
         self.known = known
         self.accepted = accepted  # conflicts started with (share)
+        self.shared = set(shared)  # devices it shares while another sweeps them
         self._ended = ended
         self.runner: Optional[MeasurementRunner] = None
         self.measurement: Optional[Measurement] = None
@@ -82,6 +86,8 @@ class _Run(RunObserver):
         self.started: Optional[RunInfo] = None  # as it started
         self.ready = threading.Event()  # started, or refused
         self.ended = threading.Event()
+        # Its end is told once its file holds it: until then it runs
+        self.final = False
         self.done, self.total = 0, procedure.estimate_steps()
         self._batch: Dict[str, List[Dict[str, Any]]] = {}
         self._flushed = time.monotonic()
@@ -124,15 +130,15 @@ class _Run(RunObserver):
             id=m.id,
             procedure=m.procedure,
             title=m.title,
-            status=m.status,
+            status=m.status if self.final else RUNNING,
             devices={slot: use.ref for slot, use in m.devices.items()},
             origin=self.origin,
             comment=m.comment,
             done=self.done,
             total=self.total,
             started=m.started,
-            finished=m.finished,
-            error=m.error,
+            finished=m.finished if self.final else None,
+            error=m.error if self.final else None,
             path=m.metadata.get("path"),
             workspace=str(self.workspace),
             conflicts=tuple(m.metadata.get(CONFLICTS, ())),
@@ -170,6 +176,9 @@ class _Run(RunObserver):
         if time.monotonic() - self._flushed >= BATCH_S:
             self._flush()
 
+    def on_flush(self) -> None:
+        self._flush()
+
     def on_set(self, ref: str, key: str, value: float) -> None:
         self._unset[ref, key] = value
         self._tell_due()
@@ -199,9 +208,16 @@ class _Run(RunObserver):
         self._flush()
         self.events.publish(MeasurementLog(self.measurement.id, message))
 
+    def on_plot(self, plot: PlotInfo) -> None:
+        with self._snapshot_lock:
+            self._flush()
+            self._plots += (plot,)
+            self._publish(MeasurementPlotted(self.id, plot))
+
     def on_finished(self, measurement: Measurement) -> None:
         for quantity in list(self._unset):
             self._tell(quantity)  # the last values, however recent
+        self.final = True
         with self._snapshot_lock:
             self._flush()
             self._visible = self.info()
@@ -270,9 +286,11 @@ class Runs:
         share: bool = False,
         workspace: Optional[str] = None,
         dry_run: bool = False,
+        shares: Collection[str] = (),
     ) -> RunInfo:
-        """dry_run: check all a start checks, open and write nothing, and
-        return the run it would be (planned, number 0)."""
+        """share: every device it uses may be swept by another measurement too,
+        shares: these devices may. dry_run: check all a start checks, open and
+        write nothing, and return the run it would be (planned, number 0)."""
         folder = self.workspaces.folder(workspace)
         try:
             procedure.validate()
@@ -283,13 +301,14 @@ class Runs:
         for slot, device in refs.items():
             mode = procedure.slot_mode(slot)
             modes[device] = max(modes.get(device, READ), mode, key=STRENGTH.index)
+        shared = tuple(modes) if share else tuple(shares)
         if dry_run:
-            return self._plan(procedure, refs, modes, comment, origin, share, folder)
+            return self._plan(procedure, refs, modes, comment, origin, shared, folder)
         store = self.workspaces.store(folder)
         with self._lock:
             run_id = self._last_id = max(store.next_id(), self._last_id + 1)
         try:
-            accepted = self.leases.acquire(run_id, procedure.title, modes, share)
+            accepted = self.leases.acquire(run_id, procedure.title, modes, shared)
         except LeaseConflict as e:
             raise conflicting(e) from None
         self._leases_changed()
@@ -297,7 +316,7 @@ class Runs:
             self.note(lease.owner, CONFLICTS, conflict(lease, origin))
         run = _Run(
             run_id, procedure, origin, self.events, self.known, accepted,
-            self._ended, folder,
+            self._ended, folder, shared,
         )  # fmt: skip
         run.runner = MeasurementRunner(self.bench.station, store, [run])
         threading.Thread(
@@ -321,7 +340,7 @@ class Runs:
         modes: Mapping[str, str],
         comment: str,
         origin: str,
-        share: bool,
+        shared: Collection[str],
         folder: Path,
     ) -> RunInfo:
         """The run a start would make, checked without opening anything."""
@@ -329,9 +348,9 @@ class Runs:
             self.bench.station.check(refs, procedure.slots(), procedure.planned())
         except StationError as e:
             raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
-        clashes = self.leases.clashes(0, modes)
-        if clashes and not share:
-            raise conflicting(LeaseConflict(clashes))
+        refused = [c for c in self.leases.clashes(0, modes) if c.device not in shared]
+        if refused:
+            raise conflicting(LeaseConflict(tuple(refused)))
         return RunInfo(
             id=0,
             procedure=procedure.name,
@@ -343,6 +362,28 @@ class Runs:
             total=procedure.estimate_steps(),
             workspace=str(folder),
         )
+
+    def join(self, run_id: int, ref: str, mode: str, share: bool = False) -> None:
+        """A device a running measurement starts using (a script's session
+        reads or sets one it did not name): its lease, the stronger use when
+        it has one; a conflict without share is refused, one with share is
+        noted in both measurements."""
+        run = self._run(run_id)
+        modes = self.leases.held(run_id)
+        modes[ref] = max(modes.get(ref, READ), mode, key=STRENGTH.index)
+        if share:
+            run.shared.add(ref)
+        try:
+            accepted = self.leases.acquire(
+                run_id, run.procedure.title, modes, run.shared
+            )
+        except LeaseConflict as e:
+            raise conflicting(e) from None
+        for lease in accepted:
+            if lease.device == ref:
+                run.note(CONFLICTS, conflict(lease, run.origin))
+                self.note(lease.owner, CONFLICTS, conflict(lease, run.origin))
+        self._leases_changed()
 
     def note(self, run_id: int, key: str, entry: Dict[str, Any]) -> None:
         """Note in a running measurement's metadata (what others did to its

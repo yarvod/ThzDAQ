@@ -72,7 +72,7 @@ def test_failures_say_what_is_wrong(lab, operation, code):
 
 def test_a_swept_device_takes_a_change_only_with_share_and_a_read_always(lab):
     leases = lab.assembled.runs.leases
-    leases.acquire(7, "a sweep", {"spectrum_analyzer_1": EXCLUSIVE}, share=False)
+    leases.acquire(7, "a sweep", {"spectrum_analyzer_1": EXCLUSIVE})
     configure = {"center": 6e9, "span": 1e9}
     with pytest.raises(LabError) as caught:
         lab.call(

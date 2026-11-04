@@ -8,6 +8,10 @@ the rules nobody changes: they never change the profile or answer for a
 person, and a call that may harm the bench (a dangerous step, a jump, a value
 beyond the warn range, another's sweep) waits for a person even where they may
 do it alone.
+
+A call a person allowed already (granted: inside a script's session a person
+allowed at its start) is not asked again, unless the person said agents may
+not do it at all.
 """
 
 from typing import Callable, Dict, Mapping
@@ -42,13 +46,19 @@ class Policy:
         return {**self.agents(), **given}
 
     def decide(
-        self, rights: Rights, origin: str, risky: Callable[[], bool]
+        self,
+        rights: Rights,
+        origin: str,
+        risky: Callable[[], bool],
+        granted: Callable[[], bool] = lambda: False,
     ) -> Decision:
         """risky: whether the call may harm the bench (asked only when an
-        agent may otherwise do it alone)."""
+        agent may otherwise do it alone); granted: a person allowed it already."""
         if not agent(origin):
             return Decision.ALLOW
         decision = self.agents()[rights]
+        if decision is Decision.ASK and granted():
+            decision = Decision.ALLOW
         if decision is Decision.ALLOW and rights not in CALM and risky():
             return Decision.ASK
         return decision
