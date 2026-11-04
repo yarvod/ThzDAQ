@@ -81,6 +81,7 @@ from thzdaq_api.script import (
 from thzdaq_api.scripts import SCRIPT_ID_ENV, SIMULATE_ENV
 from thzdaq_api.sessions import SILENT_S, StartSession
 from thzdaq_api.terminal import person_here
+from thzdaq_api.workspace import chosen, expected_profile, profile_warning
 
 R = TypeVar("R")
 WAIT_S = 1.0  # how often wait() tells the progress
@@ -217,11 +218,12 @@ class Bench:
         script=None,
         approve: Optional[Callable[[Callable[[], RunInfo]], RunInfo]] = None,
     ):
-        """workspace: the folder whose data/ gets its measurements (this one
-        when not given); script: the ScriptSource its sessions keep; approve:
-        how a start a person allows is called (asked in this terminal too)."""
+        """workspace: the folder whose data/ gets its measurements (None: the
+        program's, where the daemon writes); script: the ScriptSource its
+        sessions keep; approve: how a start a person allows is called (asked
+        in this terminal too)."""
         self.lab = lab
-        self.workspace = Path(workspace or Path.cwd()).resolve()
+        self.workspace = Path(workspace).resolve() if workspace else None
         self.script = script
         self.approve = approve or (lambda call: call())
         self.session: Optional[Session] = None  # the with block running now
@@ -230,6 +232,10 @@ class Bench:
     @property
     def origin(self) -> str:
         return self.lab.origin
+
+    def _folder(self) -> Optional[str]:
+        """The workspace as operations name it."""
+        return str(self.workspace) if self.workspace else None
 
     def _session_id(self) -> Optional[int]:
         return self.session.id if self.session is not None else None
@@ -334,7 +340,7 @@ class Bench:
             StartMeasurement(
                 procedure=procedure, parameters=values, typed=typed,
                 devices=chosen, comment=comment, share=share,
-                workspace=str(self.workspace),
+                workspace=self._folder(),
             )
         )  # fmt: skip
 
@@ -395,7 +401,7 @@ class Bench:
             share=tuple(ref_of(d) for d in share),
             parameters=dict(parameters or {}),
             comment=comment,
-            workspace=str(self.workspace),
+            workspace=self._folder(),
             script=self.script,
             columns=tuple(described(k, c) for k, c in (columns or {}).items()),
             total=total,
@@ -416,16 +422,24 @@ def connect(
     uses it, as script:<name> (the script's file name by default); the daemon
     is started when none runs. A person at this terminal is asked here too
     what a measurement's start needs allowed. A script the daemon started
-    (thzdaq script start) finds that daemon and its own number by its
-    environment, and is allowed what it was started with."""
+    (thzdaq script start) finds that daemon, its own number and its workspace
+    by its environment, and is allowed what it was started with. Its
+    measurements go to the workspace given, else to the nearest one from here
+    up (thzdaq.toml), else to the program's; a daemon started here loads the
+    profile that workspace expects."""
     path = getattr(sys.modules["__main__"], "__file__", None)  # none in a notebook
     name = name or (Path(path).stem if path else "interactive")
     number = os.environ.get(SCRIPT_ID_ENV)
     if simulate is None:
         simulate = os.environ.get(SIMULATE_ENV) == "1"
     origin = script(name, int(number) if number else None)
-    lab = host.connect_or_start(simulate, None, origin, SCRIPT_CLIENT)
-    folder = Path(workspace or Path.cwd()).resolve()
+    folder = chosen(workspace)
+    lab = host.connect_or_start(
+        simulate, expected_profile(folder), origin, SCRIPT_CLIENT
+    )
+    warning = profile_warning(lab, folder)
+    if warning:
+        print(warning, file=sys.stderr)
     approve = None
     if person_here():
         person = RemoteLab(lab.host, CLI, ANSWERING_CLI, find=lab.find)

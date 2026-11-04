@@ -78,15 +78,18 @@ def described(key: str, given: Described) -> Column:
     return given if isinstance(given, Column) else Column(key, *given)
 
 
-def script_source(path: Optional[str], workspace: Path) -> Optional[ScriptSource]:
+def script_source(
+    path: Optional[str], workspace: Optional[Path]
+) -> Optional[ScriptSource]:
     """The script a process runs, kept with its measurements: its path (within
-    the workspace when it is there), hash and text; None without a file (a
+    the workspace when it is in one), hash and text; None without a file (a
     notebook, the interpreter's prompt)."""
     if path is None:
         return None
     file = Path(path).resolve()
     data = file.read_bytes()
-    shown = file.relative_to(workspace) if file.is_relative_to(workspace) else file
+    inside = workspace is not None and file.is_relative_to(workspace)
+    shown = file.relative_to(workspace) if inside else file
     text = data.decode("utf-8", errors="replace")
     return ScriptSource(shown.as_posix(), hashlib.sha256(data).hexdigest(), text)
 

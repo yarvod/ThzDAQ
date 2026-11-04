@@ -1,8 +1,8 @@
 """Scripts the daemon runs (thzdaq script start): a file run by an interpreter
 apart from any terminal, so it outlives the one it was started from. Its
 output goes to <workspace>/data/scripts/<id>.log; it finds the daemon that
-started it by THZDAQ_SCRIPT_ID and THZDAQ_SIMULATE and calls it as
-script:<name>@<id>.
+started it by THZDAQ_SCRIPT_ID and THZDAQ_SIMULATE, works in its workspace
+(THZDAQ_WORKSPACE) and calls the daemon as script:<name>@<id>.
 
 A script started without a person nearby may be allowed in advance what it
 would otherwise ask for (allow): set:<ref> its quantities, call:<ref> its

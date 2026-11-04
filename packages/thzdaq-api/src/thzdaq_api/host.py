@@ -39,6 +39,7 @@ START_S = 15.0  # how long a client waits for a daemon it started
 LOG_KEEP = 5_000_000  # bytes of log kept before the next start moves it aside
 SERVE = "--serve"  # how a built program runs as the daemon
 PROGRAM = "ThzDAQ"  # the built program: the window, and the daemon with SERVE
+CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
 
 
 @dataclass(frozen=True)
@@ -87,10 +88,15 @@ def program_dir() -> Path:
     return Path.cwd()
 
 
+def executable(folder: Path, name: str) -> Path:
+    """A built program in folder (.exe on Windows, no suffix elsewhere)."""
+    return folder / (name + (".exe" if sys.platform == "win32" else ""))
+
+
 def program_file() -> Path:
     """The built program of this installation (ThzDAQ.exe next to
-    thzdaq-cli.exe; no suffix on macOS and Linux)."""
-    return program_dir() / (PROGRAM + (".exe" if sys.platform == "win32" else ""))
+    thzdaq-cli.exe)."""
+    return executable(program_dir(), PROGRAM)
 
 
 def install_file() -> Path:
@@ -192,22 +198,57 @@ def terminate(pid: int) -> None:
     os.kill(pid, signal.SIGTERM if sys.platform == "win32" else signal.SIGKILL)
 
 
-def start_command() -> List[str]:
-    """How the daemon starts: the built program of this installation with
-    --serve; else this Python with the daemon package; else the build the
-    install file names. LabError when there is none of them."""
+def built_or_installed(name: str, package: str, *arguments: str) -> Optional[List[str]]:
+    """How a program of ThzDAQ starts: the built one of this installation
+    (name) with arguments; else this Python with its package; else the one of
+    the build the install file names. None when there is none of them."""
     if frozen():
-        return [str(program_file()), SERVE]
-    if util.find_spec("thzdaq_daemon") is not None:
-        return [sys.executable, "-m", "thzdaq_daemon"]
+        return [str(executable(program_dir(), name)), *arguments]
+    if util.find_spec(package) is not None:
+        return [sys.executable, "-m", package]
     installed = read_installation()
     if installed is not None and Path(installed.program).exists():
-        return [installed.program, SERVE]
-    raise LabError(
-        ErrorCode.UNREACHABLE,
-        "No daemon runs and none can be started here",
-        "install thzdaq[daemon], or start the ThzDAQ build once",
-    )
+        return [str(executable(Path(installed.program).parent, name)), *arguments]
+    return None
+
+
+def start_command() -> List[str]:
+    """How the daemon starts: the built program with --serve, or the daemon
+    package. LabError when there is neither."""
+    found = built_or_installed(PROGRAM, "thzdaq_daemon", SERVE)
+    if found is None:
+        raise LabError(
+            ErrorCode.UNREACHABLE,
+            "No daemon runs and none can be started here",
+            "install thzdaq[daemon], or start the ThzDAQ build once",
+        )
+    return found
+
+
+def window_command() -> List[str]:
+    """How the window starts: the built program, or the GUI package. LabError
+    when there is neither."""
+    found = built_or_installed(PROGRAM, "thzdaq_gui")
+    if found is None:
+        raise LabError(
+            ErrorCode.NOT_FOUND,
+            "No ThzDAQ window is installed here",
+            "install thzdaq[gui], or start the ThzDAQ build once",
+        )
+    return found
+
+
+def cli_command() -> List[str]:
+    """How the command line starts from another program (the window): the
+    built thzdaq-cli, or the CLI package. LabError when there is neither."""
+    found = built_or_installed(CLI_PROGRAM, "thzdaq_cli")
+    if found is None:
+        raise LabError(
+            ErrorCode.NOT_FOUND,
+            "No thzdaq command is installed here",
+            "install thzdaq, or start the ThzDAQ build once",
+        )
+    return found
 
 
 def apart() -> Dict[str, Any]:
@@ -220,6 +261,19 @@ def apart() -> Dict[str, Any]:
             | subprocess.CREATE_NO_WINDOW
         )
     return dict(start_new_session=True)
+
+
+def start_apart(command: Sequence[str]) -> subprocess.Popen:
+    """Start a program apart from this process, without its output: it
+    outlives this one (a window, an editor)."""
+    return subprocess.Popen(
+        list(command),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        **apart(),
+    )
 
 
 def spawn(command: Sequence[str], files: DaemonFiles) -> subprocess.Popen:

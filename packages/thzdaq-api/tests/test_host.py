@@ -5,9 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import msgspec
 import pytest
 from thzdaq_api import host
-from thzdaq_api.daemon import API_VERSION, HostInfo
+from thzdaq_api.daemon import API_VERSION, HostInfo, Installation
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.host import (
     SERVE,
@@ -109,3 +110,31 @@ def test_a_client_without_the_daemon_starts_the_build_that_started_last(
     program.unlink()  # the build was deleted since
     with pytest.raises(LabError):
         start_command()
+
+
+def test_the_window_and_the_command_line_start_as_installed(tmp_path, monkeypatch):
+    # From sources and PyPI: their packages in this Python
+    assert host.window_command() == [sys.executable, "-m", "thzdaq_gui"]
+    assert host.cli_command() == [sys.executable, "-m", "thzdaq_cli"]
+    # A build: its programs, next to each other
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "thzdaq-cli.exe"))
+    assert host.window_command() == [str(program_file())]
+    (cli,) = host.cli_command()
+    assert Path(cli).parent == tmp_path and Path(cli).stem == "thzdaq-cli"
+
+
+def test_a_client_without_the_window_opens_the_builds(tmp_path, monkeypatch):
+    monkeypatch.setattr(host, "install_file", lambda: tmp_path / "install.json")
+    monkeypatch.setattr(host.util, "find_spec", lambda name: None)
+    with pytest.raises(LabError) as caught:
+        host.window_command()
+    assert "thzdaq[gui]" in caught.value.hint
+    program = host.executable(tmp_path / "build", "ThzDAQ")
+    program.parent.mkdir()
+    program.write_bytes(b"")
+    host.install_file().write_bytes(
+        msgspec.json.encode(Installation(str(program), "1.0"))
+    )
+    assert host.window_command() == [str(program)]
+    assert host.cli_command() == [str(host.executable(program.parent, "thzdaq-cli"))]

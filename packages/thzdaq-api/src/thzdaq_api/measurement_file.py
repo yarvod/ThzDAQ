@@ -46,6 +46,8 @@ CONFLICTS = "conflicts"
 INTERACTIONS = "interactions"
 # Metadata of what a person allowed the script that started it in advance
 ALLOWED = "allowed"
+# Metadata: the copy of the bench profile in its workspace (workspace.ProfileCopy)
+PROFILE = "profile"
 
 
 # Numbers given by the store (1, 2, 3, ... per data folder); 0 until numbered.

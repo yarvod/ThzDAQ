@@ -87,16 +87,16 @@ class GetStation(Operation[StationProfile]):
 
 
 class LoadStation(Operation[StationProfile]):
-    """Work with another profile (a YAML file). Refused while measurements
-    run."""
+    """Work with another profile: a YAML file, or a profile of the program by
+    its name (lab: stations/lab.yaml). Refused while measurements run."""
 
     rights = Rights.STATION
     path: str
 
 
 class NewStation(Operation[StationProfile]):
-    """Start an empty profile in a new file and work with it. Refused while
-    measurements run."""
+    """Start an empty profile in a new file (a path, or a name of the
+    program's stations/) and work with it. Refused while measurements run."""
 
     rights = Rights.STATION
     path: str
