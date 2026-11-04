@@ -6,8 +6,9 @@ installed (the build has it): the package adds the command through an entry
 point, so the command line never imports it. agent-setup writes into a folder
 what the agents read there: the MCP server as this very command starts it
 from any folder (.mcp.json for Claude Code, .codex/config.toml for Codex),
-and the guide for agents (AGENTS.md, CLAUDE.md refers to it). Files a person
-wrote stay: the MCP entry is added to theirs.
+and the guide for agents (AGENTS.md, CLAUDE.md refers to it); the folder
+becomes a workspace (thzdaq.toml) when it is none. Files a person wrote stay:
+the MCP entry is added to theirs.
 """
 
 import json
@@ -19,8 +20,17 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from thzdaq_api import guides, host
+from thzdaq_api.workspace import FILE, create
 
-from thzdaq_cli.client import FAILED, OK, PROG, Client, Mistyped
+from thzdaq_cli.client import (
+    FAILED,
+    HERE,
+    OK,
+    PROG,
+    THIS_FOLDER,
+    Client,
+    Mistyped,
+)
 
 PLUGINS = "thzdaq.cli"  # entry points of the packages that add a command
 MCP = "mcp"
@@ -44,13 +54,13 @@ def add(commands) -> None:
         MCP, help="the MCP server for agents, on stdin and stdout"
     )
     serve.add_argument(
-        "--workspace", help="its measurements go to data/ there (default: this folder)"
+        "--workspace", help=f"its measurements go to data/ there ({HERE})"
     )
     serve.set_defaults(run=serve_mcp)
     setup = commands.add_parser(
         "agent-setup", help="let Claude Code and Codex measure in a folder"
     )
-    setup.add_argument("folder", nargs="?", default=".", help="default: this folder")
+    setup.add_argument("folder", nargs="?", default=".", help=THIS_FOLDER)
     setup.add_argument(
         "--force", action="store_true", help=f"replace {GUIDE} with this version's"
     )
@@ -145,17 +155,26 @@ def claude_guide(path: Path) -> str:
     return ADDED
 
 
-def agent_setup(args, client: Client) -> int:
-    folder = Path(args.folder).resolve()
+def setup(folder: Path, simulate: bool, force: bool = False) -> Dict[str, Any]:
+    """The files agents read, written into folder: what became of each."""
     folder.mkdir(parents=True, exist_ok=True)
-    started = server_command(args.simulate, folder)
+    started = server_command(simulate, folder)
     files = {
         CLAUDE_CONFIG: claude_config(folder / CLAUDE_CONFIG, started),
         str(CODEX_CONFIG): codex_config(folder / CODEX_CONFIG, started),
-        GUIDE: guide(folder / GUIDE, args.force),
+        GUIDE: guide(folder / GUIDE, force),
         CLAUDE_GUIDE: claude_guide(folder / CLAUDE_GUIDE),
     }
-    told = {"folder": str(folder), "server": started, "files": files}
+    return {"folder": str(folder), "server": started, "files": files}
+
+
+def agent_setup(args, client: Client) -> int:
+    """The folder becomes a workspace too (thzdaq.toml, for the daemon's
+    profile): what the agent runs there with thzdaq measures there as well."""
+    folder = Path(args.folder).resolve()
+    made = create(folder, client.daemons_profile())
+    told = setup(folder, args.simulate, args.force)
+    told["files"] = {FILE: WRITTEN if made else KEPT, **told["files"]}
     client.out(told, setup_text)
     return OK
 

@@ -14,7 +14,6 @@ from thzdaq_api.lab import Lab
 from thzdaq_api.leases import LeaseInfo, ListLeases
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.measurements import (
-    DATA,
     ListProcedures,
     ListRuns,
     ProcedureSummary,
@@ -41,6 +40,7 @@ from thzdaq_gui.settings import stations_dir
 from thzdaq_gui.models.run import RunModel
 from thzdaq_gui.models.runs import RunEvents
 from thzdaq_gui.workers import DeviceWorker
+from thzdaq_gui.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 R = TypeVar("R")
@@ -50,8 +50,9 @@ Connect = Callable[[bool], Lab]
 
 
 class Session(QObject):
-    """What the window works with: the lab, the profile it works with, the data
-    of this program's workspace and the calls in the background.
+    """What the window works with: the lab, the profile it works with, its
+    workspace (whose data/ gets its measurements), the measurements it shows
+    and the calls in the background.
 
     lab is the bench as the daemon's clients call it, the daemon of the
     instruments or of their simulator; bridge brings its events to the GUI
@@ -70,8 +71,8 @@ class Session(QObject):
         super().__init__(parent)
         # Not "connect": that name of a QObject connects its signals
         self.lab_of = lab_of
-        self.workspace = Path(workspace)  # its data/ keeps this program's measurements
-        self.data_root = self.workspace / DATA
+        # Its data/ gets the measurements this window starts
+        self.workspace = Workspace(workspace, self)
         self.calls = DeviceWorker(self)
         self.measurements = MeasurementsModel(self, self)
         # Where file dialogs start until the user picks a folder of a kind
@@ -86,6 +87,7 @@ class Session(QObject):
         self.left: Optional[Lab] = None
         self.bridge = Bridge(self)
         self.run_events = RunEvents(self)
+        self.run_events.remembered.connect(self.measurements.remember)
         self.values = {}
         self.bridge.values.connect(self._values_heard)
         self.bridge.quantity_set.connect(self._quantity_heard)
@@ -119,10 +121,17 @@ class Session(QObject):
         self.run_events.refresh()
         self.bridge.listen(lab, snapshot.seq)
 
+    @property
+    def data_root(self) -> Path:
+        return self.workspace.data
+
     def run_model(self) -> RunModel:
-        """The runs of one procedure box; Data lists what they measure."""
+        """The runs of one procedure box; Data lists what they measure, with
+        the workspace each was made in."""
         run = RunModel(self, self.title_of, self)
-        run.started.connect(self.measurements.add)
+        run.started.connect(
+            lambda measurement: self.measurements.add(measurement, run.run.workspace)
+        )
         run.finished.connect(self.measurements.refresh_item)
         self.runs.append(run)
         return run

@@ -51,12 +51,14 @@ def lab(tmp_path):
 def thzdaq(lab, capsys, tmp_path, monkeypatch):
     """thzdaq ARGS on the lab, in tmp_path (the workspace of its runs), as the
     lab's origin, listening as the command's kind: (exit code, stdout, stderr)."""
+    from thzdaq_api.workspace import WORKSPACE_ENV
     from thzdaq_cli.app import main
     from thzdaq_core.application.local import LocalLab
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv(WORKSPACE_ENV, raising=False)
 
-    def connect(simulate, autostart, kind):
+    def connect(simulate, autostart, kind, station):
         return LocalLab(lab.assembled, lab.origin, kind)
 
     def run(*argv):

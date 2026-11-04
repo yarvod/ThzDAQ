@@ -22,6 +22,7 @@ from thzdaq_api.approvals import ANSWER_S
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.origins import MCP_CLIENT
 from thzdaq_api.remote import RemoteLab
+from thzdaq_api.workspace import chosen, expected_profile
 
 from thzdaq_mcp import resources
 from thzdaq_mcp.bench import Bench, Connect
@@ -61,7 +62,7 @@ def failed(error: LabError) -> types.CallToolResult:
     )
 
 
-def server(bench: Bench, workspace: Path) -> Server:
+def server(bench: Bench, workspace: Optional[Path]) -> Server:
     found = by_name(tools(workspace))
 
     async def list_tools(ctx, params) -> types.ListToolsResult:
@@ -128,20 +129,23 @@ def server(bench: Bench, workspace: Path) -> Server:
     )
 
 
-def reach(simulate: bool) -> Connect:
-    """The daemon of the bench, or of its simulator; started when none runs."""
+def reach(simulate: bool, station: Optional[str] = None) -> Connect:
+    """The daemon of the bench, or of its simulator; started when none runs,
+    with the profile station."""
 
     def connect(origin: str) -> RemoteLab:
-        return host.connect_or_start(simulate, None, origin, MCP_CLIENT)
+        return host.connect_or_start(simulate, station, origin, MCP_CLIENT)
 
     return connect
 
 
 def serve(simulate: bool = False, workspace: Optional[str] = None) -> int:
     """Serve on stdin and stdout until the client closes them; measurements
-    go to workspace (the folder it was started in when not given)."""
-    bench = Bench(reach(simulate))
-    found = server(bench, Path(workspace or Path.cwd()).resolve())
+    go to workspace, else to the nearest one up from the folder it was
+    started in (thzdaq.toml), else to the program's."""
+    folder = chosen(workspace)
+    bench = Bench(reach(simulate, expected_profile(folder)))
+    found = server(bench, folder)
 
     async def run() -> None:
         async with stdio_server() as (read, write):

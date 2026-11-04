@@ -1,8 +1,13 @@
-"""Measurements of this session (and files opened) as a table model for the Data dock.
+"""Measurements of this window as a table model for the Data dock: those it
+started or saw running, those the daemon remembers (their files are read
+when they are plotted) and files opened. Each knows the workspace it was
+made in: Data shows the window's own, and the others on asking, marked with
+where they are from.
 
 A comment goes to the daemon (set_comment): it writes the file, or keeps the
 comment of a running measurement with its data."""
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -18,9 +23,10 @@ from thzdaq_api.measurement_file import (
     read_measurement,
     write_measurement,
 )
-from thzdaq_api.measurements import SetComment
+from thzdaq_api.measurements import RunInfo, SetComment
 
 from thzdaq_gui import theme
+from thzdaq_gui.models.run import measurement_of
 
 COLUMNS = ("Id", "Measurement", "Comment", "Started", "Finished", "Status", "Points")
 STATUS_COLORS = {
@@ -45,6 +51,13 @@ def conflicts_text(conflicts) -> str:
     return "Conflicts accepted (share):\n" + "\n".join(lines)
 
 
+@dataclass
+class Row:
+    measurement: Measurement
+    workspace: Optional[str]  # where it was made; None: a file opened here
+    run: Optional[RunInfo] = None  # a run the daemon remembers, its file unread
+
+
 class MeasurementsModel(QAbstractTableModel):
     """Newest first; comments are editable and saved to the file at once."""
 
@@ -52,12 +65,27 @@ class MeasurementsModel(QAbstractTableModel):
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
-        self.session = session  # its lab writes comments, its worker calls it
-        self.items: List[Measurement] = []
+        # Its lab writes comments, its worker calls it, its workspace is here
+        self.session = session
+        self.rows: List[Row] = []
+        session.workspace.changed.connect(self.refresh)
+
+    @property
+    def items(self) -> List[Measurement]:
+        return [row.measurement for row in self.rows]
+
+    def measured(self) -> List[Measurement]:
+        """Those whose records are here (a remembered run's once plotted)."""
+        return [row.measurement for row in self.rows if row.run is None]
+
+    def here(self, row: int) -> bool:
+        """Made in the window's workspace, or opened here."""
+        workspace = self.rows[row].workspace
+        return workspace is None or self.session.workspace.holds(workspace)
 
     # Qt model
     def rowCount(self, parent=QModelIndex()) -> int:
-        return 0 if parent.isValid() else len(self.items)
+        return 0 if parent.isValid() else len(self.rows)
 
     def columnCount(self, parent=QModelIndex()) -> int:
         return len(COLUMNS)
@@ -76,18 +104,23 @@ class MeasurementsModel(QAbstractTableModel):
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-        item = self.items[index.row()]
+        row = self.rows[index.row()]
+        item = row.measurement
         column = index.column()
+        elsewhere = not self.here(index.row())
         if role in (Qt.DisplayRole, Qt.EditRole):
+            title = item.title or item.procedure
             return (
                 item.id,
-                item.title or item.procedure,
+                f"{title} · from {Path(row.workspace).name}" if elsewhere else title,
                 item.comment,
                 short_time(item.started),
                 short_time(item.finished),
                 item.status,
-                item.size,
+                row.run.done if row.run is not None else item.size,
             )[column]
+        if role == Qt.ToolTipRole and column == 1 and elsewhere:
+            return f"Measured in {row.workspace}"
         conflicts = item.metadata.get(CONFLICTS) or ()
         if role == Qt.ForegroundRole and column == 5:
             from PySide6.QtGui import QColor
@@ -104,7 +137,7 @@ class MeasurementsModel(QAbstractTableModel):
     def setData(self, index, value, role=Qt.EditRole) -> bool:
         if role != Qt.EditRole or index.column() != 2:
             return False
-        item = self.items[index.row()]
+        item = self.rows[index.row()].measurement
         item.comment = str(value)
         path = item.metadata.get("path")
         if path:
@@ -115,39 +148,74 @@ class MeasurementsModel(QAbstractTableModel):
 
     # Items
     def measurement(self, row: int) -> Measurement:
-        return self.items[row]
+        """With its records: a remembered run's file is read now (it stays
+        as the daemon told it when the file is gone)."""
+        found = self.rows[row]
+        if found.run is not None:
+            try:
+                found.measurement = read_measurement(found.run.path)
+            except (OSError, ValueError):
+                return found.measurement
+            found.run = None
+            self._changed(row)
+        return found.measurement
 
-    def add(self, measurement: Measurement) -> None:
+    def add(self, measurement: Measurement, workspace: Optional[str] = None) -> None:
+        """A measurement made in workspace (None: a file opened here)."""
         if any(item is measurement for item in self.items):
             return
-        self.beginInsertRows(QModelIndex(), 0, 0)
-        self.items.insert(0, measurement)
-        self.endInsertRows()
+        self._insert(Row(measurement, workspace))
         self.measurement_added.emit(measurement)
+
+    def remember(self, run: RunInfo) -> None:
+        """A run that ended before this window saw it, as the daemon remembers
+        it; its file is read when it is plotted."""
+        if run.path is None or self._row_of(run.path) is not None:
+            return
+        self._insert(
+            Row(measurement_of(run, self.session.title_of), run.workspace, run)
+        )
+
+    def _insert(self, row: Row) -> None:
+        self.beginInsertRows(QModelIndex(), 0, 0)
+        self.rows.insert(0, row)
+        self.endInsertRows()
+
+    def _row_of(self, path: str) -> Optional[int]:
+        """The row of the measurement whose file is path; None for none."""
+        return next(
+            (
+                row
+                for row, item in enumerate(self.items)
+                if item.metadata.get("path") == path
+            ),
+            None,
+        )
 
     def refresh_item(self, measurement: Measurement) -> None:
         for row, item in enumerate(self.items):
             if item is measurement:
-                self.dataChanged.emit(
-                    self.index(row, 0), self.index(row, len(COLUMNS) - 1)
-                )
+                self._changed(row)
+
+    def _changed(self, row: int) -> None:
+        self.dataChanged.emit(self.index(row, 0), self.index(row, len(COLUMNS) - 1))
 
     def refresh(self) -> None:
-        if self.items:
+        if self.rows:
             self.dataChanged.emit(
-                self.index(0, 0), self.index(len(self.items) - 1, len(COLUMNS) - 1)
+                self.index(0, 0), self.index(len(self.rows) - 1, len(COLUMNS) - 1)
             )
 
     def remove(self, row: int) -> None:
         self.beginRemoveRows(QModelIndex(), row, row)
-        del self.items[row]
+        del self.rows[row]
         self.endRemoveRows()
 
     def open(self, path) -> Measurement:
         path = str(Path(path))
-        for item in self.items:
-            if item.metadata.get("path") == path:
-                return item
+        listed = self._row_of(path)
+        if listed is not None:
+            return self.measurement(listed)
         measurement = read_measurement(path)
         self.add(measurement)
         return measurement

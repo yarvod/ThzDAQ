@@ -29,6 +29,28 @@ from thzdaq_api.measurements import (
 )
 
 
+def measurement_of(run: RunInfo, title_of: Callable[[str], str]) -> Measurement:
+    """A run as a measurement without its records (they come by events, or
+    from its file); the conflicts it accepted as its file keeps them."""
+    metadata: Dict[str, Any] = {"path": run.path} if run.path else {}
+    if run.conflicts:
+        metadata[CONFLICTS] = list(run.conflicts)
+    return Measurement(
+        procedure=run.procedure,
+        title=run.title,
+        id=run.id,
+        status=run.status,
+        started=run.started,
+        finished=run.finished,
+        error=run.error,
+        comment=run.comment,
+        devices={
+            slot: DeviceUse(ref, title_of(ref)) for slot, ref in run.devices.items()
+        },
+        metadata=metadata,
+    )
+
+
 class RunModel(QObject):
     started = Signal(object)  # Measurement, filled as records come
     record = Signal(str, object)  # table, record
@@ -95,7 +117,7 @@ class RunModel(QObject):
             parameters=dict(parameters),
             devices=dict(devices),
             comment=comment,
-            workspace=str(self.session.workspace),
+            workspace=str(self.session.workspace.folder),
         )
 
     def _start(self, operation: StartMeasurement) -> None:
@@ -175,20 +197,8 @@ class RunModel(QObject):
         self.run = run
         self.plots = body.plots
         self._set_running(True)
-        self.measurement = Measurement(
-            procedure=run.procedure,
-            title=run.title,
-            id=run.id,
-            status=RUNNING,
-            started=run.started,
-            comment=run.comment,
-            devices={
-                slot: DeviceUse(ref, self.title_of(ref))
-                for slot, ref in run.devices.items()
-            },
-            metadata={"path": run.path} if run.path else {},
-        )
-        self._noted(run)
+        self.measurement = measurement_of(run, self.title_of)
+        self.measurement.status = RUNNING
         self.started.emit(self.measurement)
 
     def _on_records(self, body: events.MeasurementRecords) -> None:

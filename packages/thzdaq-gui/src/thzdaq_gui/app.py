@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from thzdaq_api.errors import LabError
 from thzdaq_api.host import connect_or_start
 from thzdaq_api.origins import GUI
+from thzdaq_api.workspace import NO_PROFILE, expected_profile, profile_path
 
 from thzdaq_gui import theme
 from thzdaq_gui.main_window import MainWindow
@@ -25,6 +26,7 @@ from thzdaq_gui.settings import (
     use_file,
 )
 from thzdaq_gui.wording import STATION_PROFILE
+from thzdaq_gui.workspace import default_workspace
 
 DAEMON = "ThzDAQ daemon"
 ORIGIN = KIND = GUI  # who this program is to the daemon
@@ -42,7 +44,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "--workspace",
-        help="folder whose data/ keeps the measurements (default: the program's)",
+        help="the folder whose data/ gets the measurements (default: the one "
+        "made the default, else the program's)",
     )
     parser.add_argument(
         "--settings", help="keep settings in this INI file instead of the registry"
@@ -75,10 +78,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     from thzdaq_gui.updates import clean_leftovers
 
     clean_leftovers()
-    station = start_profile(args.station)
+    folder = Path(args.workspace) if args.workspace else default_workspace()
+    station = start_profile(args.station, folder)
     session = Session(
-        lambda simulate: connect_or_start(simulate, station, ORIGIN, KIND),
-        args.workspace or app_dir(),
+        lambda simulate: connect_or_start(simulate, station, ORIGIN, KIND), folder
     )
     # The lab comes first: its devices get docks the saved layout restores
     splash = QSplashScreen(theme.app_icon().pixmap(128, 128))
@@ -98,17 +101,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     splash.finish(window)
     if args.station:
         offer_profile(window, session, args.station)
+    else:
+        window.workspaceMenu.check_profile()
     if args.quit_after is not None:
         window.confirm_exit = False
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
     return app.exec()
 
 
-def start_profile(given: Optional[str]) -> Optional[str]:
+def start_profile(given: Optional[str], folder: Path) -> Optional[str]:
     """The profile a daemon this program starts loads: the one given, else the
-    last one worked with, else stations/lab.yaml when it exists."""
+    one the workspace expects, else the last one worked with, else
+    stations/lab.yaml when it exists."""
+    try:
+        expected = expected_profile(folder)
+    except LabError:  # a broken thzdaq.toml: the window tells it once open
+        expected = None
     for candidate in (
         given,
+        expected and profile_path(app_dir(), expected),
         settings().value(STATION_PATH),
         stations_dir() / "lab.yaml",
     ):
@@ -125,7 +136,7 @@ def offer_profile(window: MainWindow, session: Session, path: str) -> None:
     answer = QMessageBox.question(
         window,
         STATION_PROFILE,
-        f"The daemon works with {loaded or 'no profile'}. Switch it to {path}?",
+        f"The daemon works with {loaded or NO_PROFILE}. Switch it to {path}?",
     )
     if answer == QMessageBox.Yes:
         window.load_profile(path)

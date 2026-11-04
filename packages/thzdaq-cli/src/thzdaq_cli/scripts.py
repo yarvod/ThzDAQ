@@ -24,7 +24,7 @@ from thzdaq_api.scripts import (
 )
 
 from thzdaq_cli import show
-from thzdaq_cli.client import OK, Client, Mistyped
+from thzdaq_cli.client import HERE, OK, Client, Mistyped
 
 FOLLOW_S = 0.5  # how often logs -f looks for more output, as tail -f does
 RUN_SCRIPT = "run-script"
@@ -49,8 +49,7 @@ def add(commands) -> None:
         help="its measurements share it while another one sweeps it",
     )  # fmt: skip
     start.add_argument(
-        "--workspace",
-        help="its working folder, its log in data/scripts (default: this one)",
+        "--workspace", help=f"its working folder, its log in data/scripts ({HERE})"
     )
     start.set_defaults(run=start_script)
     actions.add_parser("list", help="scripts running and lately ended").set_defaults(
@@ -96,13 +95,12 @@ def script_text(info: ScriptInfo) -> str:
 
 
 def start_script(args, client: Client) -> int:
-    workspace = Path(args.workspace or Path.cwd()).resolve()
     started = client.call(
         StartScript(
             path=str(Path(args.file).resolve()),
             python=interpreter(args.python),
             arguments=tuple(args.passed),
-            workspace=str(workspace),
+            workspace=client.folder(),
             allow=grants(args.allow),
             share=tuple(args.share),
         )

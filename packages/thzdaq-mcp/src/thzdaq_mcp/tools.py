@@ -90,15 +90,16 @@ class Procedure(Tool):
 
 
 class Start(Plain):
-    """A start goes to the agent's folder unless it names another: the file
-    lands in its data/, next to the agent's work."""
+    """A start goes to the agent's workspace unless it names another: the file
+    lands in its data/, next to the agent's work (with none, in the
+    program's)."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Optional[Path]):
         super().__init__(measurements.StartMeasurement, present.run)
         self.workspace = workspace
 
     async def call(self, bench, args, progress):
-        if args.workspace is None:
+        if args.workspace is None and self.workspace is not None:
             args = msgspec.structs.replace(args, workspace=str(self.workspace))
         return await super().call(bench, args, progress)
 
@@ -141,7 +142,7 @@ class Wait(Tool):
             stop()
 
 
-def tools(workspace: Path) -> Tuple[Tool, ...]:
+def tools(workspace: Optional[Path]) -> Tuple[Tool, ...]:
     """The agent's tools; a measurement goes to the workspace unless named."""
     return (
         Plain(devices.ListDevices, present.devices),

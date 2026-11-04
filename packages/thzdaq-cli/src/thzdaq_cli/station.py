@@ -1,4 +1,7 @@
-"""thzdaq station show|load|new: the profile the daemon works with."""
+"""thzdaq station show|load|new: the profile the daemon works with. A profile
+is a YAML file, or one of the program's stations/ by its name (lab)."""
+
+from pathlib import Path
 
 from thzdaq_api.station import (
     DEVICES,
@@ -12,6 +15,8 @@ from thzdaq_api.station import (
     StationProfile,
 )
 
+from thzdaq_api.workspace import is_profile_name
+
 from thzdaq_cli import show
 from thzdaq_cli.client import OK, Client
 
@@ -22,7 +27,9 @@ def add(commands) -> None:
     actions.add_parser("show", help="its instruments and devices").set_defaults(
         run=show_profile
     )
-    load = actions.add_parser("load", help="work with another profile (a YAML file)")
+    load = actions.add_parser(
+        "load", help="work with another profile: a YAML file, or a name in stations/"
+    )
     load.add_argument("path")
     load.set_defaults(run=load_profile)
     new = actions.add_parser("new", help="start an empty profile in a new file")
@@ -49,11 +56,17 @@ def show_profile(args, client: Client) -> int:
     return OK
 
 
+def given(path: str) -> str:
+    """A name stays a name (the daemon finds it); a path is this terminal's."""
+    return path if is_profile_name(path) else str(Path(path).resolve())
+
+
 def load_profile(args, client: Client) -> int:
-    client.out(client.call(LoadStation(path=args.path)), profile_text)
+    client.out(client.call(LoadStation(path=given(args.path))), profile_text)
     return OK
 
 
 def new_profile(args, client: Client) -> int:
-    client.out(client.call(NewStation(path=args.path, title=args.title)), profile_text)
+    started = NewStation(path=given(args.path), title=args.title)
+    client.out(client.call(started), profile_text)
     return OK

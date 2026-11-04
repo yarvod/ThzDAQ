@@ -63,6 +63,9 @@ CUSTOM_GRAPHS = "graphs/custom"
 NAVIGATOR_EXPANDED = "navigator/expanded"
 IV_ANALYSIS = "iv_analysis"
 PRERELEASES = "updates/prereleases"
+RECENT_WORKSPACES = "workspaces/recent"  # newest first
+DEFAULT_WORKSPACE = "workspaces/default"  # opened at start; none: the program's
+EDITOR = "workspaces/editor"  # the program a workspace opens in without VS Code
 
 
 def procedure_key(procedure: str) -> str:

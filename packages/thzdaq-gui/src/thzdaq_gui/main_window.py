@@ -9,6 +9,7 @@ toolbar, and keeps the layout of each mode; the parts live apart:
 - graph_docks.py, device_docks.py: docks that follow the graphs and the station;
 - perspectives.py: saved layouts of Pro;
 - modes.py: what differs in Lite and Pro;
+- workspace_menu.py: the workspace in the File menu;
 - update_dialog.py (Updates), workers.py (HangWatch).
 """
 
@@ -80,6 +81,7 @@ from thzdaq_gui.update_dialog import Updates
 from thzdaq_gui.version import __version__
 from thzdaq_gui.wording import NEW_PROFILE, OPEN_PROFILE, STATION_PROFILE
 from thzdaq_gui.workers import HangWatch
+from thzdaq_gui.workspace_menu import WorkspaceMenu
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +111,8 @@ class MainWindow(QMainWindow):
         )
         # Ask on exit (layout, dump); off for smoke runs that close on a timer
         self.confirm_exit = True
-        self.setWindowTitle(f"ThzDAQ {__version__}")
+        self.show_workspace()
+        session.workspace.changed.connect(self.show_workspace)
         self.setWindowIcon(theme.app_icon())
         self.resize(1500, 900)
         configure_docking()
@@ -135,6 +138,7 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
+        self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()
         self.build_toolbar()
         self.stationLabel = QLabel()
@@ -190,6 +194,8 @@ class MainWindow(QMainWindow):
     def build_menus(self) -> None:
         bar = self.menuBar()
         file = bar.addMenu("&File")
+        self.workspaceMenu.add_to(file)
+        file.addSeparator()
         for text, icon_name, shortcut, slot in (
             (
                 "Open station…",
@@ -377,6 +383,10 @@ class MainWindow(QMainWindow):
         if self.mode.perspectives:
             self.perspectives.add_default()
 
+    def show_workspace(self) -> None:
+        """The title names the workspace: windows in several are told apart."""
+        self.setWindowTitle(f"{self.session.workspace.name} — ThzDAQ {__version__}")
+
     # Station: the profile of the lab the window works with
     def show_station(self) -> None:
         profile = self.session.profile()
@@ -540,7 +550,7 @@ class MainWindow(QMainWindow):
         if self.confirm_exit:
             dialog = ExitDialog(
                 running,
-                self.session.measurements.rowCount(),
+                len(self.session.measurements.measured()),
                 others,
                 status is not None,
                 left,
@@ -566,10 +576,10 @@ class MainWindow(QMainWindow):
         if stop_left:
             self.stop_daemon(self.daemon.stop_left, left.running)
         self.session.shutdown()
-        if dump and self.session.measurements.items:
+        if dump and self.session.measurements.measured():
             try:
                 path = dump_measurements(
-                    self.session.measurements.items, self.session.data_root
+                    self.session.measurements.measured(), self.session.data_root
                 )
                 logger.info(f"Measurements dumped to {path}")
             except OSError as e:

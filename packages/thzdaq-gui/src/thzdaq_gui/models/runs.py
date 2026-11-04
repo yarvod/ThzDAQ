@@ -19,6 +19,7 @@ from thzdaq_gui.models.run import RunModel
 
 class RunEvents(QObject):
     observed = Signal(object)  # RunModel: a run without a local procedure box
+    remembered = Signal(object)  # RunInfo: a run that ended before it was followed
 
     def __init__(self, session):
         super().__init__(session)
@@ -69,7 +70,8 @@ class RunEvents(QObject):
         return model
 
     def refresh(self) -> None:
-        """Catch up after connecting or losing events, including an unseen end."""
+        """Catch up after connecting or losing events, including an unseen end;
+        runs that ended unseen are told as the daemon remembers them."""
         runs = self.session.call(ListRuns())
         identities = {(run.id, run.started, run.path) for run in runs}
         for number, model in list(self.models.items()):
@@ -83,6 +85,8 @@ class RunEvents(QObject):
                 if model is None:
                     model = self._observe(run.id)
                 model.restore(self.session.call(GetRunSnapshot(id=run.id)))
+            elif model is None:
+                self.remembered.emit(run)
 
     def detach(self) -> None:
         for model in self.session.runs:

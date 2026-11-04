@@ -6,7 +6,6 @@ Ctrl+C asks whether to cancel it, and without a terminal leaves it running."""
 
 import queue
 import sys
-from pathlib import Path
 from typing import Any, Callable, Dict, Iterator
 
 from thzdaq_api import events
@@ -31,7 +30,7 @@ from thzdaq_api.measurements import (
 )
 
 from thzdaq_cli import show
-from thzdaq_cli.client import FAILED, OK, Client, Mistyped
+from thzdaq_cli.client import FAILED, HERE, OK, Client, Mistyped
 from thzdaq_cli.devices import assignments
 
 
@@ -52,9 +51,7 @@ def add(commands) -> None:
     run.add_argument(
         "--share", action="store_true", help="also on devices others sweep"
     )
-    run.add_argument(
-        "--workspace", help="its file goes to data/ there (default: this folder)"
-    )
+    run.add_argument("--workspace", help=f"its file goes to data/ there ({HERE})")
     run.add_argument("--dry-run", action="store_true", help="check, start nothing")
     run.add_argument("--detach", action="store_true", help="start it, do not follow")
     run.set_defaults(run=run_procedure)
@@ -155,7 +152,7 @@ def chosen_devices(args, client: Client) -> Dict[str, str]:
 
 
 def run_procedure(args, client: Client) -> int:
-    workspace = str(Path(args.workspace or Path.cwd()).resolve())
+    workspace = client.folder()
     devices = chosen_devices(args, client)
 
     def start(share: bool) -> RunInfo:

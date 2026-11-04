@@ -175,7 +175,7 @@ class GraphDocks:
             self.show(widget)
 
     def add_curve(self, graph) -> None:
-        AddCurveDialog(self.session.measurements.items, graph, self.window).exec()
+        AddCurveDialog(self.session.measurements.measured(), graph, self.window).exec()
 
     def plot(self, measurement) -> None:
         """A saved measurement on the graphs of its procedure."""

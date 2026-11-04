@@ -314,6 +314,8 @@ def test_agent_setup_writes_what_agents_read_in_a_folder(thzdaq, tmp_path):
     assert (folder / "AGENTS.md").read_text() == guides.guide(guides.AGENTS)
     assert (folder / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     assert "written .mcp.json" in out and " ".join(started + args) in out
+    # A workspace: what the agent runs there with thzdaq measures there too
+    assert "written thzdaq.toml" in out and (folder / "thzdaq.toml").exists()
 
 
 def test_agent_setup_keeps_what_a_person_wrote(thzdaq, tmp_path, monkeypatch):

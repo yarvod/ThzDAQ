@@ -25,6 +25,7 @@ from thzdaq_cli import (
     measurements,
     scripts,
     station,
+    workspaces,
 )
 from thzdaq_cli.client import (
     FAILED,
@@ -58,9 +59,19 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not start the daemon when none runs",
     )
-    found.set_defaults(kind=KIND)
+    # Commands that work in a workspace take --workspace; the others the one here
+    found.set_defaults(kind=KIND, workspace=None)
     commands = found.add_subparsers(dest="command", required=True, metavar="COMMAND")
-    for area in (daemon, devices, measurements, scripts, station, approvals, agents):
+    for area in (
+        daemon,
+        devices,
+        measurements,
+        scripts,
+        station,
+        approvals,
+        agents,
+        workspaces,
+    ):
         area.add(commands)
     return found
 

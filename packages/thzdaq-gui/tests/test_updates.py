@@ -390,7 +390,7 @@ class TestDialog:
     def test_help_menu(self, window, monkeypatch, wait):
         monkeypatch.setattr(updates, "fetch_releases", lambda: [])
         titles = [a.text() for a in window.menuBar().actions()]
-        assert "&Help" in titles and window.windowTitle().startswith("ThzDAQ ")
+        assert "&Help" in titles and "— ThzDAQ " in window.windowTitle()
         window.updates.show()
         assert window.updates.dialog.isVisible()
         wait(lambda: "latest version" in window.updates.dialog.status.text())

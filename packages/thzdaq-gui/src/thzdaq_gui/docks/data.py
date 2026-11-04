@@ -1,13 +1,14 @@
 """Data dock: measurements of the session and opened files, as the old table.
 
-Every measurement is saved to data/<date>/ as it runs; here it can be
-commented, plotted again, saved elsewhere as JSON or exported to CSV. The
-file dialogs start in the folder used last (Session.folders).
+Every measurement is saved to data/<date>/ of its workspace as it runs; here
+it can be commented, plotted again, saved elsewhere as JSON or exported to
+CSV. Measurements of other workspaces show on asking (Others). The file
+dialogs start in the folder used last (Session.folders).
 """
 
 import json
 
-from PySide6.QtCore import QUrl, Signal
+from PySide6.QtCore import QSortFilterProxyModel, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.measurement_file import dumps, export_csv
+from thzdaq_api.measurement_file import RUNNING, dumps, export_csv
 
 from thzdaq_gui import theme
 from thzdaq_gui.folders import MEASUREMENTS
@@ -57,6 +58,24 @@ class DetailsDialog(QDialog):
         layout.addWidget(buttons)
 
 
+class Shown(QSortFilterProxyModel):
+    """The window's own measurements, and those of other workspaces with
+    others on."""
+
+    def __init__(self, model, parent=None):
+        super().__init__(parent)
+        self.others = False
+        self.setSourceModel(model)
+        model.session.workspace.changed.connect(self.invalidateFilter)
+
+    def show_others(self, on: bool) -> None:
+        self.others = on
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, row: int, parent) -> bool:
+        return self.others or self.sourceModel().here(row)
+
+
 class DataWidget(QWidget):
     plot_requested = Signal(object)  # Measurement
 
@@ -64,6 +83,7 @@ class DataWidget(QWidget):
         super().__init__(parent)
         self.session = session
         self.model = session.measurements
+        self.shown = Shown(self.model, self)
         layout = QVBoxLayout(self)
         bar = QHBoxLayout()
         for icon_name, tip, slot in (
@@ -81,9 +101,17 @@ class DataWidget(QWidget):
             button.clicked.connect(slot)
             bar.addWidget(button)
         bar.addStretch()
+        self.othersButton = QToolButton()
+        self.othersButton.setIcon(theme.icon("folder-multiple-outline"))
+        self.othersButton.setText("Others")
+        self.othersButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.othersButton.setToolTip("Also measurements of other workspaces")
+        self.othersButton.setCheckable(True)
+        self.othersButton.toggled.connect(self.shown.show_others)
+        bar.addWidget(self.othersButton)
         layout.addLayout(bar)
         self.table = QTableView()
-        self.table.setModel(self.model)
+        self.table.setModel(self.shown)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().hide()
@@ -95,9 +123,17 @@ class DataWidget(QWidget):
         )
         layout.addWidget(self.table)
 
+    def selected_rows(self):
+        """Rows of the model the selection shows, top first."""
+        return sorted(
+            {
+                self.shown.mapToSource(index).row()
+                for index in self.table.selectionModel().selectedRows()
+            }
+        )
+
     def selected(self):
-        rows = sorted({i.row() for i in self.table.selectionModel().selectedRows()})
-        return [self.model.measurement(r) for r in rows]
+        return [self.model.measurement(row) for row in self.selected_rows()]
 
     def open_files(self) -> None:
         paths = self.session.folders.open_paths(
@@ -153,9 +189,6 @@ class DataWidget(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(root.resolve())))
 
     def remove(self) -> None:
-        rows = sorted(
-            {i.row() for i in self.table.selectionModel().selectedRows()}, reverse=True
-        )
-        for row in rows:
-            if self.model.measurement(row).status != "running":
+        for row in reversed(self.selected_rows()):
+            if self.model.items[row].status != RUNNING:
                 self.model.remove(row)
