@@ -48,6 +48,8 @@ INTERACTIONS = "interactions"
 ALLOWED = "allowed"
 # Metadata: the copy of the bench profile in its workspace (workspace.ProfileCopy)
 PROFILE = "profile"
+# Metadata: plots a run added while it ran (a script's m.plot), as PlotInfo
+PLOTS = "plots"
 
 
 # Numbers given by the store (1, 2, 3, ... per data folder); 0 until numbered.

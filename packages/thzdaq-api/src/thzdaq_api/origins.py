@@ -14,6 +14,7 @@ MCP_CLIENT = "mcp"  # the kind of client an MCP server listens as
 SCRIPT = "script:"  # script:<its name>
 NUMBERED = "@"  # script:<its name>@<number>: one the daemon runs
 SCRIPT_CLIENT = "script"  # the kind of client a script listens as
+PLOTS = "plots"  # a plots window: it only shows, nobody answers in it
 
 # The kind of a CLI that asks a person in its terminal what waits (approvals watch)
 ANSWERING_CLI = "cli:answers"

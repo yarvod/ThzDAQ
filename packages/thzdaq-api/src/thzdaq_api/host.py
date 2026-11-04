@@ -38,6 +38,7 @@ NO_AUTOSTART_ENV = "THZDAQ_NO_AUTOSTART"  # report "not running" instead of star
 START_S = 15.0  # how long a client waits for a daemon it started
 LOG_KEEP = 5_000_000  # bytes of log kept before the next start moves it aside
 SERVE = "--serve"  # how a built program runs as the daemon
+SIMULATE = "--simulate"  # a program works with the simulator's daemon
 PROGRAM = "ThzDAQ"  # the built program: the window, and the daemon with SERVE
 CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
 
@@ -372,7 +373,7 @@ def connect_or_start(
         if station:
             arguments += ["--station", str(station)]
         if simulate:
-            arguments.append("--simulate")
+            arguments.append(SIMULATE)
         process = spawn(arguments, files)
         lab = _wait_for_start(files, process, simulate, origin, kind, timeout)
         logger.info(f"daemon started (pid {lab.host.pid})")

@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 import msgspec
 
 from thzdaq_api.devices import DeviceInfo, Prefix, Value
+from thzdaq_api.measurement_file import PLOTS, Measurement
 from thzdaq_api.operation import Operation, Rights
 
 DATA = "data"  # the folder of a workspace that holds its measurements
@@ -163,6 +164,16 @@ class ProcedureSummary(msgspec.Struct, frozen=True):
     title: str
     description: str
     plots: Tuple[PlotInfo, ...] = ()  # every plot it may fill
+
+
+def saved_plots(
+    measurement: Measurement, procedures: Iterable[ProcedureSummary]
+) -> Tuple[PlotInfo, ...]:
+    """The plots a saved measurement is drawn with: those of its procedure
+    (list_procedures), then those it added while it ran (a script's m.plot)."""
+    own = next((p.plots for p in procedures if p.name == measurement.procedure), ())
+    added = measurement.metadata.get(PLOTS, ())
+    return tuple(own) + tuple(msgspec.convert(plot, PlotInfo) for plot in added)
 
 
 class ProcedureInfo(msgspec.Struct, frozen=True):

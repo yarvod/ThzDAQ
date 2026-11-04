@@ -17,6 +17,7 @@ quantities and whose methods are their actions:
     pm.power                             # one quantity
     lab["chopper_1"].to_hot()            # an action
     run = lab.run("sis.iv_curve", bias=bias, voltage="0:7:351")
+    run.show()                           # its plots in a window of their own
     run.wait()
     iv = run.table("iv")
 
@@ -40,7 +41,7 @@ from typing import (
     Union,
 )
 
-from thzdaq_api import host
+from thzdaq_api import host, windows
 from thzdaq_api.data import Measured, decode_values
 from thzdaq_api.devices import (
     CallAction,
@@ -67,14 +68,16 @@ from thzdaq_api.measurements import (
     fill_slots,
 )
 from thzdaq_api.operation import Operation
-from thzdaq_api.origins import ANSWERING_CLI, CLI, SCRIPT_CLIENT, script
+from thzdaq_api.origins import ANSWERING_CLI, CLI, GUI, PLOTS, SCRIPT_CLIENT, script
 from thzdaq_api.procedures import entry
 from thzdaq_api.remote import RemoteLab
 from thzdaq_api.script import (
     AnsweredHere,
     Described,
     Session,
+    Where,
     described,
+    place,
     ref_of,
     script_source,
 )
@@ -178,6 +181,11 @@ class Run:
         self.info = self.bench.cancel(self.id)
         return self.info
 
+    def show(self, where: Where = PLOTS) -> None:
+        """Its plots on screen as it runs: in a window of their own (plots),
+        or in the main window (gui); see Bench.show."""
+        self.bench.show(self.id, where)
+
     def measurement(self) -> Measurement:
         """What it holds: its file once it ended, its records so far while it
         runs."""
@@ -217,15 +225,18 @@ class Bench:
         workspace: Union[str, Path, None] = None,
         script=None,
         approve: Optional[Callable[[Callable[[], RunInfo]], RunInfo]] = None,
+        simulate: bool = False,
     ):
         """workspace: the folder whose data/ gets its measurements (None: the
         program's, where the daemon writes); script: the ScriptSource its
         sessions keep; approve: how a start a person allows is called (asked
-        in this terminal too)."""
+        in this terminal too); simulate: the lab is the simulator's daemon,
+        the windows it opens work with it too."""
         self.lab = lab
         self.workspace = Path(workspace).resolve() if workspace else None
         self.script = script
         self.approve = approve or (lambda call: call())
+        self.simulate = simulate
         self.session: Optional[Session] = None  # the with block running now
         self._described: Dict[str, DeviceDescription] = {}
 
@@ -366,6 +377,42 @@ class Bench:
     def cancel(self, id: int) -> RunInfo:
         return self.lab.call(CancelMeasurement(id=id))
 
+    # Windows: each a program of its own, apart from this script
+    def plot(
+        self,
+        measurement: Union[int, str, Path],
+        table: Optional[str] = None,
+        x: Optional[str] = None,
+        y: Optional[str] = None,
+        group_by: Iterable[str] = (),
+    ) -> None:
+        """The plots of a measurement in a window of their own (thzdaq plot):
+        one of the daemon by its number, drawn as it runs, or a file. With
+        table, x and y the window draws that plot instead (curves by the
+        values of group_by). The script does not wait for the window."""
+        which = measurement if isinstance(measurement, int) else str(measurement)
+        own = windows.OwnPlot.asked(table, x, y, tuple(group_by))
+        windows.open_plots(self.lab.call, which, self.simulate, own)
+
+    def show(self, id: int, where: Where = PLOTS) -> None:
+        """A measurement of the daemon on screen as it runs: in a window of
+        its own with only its plots (plots, or True), or in the main window
+        (gui), opened in this workspace unless one is open already."""
+        shows = {PLOTS: self.plot, GUI: self._main_window}
+        if place(where) not in shows:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"No window {where!r} to show #{id} in",
+                f"one of: {', '.join(shows)}",
+            )
+        shows[place(where)](id)
+
+    def _main_window(self, id: int) -> None:
+        """A main window draws every measurement running: one is opened
+        when none listens."""
+        if not windows.window_open(self.lab.call):
+            host.start_apart(windows.gui_command(self.workspace, self.simulate))
+
     def wait(self, id: int, progress: bool = False) -> RunInfo:
         """Until the measurement ends; progress: told on stderr as it goes."""
         info = self.lab.call(WaitMeasurement(id=id, timeout=0))
@@ -407,7 +454,7 @@ class Bench:
             total=total,
             silent=silent,
         )
-        return Session(self.lab, start, self.approve, self._entered)
+        return Session(self.lab, start, self.approve, self._entered, self.show)
 
     def __repr__(self) -> str:
         return f"<bench of {self.origin}>"
@@ -444,4 +491,4 @@ def connect(
     if person_here():
         person = RemoteLab(lab.host, CLI, ANSWERING_CLI, find=lab.find)
         approve = AnsweredHere(person, lab.origin)
-    return Bench(lab, folder, script_source(path, folder), approve)
+    return Bench(lab, folder, script_source(path, folder), approve, simulate)

@@ -4,6 +4,7 @@ and the script fills it.
 
     with lab.measurement("pv_fine", devices=[bias, pm], exclusive=[bias]) as m:
         m.plot("scan", x="voltage", y="power")     # a live plot where it is followed
+        m.show()                                   # in a window of its own (or "gui")
         m.restore(bias, "voltage_set")             # set back however it ends
         for v in m.sweep("2:3:51", unit="mV"):     # each step looks for a cancel
             bias.voltage_set = v
@@ -26,7 +27,7 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Set, Union
 
 from thzdaq_api.approvals import AnswerApproval, Approval
 from thzdaq_api.data import Measured, encode_values
@@ -42,6 +43,7 @@ from thzdaq_api.measurement_file import (
     column_for,
 )
 from thzdaq_api.measurements import PlotInfo, RunInfo
+from thzdaq_api.origins import PLOTS
 from thzdaq_api.sessions import (
     KEEP_S,
     AdvanceSession,
@@ -64,6 +66,15 @@ Device = Union[str, Any]
 # A column described by a script: (title, unit), or a Column
 Described = Union[Column, tuple]
 Typed = Callable[[str, threading.Event], Optional[str]]  # a person's line, or None
+# Where a measurement is shown: a window of its plots (plots, True), the main
+# window (gui); False: nowhere
+Where = Union[bool, str]
+Show = Callable[[int, str], None]  # the bench's: a measurement in a window
+
+
+def place(where: Where) -> str:
+    """Where a measurement is shown, by the name of its window."""
+    return PLOTS if where is True else str(where)
 
 
 class Cancelled(Exception):
@@ -115,13 +126,17 @@ class Session:
         start: StartSession,
         approve: Callable[[Callable[[], RunInfo]], RunInfo],
         entered: Callable[[Optional["Session"]], None],
+        show: Show,
     ):
         """lab: the bench's Lab; approve(call): the start as a person allows
-        it; entered(session): the bench's calls belong to it (None: no more)."""
+        it; entered(session): the bench's calls belong to it (None: no more);
+        show(id, where): the bench's window of a measurement."""
         self.lab = lab
         self._start = start
         self._approve = approve
         self._entered = entered
+        self._show = show
+        self._shown: Set[str] = set()  # where it is on screen already
         self.run: Optional[RunInfo] = None  # as it started; as it ended, after
         self.id = 0
         self._columns: Dict[str, Column] = {c.key: c for c in start.columns}
@@ -239,14 +254,28 @@ class Session:
         title: str = "",
         kind: str = "line",
         z: Optional[str] = None,
+        show: Where = False,
     ) -> PlotInfo:
         """A live plot of a table where the measurement is followed, kept in
-        its file for Data to draw again; curves by the values of group_by."""
+        its file for Data to draw again; curves by the values of group_by.
+        show: the measurement on screen at once (see show)."""
         plot = PlotInfo(
             key="", title=title, table=table, x=x, y=y,
             group_by=tuple(group_by), kind=kind, z=z,
         )  # fmt: skip
-        return self.lab.call(PlotSession(id=self.id, plot=plot))
+        drawn = self.lab.call(PlotSession(id=self.id, plot=plot))
+        if show:
+            self.show(show)
+        return drawn
+
+    def show(self, where: Where = PLOTS) -> None:
+        """Its plots on screen as it runs, once for each place: in a window
+        of their own (plots, True), or in the main window (gui), opened in
+        the script's workspace unless one is open already."""
+        shown = place(where)
+        if shown not in self._shown:
+            self._show(self.id, shown)
+            self._shown.add(shown)
 
     # What the daemon does at the end
     def restore(self, device: Device, key: str) -> Any:
