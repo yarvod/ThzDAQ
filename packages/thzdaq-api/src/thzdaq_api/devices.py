@@ -182,10 +182,12 @@ class DescribeDevice(Operation[DeviceDescription]):
 
 class ReadDevice(Operation[Reading]):
     """Read a device: every readable quantity, or the listed keys. Values are
-    in SI units (power in dBm)."""
+    in SI units (power in dBm). session: the number of the script's session the
+    read belongs to (the device joins it)."""
 
     ref: str
     keys: Optional[Tuple[str, ...]] = None
+    session: Optional[int] = None
 
 
 class SetQuantity(Operation[QuantityValue]):
@@ -195,13 +197,15 @@ class SetQuantity(Operation[QuantityValue]):
     (out_of_limits) before anything is sent; a change larger than the bench
     step goes in steps at the bench rate. A device a running measurement sweeps
     is refused (conflict) unless share is true; the measurements using it
-    record the change."""
+    record the change. session: the number of the script's session the set
+    belongs to: its devices are its own, and the session tells what it sets."""
 
     rights = Rights.SET
     ref: str
     key: str
     value: Union[bool, int, float, str]
     share: bool = False
+    session: Optional[int] = None
 
 
 class CallAction(Operation[ActionResult]):
@@ -210,7 +214,8 @@ class CallAction(Operation[ActionResult]):
     its trace. describe_device lists the actions of a device with their
     arguments; numbers are in SI units, a text may carry its unit ("12 Hz"). A
     device a running measurement sweeps is refused (conflict) unless share is
-    true, except for reads; the measurements using it record the call."""
+    true, except for reads; the measurements using it record the call.
+    session: the number of the script's session the call belongs to."""
 
     rights = Rights.SET
     ref: str
@@ -219,6 +224,7 @@ class CallAction(Operation[ActionResult]):
         default_factory=dict
     )
     share: bool = False
+    session: Optional[int] = None
 
 
 class SafeState(Operation[Tuple[SafeValue, ...]]):

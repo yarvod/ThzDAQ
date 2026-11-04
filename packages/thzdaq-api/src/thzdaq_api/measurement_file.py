@@ -56,6 +56,9 @@ class Column:
     key: str
     title: str = ""
     unit: str = ""  # SI unit of the stored values
+    # The device quantity the values were read from, "<ref>/<key>"
+    # (power_meter_1/power); empty for set, swept or computed values
+    source: str = ""
 
     @property
     def label(self) -> str:
@@ -63,11 +66,17 @@ class Column:
         return f"{title}, {self.unit}" if self.unit else title
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"key": self.key, "title": self.title, "unit": self.unit}
+        found = {"key": self.key, "title": self.title, "unit": self.unit}
+        return {**found, "source": self.source} if self.source else found
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Column":
-        return cls(data["key"], data.get("title", ""), data.get("unit", ""))
+        return cls(
+            data["key"],
+            data.get("title", ""),
+            data.get("unit", ""),
+            data.get("source", ""),
+        )
 
 
 # Titles and units of the usual record keys; procedures may override per key
@@ -133,6 +142,10 @@ class Table:
     def column(self, key: str) -> List[Any]:
         return self.data.get(key, [None] * len(self))
 
+    def __getitem__(self, key: str) -> List[Any]:
+        """The values of a column: table["voltage"]."""
+        return self.data[key]
+
     def get_column(self, key: str) -> Optional[Column]:
         return next((c for c in self.columns if c.key == key), None)
 
@@ -148,6 +161,10 @@ class Table:
                 self.data[key] = [None] * size
         for key, values in self.data.items():
             values.append(record.get(key))
+
+    def describe(self, column: Column) -> None:
+        """Another title, unit or source for a column it has."""
+        self.columns = [column if c.key == column.key else c for c in self.columns]
 
     def rows(self) -> Iterator[Dict[str, Any]]:
         keys = list(self.data)

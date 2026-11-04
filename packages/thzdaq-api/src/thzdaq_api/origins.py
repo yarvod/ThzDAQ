@@ -2,6 +2,8 @@
 that listens. People do what they ask and answer for agents; agents and
 scripts ask a person before they change the bench (thzdaq_core's Policy)."""
 
+import os
+
 GUI = "gui"  # a window: people answer in it
 CLI = "cli"  # the command line in a terminal of a person
 AGENT_CLI = "cli:agent"  # the command line in a shell an agent runs
@@ -9,10 +11,15 @@ ASSISTANT = "assistant"  # the chat in the window
 MCP = "mcp:"  # mcp:<the agent's name> (Claude Code, Codex)
 MCP_CLIENT = "mcp"  # the kind of client an MCP server listens as
 SCRIPT = "script:"  # script:<its name>
+SCRIPT_CLIENT = "script"  # the kind of client a script listens as
 
 # The kind of a CLI that asks a person in its terminal what waits (approvals watch)
 ANSWERING_CLI = "cli:answers"
 ANSWERING = (GUI, ANSWERING_CLI)  # the kinds of client a person answers in
+
+# Set in the shells agents run commands in (Claude Code, Codex): a command or
+# a script started there is the agent's, so no person answers in its terminal
+AGENT_SHELLS = ("CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED")
 
 
 def agent(origin: str) -> bool:
@@ -24,3 +31,13 @@ def answers(kind: str, origin: str) -> bool:
     """A client a person answers in: a window, or a terminal that asks; never
     one an agent runs."""
     return kind in ANSWERING and not agent(origin)
+
+
+def script(name: str) -> str:
+    """The origin of a script: script:<its name>."""
+    return f"{SCRIPT}{name}"
+
+
+def agent_shell() -> bool:
+    """This process runs in a shell an agent drives (Claude Code, Codex)."""
+    return any(os.environ.get(name) for name in AGENT_SHELLS)

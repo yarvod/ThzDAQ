@@ -37,7 +37,7 @@ def group_of(name: str) -> str:
     return name.split(".", 1)[0]
 
 
-# Monitor: what it watches is "<ref>" or "<ref>/<quantity key>"
+# What the monitor watches: "<ref>" or "<ref>/<quantity key>"; a column's source too
 KEY_SEPARATOR = "/"
 
 # The time graph of each unit
@@ -58,6 +58,12 @@ def split_entry(entry: str) -> Tuple[str, Optional[str]]:
     """ "sis_bias_1/voltage" -> ("sis_bias_1", "voltage"); "power_meter_1" -> (ref, None)."""
     ref, _, key = entry.partition(KEY_SEPARATOR)
     return ref, key or None
+
+
+def entry(ref: str, key: str) -> str:
+    """("sis_bias_1", "voltage") -> "sis_bias_1/voltage": a quantity of a device
+    in one text, as the monitor watches it and a column names its source."""
+    return f"{ref}{KEY_SEPARATOR}{key}"
 
 
 # The rules take quantities as described (instruments' Quantity, or QuantityInfo)

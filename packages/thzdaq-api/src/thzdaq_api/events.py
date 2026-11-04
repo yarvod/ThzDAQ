@@ -76,6 +76,13 @@ class MeasurementLog(msgspec.Struct, tag="measurement_log", frozen=True):
     message: str
 
 
+class MeasurementPlotted(msgspec.Struct, tag="measurement_plotted", frozen=True):
+    """A running measurement draws another plot from now on (a script's)."""
+
+    id: int
+    plot: PlotInfo
+
+
 class MeasurementFinished(msgspec.Struct, tag="measurement_finished", frozen=True):
     run: RunInfo
 
@@ -119,6 +126,7 @@ Body = Union[
     MeasurementRecords,
     MeasurementProgress,
     MeasurementLog,
+    MeasurementPlotted,
     MeasurementFinished,
     StationChanged,
     LeasesChanged,
@@ -132,7 +140,10 @@ def run_id(body: Body) -> Optional[int]:
     """The number of the measurement an event tells about; None for another."""
     if isinstance(body, (MeasurementStarted, MeasurementFinished)):
         return body.run.id
-    if isinstance(body, (MeasurementRecords, MeasurementProgress, MeasurementLog)):
+    if isinstance(
+        body,
+        (MeasurementRecords, MeasurementProgress, MeasurementLog, MeasurementPlotted),
+    ):
         return body.id
     return None
 

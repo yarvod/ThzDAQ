@@ -73,6 +73,24 @@ class SlotInfo(msgspec.Struct, frozen=True):
         return preferred or suitable
 
 
+def fill_slots(
+    slots: Iterable[SlotInfo], bench: Iterable[DeviceInfo], given: Mapping[str, str]
+) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    """The devices given, and for a slot without one the only device that
+    suits it; besides, the slots several devices suit, with those devices."""
+    devices, choices = dict(given), {}
+    bench = list(bench)
+    for slot in slots:
+        if slot.name in devices:
+            continue
+        suitable = [device.ref for device in slot.candidates(bench)]
+        if len(suitable) == 1:
+            devices[slot.name] = suitable[0]
+        elif suitable:
+            choices[slot.name] = suitable
+    return devices, choices
+
+
 GroupKey = Tuple[Any, ...]
 
 
