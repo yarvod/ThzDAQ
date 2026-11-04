@@ -357,3 +357,38 @@ def test_mcp_is_served_by_its_package_or_says_what_to_install(thzdaq, monkeypatc
     monkeypatch.setattr(agents, "entry_points", lambda **_: ())
     code, _, err = thzdaq("mcp")
     assert code == 1 and "thzdaq[mcp]" in err
+
+
+def test_a_file_is_run_as_python_runs_it(thzdaq, tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "argv", list(sys.argv))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    file = tmp_path / "args.py"
+    file.write_text(
+        "import sys\nfrom pathlib import Path\n"
+        "print(__name__, sys.argv[1:], Path(sys.path[0]).name)\n"
+    )
+    code, out, _ = thzdaq("run-script", str(file), "--", "a", "-b")
+    assert code == 0 and out == f"__main__ ['a', '-b'] {tmp_path.name}\n"
+
+
+def test_a_script_is_started_with_what_it_may_do(thzdaq, lab, tmp_path):
+    from thzdaq_api.scripts import ListScripts
+
+    file = tmp_path / "quiet.py"
+    file.write_text("print('quiet')\n")
+    code, _, err = thzdaq("script", "start", str(file), "--allow", "sweep:sis_bias_1")
+    assert code == 2 and "set:" in err
+    code, out, _ = thzdaq(
+        "script",
+        "start",
+        str(file),
+        "--allow",
+        "set:sis_bias_1",
+        "--share",
+        "sis_bias_1",
+    )
+    assert code == 0 and "may set:sis_bias_1" in out
+    (started,) = lab.call(ListScripts())
+    assert started.share == ("sis_bias_1",) and started.workspace == str(tmp_path)

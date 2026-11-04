@@ -210,6 +210,10 @@ class DaemonWidget(QWidget):
                 (f"#{r.id} {r.title}", f"{r.done}/{r.total or '?'} · {r.origin}")
                 for r in status.runs
             ]),
+            ("Scripts", [
+                (f"{s.id} {s.name}", f"pid {s.pid} · since {s.started} · {s.log}")
+                for s in status.scripts
+            ]),
             ("Queues", [
                 (lane.instrument, lane_state(lane)) for lane in status.lanes
             ]),

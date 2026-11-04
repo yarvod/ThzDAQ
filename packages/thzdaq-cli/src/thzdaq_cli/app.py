@@ -6,16 +6,26 @@ change that may harm the bench, or that touches a device a measurement sweeps,
 is asked in the terminal; --yes answers yes, and without a terminal the
 answer is no. --json prints what the daemon answered, as JSON.
 
+Arguments after -- are not thzdaq's: they go to the script a command runs.
+
 Exit codes: 0 done, 1 refused or failed, 2 wrong arguments, 3 no daemon runs.
 """
 
 import argparse
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from thzdaq_api.errors import ErrorCode, LabError
 
-from thzdaq_cli import agents, approvals, daemon, devices, measurements, station
+from thzdaq_cli import (
+    agents,
+    approvals,
+    daemon,
+    devices,
+    measurements,
+    scripts,
+    station,
+)
 from thzdaq_cli.client import (
     FAILED,
     KIND,
@@ -27,6 +37,8 @@ from thzdaq_cli.client import (
     Mistyped,
     reach,
 )
+
+PASSED = "--"  # what follows is the script's
 
 
 def parser() -> argparse.ArgumentParser:
@@ -48,13 +60,23 @@ def parser() -> argparse.ArgumentParser:
     )
     found.set_defaults(kind=KIND)
     commands = found.add_subparsers(dest="command", required=True, metavar="COMMAND")
-    for area in (daemon, devices, measurements, station, approvals, agents):
+    for area in (daemon, devices, measurements, scripts, station, approvals, agents):
         area.add(commands)
     return found
 
 
+def passed_on(argv: List[str]) -> Tuple[List[str], List[str]]:
+    """thzdaq's own arguments, and those after -- for the script it runs."""
+    if PASSED not in argv:
+        return argv, []
+    at = argv.index(PASSED)
+    return argv[:at], argv[at + 1 :]
+
+
 def main(argv: Optional[List[str]] = None, connect: Connect = reach) -> int:
-    args = parser().parse_args(argv)
+    own, passed = passed_on(sys.argv[1:] if argv is None else list(argv))
+    args = parser().parse_args(own)
+    args.passed = passed
     client = Client(args, connect)
     try:
         return args.run(args, client)

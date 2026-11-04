@@ -1260,6 +1260,7 @@ class TestHangs:
 
     def test_connections_group(self, app, wait, tmp_path):
         from thzdaq_core.adapters.json_store import MeasurementStore
+        from thzdaq_core.adapters.processes import Processes
         from thzdaq_core.adapters.yaml_profiles import YamlProfiles
         from thzdaq_core.application.assembly import assemble
         from thzdaq_core.application.bench import Bench
@@ -1283,8 +1284,9 @@ class TestHangs:
         station = Station(config, pause=time.sleep, pool=pool)
         workspaces = Workspaces(tmp_path, tmp_path / "data", MeasurementStore)
         assembled = assemble(
-            Bench(station, Lanes()), workspaces, YamlProfiles(), LocalControl()
-        )
+            Bench(station, Lanes()), workspaces, YamlProfiles(), LocalControl(),
+            Processes(),
+        )  # fmt: skip
 
         class Client:
             """What the group needs of a session: its lab and its call queue."""
@@ -1675,9 +1677,36 @@ class TestDaemon:
             for i in range(widget.tree.topLevelItemCount())
         ]
         assert [s.split(" (")[0] for s in sections] == [
-            "Problems", "Clients", "Measurements", "Queues", "Connections", "Polls",
+            "Problems", "Clients", "Measurements", "Scripts", "Queues", "Connections",
+            "Polls",
         ]  # fmt: skip
         assert widget.btnStop.isEnabled() and not widget.btnStart.isEnabled()
+
+    def test_a_running_script_is_shown(self, window, session, wait, tmp_path):
+        import sys
+
+        from thzdaq_api.scripts import StartScript, StopScript
+
+        file = tmp_path / "slow.py"
+        file.write_text("import time\ntime.sleep(60)\n")
+        session.lab.assembled.scripts.grace = 0.2  # it ignores the cancel
+        started = session.call(
+            StartScript(
+                path=str(file), python=(sys.executable,), workspace=str(tmp_path)
+            )
+        )
+        tree = window.daemonWidget.tree
+
+        def scripts():
+            window.daemon.look()
+            found = [tree.topLevelItem(i) for i in range(tree.topLevelItemCount())]
+            items = [i for i in found if i.text(0).startswith("Scripts")]
+            return [i.child(c).text(0) for i in items for c in range(i.childCount())]
+
+        try:
+            wait(lambda: scripts() == [f"{started.id} slow"])
+        finally:
+            session.call(StopScript(id=started.id))
 
     def test_a_person_chooses_what_agents_may_do(self, window, session, wait):
         from thzdaq_api.daemon import GetDaemonSettings

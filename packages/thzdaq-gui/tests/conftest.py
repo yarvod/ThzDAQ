@@ -116,13 +116,16 @@ def connect(bench, tmp_path):
     daemon outlives its window."""
     from thzdaq_api.measurements import DATA
     from thzdaq_core.adapters.json_store import MeasurementStore
+    from thzdaq_core.adapters.processes import Processes
     from thzdaq_core.adapters.yaml_profiles import YamlProfiles
     from thzdaq_core.application.assembly import assemble
     from thzdaq_core.application.local import LocalControl, LocalLab
     from thzdaq_core.application.workspaces import Workspaces
 
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
-    assembled = assemble(bench, workspaces, YamlProfiles(), LocalControl(True))
+    assembled = assemble(
+        bench, workspaces, YamlProfiles(), LocalControl(True), Processes()
+    )
     yield lambda simulate: LocalLab(assembled, origin="gui", kind="gui")
     assembled.close()
 
