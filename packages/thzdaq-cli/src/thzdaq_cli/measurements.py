@@ -1,14 +1,16 @@
-"""thzdaq procedures, describe, run, status, measurements, cancel, watch: the
-procedures of the bench and the measurements in its daemon. Parameters are
-typed as describe shows them, in their display units: --set voltage=0:7:351
-is a sweep from 0 to 7 mV in 351 points. A run is followed until it ends;
-Ctrl+C asks whether to cancel it, and without a terminal leaves it running."""
+"""thzdaq procedures, describe, run, status, measurements, cancel, watch, plot:
+the procedures of the bench and the measurements in its daemon. Parameters
+are typed as describe shows them, in their display units: --set
+voltage=0:7:351 is a sweep from 0 to 7 mV in 351 points. A run is followed
+until it ends; Ctrl+C asks whether to cancel it, and without a terminal
+leaves it running. plot opens the plots of a measurement in a window of
+their own, apart from this terminal."""
 
 import queue
 import sys
 from typing import Any, Callable, Dict, Iterator
 
-from thzdaq_api import events
+from thzdaq_api import events, windows
 from thzdaq_api.devices import ListDevices
 from thzdaq_api.lab import Lab
 from thzdaq_api.measurement_file import (
@@ -68,6 +70,15 @@ def add(commands) -> None:
     watch = commands.add_parser("watch", help="follow a measurement, or every event")
     watch.add_argument("id", type=int, nargs="?")
     watch.set_defaults(run=watch_events)
+    plot = commands.add_parser(
+        "plot", help="the plots of a measurement in a window of their own"
+    )
+    plot.add_argument(
+        "measurement", type=windows.which, metavar=windows.WHICH,
+        help=windows.WHICH_HELP,
+    )  # fmt: skip
+    windows.add_options(plot)
+    plot.set_defaults(run=plot_measurement)
     file = commands.add_parser("show", help="what a measurement file holds")
     file.add_argument("path")
     file.set_defaults(run=show_file)
@@ -310,6 +321,19 @@ def watch_events(args, client: Client) -> int:
             return OK
     finally:
         heard.stop()
+
+
+def plot_measurement(args, client: Client) -> int:
+    which = args.measurement
+    command = windows.open_plots(
+        client.call, which, client.simulate, windows.OwnPlot.of(args)
+    )
+    shown = f"#{which}" if isinstance(which, int) else which
+    client.out(
+        {"measurement": which, "command": command},
+        lambda told: f"the plots of {shown} open in a window",
+    )
+    return OK
 
 
 def file_text(measurement: Measurement) -> str:

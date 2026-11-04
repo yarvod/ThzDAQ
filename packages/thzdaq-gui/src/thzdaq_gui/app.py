@@ -1,6 +1,7 @@
 """The desktop application: a client of the bench daemon. It connects to the
 daemon of the instruments (or of their simulator) and starts it when none
-runs; closing the window leaves the daemon to its measurements."""
+runs; closing the window leaves the daemon to its measurements. With --plot
+it is only the plots window of one measurement (viewer.py)."""
 
 import argparse
 import logging
@@ -10,12 +11,13 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
+from thzdaq_api import windows
 from thzdaq_api.errors import LabError
-from thzdaq_api.host import connect_or_start
+from thzdaq_api.host import SIMULATE, connect_or_start
 from thzdaq_api.origins import GUI
 from thzdaq_api.workspace import NO_PROFILE, expected_profile, profile_path
 
-from thzdaq_gui import theme
+from thzdaq_gui import theme, viewer
 from thzdaq_gui.main_window import MainWindow
 from thzdaq_gui.session import Session
 from thzdaq_gui.settings import (
@@ -40,16 +42,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--station", help="station profile (YAML) to work with; the daemon loads it"
     )
     parser.add_argument(
-        "--simulate", action="store_true", help="work with the simulator's daemon"
+        SIMULATE, action="store_true", help="work with the simulator's daemon"
     )
     parser.add_argument(
-        "--workspace",
+        windows.WORKSPACE,
         help="the folder whose data/ gets the measurements (default: the one "
         "made the default, else the program's)",
     )
     parser.add_argument(
         "--settings", help="keep settings in this INI file instead of the registry"
     )
+    parser.add_argument(
+        windows.PLOT, type=windows.which, metavar=windows.WHICH,
+        help=f"only the plots of {windows.WHICH_HELP}",
+    )  # fmt: skip
+    windows.add_options(parser)
     parser.add_argument(
         "--quit-after", type=float, metavar="SECONDS", help=argparse.SUPPRESS
     )  # smoke test of a build
@@ -72,6 +79,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     app.setApplicationName("ThzDAQ")
     theme.apply(app)
     app.setWindowIcon(theme.app_icon())
+    if args.plot is not None:
+        return show_plots(app, args)
     if args.settings:
         use_file(args.settings)
     # Folders of an earlier update left in the system temp folder
@@ -105,6 +114,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         window.workspaceMenu.check_profile()
     if args.quit_after is not None:
         window.confirm_exit = False
+        QTimer.singleShot(int(args.quit_after * 1000), window.close)
+    return app.exec()
+
+
+def show_plots(app: QApplication, args: argparse.Namespace) -> int:
+    """Only the plots of one measurement, until the window is closed."""
+    try:
+        window = viewer.open_window(args.plot, args.simulate, windows.OwnPlot.of(args))
+    except LabError as e:
+        QMessageBox.critical(None, viewer.PROGRAM, f"{e.message}\n\n{e.hint}".strip())
+        return 1
+    window.show()
+    if args.quit_after is not None:
         QTimer.singleShot(int(args.quit_after * 1000), window.close)
     return app.exec()
 

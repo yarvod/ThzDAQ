@@ -106,6 +106,37 @@ def test_watch_tells_how_an_ended_run_went(thzdaq):
     assert code == 1 and "no measurement #99" in out
 
 
+def test_plot_opens_a_measurements_plots_in_a_window(thzdaq, tmp_path, monkeypatch):
+    from thzdaq_api import host
+
+    opened = []
+    monkeypatch.setattr(host, "window_command", lambda: ["ThzDAQ"])
+    monkeypatch.setattr(host, "start_apart", opened.append)
+    code, out, err = thzdaq(
+        "run", "sis.iv_curve", "--device", "bias=sis_bias_1",
+        "--set", "voltage=0:1:3", *FAST,
+    )  # fmt: skip
+    path = out.strip().splitlines()[-1].removeprefix("file ")
+    code, out, err = thzdaq("--simulate", "plot", "1")
+    assert code == 0, err
+    assert out.strip() == "the plots of #1 open in a window"
+    code, out, err = thzdaq(
+        "plot", path, "--table", "iv", "--x", "voltage", "--y", "current"
+    )
+    assert code == 0, err
+    assert opened == [
+        ["ThzDAQ", "--plot", "1", "--simulate"],
+        ["ThzDAQ", "--plot", path, "--table", "iv", "--x", "voltage",
+         "--y", "current"],
+    ]  # fmt: skip
+    code, _, err = thzdaq("plot", "99")
+    assert code == 1 and "99" in err
+    code, _, err = thzdaq("plot", "1", "--table", "iv")
+    assert code == 1 and "table, x and y" in err
+    code, _, err = thzdaq("plot", str(tmp_path / "missing.json"))
+    assert code == 1 and len(opened) == 2
+
+
 def test_the_daemon_is_asked_about_itself(thzdaq):
     code, out, _ = thzdaq("daemon", "status")
     assert code == 0 and "daemon (simulator)" in out and "profile 2sb" in out

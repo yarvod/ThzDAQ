@@ -186,7 +186,8 @@ class MainWindow(QMainWindow):
         # A default layout gets its widths once the window has a size
         self._fit_on_show = not restored
         self.perspectives.refresh()
-        self.runGraphs = RunGraphs(session, self.hub, self)
+        self.runGraphs = RunGraphs(self.hub, parent=self)
+        self.runGraphs.follow_all(session.run_events)
         if check_updates:
             self.updates.check_in_background()
 

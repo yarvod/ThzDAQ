@@ -1,6 +1,7 @@
 """ThzDAQ: the desktop application, and with --serve the bench daemon (entry point
 for `uv run python main.py` and PyInstaller). The one place that knows both: a
-built ThzDAQ.exe is the daemon its clients start."""
+built ThzDAQ.exe is the daemon its clients start. With --plot <id|file> the
+application is only the plots window of one measurement (thzdaq plot)."""
 
 import sys
 

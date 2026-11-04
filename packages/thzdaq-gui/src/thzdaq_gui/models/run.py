@@ -64,7 +64,9 @@ class RunModel(QObject):
     resetting = Signal(object)  # Measurement: its records will be replaced
 
     def __init__(self, session, title_of: Callable[[str], str], parent=None):
-        """title_of(ref): how a device is named in the curves of the run."""
+        """session: what starts and stops its runs, None where a run is only
+        watched (the plots window); title_of(ref): how a device is named in
+        the curves of the run."""
         super().__init__(parent)
         self.session = session
         self.title_of = title_of

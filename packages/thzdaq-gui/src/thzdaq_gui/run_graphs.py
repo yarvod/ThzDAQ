@@ -1,14 +1,23 @@
 """Graphs of observed runs, independent of any procedure configuration form."""
 
+from typing import Tuple
+
 from PySide6.QtCore import QObject
+from thzdaq_api.measurements import PlotInfo
 
 
 class RunGraphs(QObject):
-    def __init__(self, session, hub, parent=None):
+    def __init__(self, hub, chosen: Tuple[PlotInfo, ...] = (), parent=None):
+        """chosen: plots drawn instead of the runs' own (a plot of one's own in
+        the plots window)."""
         super().__init__(parent)
         self.hub = hub
-        session.run_events.observed.connect(self.follow)
-        for model in session.run_events.external:
+        self.chosen = chosen
+
+    def follow_all(self, run_events) -> None:
+        """Every run the window observes: those already followed, and those to come."""
+        run_events.observed.connect(self.follow)
+        for model in run_events.external:
             self.follow(model)
 
     def follow(self, model) -> None:
@@ -16,19 +25,25 @@ class RunGraphs(QObject):
         model.plotted.connect(lambda plot: self.plotted(plot))
         model.record.connect(
             lambda table, record: self.hub.feed(
-                model.measurement, model.plots, table, record
+                model.measurement, self.plots(model), table, record
             )
         )
         model.resetting.connect(self.hub.clear_measurement)
         if model.measurement is not None:
             self.started(model)
-            self.hub.show_measurement(model.measurement, model.plots)
+            self.hub.show_measurement(model.measurement, self.plots(model))
+
+    def plots(self, model) -> Tuple[PlotInfo, ...]:
+        return self.chosen or model.plots
 
     def started(self, model) -> None:
-        self.hub.register_plots(model.plots)
-        self.hub.show_run([plot.title for plot in model.plots])
+        plots = self.plots(model)
+        self.hub.register_plots(plots)
+        self.hub.show_run([plot.title for plot in plots])
 
     def plotted(self, plot) -> None:
-        """A plot the run added while it runs (a script's): on screen too."""
-        self.hub.register_plots([plot])
-        self.hub.show_run([plot.title])
+        """A plot the run added while it runs (a script's): on screen too,
+        unless other plots were chosen."""
+        if not self.chosen:
+            self.hub.register_plots([plot])
+            self.hub.show_run([plot.title])

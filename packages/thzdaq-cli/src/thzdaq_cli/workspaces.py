@@ -11,14 +11,11 @@ build's ThzDAQ, or the GUI package), never imported.
 from pathlib import Path
 from typing import Any, Dict
 
-from thzdaq_api import host
+from thzdaq_api import host, windows
 from thzdaq_api.workspace import FILE, create, read
 
 from thzdaq_cli import agents
 from thzdaq_cli.client import OK, THIS_FOLDER, Client
-
-WORKSPACE = "--workspace"  # the window's option, as its own command line names it
-SIMULATE = "--simulate"
 
 
 def add(commands) -> None:
@@ -39,7 +36,7 @@ def add(commands) -> None:
     init.set_defaults(run=init_workspace)
     window = commands.add_parser("gui", help="open the window in the workspace here")
     window.add_argument(
-        WORKSPACE,
+        windows.WORKSPACE,
         help="the folder it opens (default: the workspace here or above, else "
         "the window's default)",
     )
@@ -74,11 +71,7 @@ def init_text(told: Dict[str, Any]) -> str:
 
 
 def open_window(args, client: Client) -> int:
-    command = host.window_command()
-    if client.workspace is not None:
-        command += [WORKSPACE, str(client.workspace)]
-    if client.simulate:
-        command.append(SIMULATE)
+    command = windows.gui_command(client.workspace, client.simulate)
     host.start_apart(command)
     folder = str(client.workspace) if client.workspace else None
     client.out(
