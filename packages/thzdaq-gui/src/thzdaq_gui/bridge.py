@@ -4,7 +4,7 @@ it on the signal of its kind, where view models take it."""
 
 from typing import Callable, Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from thzdaq_api import events
 from thzdaq_api.lab import Lab
 
@@ -37,8 +37,11 @@ class Bridge(QObject):
             events.ApprovalAnswered: self.approval_answered,
             events.Resync: self.resync,
         }
-        # Emitted from another thread, delivered in this object's: the GUI's
-        self._heard.connect(self._tell)
+        # Delivered in this object's thread (the GUI's) through its event queue,
+        # also when emitted there (a LocalLab called from the GUI thread): Qt
+        # would call a same-thread slot at once, ahead of events of other
+        # threads already queued, and the order of the events would break
+        self._heard.connect(self._tell, Qt.ConnectionType.QueuedConnection)
 
     def listen(self, lab: Lab, since: Optional[int] = None) -> None:
         """Hear this lab (and no other) after event since, from now for None."""

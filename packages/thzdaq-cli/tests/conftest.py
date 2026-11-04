@@ -10,7 +10,7 @@ EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 @pytest.fixture(autouse=True)
 def a_persons_terminal(monkeypatch):
     """Tests run as a person types, also from an agent's shell."""
-    from thzdaq_cli.client import AGENT_SHELLS
+    from thzdaq_api.origins import AGENT_SHELLS
 
     for name in AGENT_SHELLS:
         monkeypatch.delenv(name, raising=False)

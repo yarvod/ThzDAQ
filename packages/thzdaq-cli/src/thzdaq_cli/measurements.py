@@ -27,6 +27,7 @@ from thzdaq_api.measurements import (
     ProcedureInfo,
     RunInfo,
     StartMeasurement,
+    fill_slots,
 )
 
 from thzdaq_cli import show
@@ -142,19 +143,14 @@ def run_text(run: RunInfo) -> str:
 def chosen_devices(args, client: Client) -> Dict[str, str]:
     """The devices given, and for a slot without one the device that alone
     suits it (said on stderr); several that suit are named for --device."""
-    typed, devices = assignments(args.set), assignments(args.device)
+    typed, given = assignments(args.set), assignments(args.device)
     info = client.call(DescribeProcedure(procedure=args.procedure, typed=typed))
-    bench = client.call(ListDevices())
-    for slot in info.slots:
-        if slot.name in devices:
-            continue
-        suitable = slot.candidates(bench)
-        if len(suitable) == 1:
-            devices[slot.name] = suitable[0].ref
-            print(f"{slot.name}: {suitable[0].ref}", file=sys.stderr)
-        elif suitable:
-            refs = ", ".join(d.ref for d in suitable)
-            raise Mistyped(f"--device {slot.name}=… one of {refs}")
+    devices, choices = fill_slots(info.slots, client.call(ListDevices()), given)
+    if choices:
+        slot, refs = next(iter(choices.items()))
+        raise Mistyped(f"--device {slot}=… one of {', '.join(refs)}")
+    for slot in devices.keys() - given.keys():
+        print(f"{slot}: {devices[slot]}", file=sys.stderr)
     return devices
 
 
@@ -283,6 +279,7 @@ LINES: Dict[type, Callable[[Any], str]] = {
     events.MeasurementStarted: lambda b: f"#{b.run.id} {b.run.title} started ({b.run.origin})",
     events.MeasurementProgress: lambda b: f"#{b.id} {b.done}/{b.total or '?'}",
     events.MeasurementLog: lambda b: f"#{b.id} {b.message}",
+    events.MeasurementPlotted: lambda b: f"#{b.id} plots {b.plot.title}",
     events.MeasurementFinished: lambda b: run_text(b.run),
     events.StationChanged: lambda b: f"profile {show.profile(b.name, b.path)}",
     events.LeasesChanged: lambda b: "in use: "

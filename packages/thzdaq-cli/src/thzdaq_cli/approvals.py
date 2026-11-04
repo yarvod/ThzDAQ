@@ -11,6 +11,7 @@ from thzdaq_api.approvals import AnswerApproval, Approval, ListApprovals
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ApprovalAnswered, ApprovalRequested
 from thzdaq_api.origins import ANSWERING_CLI, agent
+from thzdaq_api.terminal import ALLOW, yes
 
 from thzdaq_cli import show
 from thzdaq_cli.client import FAILED, OK, Client, origin
@@ -117,7 +118,7 @@ def ask(client: Client, approval: Approval) -> None:
 def decided(approval: Approval) -> AnswerApproval:
     """An operation: allow it (another value, the device typed for a dangerous
     step) or not, with words for the agent."""
-    if input("allow? [y/N] ").strip().lower() not in ("y", "yes"):
+    if not yes(input(ALLOW)):
         words = input("why not, what instead (Enter: nothing): ").strip()
         return AnswerApproval(id=approval.id, allowed=False, text=words)
     value: Optional[str] = None

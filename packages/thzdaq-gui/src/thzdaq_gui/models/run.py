@@ -34,6 +34,7 @@ class RunModel(QObject):
     record = Signal(str, object)  # table, record
     progress = Signal(int, object)  # done, total or None
     log = Signal(str)
+    plotted = Signal(object)  # PlotInfo: drawn from now on (a script's plot)
     finished = Signal(object)  # Measurement, ended
     failed = Signal(str)  # could not start: missing device, bad parameters
     conflict = Signal(str)  # could not start: another measurement sweeps a device
@@ -56,6 +57,7 @@ class RunModel(QObject):
             events.MeasurementRecords: self._on_records,
             events.MeasurementProgress: self._on_progress,
             events.MeasurementLog: self._on_log,
+            events.MeasurementPlotted: self._on_plotted,
             events.MeasurementFinished: self._on_finished,
         }
 
@@ -200,6 +202,10 @@ class RunModel(QObject):
 
     def _on_log(self, body: events.MeasurementLog) -> None:
         self.log.emit(body.message)
+
+    def _on_plotted(self, body: events.MeasurementPlotted) -> None:
+        self.plots += (body.plot,)
+        self.plotted.emit(body.plot)
 
     def _on_finished(self, body: events.MeasurementFinished) -> None:
         run = body.run

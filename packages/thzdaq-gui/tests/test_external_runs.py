@@ -61,6 +61,23 @@ def test_cli_measurement_reaches_data_graphs_and_processes(window, session, cli,
     assert sum(len(points) for points in graph.points.values()) == 6
 
 
+def test_a_scripts_plot_added_while_it_runs_is_drawn(window, session, cli, wait):
+    from thzdaq_api.measurements import PlotInfo
+    from thzdaq_api.sessions import EndSession, PlotSession, RecordSession
+    from thzdaq_api.sessions import StartSession
+
+    run = cli.call(StartSession(title="pv_fine"))
+    asked = PlotInfo(key="", title="", table="scan", x="voltage", y="power")
+    plot = cli.call(PlotSession(id=run.id, plot=asked))
+    for v in (1e-3, 2e-3):
+        row = {"voltage": v, "power": -30.0}
+        cli.call(RecordSession(id=run.id, table="scan", rows=(row,)))
+    wait(lambda: plot.title in window.hub.graphs)
+    graph = window.hub.graph(plot.title)
+    wait(lambda: sum(len(points) for points in graph.points.values()) == 2)
+    cli.call(EndSession(id=run.id))
+
+
 def test_process_stop_cancels_an_external_monitor(window, session, cli, wait):
     run = monitor(cli)
     wait(lambda: session.processes.items)

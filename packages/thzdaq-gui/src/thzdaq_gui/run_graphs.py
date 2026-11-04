@@ -13,6 +13,7 @@ class RunGraphs(QObject):
 
     def follow(self, model) -> None:
         model.started.connect(lambda _: self.started(model))
+        model.plotted.connect(lambda plot: self.plotted(plot))
         model.record.connect(
             lambda table, record: self.hub.feed(
                 model.measurement, model.plots, table, record
@@ -26,3 +27,8 @@ class RunGraphs(QObject):
     def started(self, model) -> None:
         self.hub.register_plots(model.plots)
         self.hub.show_run([plot.title for plot in model.plots])
+
+    def plotted(self, plot) -> None:
+        """A plot the run added while it runs (a script's): on screen too."""
+        self.hub.register_plots([plot])
+        self.hub.show_run([plot.title])

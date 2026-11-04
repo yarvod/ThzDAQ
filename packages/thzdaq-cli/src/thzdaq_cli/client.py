@@ -2,7 +2,6 @@
 in the terminal, output as text or JSON, and the exit codes."""
 
 import argparse
-import os
 import sys
 from typing import Any, Callable, Optional, TypeVar
 
@@ -10,7 +9,8 @@ from thzdaq_api import host
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Lab
 from thzdaq_api.operation import Operation
-from thzdaq_api.origins import AGENT_CLI, CLI
+from thzdaq_api.origins import AGENT_CLI, CLI, agent_shell
+from thzdaq_api.terminal import yes
 
 from thzdaq_cli import show
 
@@ -18,14 +18,12 @@ R = TypeVar("R")
 PROG = "thzdaq"  # the command, as people type it
 KIND = CLI
 OK, FAILED, USAGE, NO_DAEMON = 0, 1, 2, 3
-# Set in the shells agents run commands in (Claude Code, Codex): a command
-# there is the agent's, so what it changes waits for a person in the window
-AGENT_SHELLS = ("CLAUDECODE", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED")
 
 
 def origin() -> str:
-    """cli in a person's terminal, cli:agent in an agent's shell."""
-    return AGENT_CLI if any(os.environ.get(name) for name in AGENT_SHELLS) else CLI
+    """cli in a person's terminal, cli:agent in an agent's shell: what it
+    changes waits for a person in the window."""
+    return AGENT_CLI if agent_shell() else CLI
 
 
 class Mistyped(Exception):
@@ -83,8 +81,7 @@ class Client:
         if not sys.stdin.isatty():
             print(f"{question} — not asked without a terminal: --yes", file=sys.stderr)
             return False
-        answer = input(f"{question} [y/N] ").strip().lower()
-        return answer in ("y", "yes")
+        return yes(input(f"{question} [y/N] "))
 
     def shared(self, call: Callable[[bool], R]) -> Optional[R]:
         """call(share=False); a conflict (a device another measurement sweeps)
