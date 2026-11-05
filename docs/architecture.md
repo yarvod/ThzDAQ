@@ -173,6 +173,7 @@ class Instrument:                     # база драйверов и симу�
 class ScpiInstrument(Instrument):     # текстовые команды поверх Transport
     def query_float / query_int / query_bool(...)   # мусор в ответе → InstrumentResponseError
     def identify(self) -> str                       # *IDN?
+    def send_raw(self, command, answer) -> str | None   # RawCommands: команда как набрана
 
 @dataclass(frozen=True)
 class SubdeviceType:                  # вид функционального устройства на приборе
@@ -193,6 +194,7 @@ class SubdeviceType:                  # вид функционального у
 только из методов, поэтому реестр выводит возможности драйвера из класса (`issubclass`).
 ```python
 class Identifiable(Protocol):       def identify(self) -> str
+class RawCommands(Protocol):        send_raw(command, answer) -> str | None  # мимо защиты
 class Switchable(Protocol):         set_output(bool), get_output() -> bool
 class VoltageSource(Protocol):      set_voltage(V), get_voltage() -> V   # уставка
 class CurrentSource(Protocol):      set_current(A), get_current() -> A   # уставка/предел

@@ -43,6 +43,11 @@ do is seen in the window, and what you change waits for the person's consent.
    Read the file to analyse it; never pass arrays through tools.
 9. **Ask in words** when the plan is unclear: `ask_user(question, options)` shows the
    question in the window; still waiting after `timeout`, `wait_answer(id)` waits on.
+10. **Raw commands** go to an instrument as typed, for what its driver does not wrap
+    (`raw_command(instrument, command)`, `instrument` is its id in the profile, not a
+    device on it). A query (with `?`, `*IDN?`) waits for the person like a set. A write
+    is refused to agents whatever you are allowed: no limit checks it. When the bench
+    needs one, say which command and why (`ask_user`); the person sends it.
 
 ## Tools of the MCP server `thzdaq`
 
@@ -51,6 +56,7 @@ do is seen in the window, and what you change waits for the person's consent.
 | `list_devices`, `describe_device`, `read_device` | the devices, what they take, what they read now |
 | `set_quantity(ref, key, value)` | set a value (with its unit); a person allows it |
 | `call_action(ref, action, arguments)` | an action of a device (turn the load, read a trace) |
+| `raw_command(instrument, command)` | a raw query (with `?`) to an instrument; a person allows it |
 | `list_connections` | the connections the instruments share, open or broken |
 | `list_procedures`, `describe_procedure` | what the bench measures and how a run would go |
 | `start_measurement` | start a procedure; a person allows it |
@@ -80,7 +86,7 @@ profile; connections only by their kind) and `thzdaq://guide/<topic>` (this guid
 The same operations from your shell, with `--json` for answers to parse:
 `thzdaq devices`, `thzdaq device sis_bias_1`, `thzdaq read sis_bias_1`,
 `thzdaq set sis_bias_1 voltage_set 2.3mV`, `thzdaq procedures`,
-`thzdaq describe sis.iv_curve`,
+`thzdaq describe sis.iv_curve`, `thzdaq raw sis_block_1 "*IDN?"`,
 `thzdaq run sis.iv_curve --device bias=sis_bias_1 --set voltage=0:7:351` (follows the run
 to its end; `--detach` only starts it), `thzdaq status`, `thzdaq cancel 12`,
 `thzdaq show <file>`. In an agent's shell the command is the agent's (`cli:agent`): `--yes`
