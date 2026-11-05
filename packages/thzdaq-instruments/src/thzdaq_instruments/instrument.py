@@ -117,6 +117,13 @@ class ScpiInstrument(Instrument):
     def query(self, command: str) -> str:
         return self.transport.query(command).strip()
 
+    def send_raw(self, command: str, answer: bool) -> Optional[str]:
+        """A command as typed (RawCommands); its answer when one is read."""
+        if answer:
+            return self.query(command)
+        self.write(command)
+        return None
+
     def _parse(self, command: str, response: str, parser) -> Any:
         try:
             return parser(response)

@@ -1,9 +1,9 @@
 from typing import Optional
 
-from thzdaq_instruments.instrument import Instrument
+from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimRotator(Instrument):
+class SimRotator(SimInstrument):
     driver_key = "sim.rotator"
     device_type = "grid"
 

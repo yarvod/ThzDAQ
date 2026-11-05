@@ -183,8 +183,18 @@ class Compressor(Protocol):
         """Pa, gauge pressure"""
 
 
+@runtime_checkable
+class RawCommands(Protocol):
+    """An instrument that takes commands as text: what its driver does not wrap
+    yet is sent as typed, over its link, with nothing checked."""
+
+    def send_raw(self, command: str, answer: bool) -> Optional[str]:
+        """Send the command; with answer, read and return the answer."""
+
+
 ALL_CAPABILITIES: tuple[type, ...] = (
     Identifiable,
+    RawCommands,
     Switchable,
     VoltageSource,
     CurrentSource,
@@ -202,6 +212,10 @@ ALL_CAPABILITIES: tuple[type, ...] = (
     Rotator,
     Compressor,
 )
+
+
+# How an instrument is reached rather than what it does
+ACCESS: tuple[type, ...] = (Identifiable, RawCommands)
 
 
 def capabilities_of(cls: type | None) -> tuple[type, ...]:

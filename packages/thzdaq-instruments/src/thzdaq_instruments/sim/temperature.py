@@ -1,7 +1,8 @@
 from typing import Dict, Optional
 
-from thzdaq_instruments.instrument import Channel, Instrument
+from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.sim.lively import Wobble, still
+from thzdaq_instruments.sim.base import SimInstrument
 
 
 class SimTemperatureInput(Channel):
@@ -12,7 +13,7 @@ class SimTemperatureInput(Channel):
         return temperature * (1 + self.instrument.wobble[self.key]())
 
 
-class SimTemperatureController(Instrument):
+class SimTemperatureController(SimInstrument):
     driver_key = "sim.temperature_controller"
     device_type = "temperature_controller"
     channel_class = SimTemperatureInput

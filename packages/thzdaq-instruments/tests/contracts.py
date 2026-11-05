@@ -31,6 +31,7 @@ from thzdaq_instruments.capabilities import (
     OutputProtection,
     PowerDetector,
     PowerLevel,
+    RawCommands,
     Rotator,
     SpectrumAnalyzer,
     Switchable,
@@ -161,6 +162,12 @@ def check_identifiable(device):
     assert isinstance(identity, str) and identity
 
 
+def check_raw_commands(device, query="*IDN?", write="*CLS"):
+    answer = device.send_raw(query, True)
+    assert isinstance(answer, str) and answer
+    assert device.send_raw(write, False) is None
+
+
 def check_switchable(device):
     device.set_output(True)
     assert device.get_output() is True
@@ -287,6 +294,28 @@ CONTRACTS = {
             "f70": f70,
             "f70 rest": f70_rest,
             "grid": grid,
+        },
+    ),
+    RawCommands: (
+        check_raw_commands,
+        {
+            "sim power supply": SimPowerSupply,
+            "sim signal generator": SimSignalGenerator,
+            "sim power meter": SimPowerMeter,
+            "sim sis block": SimSisBlock,
+            "sim yig filter": SimYigFilter,
+            "sim chopper": SimChopper,
+            "sim temperature": SimTemperatureController,
+            "sim spectrum analyzer": SimSpectrumAnalyzer,
+            "sim network analyzer": SimNetworkAnalyzer,
+            "sim vacuum gauge": SimVacuumGauge,
+            "sim compressor": SimCompressor,
+            "sim rotator": SimRotator,
+            "rigol": rigol,
+            "agilent": agilent,
+            "lakeshore": lakeshore,
+            "sr830": sr830,
+            "zva": zva,
         },
     ),
     Switchable: (

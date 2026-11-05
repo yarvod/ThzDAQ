@@ -3,7 +3,7 @@ import random
 from typing import Callable, Optional
 
 from thzdaq_instruments.errors import ConfigurationError
-from thzdaq_instruments.instrument import Instrument
+from thzdaq_instruments.sim.base import SimInstrument
 from thzdaq_instruments.quantities import POWER_METER_QUANTITIES, POWER_UNITS
 from thzdaq_instruments.sim.lively import Wobble, still
 
@@ -20,7 +20,7 @@ def load_power(power: float, load: Optional[str]) -> float:
     return power + 10 * math.log10((T_HOT + T_RECEIVER) / (T_COLD + T_RECEIVER))
 
 
-class SimPowerMeter(Instrument):
+class SimPowerMeter(SimInstrument):
     """Reads `power` (dBm) or, when given, the value of `model()`.
 
     The model lets a simulated bench couple instruments, e.g. power that depends

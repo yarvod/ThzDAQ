@@ -2,12 +2,13 @@ import math
 from typing import Optional
 
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
-from thzdaq_instruments.instrument import Channel, Instrument
+from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.quantities import COIL_CURRENT, SHORT, SIS_VOLTAGE_SET
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments import sis_block
 from thzdaq_instruments.sis_block import DEVICES
 from thzdaq_instruments.sim.lively import Wobble, still
+from thzdaq_instruments.sim.base import SimInstrument
 
 
 class SimSisBiasChannel(Channel):
@@ -84,7 +85,7 @@ class SimSisCtrlChannel(Channel):
         return self._current
 
 
-class SimSisBlock(Instrument):
+class SimSisBlock(SimInstrument):
     driver_key = "sim.sis_block"
     device_type = "sis_block"
     channel_class = SimSisBiasChannel

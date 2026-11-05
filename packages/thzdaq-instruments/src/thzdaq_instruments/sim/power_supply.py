@@ -1,9 +1,10 @@
 from typing import Dict, Optional, Tuple
 
 from thzdaq_instruments.errors import InstrumentResponseError
-from thzdaq_instruments.instrument import Channel, Instrument
+from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim.lively import Wobble, still
+from thzdaq_instruments.sim.base import SimInstrument
 
 
 class SimSupplyChannel(Channel):
@@ -68,7 +69,7 @@ class SimSupplyChannel(Channel):
         return ChannelReading(self._current * load, self._current)
 
 
-class SimPowerSupply(Instrument):
+class SimPowerSupply(SimInstrument):
     driver_key = "sim.power_supply"
     device_type = "power_supply"
     channel_class = SimSupplyChannel

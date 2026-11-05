@@ -1,6 +1,7 @@
 from typing import Optional
 
-from thzdaq_instruments.instrument import Channel, Instrument
+from thzdaq_instruments.instrument import Channel
+from thzdaq_instruments.sim.base import SimInstrument
 
 
 class SimYigChannel(Channel):
@@ -24,7 +25,7 @@ class SimYigChannel(Channel):
         return self.frequency
 
 
-class SimYigFilter(Instrument):
+class SimYigFilter(SimInstrument):
     driver_key = "sim.yig_filter"
     device_type = "yig_filter"
     channel_class = SimYigChannel

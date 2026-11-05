@@ -14,6 +14,7 @@ from thzdaq_instruments.capabilities import (
     FrequencySource,
     Identifiable,
     PowerDetector,
+    RawCommands,
     Switchable,
     VoltageCurrentMeter,
     VoltageSource,
@@ -91,7 +92,7 @@ class TestRegistry:
         registry = DriverRegistry()
         registry.register("demo.supply", DemoSupply, title="Demo")
         info = registry.get("demo.supply")
-        assert info.capabilities == (Identifiable,)
+        assert info.capabilities == (Identifiable, RawCommands)
         assert set(info.channel_capabilities) == {Switchable, VoltageCurrentMeter}
         assert registry.find(Switchable) == [info]
         assert registry.find(FrequencySource) == []
