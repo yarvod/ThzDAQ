@@ -17,6 +17,13 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
                  "data": {"voltage": [...], "current": [...]}}},
       "results": {...}, "station": {...}, "metadata": {...}
     }
+
+While it runs, the file holds its description without records (the data of
+every table empty) and the records are appended next to it, one line each,
+to <id>_<procedure>.jsonl: {"table": "iv", "record": {"voltage": ...}}. At
+its end the whole file is written and the records file removed. A file still
+marked running (its writer gone, or not finished) reads with the records of
+its records file: none of them is lost when the process is killed.
 """
 
 import csv
@@ -24,7 +31,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple, Union
 
 from thzdaq_api.data import decode_values, encode_values
 
@@ -51,6 +58,11 @@ PROFILE = "profile"
 # Metadata: plots a run added while it ran (a script's m.plot), as PlotInfo
 PLOTS = "plots"
 
+
+# The records of a running measurement, next to its file: one line each
+RECORDS_SUFFIX = ".jsonl"
+TABLE = "table"
+RECORD = "record"
 
 # Numbers given by the store (1, 2, 3, ... per data folder); 0 until numbered.
 # Files of older versions keep their text ids ("20261023-022400-ab12").
@@ -177,11 +189,12 @@ class Table:
         for values in zip(*(self.data[k] for k in keys)):
             yield dict(zip(keys, values))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, records: bool = True) -> Dict[str, Any]:
+        """records=False: its description, every column without values."""
         return {
             "title": self.title,
             "columns": [c.to_dict() for c in self.columns],
-            "data": self.data,
+            "data": self.data if records else {key: [] for key in self.data},
         }
 
     @classmethod
@@ -254,6 +267,17 @@ class Measurement:
     def size(self) -> int:
         return sum(len(t) for t in self.tables.values())
 
+    def gather(self, records: Iterable[Tuple[str, Mapping[str, Any]]]) -> None:
+        """The records a records file appended (table, record), in order, but
+        those it has already: the n-th record of a table is skipped when the
+        table holds n or more."""
+        held = {name: len(table) for name, table in self.tables.items()}
+        counted: Dict[str, int] = {}
+        for table, record in records:
+            counted[table] = counted.get(table, 0) + 1
+            if counted[table] > held.get(table, 0):
+                self.append(table, record)
+
     def finish(self, status: str, at: str, error: Optional[str] = None) -> None:
         """Ended with `status` at the ISO time `at`."""
         if status not in STATUSES:
@@ -262,7 +286,9 @@ class Measurement:
         self.error = error
         self.finished = at
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, records: bool = True) -> Dict[str, Any]:
+        """records=False: its description, as the file of a running one holds
+        it (its records are in the records file)."""
         return {
             "format": FORMAT,
             "version": FORMAT_VERSION,
@@ -276,7 +302,7 @@ class Measurement:
             "comment": self.comment,
             "parameters": self.parameters,
             "devices": {k: v.to_dict() for k, v in self.devices.items()},
-            "tables": {k: v.to_dict() for k, v in self.tables.items()},
+            "tables": {k: v.to_dict(records) for k, v in self.tables.items()},
             "results": self.results,
             "station": self.station,
             "metadata": self.metadata,
@@ -319,26 +345,61 @@ def loads(text: str) -> Any:
     return decode_values(json.loads(text))
 
 
-def write_measurement(measurement: Measurement, path: PathLike) -> Path:
+def write_file(path: PathLike, text: str) -> Path:
     """Through a temporary file: a crash leaves the previous complete version."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(dumps(measurement.to_dict(), indent=1), encoding="utf-8")
+    temporary.write_text(text, encoding="utf-8")
     os.replace(temporary, path)
     return path
 
 
+def write_measurement(measurement: Measurement, path: PathLike) -> Path:
+    """The whole measurement, records in it (write_file)."""
+    return write_file(path, dumps(measurement.to_dict(), indent=1))
+
+
+def records_path(path: PathLike) -> Path:
+    """Where a running measurement appends its records: 000042_monitor_time.jsonl
+    next to 000042_monitor_time.json."""
+    return Path(path).with_suffix(RECORDS_SUFFIX)
+
+
+def record_line(table: str, record: Mapping[str, Any]) -> str:
+    """A record as its line in a records file."""
+    return dumps({TABLE: table, RECORD: record}) + "\n"
+
+
+def read_records(path: PathLike) -> Iterator[Tuple[str, Dict[str, Any]]]:
+    """The records of a records file, in order: (table, record); none when
+    there is none. A line cut short (the last one, by a crash while it was
+    written) ends them."""
+    try:
+        file = open(path, "rb")
+    except FileNotFoundError:
+        return
+    with file:
+        for line in file:
+            try:
+                found = loads(line.decode("utf-8"))
+            except ValueError:  # JSONDecodeError, UnicodeDecodeError
+                return
+            yield found[TABLE], found[RECORD]
+
+
 def read_measurement(path: PathLike) -> Measurement:
     """A measurement file; one still marked running reads as interrupted (its
-    writer is gone or has not finished). ValueError when it is not one."""
+    writer is gone or has not finished), with the records its records file
+    holds. ValueError when it is not one."""
     try:
         data = loads(Path(path).read_text(encoding="utf-8"))
+        measurement = Measurement.from_dict(data)
+        if measurement.status == RUNNING:
+            measurement.status = INTERRUPTED
+            measurement.gather(read_records(records_path(path)))
     except (OSError, json.JSONDecodeError) as e:
         raise ValueError(f"{path}: {e}") from e
-    measurement = Measurement.from_dict(data)
-    if measurement.status == RUNNING:
-        measurement.status = INTERRUPTED
     measurement.metadata["path"] = str(path)
     return measurement
 
