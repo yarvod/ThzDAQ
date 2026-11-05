@@ -1,15 +1,35 @@
 [project]
 name = "thzdaq-core"
-version = "0.1.0"
+version = "0.0.6b2"
 description = "ThzDAQ bench model, measurements and data without GUI"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "pyyaml>=6.0",
-    "thzdaq-analysis",
-    "thzdaq-api",
-    "thzdaq-instruments",
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "yarvod" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Physics",
 ]
+dependencies = [
+    # The daemon is tested with numpy 1.x; thzdaq-analysis alone allows 2 for scripts
+    "numpy>=1.26,<2",
+    "pyyaml>=6.0",
+    "thzdaq-analysis==0.0.6b2",
+    "thzdaq-api==0.0.6b2",
+    "thzdaq-instruments==0.0.6b2",
+]
+
+[project.urls]
+Homepage = "https://github.com/yarvod/ThzDAQ"
+Documentation = "https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md"
+Issues = "https://github.com/yarvod/ThzDAQ/issues"
+Releases = "https://github.com/yarvod/ThzDAQ/releases"
 
 [project.scripts]
 thzdaq-station = "thzdaq_core.cli.station:main"

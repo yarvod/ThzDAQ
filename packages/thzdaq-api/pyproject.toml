@@ -1,12 +1,30 @@
 [project]
 name = "thzdaq-api"
-version = "0.1.0"
+version = "0.0.6b2"
 description = "ThzDAQ contract and client: operations, data types and events of the bench daemon"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "yarvod" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = [
     "msgspec>=0.19",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yarvod/ThzDAQ"
+Documentation = "https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md"
+Issues = "https://github.com/yarvod/ThzDAQ/issues"
+Releases = "https://github.com/yarvod/ThzDAQ/releases"
 
 [build-system]
 requires = ["hatchling>=1.27"]

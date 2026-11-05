@@ -10,8 +10,10 @@ point inward and import-linter checks them (root `pyproject.toml`):
   autosave, time stamps) and the ports it needs (`ports.py`).
 - `adapters/` — files: measurements as JSON (`json_store.py`), profiles as YAML
   (`yaml_profiles.py`), the old program's `settings.ini` (`legacy_profiles.py`).
-- `cli/` — the local commands `thzdaq` and `thzdaq-station`, until the daemon takes over
-  (`docs/daemon.md`).
+- `cli/` — `thzdaq-station`: bench profiles as files, without the daemon.
+
+The bench daemon (`thzdaq[daemon]`) runs it; clients reach it only through `thzdaq-api`
+([docs/daemon.md](https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md)).
 
 ## Station
 
@@ -55,10 +57,9 @@ with Station(load_station("stations/2sb.example.yaml"), simulate=True) as statio
 ```
 
 ```bash
-uv run thzdaq list
+uv run thzdaq procedures
 uv run thzdaq describe sis.iv_curve
-uv run thzdaq run sis.iv_curve --station stations/2sb.example.yaml --simulate \
-    --device bias=sis_bias_1 --set voltage=0:7:351
+uv run thzdaq --simulate run sis.iv_curve --device bias=sis_bias_1 --set voltage=0:7:351
 uv run thzdaq show data/2026-10-29/000001_sis_iv_curve.json
 ```
 
