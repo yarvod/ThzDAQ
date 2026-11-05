@@ -44,6 +44,27 @@ def test_a_dangerous_set_is_asked_and_refused_without_a_terminal(thzdaq):
     assert code == 0 and "active = off" in out
 
 
+def test_a_raw_query_answers_and_a_raw_write_is_asked(thzdaq, lab):
+    code, out, _ = thzdaq("raw", "sis_block_1", "*IDN?")
+    assert code == 0 and out.strip() == "THZDAQ,SimSisBlock,0,1.0"
+    code, _, err = thzdaq("raw", "sis_block_1", "DEV4:OFF")
+    assert code == 1 and "do not check a raw command" in err and "--yes" in err
+    code, out, _ = thzdaq("--yes", "raw", "sis_block_1", "DEV4:OFF")
+    assert code == 0 and out.startswith("sent; read again: ") and "sis_bias_1" in out
+    sweep = lab.call(
+        StartMeasurement(
+            procedure="sis.iv_curve", parameters=SLOW_IV, devices={"bias": "sis_bias_1"}
+        )
+    )
+    code, _, err = thzdaq("raw", "sis_block_1", "*IDN?")  # a query: no conflict
+    assert code == 0, err
+    code, _, err = thzdaq("--yes", "raw", "sis_block_1", "DEV4:OFF")  # shared
+    assert code == 0, err
+    lab.call(CancelMeasurement(id=sweep.id))
+    code, _, err = thzdaq("raw", "chopper_1", "*IDN?")
+    assert code == 1 and "takes no raw commands" in err
+
+
 def test_procedures_are_described_as_they_are_typed(thzdaq):
     code, out, _ = thzdaq("procedures")
     assert code == 0 and "sis.iv_curve" in out
@@ -186,9 +207,10 @@ def test_a_command_in_an_agents_shell_waits_for_a_person(thzdaq, lab, monkeypatc
 
 def test_people_set_what_agents_may_do(thzdaq):
     code, out, _ = thzdaq("daemon", "settings")
-    assert "set      ask" in out and "station  deny" in out and "(always)" in out
+    assert "raw_write  deny" in out and "raw_query  ask" in out
+    assert "set        ask" in out and "station    deny" in out and "(always)" in out
     code, out, _ = thzdaq("daemon", "settings", "--agents", "set=allow")
-    assert code == 0 and "set      allow" in out and "idle timeout" in out
+    assert code == 0 and "set        allow" in out and "idle timeout" in out
     code, _, err = thzdaq("daemon", "settings", "--agents", "answer=allow")
     assert code == 1 and "stay deny" in err
     code, _, err = thzdaq("daemon", "settings", "--agents", "set=maybe")

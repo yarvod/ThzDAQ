@@ -158,6 +158,25 @@ async def test_a_refusal_reaches_the_agent_in_the_persons_words(connect, window)
     assert text(result).startswith("denied:") and "check the pump first" in text(result)
 
 
+async def test_an_agent_asks_raw_queries_and_never_writes(connect, window):
+    async with connect() as client:
+        query = await answering(
+            window,
+            client.call_tool(
+                "raw_command", {"instrument": "sis_block_1", "command": "*IDN?"}
+            ),
+            allowed=True,
+        )
+        write = await client.call_tool(
+            "raw_command",
+            {"instrument": "sis_block_1", "command": "DEV4:OFF", "share": True},
+        )
+    assert not query.is_error
+    assert text(query) == "sis_block_1 *IDN?: THZDAQ,SimSisBlock,0,1.0"
+    assert write.is_error and text(write).startswith("denied:")
+    assert len(bodies(window.heard, ApprovalRequested)) == 1  # the query alone
+
+
 async def test_a_value_beyond_the_limits_is_refused_before_anybody_is_asked(
     connect, window
 ):

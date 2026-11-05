@@ -5,7 +5,8 @@ actions and the settings it keeps in the profile, so every driver gets a
 working dock. It reads, sets and acts through the lab (DeviceModel), and keeps
 what belongs in the profile through update_station. Actions get buttons; an
 analyzer's trace, a chopper's rotation and a SIS bias's calibration get groups
-of their own, a device kind its quick scans.
+of their own, a device kind its quick scans. A device whose instrument takes
+raw commands has their console in a folded Advanced section.
 """
 
 import json
@@ -56,10 +57,12 @@ from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.device_types import type_title
 from thzdaq_gui.dock_names import DEVICE, dock_name
 from thzdaq_gui.docks.measure import ProcedureBox
+from thzdaq_gui.docks.raw import RawConsole
 from thzdaq_gui.fields import PrefixBox, QuantityField, default_prefix, format_number
 from thzdaq_gui.forms import CompactDoubleSpinBox, Editor
 from thzdaq_gui.models.device import DeviceModel
 from thzdaq_gui.settings import (
+    ADVANCED,
     argument_key,
     sections_path,
     setpoint_key,
@@ -245,6 +248,7 @@ class QuantityPanel(QWidget):
         self.plot.toggled.connect(self.plot_toggled)
         model.values.connect(self.show_values)
         model.observed.connect(self.show_observed)
+        model.unknown.connect(self.forget)
         model.read_failed.connect(self.failed)
         model.set_done.connect(self.was_set)
         model.set_failed.connect(self.set_failed)
@@ -427,11 +431,16 @@ class QuantityPanel(QWidget):
         self.notes[quantity.key].hide()
         self.remember(quantity, value)
 
+    def forget(self) -> None:
+        """Nothing is known of the device (a raw write to its instrument): its
+        readouts are empty until it is read again."""
+        for label in self.values.values():
+            label.setText("--")
+
     def failed(self, message: str) -> None:
         self.pending = False
         self.monitor.setChecked(False)
-        for label in self.values.values():
-            label.setText("--")
+        self.forget()
         self.tell(message)
 
     def tell(self, message: str) -> None:
@@ -943,6 +952,12 @@ class DeviceWidget(QScrollArea):
             layout.addWidget(self._boxed(channel.title, panel))
         for group in self.groups(main, described):
             layout.addWidget(group)
+        if info.raw:
+            # Commands to its instrument the driver does not wrap: rarely needed
+            advanced = Collapsible("Advanced", ADVANCED, expanded=False)
+            advanced.set_summary(f"raw commands to {info.instrument}")
+            advanced.addWidget(RawConsole(model))
+            layout.addWidget(advanced)
         layout.addStretch()
         self.setWidget(inner)
         session.leases_changed.connect(self.show_use)

@@ -13,6 +13,7 @@ class Bridge(QObject):
     measurement_event = Signal(object)  # numbered Event, for run catch-up
     quantity_set = Signal(object)  # QuantitySet
     action_done = Signal(object)  # ActionDone
+    raw_sent = Signal(object)  # RawSent
     values = Signal(object)  # Values
     read_failed = Signal(object)  # ReadFailed
     station_changed = Signal(object)  # StationChanged
@@ -29,6 +30,7 @@ class Bridge(QObject):
         self._signals = {
             events.QuantitySet: self.quantity_set,
             events.ActionDone: self.action_done,
+            events.RawSent: self.raw_sent,
             events.Values: self.values,
             events.ReadFailed: self.read_failed,
             events.StationChanged: self.station_changed,

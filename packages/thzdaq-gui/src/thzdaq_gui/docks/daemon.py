@@ -291,7 +291,8 @@ class AgentRights(Collapsible):
             means = QLabel(MEANS[rights])
             means.setProperty("role", "muted")
             means.setWordWrap(True)
-            grid.addWidget(QLabel(rights.value.capitalize()), row, 0)
+            title = rights.value.replace("_", " ").capitalize()  # Raw query
+            grid.addWidget(QLabel(title), row, 0)
             grid.addWidget(choice, row, 1)
             grid.addWidget(means, row, 2)
             self.choices[rights] = choice

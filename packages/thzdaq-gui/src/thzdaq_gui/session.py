@@ -91,6 +91,7 @@ class Session(QObject):
         self.values = {}
         self.bridge.values.connect(self._values_heard)
         self.bridge.quantity_set.connect(self._quantity_heard)
+        self.bridge.raw_sent.connect(self._raw_heard)
         self.bridge.station_changed.connect(self._profile_changed)
         self.bridge.resync.connect(self._resynced)
         self.bridge.leases_changed.connect(self._leases_heard)
@@ -232,6 +233,14 @@ class Session(QObject):
 
     def _quantity_heard(self, body) -> None:
         self.values.setdefault(body.ref, {})[body.key] = body.value
+
+    def _raw_heard(self, body) -> None:
+        """A raw command: in the log; after a write nothing is known of the
+        devices on the instrument until they are read again."""
+        answer = "" if body.answer is None else f": {body.answer}"
+        logger.info(f"{body.origin} → {body.instrument} {body.command}{answer}")
+        for ref in body.unknown:
+            self.values.pop(ref, None)
 
     def running(self) -> List[RunInfo]:
         """Measurements running in the lab, whoever started them."""

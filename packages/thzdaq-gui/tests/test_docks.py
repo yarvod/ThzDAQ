@@ -561,6 +561,44 @@ class TestDeviceDocks:
         panel.monitor.setChecked(False)
         wait(lambda: polls() == [])
 
+    def test_raw_commands_from_a_device_dock(self, window, wait, monkeypatch):
+        from thzdaq_gui.docks.raw import RawConsole
+
+        widget = window.docks["device:sis_bias_1"].widget()
+        (console,) = widget.findChildren(RawConsole)  # to its block, sis_block_1
+        assert not window.docks["device:chopper_1"].widget().findChildren(RawConsole)
+        console.line.setText("*IDN?")
+        console.send()
+        wait(lambda: "< THZDAQ,SimSisBlock,0,1.0" in console.log.toPlainText())
+        # A write is confirmed first: no sends nothing
+        asked = []
+        answer = [QMessageBox.No]
+        monkeypatch.setattr(
+            QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or answer[0]
+        )
+        console.line.setText("DEV4:OFF")
+        console.send()
+        assert asked and "do not check a raw command" in asked[0]
+        assert (
+            console.line.text() == "DEV4:OFF"
+            and "> DEV4" not in console.log.toPlainText()
+        )
+        # Sent: the dock knows nothing of the bias until the lab read it again
+        panel = widget.panels[0]
+        panel.read()
+        wait(lambda: panel.values["voltage"].text() != "--")
+        forgotten = []
+        panel.model.unknown.connect(
+            lambda: forgotten.append(panel.values["voltage"].text())
+        )
+        answer[0] = QMessageBox.Yes
+        console.send()
+        wait(lambda: "sent; read again: " in console.log.toPlainText())
+        wait(lambda: forgotten and panel.values["voltage"].text() != "--")
+        assert forgotten == ["--"]
+        console.recall(1)
+        assert console.line.text() == "DEV4:OFF"
+
     def test_device_docks_use_their_instrument_queue(self, window):
         sis = window.docks["device:sis_bias_1"].widget().panels[0]
         meter = window.docks["device:power_meter_1"].widget().panels[0]

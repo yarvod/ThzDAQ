@@ -1,10 +1,14 @@
-"""A device as its dock works with it: read, set and act through the lab in the
-background, and the readings of polls as the lab tells them.
+"""A device as its dock works with it: read, set, act and send its instrument
+raw commands through the lab in the background, and the readings of polls as
+the lab tells them.
 
 The calls of a device go one after another in its instrument's queue
-(session.calls); devices do not wait for each other. A set or an action
-refused because another measurement sweeps the device is a conflict: whoever
-shows the device asks, and the retry it is given goes on (share).
+(session.calls); devices do not wait for each other. A set, an action or a
+raw write refused because another measurement sweeps the device is a
+conflict: whoever shows the device asks, and the retry it is given goes on
+(share). After a raw write to its instrument (by anyone) nothing is known of
+the device until the lab has read it again: what it reads then is what the
+device holds, as if set.
 """
 
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
@@ -16,6 +20,7 @@ from thzdaq_api.devices import (
     CancelPoll,
     DeviceInfo,
     Poll,
+    RawCommand,
     ReadDevice,
     SetQuantity,
     SubscribePoll,
@@ -40,6 +45,9 @@ class DeviceModel(QObject):
     acted = Signal(str, object)  # action, what it returned: a value or a Trace
     action_failed = Signal(str, str)  # action, why
     conflict = Signal(str, object)  # why, a retry that goes on anyway
+    raw_done = Signal(object)  # RawReply: what its instrument answered
+    raw_failed = Signal(str, str)  # the command, why it failed
+    unknown = Signal()  # a raw write to its instrument: its values are not known
 
     def __init__(self, session, info: DeviceInfo, parent=None):
         super().__init__(parent)
@@ -49,9 +57,11 @@ class DeviceModel(QObject):
         self.lane = info.instrument  # the queue its calls join
         self._poll: Optional[Tuple[Lab, Poll]] = None  # the lab that polls
         self._polls = 0  # counts changes: an answer to an earlier poll is let go
+        self._unknown = False  # since a raw write, until it is read again
         session.bridge.values.connect(self._heard)
         session.bridge.read_failed.connect(self._poll_failed)
         session.bridge.quantity_set.connect(self._quantity_set)
+        session.bridge.raw_sent.connect(self._raw_sent)
 
     @property
     def known_values(self):
@@ -97,6 +107,26 @@ class DeviceModel(QObject):
             ),
         )
 
+    def raw(self, command: str, answer: bool = False, share: bool = False) -> None:
+        """A command to its instrument as typed; answer: read the answer of a
+        write too."""
+        self._call(
+            RawCommand(
+                instrument=self.lane, command=command, answer=answer, share=share
+            ),
+            self.raw_done.emit,
+            lambda error: self._refused(
+                error,
+                lambda: self.raw_failed.emit(command, str(error)),
+                lambda: self.raw(command, answer, share=True),
+            ),
+        )
+
+    def _raw_sent(self, body: events.RawSent) -> None:
+        if self.ref in body.unknown:
+            self._unknown = True
+            self.unknown.emit()
+
     def _refused(self, error: BaseException, failed, again) -> None:
         """Told as it failed; a conflict also offers to go on anyway."""
         failed()
@@ -130,6 +160,9 @@ class DeviceModel(QObject):
     def _heard(self, body: events.Values) -> None:
         if body.ref == self.ref:
             self.values.emit(body.values)
+            if self._unknown:  # read again: what it holds now, as if set
+                self._unknown = False
+                self.observed.emit(body.values)
 
     def _poll_failed(self, body: events.ReadFailed) -> None:
         if body.ref == self.ref and self._poll is not None:

@@ -78,6 +78,10 @@ def sections_path(procedure: str, scan: bool = False) -> str:
     return f"scan/{procedure}" if scan else procedure
 
 
+# Folded or not in every device dock: what is rarely needed (raw commands)
+ADVANCED = "device/advanced"
+
+
 def section_key(path: str) -> str:
     return f"sections/{path}"
 

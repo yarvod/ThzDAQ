@@ -3,8 +3,9 @@ docstring and the JSON schema of its arguments (thzdaq_api.catalog), and the
 short text it answers with.
 
 The set is chosen: an agent looks at the bench, sets and calls with a person's
-consent, runs measurements and follows them, asks the person. It does not
-edit the profile, answer for a person or stop the daemon (those are a
+consent, asks an instrument a raw query with a person's consent, runs
+measurements and follows them, asks the person. It does not edit the profile,
+answer for a person, write raw commands or stop the daemon (those are a
 person's, and the daemon would refuse them anyway), nor take what it cannot
 use (polls, streams of records).
 """
@@ -150,6 +151,7 @@ def tools(workspace: Optional[Path]) -> Tuple[Tool, ...]:
         Values(devices.ReadDevice),
         Values(devices.SetQuantity),
         Plain(devices.CallAction, present.action_result),
+        Plain(devices.RawCommand, present.raw),
         Plain(station.ListConnections, present.connections),
         Plain(measurements.ListProcedures, present.procedures),
         Procedure(measurements.DescribeProcedure),

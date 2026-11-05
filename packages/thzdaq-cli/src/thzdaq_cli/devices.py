@@ -1,20 +1,27 @@
-"""thzdaq devices, device, read, set, call, safe, connections: the devices of the
-bench, what they read and take, their actions, the safe state, the shared
-connections. A value is typed with its unit ("2.3mV", "223GHz"); the daemon
-parses it, checks it against the limits and sets it in steps where they ask."""
+"""thzdaq devices, device, read, set, call, raw, safe, connections: the devices
+of the bench, what they read and take, their actions, raw commands to an
+instrument, the safe state, the shared connections. A value is typed with its
+unit ("2.3mV", "223GHz"); the daemon parses it, checks it against the limits
+and sets it in steps where they ask. A raw command goes as typed, for what a
+driver does not wrap yet: a query (with ?) answers, a write is asked first,
+since no limit checks it."""
 
 from typing import Dict, List, Sequence
 
+import msgspec
 from thzdaq_api.devices import (
     CallAction,
     DescribeDevice,
     DeviceDescription,
     ListDevices,
     QuantityInfo,
+    RawCommand,
+    RawReply,
     ReadDevice,
     SafeState,
     SetQuantity,
     Trace,
+    raw_question,
 )
 from thzdaq_api.station import ListConnections, ResetConnection
 
@@ -51,6 +58,18 @@ def add(commands) -> None:
         "--share", action="store_true", help="also while a measurement sweeps it"
     )
     call.set_defaults(run=call_action)
+    raw = commands.add_parser(
+        "raw", help='a command as typed: thzdaq raw signal_generator_1 "*IDN?"'
+    )
+    raw.add_argument("instrument", help="its id in the profile")
+    raw.add_argument("command", help="with ? a query; else a write, asked first")
+    raw.add_argument(
+        "--answer", action="store_true", help="read the answer of a write too"
+    )
+    raw.add_argument(
+        "--share", action="store_true", help="also while a measurement sweeps it"
+    )
+    raw.set_defaults(run=raw_command)
     safe = commands.add_parser("safe", help="set the profile's safe state")
     safe.add_argument(
         "--share", action="store_true", help="also where measurements sweep"
@@ -170,6 +189,30 @@ def call_action(args, client: Client) -> int:
         return FAILED
     client.out(done, lambda d: result_text(d.result))
     return OK
+
+
+def raw_command(args, client: Client) -> int:
+    command = RawCommand(
+        instrument=args.instrument, command=args.command, answer=args.answer
+    )
+    question = raw_question(args.instrument, args.command)
+    if not command.query and not client.ask(question):
+        return FAILED
+    done = client.shared(
+        lambda share: client.call(
+            msgspec.structs.replace(command, share=share or args.share)
+        )
+    )
+    if done is None:
+        return FAILED
+    client.out(done, raw_text)
+    return OK
+
+
+def raw_text(reply: RawReply) -> str:
+    if reply.answer is not None:
+        return reply.answer
+    return f"sent; read again: {', '.join(reply.unknown)}"
 
 
 def result_text(result) -> str:

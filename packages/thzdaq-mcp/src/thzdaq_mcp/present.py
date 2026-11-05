@@ -15,6 +15,7 @@ from thzdaq_api.devices import (
     DeviceInfo,
     Prefix,
     QuantityInfo,
+    RawReply,
     Trace,
     Value,
     shown,
@@ -143,6 +144,12 @@ def action_result(done: ActionResult) -> str:
     result = done.result
     told = trace(result) if isinstance(result, Trace) else shown(result)
     return f"{done.ref} {done.action}: {told}"
+
+
+def raw(reply: RawReply) -> str:
+    if reply.answer is not None:
+        return f"{reply.instrument} {reply.command}: {reply.answer}"
+    return f"{reply.instrument} {reply.command}: sent; read again"
 
 
 def connections(found: Sequence[ConnectionInfo]) -> str:
