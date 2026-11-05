@@ -1769,10 +1769,16 @@ GUI, а отказ доходит до агента текстом.
      пределы проверяются до вопроса человеку (дыра М2 закрыта);
    - [x] формат: значения с единицей и источником (`Measured`), `Column.source`, `m.plot`
      (событие `measurement_plotted`, график в GUI), текст скрипта в метаданных.
-2. [x] `thzdaq script start|list|logs|stop`, `--python`, `--allow`, `--share`, `run-script`
-   (`thzdaq_api/scripts.py`, `application/processes.py`, `thzdaq_cli/scripts.py`); скрипты
-   в доке Daemon; сквозной тест на живом демоне-симуляторе (`thzdaq-daemon/tests/
-   test_scripts.py`).
+2. **Скрипты в демоне:**
+   - [x] `thzdaq script start|list|logs|stop`, `--python`, `--allow`, `--share`,
+     `run-script` (`thzdaq_api/scripts.py`, `application/processes.py`,
+     `thzdaq_cli/scripts.py`); скрипты в доке Daemon; сквозной тест на живом
+     демоне-симуляторе (`thzdaq-daemon/tests/test_scripts.py`);
+   - [ ] (следующая версия) гонка: `ALLOWED` пишется в измерение после его старта
+     (`scripts.note` в обработчиках), и `_Run.note` теряет запись, пока у прогона нет
+     `measurement`, а короткий прогон может уже сохраниться. Передавать разрешения в сам
+     старт (`noted` у `_Run.execute`); тест
+     `test_what_a_script_was_allowed_goes_without_a_person` падает примерно 1 раз из 6.
 3. ✅ **Рабочие папки целиком:**
    - [x] `thzdaq.toml`, поиск вверх (`thzdaq_api/workspace.py`), `thzdaq init`,
      `thzdaq gui`; CLI, MCP и `connect()` — в найденной папке, демон стартует с её
@@ -1781,10 +1787,15 @@ GUI, а отказ доходит до агента текстом.
      о профиле, Open in VS Code и в проводнике;
    - [x] копии профиля и `profile` в измерении, профиль по имени; фильтр Data по папке и
      законченные прогоны демона в Data.
-4. [x] Окно графиков: `thzdaq plot <id|файл>`, `lab.plot`, `run.show`, `m.show`,
-   `m.plot(show="plots"|"gui")` (`thzdaq_api/windows.py`, `thzdaq_gui/viewer.py`, `--plot`
-   у программы окна); свой график `--table/--x/--y/--group`; кончившийся прогон —
-   окно отписывается.
+4. **Окно графиков:**
+   - [x] `thzdaq plot <id|файл>`, `lab.plot`, `run.show`, `m.show`,
+     `m.plot(show="plots"|"gui")` (`thzdaq_api/windows.py`, `thzdaq_gui/viewer.py`,
+     `--plot` у программы окна); свой график `--table/--x/--y/--group`; кончившийся
+     прогон — окно отписывается;
+   - [ ] (следующая версия) Data → Plot в главном окне рисует и графики `m.plot` из
+     файла (`measurements.saved_plots`, как окно графиков), а не только графики процедуры;
+   - [ ] (следующая версия) `thzdaq plot` и `lab.plot` / `m.show` — в гайдах агентов
+     (`thzdaq_api/assistant/*.md`, `AGENTS.md` рабочей папки) и в MCP.
 5. [ ] Дозапись `.jsonl` для долгих измерений.
 6. [ ] `thzdaq raw` / `lab.raw`.
 7. [ ] Пакеты на PyPI из релиза.
