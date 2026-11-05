@@ -16,6 +16,7 @@ quantities and whose methods are their actions:
     bias.read()                          # = thzdaq read sis_bias_1: SI values
     pm.power                             # one quantity
     lab["chopper_1"].to_hot()            # an action
+    lab.raw("signal_generator_1", "*IDN?")   # a raw command, as typed
     run = lab.run("sis.iv_curve", bias=bias, voltage="0:7:351")
     run.show()                           # its plots in a window of their own
     run.wait()
@@ -49,6 +50,7 @@ from thzdaq_api.devices import (
     DeviceDescription,
     DeviceInfo,
     ListDevices,
+    RawCommand,
     ReadDevice,
     SetQuantity,
     Value,
@@ -224,13 +226,13 @@ class Bench:
         lab: Lab,
         workspace: Union[str, Path, None] = None,
         script=None,
-        approve: Optional[Callable[[Callable[[], RunInfo]], RunInfo]] = None,
+        approve: Optional[Callable[[Callable[[], Any]], Any]] = None,
         simulate: bool = False,
     ):
         """workspace: the folder whose data/ gets its measurements (None: the
         program's, where the daemon writes); script: the ScriptSource its
-        sessions keep; approve: how a start a person allows is called (asked
-        in this terminal too); simulate: the lab is the simulator's daemon,
+        sessions keep; approve: how a call a person allows is made (asked in
+        this terminal too); simulate: the lab is the simulator's daemon,
         the windows it opens work with it too."""
         self.lab = lab
         self.workspace = Path(workspace).resolve() if workspace else None
@@ -310,6 +312,22 @@ class Bench:
             )
         )  # fmt: skip
         return done.result
+
+    def raw(
+        self, instrument: str, command: str, answer: bool = False, share: bool = False
+    ) -> Optional[str]:
+        """Send an instrument (its id in the profile) a command as typed, for
+        what its driver does not wrap yet; returns its answer: of a query
+        (with ?), or of a write with answer. No limit checks a write: it waits
+        for a person, unless the script was started with --allow
+        raw:<instrument>. Put a command used often into the driver."""
+        command = RawCommand(
+            instrument=instrument, command=command, answer=answer, share=share,
+            session=self._session_id(),
+        )  # fmt: skip
+        if command.query:
+            return self.lab.call(command).answer
+        return self.approve(lambda: self.lab.call(command)).answer
 
     # Procedures
     def start(

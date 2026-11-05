@@ -6,7 +6,8 @@ started it by THZDAQ_SCRIPT_ID and THZDAQ_SIMULATE, works in its workspace
 
 A script started without a person nearby may be allowed in advance what it
 would otherwise ask for (allow): set:<ref> its quantities, call:<ref> its
-actions, run:<procedure> a built-in procedure; a session (lab.measurement)
+actions, run:<procedure> a built-in procedure, raw:<instrument> raw writes to
+an instrument (lab.raw), which no limit checks; a session (lab.measurement)
 starts without asking when every device it names is allowed. A dangerous step
 is never allowed in advance. share names devices its measurements share while
 another one sweeps them. Who starts the script allows these: a person by
@@ -30,14 +31,15 @@ EXITED = "exited"  # ended by itself (exit_code says how)
 STOPPED = "stopped"  # ended by stop_script
 
 # What may be allowed in advance: <kind>:<target>
-SET, CALL, RUN = "set", "call", "run"
-KINDS = (SET, CALL, RUN)
+SET, CALL, RUN, RAW = "set", "call", "run", "raw"
+KINDS = (SET, CALL, RUN, RAW)
 SEPARATOR = ":"
 
 
 class Grant(msgspec.Struct, frozen=True):
     """Allowed in advance: set (quantities) or call (actions) of a device by
-    its ref, or run a built-in procedure by its name."""
+    its ref, run a built-in procedure by its name, or raw writes to an
+    instrument by its id."""
 
     kind: str
     target: str
@@ -52,7 +54,8 @@ class Grant(msgspec.Struct, frozen=True):
         if not separator or kind not in KINDS or not target:
             raise ValueError(
                 f"{text!r}: allow {', '.join(f'{k}:…' for k in KINDS)}"
-                " (set:sis_bias_1, call:chopper_1, run:sis.iv_curve)"
+                " (set:sis_bias_1, call:chopper_1, run:sis.iv_curve,"
+                " raw:signal_generator_1)"
             )
         return cls(kind, target)
 
@@ -90,8 +93,8 @@ class StartScript(Operation[ScriptInfo]):
     ([python], or a build's [thzdaq-cli.exe, run-script]), arguments go after
     the file, workspace is its working folder (its log under data/scripts).
     allow: what it may do without asking (set:<ref>, call:<ref>,
-    run:<procedure>; never a dangerous step); share: devices it shares while
-    another measurement sweeps them."""
+    run:<procedure>, raw:<instrument> raw writes; never a dangerous step);
+    share: devices it shares while another measurement sweeps them."""
 
     rights = Rights.RUN
     path: str

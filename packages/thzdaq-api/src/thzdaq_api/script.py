@@ -27,7 +27,17 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Set, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    Optional,
+    Set,
+    TypeVar,
+    Union,
+)
 
 from thzdaq_api.approvals import AnswerApproval, Approval
 from thzdaq_api.data import Measured, encode_values
@@ -75,6 +85,9 @@ Show = Callable[[int, str], None]  # the bench's: a measurement in a window
 def place(where: Where) -> str:
     """Where a measurement is shown, by the name of its window."""
     return PLOTS if where is True else str(where)
+
+
+R = TypeVar("R")
 
 
 class Cancelled(Exception):
@@ -304,7 +317,7 @@ class AnsweredHere:
         self.origin = origin
         self.typed = typed
 
-    def __call__(self, call: Callable[[], RunInfo]) -> RunInfo:
+    def __call__(self, call: Callable[[], R]) -> R:
         asked: "queue.Queue[Optional[Approval]]" = queue.Queue()
         gone: Dict[int, threading.Event] = {}
 

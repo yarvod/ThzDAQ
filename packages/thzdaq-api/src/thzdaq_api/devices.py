@@ -86,6 +86,7 @@ class DeviceInfo(msgspec.Struct, frozen=True):
     capabilities: Tuple[str, ...]
     channel: Optional[str] = None
     configured: bool = False
+    raw: bool = False  # its instrument takes raw commands (raw_command)
 
 
 class ArgumentInfo(msgspec.Struct, frozen=True):
@@ -168,6 +169,33 @@ class Poll(msgspec.Struct, frozen=True):
     interval: float
 
 
+# Raw commands: what a driver does not wrap yet, sent as typed
+QUERY_MARK = "?"  # in a command that asks and changes nothing
+UNCHECKED = "Limits and the bench protection do not check a raw command"
+
+
+def raw_query(command: str) -> bool:
+    """A raw command that asks and changes nothing: it has a ?. Any other is a
+    write, also one whose answer is read."""
+    return QUERY_MARK in command
+
+
+def raw_question(instrument: str, command: str) -> str:
+    """What a person confirms before a raw write."""
+    return f"{UNCHECKED}. Send {command!r} to {instrument}?"
+
+
+class RawReply(msgspec.Struct, frozen=True):
+    """What a raw command got: the instrument's answer (None when none was
+    read) and, after a write, the devices whose values are unknown until
+    they are read again."""
+
+    instrument: str
+    command: str
+    answer: Optional[str] = None
+    unknown: Tuple[str, ...] = ()
+
+
 class ListDevices(Operation[Tuple[DeviceInfo, ...]]):
     """Every device of the bench: its instruments, their fixed channels and the
     devices configured on them (a SIS bias on a SIS block)."""
@@ -225,6 +253,32 @@ class CallAction(Operation[ActionResult]):
     )
     share: bool = False
     session: Optional[int] = None
+
+
+class RawCommand(Operation[RawReply]):
+    """Send an instrument a command as it is typed, for what its driver does
+    not wrap yet; instrument is its id in the profile (get_station), not a
+    device on it. A command with ? is a query: its answer is read and
+    returned. Any other is a write that neither the limits nor the bench
+    protection check: a person confirms it, a script needs a person's yes or
+    allow raw:<instrument> at its start, agents may never write. answer: read
+    the answer of a write too (a query without ?). The command waits its turn
+    in the instrument's lane and holds its link, so measurements and polls go
+    on. A write to an instrument a device of which a running measurement
+    sweeps is refused (conflict) unless share is true; the measurements using
+    its devices record it, and its devices are read again. session: the
+    number of the script's session the command belongs to."""
+
+    rights = Rights.RAW_WRITE
+    instrument: str
+    command: str
+    answer: bool = False
+    share: bool = False
+    session: Optional[int] = None
+
+    @property
+    def query(self) -> bool:
+        return raw_query(self.command)
 
 
 class SafeState(Operation[Tuple[SafeValue, ...]]):

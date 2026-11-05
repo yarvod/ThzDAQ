@@ -36,6 +36,12 @@ def answers(kind: str, origin: str) -> bool:
     return kind in ANSWERING and not agent(origin)
 
 
+def scripted(origin: str) -> bool:
+    """A script, by its origin: what it may do differs from an agent's only
+    for raw commands (thzdaq_api.rights.SCRIPTS)."""
+    return origin.startswith(SCRIPT)
+
+
 def script(name: str, number: Optional[int] = None) -> str:
     """The origin of a script: script:<its name>, and @<number> for one the
     daemon runs (thzdaq script start)."""

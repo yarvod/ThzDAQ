@@ -35,6 +35,18 @@ class ActionDone(msgspec.Struct, tag="action_done", frozen=True):
     origin: str = ""
 
 
+class RawSent(msgspec.Struct, tag="raw_sent", frozen=True):
+    """A raw command went to an instrument: by whom, what it answered. After a
+    write the values of the devices in unknown are unknown; values events
+    follow as they are read again."""
+
+    instrument: str
+    command: str
+    answer: Optional[str] = None
+    unknown: Tuple[str, ...] = ()
+    origin: str = ""
+
+
 class Values(msgspec.Struct, tag="values", frozen=True):
     """Readings of a polled device."""
 
@@ -120,6 +132,7 @@ class Resync(msgspec.Struct, tag="resync", frozen=True):
 Body = Union[
     QuantitySet,
     ActionDone,
+    RawSent,
     Values,
     ReadFailed,
     MeasurementStarted,

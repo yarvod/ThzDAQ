@@ -26,6 +26,8 @@ class Rights(str, Enum):
     STATION = "station"  # changes the profile, or what agents may do
     DAEMON = "daemon"  # stops or restarts the daemon
     ANSWER = "answer"  # answers for a person what waits for one
+    RAW_QUERY = "raw_query"  # asks an instrument a raw command (with ?)
+    RAW_WRITE = "raw_write"  # sends an instrument a raw command nothing checks
 
 
 class Operation(
