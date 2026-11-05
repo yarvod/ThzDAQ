@@ -1441,23 +1441,46 @@ class PVGrid(Script):
   - `thzdaq[daemon]` — демон с драйверами: стенд на чистом Python без exe (Linux, своё
     окружение);
   - `thzdaq[mcp]` — `thzdaq mcp` для агентов;
-  - `thzdaq[gui]` — окно; `thzdaq[jupyter]` — живые графики в ячейке (позже); `thzdaq[all]` —
-    всё.
+  - `thzdaq[gui]` — окно (клиент, как CLI: зависит от thzdaq-api, демона берёт из
+    `[daemon]` или из сборки; Python 3.11, как у сборки); `thzdaq[jupyter]` — живые
+    графики в ячейке (позже); `thzdaq[all]` — всё.
 - API только localhost, поэтому клиенту без `[daemon]` демон нужен на этой же машине:
   `connect_or_start()` подключается к запущенному или запускает установленную сборку (путь —
   из файла установки пользователя). Нет ни демона, ни сборки — ошибка называет, что
   поставить.
-- Тот же workflow релиза по тегу публикует все пакеты (trusted publishing из GitHub Actions)
-  вместе со сборкой exe. Версия у всех пакетов одна — версия программы, её ставит
-  `release.py`.
+- Версия у всех пакетов одна — версия программы. `release.py` пишет её в `version.py` в виде
+  тега (`0.3.0-beta.1`, его читает проверка обновлений) и во все `packages/*/pyproject.toml`
+  по PEP 440 (`0.3.0b1`). Пакеты требуют друг друга ровно этой версии (`thzdaq-api==0.3.0b1`):
+  выходят они вместе из одного коммита, а смеси версий никто не проверял. Затем — `uv lock`.
+  Всё это проверяет `tests/test_packages.py`.
+- Тот же workflow релиза по тегу (`release.yml`) публикует пакеты вместе со сборкой exe:
+  - job `packages` после тестов: `uv build --all-packages`, затем `check_packages.py` ставит
+    wheel'ы в чистые окружения. `thzdaq` без extras даёт ровно thzdaq, thzdaq-api, thzdaq-cli
+    и msgspec (на Python 3.11 и 3.13), команда и `from thzdaq import connect` работают.
+    `thzdaq[all]` ставит всё одной версии, демон на симуляторах запускается и
+    останавливается. В wheel'е каждого пакета — все файлы его исходников;
+  - job `pypi` после сборки exe и `packages`: trusted publishing (`id-token: write`,
+    environment `pypi`, `pypa/gh-action-pypi-publish`), без токенов в репозитории. Бета
+    уходит pre-release'ом: `pip install thzdaq` её не ставит, нужен `--pre` или точная
+    версия;
+  - `release.py --again` меняет zip на GitHub, а PyPI оставляет пакеты первой сборки
+    (`skip-existing`): версия на PyPI не меняется никогда. Исправление для PyPI — новая
+    версия.
 - На ПК стенда со сборкой ставить ничего не нужно: там уже есть `thzdaq-cli.exe` (CLI, MCP,
   встроенный Python для скриптов). PyPI нужен для своих окружений (Jupyter, scipy, другой
   проект).
 - Совместимость: клиент и демон сверяют `api_version`. Один major — работают; иначе ошибка
   называет версию, которую надо поставить.
-- Проверить: свободны ли имена на PyPI (`thzdaq`, `thzdaq-*`). `numpy<2` остаётся только у
-  thzdaq-core и к клиенту не попадает.
-- Python ≥ 3.11.
+- Имена `thzdaq` и `thzdaq-*` на PyPI свободны (проверено 2026-11-05). `numpy<2` стоит только
+  у thzdaq-core (демон проверен на numpy 1.x). thzdaq-analysis берёт numpy любой ≥ 1.26 (его
+  тесты проходят на numpy 2), чтобы `thzdaq[analysis]` ставился в ноутбук с numpy 2. К
+  клиенту numpy не попадает.
+- Python ≥ 3.11. Лицензия MIT: `LICENSE` в корне и его копия в каждом пакете (в sdist и
+  wheel попадает только файл из папки пакета).
+- Один раз руками, до первого релиза с PyPI:
+  - на pypi.org для каждого из девяти имён — pending trusted publisher: владелец `yarvod`,
+    репозиторий `ThzDAQ`, workflow `release.yml`, environment `pypi`;
+  - в GitHub — environment `pypi` (Settings → Environments; можно ограничить тегами `v*`).
 
 ## Агенты рядом с GUI (Claude Code, Codex)
 Сценарий: человек работает в GUI, рядом в терминале или в приложении открыт Claude Code
@@ -1855,7 +1878,16 @@ GUI, а отказ доходит до агента текстом.
      скрипту вопрос или `--allow raw:<прибор>`, агентам `deny` навсегда;
    - [x] аренды всех устройств прибора, `conflicts`/`interactions`, событие `raw_sent` и лог
      демона; «неизвестно» и перечитывание после записи; консоль в доке (Advanced).
-7. [ ] Пакеты на PyPI из релиза.
+7. ✅ **Пакеты на PyPI из релиза:**
+   - [x] одна версия программы всем пакетам (`release.py`: `version.py` — как тег, пакеты —
+     по PEP 440, внутренние зависимости `==`, `uv lock`); метаданные для PyPI, MIT,
+     README мета-пакета; `thzdaq-gui` зависит от thzdaq-api, а не от core;
+     `tests/test_packages.py`;
+   - [x] `release.yml`: `packages` (сборка, `check_packages.py` в чистых окружениях) и
+     `pypi` (trusted publishing, `skip-existing`); проверено локально, публикации ещё не
+     было;
+   - [ ] (руками) pending trusted publisher на pypi.org для девяти имён и environment `pypi`
+     в GitHub.
 8. **Док Scripts, первый шаг:**
    - [ ] список, «Открыть в VS Code»;
    - [ ] Run/Stop с выводом;
