@@ -3,16 +3,14 @@ open it at start, open it in VS Code or in the file manager. A workspace that
 expects another profile than the daemon's asks whether to switch the daemon
 to it, when it opens (the daemon refuses while measurements run).
 
-VS Code opens a folder by its command code (inside its app bundle on macOS
-when not in PATH); without it, a person picks the program once. The files for
-agents of a new workspace come from the command line (thzdaq agent-setup),
-another program: the window does not import it."""
+VS Code opens the folder (external_editor.py). The files for agents of a new
+workspace come from the command line (thzdaq agent-setup), another program:
+the window does not import it."""
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
@@ -34,32 +32,14 @@ from thzdaq_api.errors import LabError
 from thzdaq_api.workspace import mismatch_text, other_profile, profile_name
 
 from thzdaq_gui import theme
-from thzdaq_gui.settings import EDITOR, settings
+from thzdaq_gui.external_editor import EDITOR_TITLE, ExternalEditor
 
 WORKSPACE = "Workspace"  # the title of its dialogs
 OPEN_WORKSPACE = "Open workspace"
 FILE_MANAGER = {"win32": "Open in Explorer", "darwin": "Open in Finder"}.get(
     sys.platform, "Open in file manager"
 )
-MAC_CODE = Path("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
 AGENT_SETUP_S = 60.0  # writing the agents' files takes a moment
-
-
-def code_command() -> Optional[str]:
-    """VS Code's command, None when it is not installed where it is looked for."""
-    found = shutil.which("code")
-    if found is not None:
-        return found
-    if sys.platform == "darwin" and MAC_CODE.exists():
-        return str(MAC_CODE)
-    return None
-
-
-def editor_command(program: str, folder: Path) -> List[str]:
-    """How a program opens a folder: an app bundle on macOS through open."""
-    if sys.platform == "darwin" and program.endswith(".app"):
-        return ["open", "-a", program, str(folder)]
-    return [program, str(folder)]
 
 
 class SetupFailed(Exception):
@@ -129,6 +109,7 @@ class WorkspaceMenu(QObject):
         self.workspace = session.workspace
         self.load_profile = load_profile
         self.window = window
+        self.editor = ExternalEditor(window)
         self.workspace.changed.connect(self.check_profile)
         self.recentMenu: Optional[QMenu] = None  # in the menu it is added to
         self.atStart = QAction("Open this workspace at start", self)
@@ -146,7 +127,7 @@ class WorkspaceMenu(QObject):
         menu.aboutToShow.connect(self.show_default)
         menu.addAction(
             self._action(
-                "Open in VS Code", "microsoft-visual-studio-code", self.open_in_editor
+                EDITOR_TITLE, "microsoft-visual-studio-code", self.open_in_editor
             )
         )
         menu.addAction(
@@ -215,33 +196,7 @@ class WorkspaceMenu(QObject):
             self.load_profile(expected)
 
     def open_in_editor(self) -> None:
-        folder = self.workspace.folder
-        code = code_command()
-        if code is not None:
-            command = [code, str(folder)]
-        else:
-            program = self.editor()
-            if program is None:
-                return
-            command = editor_command(program, folder)
-        try:
-            host.start_apart(command)
-        except OSError as e:
-            settings().remove(EDITOR)  # asked again next time
-            QMessageBox.warning(self.window, WORKSPACE, f"{command[0]}: {e}")
-
-    def editor(self) -> Optional[str]:
-        """The program a person chose for folders without VS Code (asked once)."""
-        chosen = settings().value(EDITOR)
-        if chosen and Path(chosen).exists():
-            return chosen
-        chosen, _ = QFileDialog.getOpenFileName(
-            self.window, "VS Code is not found: the editor to open folders with"
-        )
-        if not chosen:
-            return None
-        settings().setValue(EDITOR, chosen)
-        return chosen
+        self.editor.open(self.workspace.folder)
 
     def open_in_file_manager(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.workspace.folder)))

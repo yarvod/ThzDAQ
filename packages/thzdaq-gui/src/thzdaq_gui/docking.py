@@ -24,6 +24,7 @@ from thzdaq_gui.dock_names import (
     MEASURE,
     MEASUREMENT,
     PROCESSES,
+    SCRIPTS,
     SETUP,
     kind_of,
 )
@@ -32,7 +33,7 @@ from thzdaq_gui.graphs import close_views
 from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
 
 SECTIONS = ("Base", "Devices", "Measures", "Graphs")  # of the menus, in order
-AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
+AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220, SCRIPTS: 380}
 FIT_SHARE = 0.4  # a column takes at most this part of the window
 # The side of the window where the first open dock of a kind makes its column;
 # graphs go between the columns (open_center)

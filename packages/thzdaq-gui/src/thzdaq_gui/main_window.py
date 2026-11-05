@@ -46,6 +46,7 @@ from thzdaq_gui.dock_names import (
     MEASURE,
     MEASUREMENT,
     PROCESSES,
+    SCRIPTS,
     SETUP,
     dock_name,
 )
@@ -55,6 +56,7 @@ from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.processes import ProcessesWidget
+from thzdaq_gui.docks.scripts import ScriptsWidget
 from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.docks.daemon import DaemonIndicator, DaemonWidget, LostBanner
 from thzdaq_gui.approval_dialog import ApprovalPrompts
@@ -326,6 +328,7 @@ class MainWindow(QMainWindow):
         self.processesWidget = ProcessesWidget(self.session.processes)
         self.processesWidget.show_requested.connect(self.show_dock)
         self.daemonWidget = DaemonWidget(self.daemon)
+        self.scriptsWidget = ScriptsWidget(self.session.scripts)
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
@@ -338,12 +341,21 @@ class MainWindow(QMainWindow):
                 QtAds.SideBarBottom,
             ),
             (DAEMON, "Daemon", self.daemonWidget, "server", QtAds.SideBarBottom),
+            (
+                SCRIPTS,
+                "Scripts",
+                self.scriptsWidget,
+                "language-python",
+                QtAds.SideBarBottom,
+            ),
         ):
             dock = self.docks.add(
                 name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
             )
             self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
         self.processesWidget.count_changed.connect(self.show_process_count)
+        # A script made or kept from a measurement is shown where it is
+        self.session.scripts.chosen.connect(lambda _: self.show_dock(SCRIPTS))
 
     def show_process_count(self, count: int) -> None:
         """How many run, on the Processes tab and toolbar button."""

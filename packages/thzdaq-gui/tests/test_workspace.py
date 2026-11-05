@@ -10,7 +10,7 @@ from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
 from thzdaq_api.procedures import IV_CURVE
 from thzdaq_api.workspace import create, read
 
-from thzdaq_gui import workspace_menu
+from thzdaq_gui import external_editor, workspace_menu
 from thzdaq_gui.settings import DEFAULT_WORKSPACE, EDITOR, app_dir, settings
 from thzdaq_gui.workspace import Workspace, default_workspace
 
@@ -149,12 +149,12 @@ def test_a_workspace_opens_in_vs_code_or_the_editor_chosen(
 ):
     opened = []
     monkeypatch.setattr(host, "start_apart", opened.append)
-    monkeypatch.setattr(workspace_menu, "code_command", lambda: "code")
+    monkeypatch.setattr(external_editor, "code_command", lambda: "code")
     window.workspaceMenu.open_in_editor()
     folder = str(session.workspace.folder)
     assert opened == [["code", folder]]
 
-    monkeypatch.setattr(workspace_menu, "code_command", lambda: None)
+    monkeypatch.setattr(external_editor, "code_command", lambda: None)
     settings().remove(EDITOR)
     editor = tmp_path / "editor"
     editor.write_text("")
@@ -164,7 +164,7 @@ def test_a_workspace_opens_in_vs_code_or_the_editor_chosen(
         chosen.append(True)
         return str(editor), ""
 
-    monkeypatch.setattr(workspace_menu.QFileDialog, "getOpenFileName", choose)
+    monkeypatch.setattr(external_editor.QFileDialog, "getOpenFileName", choose)
     window.workspaceMenu.open_in_editor()
     window.workspaceMenu.open_in_editor()  # asked once
     assert chosen == [True] and opened[1:] == [[str(editor), folder]] * 2

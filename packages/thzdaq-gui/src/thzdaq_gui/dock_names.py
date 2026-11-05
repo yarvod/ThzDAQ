@@ -17,6 +17,7 @@ DATA = "data"
 LOG = "log"
 PROCESSES = "processes"
 DAEMON = "daemon"
+SCRIPTS = "scripts"
 
 
 def dock_name(kind: str, key: str) -> str:

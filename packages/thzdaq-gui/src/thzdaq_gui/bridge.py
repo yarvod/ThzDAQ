@@ -14,6 +14,9 @@ class Bridge(QObject):
     quantity_set = Signal(object)  # QuantitySet
     action_done = Signal(object)  # ActionDone
     raw_sent = Signal(object)  # RawSent
+    script_started = Signal(object)  # ScriptStarted
+    script_output = Signal(object)  # ScriptOutput
+    script_ended = Signal(object)  # ScriptEnded
     values = Signal(object)  # Values
     read_failed = Signal(object)  # ReadFailed
     station_changed = Signal(object)  # StationChanged
@@ -31,6 +34,9 @@ class Bridge(QObject):
             events.QuantitySet: self.quantity_set,
             events.ActionDone: self.action_done,
             events.RawSent: self.raw_sent,
+            events.ScriptStarted: self.script_started,
+            events.ScriptOutput: self.script_output,
+            events.ScriptEnded: self.script_ended,
             events.Values: self.values,
             events.ReadFailed: self.read_failed,
             events.StationChanged: self.station_changed,

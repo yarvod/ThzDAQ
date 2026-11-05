@@ -29,6 +29,8 @@ from thzdaq_api.measurement_file import RUNNING, dumps, export_csv
 from thzdaq_gui import theme
 from thzdaq_gui.folders import MEASUREMENTS
 
+SCRIPT_TITLE = "The script of a measurement"
+
 
 class DetailsDialog(QDialog):
     def __init__(self, measurement, parent=None):
@@ -92,6 +94,7 @@ class DataWidget(QWidget):
             ("content-save-outline", "Save as JSON…", self.save_as),
             ("file-delimited-outline", "Export a table to CSV…", self.export),
             ("information-outline", "Details", self.details),
+            ("language-python", "The script that measured it", self.script),
             ("folder-outline", "Show the data folder", self.open_folder),
             ("close", "Remove from the list (the file stays)", self.remove),
         ):
@@ -178,6 +181,22 @@ class DataWidget(QWidget):
             )
             if path:
                 export_csv(measurement, table, path)
+
+    def script(self) -> None:
+        """In the Scripts dock: the file it ran, or a copy of its text."""
+        for measurement in self.selected()[:1]:
+            try:
+                found = self.session.scripts.script_of(measurement)
+            except OSError as e:
+                QMessageBox.warning(self, SCRIPT_TITLE, str(e))
+                return
+            if found is None:
+                QMessageBox.information(
+                    self,
+                    SCRIPT_TITLE,
+                    "No script measured it: its text is kept only with the "
+                    "measurements of a script (lab.measurement).",
+                )
 
     def details(self) -> None:
         for measurement in self.selected()[:1]:
