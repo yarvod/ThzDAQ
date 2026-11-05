@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 
+import msgspec
 import pytest
 from thzdaq_api.devices import SetQuantity
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement
@@ -447,3 +448,41 @@ def test_a_script_is_started_with_what_it_may_do(thzdaq, lab, tmp_path):
     assert code == 0 and "may set:sis_bias_1" in out
     (started,) = lab.call(ListScripts())
     assert started.share == ("sis_bias_1",) and started.workspace == str(tmp_path)
+
+
+def test_watch_has_a_line_for_every_event():
+    from typing import get_args
+
+    from thzdaq_api import events
+    from thzdaq_cli.measurements import LINES
+
+    told = set(get_args(events.Body)) - {events.MeasurementRecords}
+    assert told <= set(LINES)
+
+
+def test_watch_tells_a_scripts_start_output_and_end():
+    from thzdaq_api import events
+    from thzdaq_api.scripts import ScriptInfo
+    from thzdaq_cli.measurements import LINES
+
+    info = ScriptInfo(
+        id=7, name="scan", path="scripts/scan.py", command=("python",),
+        workspace=".", log="data/scripts/7.log", origin="script:scan@7",
+        by="gui", pid=42, status="running", started="2026-11-05T10:00:00",
+    )  # fmt: skip
+    ended = events.ScriptEnded(
+        msgspec.structs.replace(info, status="exited", exit_code=1, pid=None)
+    )
+    told = [
+        LINES[type(body)](body)
+        for body in (
+            events.ScriptStarted(info),
+            events.ScriptOutput(7, "swept\nTraceback\n", 0, 16),
+            ended,
+        )
+    ]
+    assert told == [
+        "script 7 scan: running (gui)",
+        "script 7 | swept\nscript 7 | Traceback",
+        "script 7 scan: exited (exit code 1)",
+    ]

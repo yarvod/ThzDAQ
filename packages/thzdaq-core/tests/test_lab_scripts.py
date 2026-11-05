@@ -5,10 +5,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from lab_helpers import Window, calling, wait_for
+from lab_helpers import Window, bodies, calling, wait_for
 from thzdaq_api.daemon import GetDaemonStatus, StopDaemon, StopMode
 from thzdaq_api.devices import CallAction, ReadDevice, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import ALLOWED, read_measurement
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
 from thzdaq_api.origins import GUI, script
@@ -95,6 +96,36 @@ def test_a_script_runs_apart_and_prints_into_its_log(lab, tmp_path):
     ]
     rest = lab.call(ReadScriptLog(id=started.id, since=log.next))
     assert rest.text == "" and rest.next == log.next
+
+
+def test_clients_hear_a_script_start_print_and_end(lab, tmp_path):
+    heard = []
+    stop = lab.subscribe(heard.append)
+    try:
+        text = (
+            "import time\n"
+            "print('Привет, стенд')\n"
+            "time.sleep(0.5)\n"  # a second part, told while it runs
+            "print('bye')\n"
+            "raise SystemExit(3)\n"
+        )
+        started = run(lab, tmp_path, "talk.py", text)
+        done = ended(lab, started.id)
+        wait_for(lambda: bodies(heard, ScriptEnded))
+    finally:
+        stop()
+    told = [
+        b for b in (event.body for event in heard)
+        if isinstance(b, (ScriptStarted, ScriptOutput, ScriptEnded))
+    ]  # fmt: skip
+    assert told[0] == ScriptStarted(started) and told[-1] == ScriptEnded(done)
+    assert (done.status, done.exit_code) == ("exited", 3)
+    parts = told[1:-1]
+    assert len(parts) >= 2 and all(p.id == started.id for p in parts)
+    assert [p.since for p in parts[1:]] == [p.next for p in parts[:-1]]
+    log = lab.call(ReadScriptLog(id=started.id))
+    assert "".join(p.text for p in parts) == log.text == "Привет, стенд\nbye\n"
+    assert parts[-1].next == log.next
 
 
 def test_a_number_is_not_given_twice_in_a_folder(lab, tmp_path):

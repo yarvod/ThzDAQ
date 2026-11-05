@@ -57,6 +57,8 @@ ALLOWED = "allowed"
 PROFILE = "profile"
 # Metadata: plots a run added while it ran (a script's m.plot), as PlotInfo
 PLOTS = "plots"
+# Metadata: the script a session ran, as sessions.ScriptSource (path, sha256, text)
+SCRIPT = "script"
 
 
 # The records of a running measurement, next to its file: one line each

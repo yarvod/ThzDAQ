@@ -11,6 +11,11 @@ once (interrupted), as they would when it fell silent.
 Stopping cancels the measurements it started and gives it STOP_S to end
 (its with blocks end them cancelled); a script that goes on is ended.
 
+Clients hear a script start, what it prints and its end as events: the thread
+that waits for its end reads its log as it grows (the process writes it
+itself) and tells each new part, a character cut at the end of a part waits
+for its rest.
+
 What it was allowed (set:<ref>, call:<ref>, run:<procedure>,
 raw:<instrument>) is not asked again while it runs, but for a dangerous step
 or another's sweep; a session it
@@ -18,6 +23,7 @@ starts is allowed when every device it names is. The measurements it starts
 note what it was allowed.
 """
 
+import codecs
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,6 +31,7 @@ from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import msgspec
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import ALLOWED
 from thzdaq_api.measurements import DATA
 from thzdaq_api.origins import script, script_number
@@ -50,6 +57,7 @@ from thzdaq_api.scripts import (
 
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.clock import wall_time
+from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.ports import Launched, Launcher
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.scripts import Sessions
@@ -58,6 +66,7 @@ from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.catalog import get_procedure
 
 LOG_PART = 65536  # bytes of a script's log one read gives at most
+OUTPUT_S = 0.2  # how often a running script's log is looked at for its output
 KEPT = 100  # scripts that ended, remembered for list and logs
 UNBUFFERED = {"PYTHONUNBUFFERED": "1"}  # its output reaches the log as it prints
 
@@ -74,6 +83,22 @@ class _Script:
         return not self.ended.is_set()
 
 
+def read_part(log: str, since: int, final: bool) -> Tuple[str, int]:
+    """The text of a log from byte since, up to LOG_PART, and the byte after
+    it. A character cut at the end of the part is left for the next one,
+    unless the log is final (its script ended) and the part is its end."""
+    try:
+        with open(log, "rb") as file:
+            file.seek(max(0, since))
+            data = file.read(LOG_PART)
+    except FileNotFoundError:
+        data = b""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    text = decoder.decode(data, final=final and len(data) < LOG_PART)
+    waiting, _ = decoder.getstate()
+    return text, since + len(data) - len(waiting)
+
+
 def last_log(folder: Path) -> int:
     """The highest number of the logs a folder holds; 0 for none."""
     numbers = [int(p.stem) for p in folder.glob("*.log") if p.stem.isdigit()]
@@ -86,6 +111,7 @@ class ScriptProcesses:
         bench: Bench,
         workspaces: Workspaces,
         runs: Runs,
+        events: EventBus,
         sessions: Sessions,
         launcher: Launcher,
         simulate: Callable[[], bool],
@@ -97,6 +123,7 @@ class ScriptProcesses:
         self.grace = grace
         self.workspaces = workspaces
         self.runs = runs
+        self.events = events
         self.sessions = sessions
         self.launcher = launcher
         self.simulate = simulate
@@ -137,6 +164,7 @@ class ScriptProcesses:
             )  # fmt: skip
             found = self._scripts[number] = _Script(info, launched)
             self._forget_old()
+        self.events.publish(ScriptStarted(info))
         threading.Thread(
             target=self._watch, args=(found,), name=f"script {number}", daemon=True
         ).start()
@@ -163,13 +191,27 @@ class ScriptProcesses:
                 raise LabError(ErrorCode.NOT_FOUND, f"{grant}: {e}") from None
 
     def _watch(self, found: _Script) -> None:
-        code = found.launched.wait()
+        """Tells what it prints while it runs, then the rest and its end."""
+        told = 0
+        while (code := found.launched.wait(OUTPUT_S)) is None:
+            told = self._tell(found.info, told, final=False)
+        self._tell(found.info, told, final=True)
         status = STOPPED if found.stopping else EXITED
         found.info = msgspec.structs.replace(
             found.info, status=status, ended=wall_time(), exit_code=code, pid=None
         )
         found.ended.set()
         self.sessions.interrupt(found.info.origin, f"its script {status}")
+        self.events.publish(ScriptEnded(found.info))
+
+    def _tell(self, info: ScriptInfo, since: int, final: bool) -> int:
+        """Its output from byte since as events, part by part; where it ends."""
+        while True:
+            text, after = read_part(info.log, since, final)
+            if not text:
+                return after
+            self.events.publish(ScriptOutput(info.id, text, since, after))
+            since = after
 
     def _forget_old(self) -> None:
         ended = [n for n, s in self._scripts.items() if not s.running]
@@ -193,15 +235,8 @@ class ScriptProcesses:
     def log(self, id: int, since: int) -> ScriptLog:
         found = self._get(id)
         running = found.running  # before the read: what it printed last is read
-        try:
-            with open(found.info.log, "rb") as file:
-                file.seek(max(0, since))
-                data = file.read(LOG_PART)
-        except FileNotFoundError:
-            data = b""
-        return ScriptLog(
-            data.decode("utf-8", errors="replace"), since + len(data), running
-        )
+        text, after = read_part(found.info.log, since, final=not running)
+        return ScriptLog(text, after, running)
 
     def stop(self, id: int) -> ScriptInfo:
         """Cancel what it measures, give it grace to end, then end it."""

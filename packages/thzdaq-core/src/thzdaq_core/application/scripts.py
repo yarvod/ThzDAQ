@@ -30,6 +30,7 @@ from thzdaq_api.measurement_file import (
     FAILED,
     INTERRUPTED,
     RUNNING,
+    SCRIPT,
     Column,
     DeviceUse,
     column_for,
@@ -113,7 +114,7 @@ class ScriptSession(Procedure):
             self._ctx = ctx
             self.owner = ctx.measurement.id
             if self.source is not None:
-                ctx.measurement.metadata["script"] = msgspec.to_builtins(self.source)
+                ctx.measurement.metadata[SCRIPT] = msgspec.to_builtins(self.source)
             self._heard = self.clock()
             self._changed.notify_all()
             while not self._ending:

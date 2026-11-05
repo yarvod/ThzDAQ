@@ -14,7 +14,6 @@ from typing import List, Tuple
 
 from thzdaq_api import host
 from thzdaq_api.scripts import (
-    RUNNING,
     Grant,
     ListScripts,
     ReadScriptLog,
@@ -27,7 +26,6 @@ from thzdaq_cli import show
 from thzdaq_cli.client import HERE, OK, Client, Mistyped
 
 FOLLOW_S = 0.5  # how often logs -f looks for more output, as tail -f does
-RUN_SCRIPT = "run-script"
 
 
 def add(commands) -> None:
@@ -66,18 +64,15 @@ def add(commands) -> None:
     stop.add_argument("id", type=int)
     stop.set_defaults(run=stop_script)
     run = commands.add_parser(
-        RUN_SCRIPT, help="run a Python file with this program's Python"
+        host.RUN_SCRIPT, help="run a Python file with this program's Python"
     )
     run.add_argument("file", help="then -- and the script's arguments")
     run.set_defaults(run=run_script)
 
 
 def interpreter(given: str) -> Tuple[str, ...]:
-    """How the daemon runs a file: --python, else this command's Python; a
-    build has none but its own (thzdaq-cli.exe run-script)."""
-    if given:
-        return (given,)
-    return (sys.executable, RUN_SCRIPT) if host.frozen() else (sys.executable,)
+    """How the daemon runs a file: --python, else this command's Python."""
+    return (given,) if given else host.script_python()
 
 
 def grants(given: List[str]) -> Tuple[Grant, ...]:
@@ -88,8 +83,7 @@ def grants(given: List[str]) -> Tuple[Grant, ...]:
 
 
 def script_text(info: ScriptInfo) -> str:
-    ended = "" if info.status == RUNNING else f" (exit code {info.exit_code})"
-    lines = [f"script {info.id} {info.name}: {info.status}{ended}", f"log {info.log}"]
+    lines = [show.script(info), f"log {info.log}"]
     if info.allow:
         lines.append("may " + ", ".join(str(grant) for grant in info.allow))
     return "\n".join(lines)

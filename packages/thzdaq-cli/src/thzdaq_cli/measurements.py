@@ -289,6 +289,12 @@ LINES: Dict[type, Callable[[Any], str]] = {
     events.MeasurementLog: lambda b: f"#{b.id} {b.message}",
     events.MeasurementPlotted: lambda b: f"#{b.id} plots {b.plot.title}",
     events.MeasurementFinished: lambda b: run_text(b.run),
+    events.RawSent: lambda b: f"{b.instrument} {b.command!r}"
+    + ("" if b.answer is None else f" -> {b.answer!r}")
+    + f" ({b.origin})",
+    events.ScriptStarted: lambda b: f"{show.script(b.script)} ({b.script.by})",
+    events.ScriptOutput: lambda b: show.output(b.id, b.text),
+    events.ScriptEnded: lambda b: show.script(b.script),
     events.StationChanged: lambda b: f"profile {show.profile(b.name, b.path)}",
     events.LeasesChanged: lambda b: "in use: "
     + (", ".join(f"{l.device} {l.mode} by #{l.run}" for l in b.leases) or "nothing"),

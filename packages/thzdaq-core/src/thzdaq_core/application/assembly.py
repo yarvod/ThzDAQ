@@ -68,7 +68,7 @@ def assemble(
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     script_sessions = Sessions(runs, access)
     processes = ScriptProcesses(
-        bench, workspaces, runs, script_sessions, launcher,
+        bench, workspaces, runs, events, script_sessions, launcher,
         lambda: control.process().simulate,
     )  # fmt: skip
     polling = Polling(access, events)

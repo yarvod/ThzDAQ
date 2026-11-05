@@ -14,6 +14,7 @@ from thzdaq_api.devices import Value
 from thzdaq_api.leases import LeaseInfo
 from thzdaq_api.measurements import PlotInfo, RunInfo
 from thzdaq_api.operation import Operation
+from thzdaq_api.scripts import ScriptInfo
 
 
 class QuantitySet(msgspec.Struct, tag="quantity_set", frozen=True):
@@ -99,6 +100,29 @@ class MeasurementFinished(msgspec.Struct, tag="measurement_finished", frozen=Tru
     run: RunInfo
 
 
+class ScriptStarted(msgspec.Struct, tag="script_started", frozen=True):
+    """The daemon started a script (thzdaq script start, Run in a window)."""
+
+    script: ScriptInfo
+
+
+class ScriptOutput(msgspec.Struct, tag="script_output", frozen=True):
+    """What a running script printed lately: the bytes since..next of its log.
+    A client that came later reads the log up to since first (ReadScriptLog)."""
+
+    id: int
+    text: str
+    since: int
+    next: int
+
+
+class ScriptEnded(msgspec.Struct, tag="script_ended", frozen=True):
+    """A script ended: by itself (exited, with its exit code) or stopped. Its
+    output came before."""
+
+    script: ScriptInfo
+
+
 class StationChanged(msgspec.Struct, tag="station_changed", frozen=True):
     """The profile changed (edited, or another loaded): devices may differ."""
 
@@ -141,6 +165,9 @@ Body = Union[
     MeasurementLog,
     MeasurementPlotted,
     MeasurementFinished,
+    ScriptStarted,
+    ScriptOutput,
+    ScriptEnded,
     StationChanged,
     LeasesChanged,
     ApprovalRequested,

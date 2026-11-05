@@ -103,3 +103,30 @@ def test_another_profile_than_the_workspace_expects_is_told(tmp_path):
 def test_a_workspace_without_a_profile_expects_any(tmp_path):
     create(tmp_path)
     assert other_profile(tmp_path, "/program/stations/2sb.yaml") is None
+
+
+def test_a_workspace_keeps_the_script_folders_added_to_it(tmp_path):
+    folder = tmp_path / "experiment"
+    create(folder, "lab")
+    assert workspace.script_folders(folder) == (folder / SCRIPT_FOLDER,)
+    library, inside = tmp_path / "library", folder / "more"
+    workspace.add_script_folder(folder, library)
+    workspace.add_script_folder(folder, inside)
+    workspace.add_script_folder(folder, library)  # once
+    workspace.add_script_folder(folder, folder / SCRIPT_FOLDER)  # has it already
+    kept = read(folder)
+    assert kept.station == "lab"
+    assert kept.script_folders == (str(library.resolve().as_posix()), "more")
+    assert [p.resolve() for p in workspace.script_folders(folder)] == [
+        (folder / SCRIPT_FOLDER).resolve(), library.resolve(), inside.resolve(),
+    ]  # fmt: skip
+    workspace.remove_script_folder(folder, library)
+    assert read(folder).script_folders == ("more",)
+
+
+def test_only_a_workspace_keeps_script_folders(tmp_path):
+    with pytest.raises(LabError) as caught:
+        workspace.add_script_folder(tmp_path, tmp_path / "library")
+    assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert not (tmp_path / FILE).exists()
+    assert workspace.script_folders(tmp_path) == (tmp_path / SCRIPT_FOLDER,)

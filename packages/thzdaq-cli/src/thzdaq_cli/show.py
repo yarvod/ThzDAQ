@@ -4,6 +4,7 @@ from typing import Any, Iterable, Optional, Sequence
 
 import msgspec
 from thzdaq_api.approvals import Answer, Approval
+from thzdaq_api.scripts import RUNNING, ScriptInfo
 
 
 NO_FILE = "no file"  # a profile, or a run, not kept in a file
@@ -56,3 +57,14 @@ def answer(id: int, given: Answer) -> str:
     verdict = "allowed" if given.allowed else "denied"
     words = f": {given.text}" if given.text else ""
     return f"#{id} {verdict} by {given.by}{words}"
+
+
+def script(info: ScriptInfo) -> str:
+    """A script the daemon runs or ran, in a line: how it stands."""
+    ended = "" if info.status == RUNNING else f" (exit code {info.exit_code})"
+    return f"script {info.id} {info.name}: {info.status}{ended}"
+
+
+def output(id: int, text: str) -> str:
+    """What a script printed, each line marked with its number."""
+    return "\n".join(f"script {id} | {line}" for line in text.splitlines())

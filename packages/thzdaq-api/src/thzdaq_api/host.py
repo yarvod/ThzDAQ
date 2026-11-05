@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from importlib import metadata, util
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import msgspec
 
@@ -41,6 +41,7 @@ SERVE = "--serve"  # how a built program runs as the daemon
 SIMULATE = "--simulate"  # a program works with the simulator's daemon
 PROGRAM = "ThzDAQ"  # the built program: the window, and the daemon with SERVE
 CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
+RUN_SCRIPT = "run-script"  # thzdaq-cli run-script <file>: a build's Python runs it
 
 
 @dataclass(frozen=True)
@@ -250,6 +251,16 @@ def cli_command() -> List[str]:
             "install thzdaq, or start the ThzDAQ build once",
         )
     return found
+
+
+def script_python() -> Tuple[str, ...]:
+    """How a script runs with this program's Python (thzdaq script start, Run
+    in a window): this interpreter from sources; a build has none but its own,
+    through thzdaq-cli run-script, a console program whose print and
+    tracebacks reach the script's log."""
+    if frozen():
+        return (str(executable(program_dir(), CLI_PROGRAM)), RUN_SCRIPT)
+    return (sys.executable,)
 
 
 def apart() -> Dict[str, Any]:

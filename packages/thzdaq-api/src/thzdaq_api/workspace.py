@@ -17,7 +17,7 @@ import json
 import os
 import tomllib
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import msgspec
 
@@ -45,6 +45,9 @@ station = {station}
 
 # Notes on the experiment
 notes = {notes}
+
+# Folders of scripts besides scripts/ (relative to this folder, or absolute)
+script_folders = {script_folders}
 """
 
 
@@ -53,12 +56,14 @@ class WorkspaceFile(msgspec.Struct, frozen=True):
 
     station: str = ""  # the profile it expects, by its name in stations/
     notes: str = ""
+    script_folders: Tuple[str, ...] = ()  # besides scripts/
 
     def text(self) -> str:
-        """As thzdaq.toml: JSON strings are TOML basic strings."""
+        """As thzdaq.toml: JSON strings and arrays of them are TOML too."""
         return TEMPLATE.format(
             station=json.dumps(self.station, ensure_ascii=False),
             notes=json.dumps(self.notes, ensure_ascii=False),
+            script_folders=json.dumps(list(self.script_folders), ensure_ascii=False),
         )
 
 
@@ -122,6 +127,49 @@ def create(folder: PathLike, station: str = "") -> bool:
         return False
     (folder / FILE).write_text(WorkspaceFile(station).text(), encoding="utf-8")
     return True
+
+
+def script_folders(folder: PathLike) -> Tuple[Path, ...]:
+    """Where a folder keeps its scripts: scripts/, then the folders its
+    thzdaq.toml adds; LabError for a broken thzdaq.toml."""
+    folder = Path(folder)
+    added = read(folder).script_folders
+    return (folder / SCRIPT_FOLDER, *(folder / Path(f).expanduser() for f in added))
+
+
+def add_script_folder(folder: PathLike, added: PathLike) -> None:
+    """Keep the scripts of another folder in a workspace's thzdaq.toml: by its
+    path relative to the workspace when it is inside, else whole. LabError
+    for a folder without thzdaq.toml (its folders would be kept nowhere)."""
+    folder, added = Path(folder).resolve(), Path(added).resolve()
+    kept = _workspace_file(folder)
+    if added in (shown.resolve() for shown in script_folders(folder)):
+        return
+    inside = added.relative_to(folder) if added.is_relative_to(folder) else added
+    _write(folder, kept, (*kept.script_folders, inside.as_posix()))
+
+
+def remove_script_folder(folder: PathLike, removed: PathLike) -> None:
+    """Its scripts are no longer shown with the workspace's (they stay)."""
+    folder, removed = Path(folder).resolve(), Path(removed).resolve()
+    kept = _workspace_file(folder)
+    left = tuple(f for f in kept.script_folders if (folder / f).resolve() != removed)
+    _write(folder, kept, left)
+
+
+def _workspace_file(folder: Path) -> WorkspaceFile:
+    if not is_workspace(folder):
+        raise LabError(
+            ErrorCode.INVALID_ARGUMENTS,
+            f"{folder} is not a workspace: it has no {FILE}",
+            "make one with thzdaq init, or New workspace in the window",
+        )
+    return read(folder)
+
+
+def _write(folder: Path, kept: WorkspaceFile, folders: Tuple[str, ...]) -> None:
+    changed = msgspec.structs.replace(kept, script_folders=folders)
+    (folder / FILE).write_text(changed.text(), encoding="utf-8")
 
 
 def profile_name(path: PathLike) -> str:
