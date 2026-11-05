@@ -20,7 +20,11 @@ from typing import (
 
 from thzdaq_instruments import default_registry
 from thzdaq_instruments.actions import Action, actions_for
-from thzdaq_instruments.capabilities import OutputProtection, capabilities_of
+from thzdaq_instruments.capabilities import (
+    OutputProtection,
+    RawCommands,
+    capabilities_of,
+)
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.limits import Limit
@@ -222,16 +226,19 @@ class Station:
     def is_open(self, instrument_id: str) -> bool:
         return instrument_id in self._instruments
 
+    def _belongs(self, ref: str, instrument_id: str) -> bool:
+        """The device is the instrument, its fixed channel or configured on it."""
+        return (
+            ref == instrument_id
+            or ref.startswith(instrument_id + CHANNEL_SEPARATOR)
+            or self._owner(ref) == instrument_id
+        )
+
     def close_instrument(self, instrument_id: str) -> None:
         with self._lock:
             instrument = self._instruments.pop(instrument_id, None)
-            prefix = instrument_id + CHANNEL_SEPARATOR
             for ref in list(self._devices):
-                if (
-                    ref == instrument_id
-                    or ref.startswith(prefix)
-                    or self._owner(ref) == instrument_id
-                ):
+                if self._belongs(ref, instrument_id):
                     del self._devices[ref]
             if instrument is not None:
                 try:
@@ -304,6 +311,36 @@ class Station:
                 self.transport_pool.abort(connection.link_key)
             elif instrument_id in self._instruments:
                 self.close_instrument(instrument_id)
+
+    # Raw commands: what a driver does not wrap yet, past every guard
+    def takes_raw(self, instrument_id: str) -> bool:
+        """Its driver takes commands as text (RawCommands), and so its
+        simulator does: a bench and its simulation offer the same."""
+        try:
+            driver = self.registry.get(self._spec(instrument_id).driver).cls
+            opened = self.driver_class(instrument_id)
+        except InstrumentError:
+            return False
+        return issubclass(driver, RawCommands) and issubclass(opened, RawCommands)
+
+    def raw(self, instrument_id: str) -> RawCommands:
+        """The instrument as a raw command reaches it, opened on first use."""
+        if not self.takes_raw(instrument_id):
+            raise StationError(f"{instrument_id} takes no raw commands")
+        return self.instrument(instrument_id)
+
+    def parts_of(self, instrument_id: str) -> List[str]:
+        """Every device on an instrument: itself, its fixed channels and the
+        devices configured on it."""
+        return [item.ref for item in self.devices() if item.instrument == instrument_id]
+
+    def forget_setpoints(self, instrument_id: str) -> None:
+        """After a raw write nobody knows the setpoints of its devices: their
+        guards read where the next change starts from."""
+        with self._lock:
+            for ref, port in self._devices.items():
+                if self._belongs(ref, instrument_id):
+                    port.forget()
 
     # Devices
     def _owner(self, ref: str) -> Optional[str]:

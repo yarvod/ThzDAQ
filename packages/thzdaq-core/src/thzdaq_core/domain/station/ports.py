@@ -107,6 +107,11 @@ class GuardedPort(PortAdapter):
             self.target, self.guard, quantities, pause, self.setpoints, told
         )
 
+    def forget(self) -> None:
+        """The setpoints are not known any more (a raw write): each change reads
+        its own first."""
+        self.setpoints.clear()
+
     def __getattr__(self, name: str) -> Any:
         if name in ("target", "guard", "setters", "pause", "setpoints", "told"):
             raise AttributeError(name)

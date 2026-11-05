@@ -163,6 +163,18 @@ class TestGuard:
             station["supply:1"].set_voltage(value)
         assert len(reads) == 1  # read once, at the first change
 
+    def test_after_a_raw_write_a_change_starts_from_the_device(self):
+        """A raw write changed the device past its guard: the next change reads
+        where it starts from instead of the setpoint written last."""
+        station = Station(bench(), pause=Waits())
+        supply = station["supply:1"]
+        supply.set_voltage(1.0)
+        supply.target.set_voltage(3.0)  # as a raw command would, unguarded
+        station.forget_setpoints("supply")
+        values = written(supply.target)
+        supply.set_voltage(3.5)
+        assert values == [3.5]  # within a step of 3 V: no ladder from 1 V
+
     def test_a_cancel_stops_a_ladder_at_once(self):
         cancel = threading.Event()
         pause = RampPause(cancel)

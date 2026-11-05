@@ -11,8 +11,9 @@ once (interrupted), as they would when it fell silent.
 Stopping cancels the measurements it started and gives it STOP_S to end
 (its with blocks end them cancelled); a script that goes on is ended.
 
-What it was allowed (set:<ref>, call:<ref>, run:<procedure>) is not asked
-again while it runs, but for a dangerous step or another's sweep; a session it
+What it was allowed (set:<ref>, call:<ref>, run:<procedure>,
+raw:<instrument>) is not asked again while it runs, but for a dangerous step
+or another's sweep; a session it
 starts is allowed when every device it names is. The measurements it starts
 note what it was allowed.
 """
@@ -32,6 +33,7 @@ from thzdaq_api.scripts import (
     CALL,
     EXITED,
     KINDS,
+    RAW,
     RUN,
     RUNNING,
     SCRIPT_ID_ENV,
@@ -141,21 +143,24 @@ class ScriptProcesses:
         return info
 
     def check(self, allow: Iterable[Grant]) -> None:
-        """What is allowed names devices and procedures that exist: a typo
-        would allow nothing."""
+        """What is allowed names devices, procedures and instruments (that take
+        raw commands) that exist: a typo would allow nothing."""
+        exists: Dict[str, Callable[[str], object]] = {
+            SET: self.bench.info,
+            CALL: self.bench.info,
+            RUN: get_procedure,
+            RAW: self.bench.raw_parts,
+        }
         for grant in allow:
-            if grant.kind not in KINDS:
+            if grant.kind not in exists:
                 raise LabError(
                     ErrorCode.INVALID_ARGUMENTS,
                     f"{grant}: allow {', '.join(KINDS)}",
                 )
-            if grant.kind == RUN:
-                try:
-                    get_procedure(grant.target)
-                except ProcedureError as e:
-                    raise LabError(ErrorCode.NOT_FOUND, f"{grant}: {e}") from None
-            else:
-                self.bench.info(grant.target)  # an unknown device is NOT_FOUND
+            try:
+                exists[grant.kind](grant.target)
+            except ProcedureError as e:
+                raise LabError(ErrorCode.NOT_FOUND, f"{grant}: {e}") from None
 
     def _watch(self, found: _Script) -> None:
         code = found.launched.wait()

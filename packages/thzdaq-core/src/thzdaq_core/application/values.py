@@ -2,7 +2,7 @@
 what a snapshot shows and what a set changes from."""
 
 import threading
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Iterable, Mapping
 
 
 class KnownValues:
@@ -13,6 +13,12 @@ class KnownValues:
     def update(self, ref: str, values: Mapping[str, Any]) -> None:
         with self._lock:
             self._values.setdefault(ref, {}).update(values)
+
+    def forget(self, refs: Iterable[str]) -> None:
+        """Nothing is known of these devices until they are read again."""
+        with self._lock:
+            for ref in refs:
+                self._values.pop(ref, None)
 
     def get(self, ref: str, key: str) -> Any:
         with self._lock:

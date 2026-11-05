@@ -41,6 +41,7 @@ def device_info(info: DeviceInfo, station: Station) -> api.DeviceInfo:
         capabilities=tuple(c.__name__ for c in info.capabilities),
         channel=None if info.channel is None else str(info.channel),
         configured=info.configured,
+        raw=station.takes_raw(info.instrument),
     )
 
 

@@ -10,13 +10,21 @@ check just before the write holds.
 A call may be made within a measurement (a script's session, Within): its own
 leases do not conflict, the devices it agreed to share are shared, and what it
 sets is told as its run's sets are.
+
+A raw command goes to an instrument as typed, past every guard. A write may
+change any device on the instrument: it checks and notes the leases of all of
+them, and leaves their values unknown, forgotten by the daemon and the guards
+and read again in the lane. Every raw command is an event and a line of the
+daemon's log, with who sent it and what came back.
 """
 
+import functools
+import logging
 from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple
 
-from thzdaq_api.devices import SafeValue
+from thzdaq_api.devices import UNCHECKED, RawReply, SafeValue, raw_query
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.events import ActionDone, QuantitySet
+from thzdaq_api.events import ActionDone, QuantitySet, RawSent, ReadFailed, Values
 from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS
 from thzdaq_instruments.actions import Action
@@ -31,9 +39,12 @@ from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.values import KnownValues
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
 
+logger = logging.getLogger(__name__)
+
 # note(run id, metadata key, entry) into a running measurement
 Note = Callable[[int, str, Dict[str, Any]], None]
 JUMP = 10.0  # a set that changes a value this many times is pointed out
+RAW_QUERY, RAW_WRITE = "raw query", "raw write"  # how a person reads which it is
 
 
 class Within(Protocol):
@@ -161,7 +172,7 @@ class DeviceAccess:
         parsed by the quantity. Returns the value set."""
         within = within or self.outside
         quantity, parsed = self.checked(ref, key, value)
-        users = self._users(ref, share or within.shares(ref), within.owner)
+        users = self._users((ref,), share, within)
         before = self.known.get(ref, key)
         self.bench.run(ref, lambda device: quantity.write(device, parsed))
         self.known.update(ref, {key: parsed})
@@ -195,7 +206,7 @@ class DeviceAccess:
         before = self.known.get(ref, key)
         leap = jump(before, after)
         unusual = self.bench.station.guard(ref).unusual(quantity, after)
-        sweeps = self._sweeps(ref, within or self.outside)
+        sweeps = self._sweeps((ref,), within or self.outside)
         warning = "; ".join(filter(None, (quantity.danger, unusual, sweeps)))
         return Ask(
             f"{ref} · {quantity.title}",
@@ -220,7 +231,7 @@ class DeviceAccess:
             for argument in action.arguments
             if argument.key in bound
         ]
-        sweeps = self._sweeps(ref, within or self.outside) if action.changes else ""
+        sweeps = self._sweeps((ref,), within or self.outside) if action.changes else ""
         warning = "; ".join(filter(None, (action.danger, sweeps)))
         return Ask(
             f"{ref} · {action.title}",
@@ -231,17 +242,22 @@ class DeviceAccess:
             grave=bool(warning),
         )
 
-    def _sweeps(self, ref: str, within: Within) -> str:
-        """The sweep of another measurement a change disturbs (allowing it
-        shares the device); none where the caller shares it already."""
-        if within.shares(ref):
-            return ""
-        swept = tuple(
+    def _sweeps(self, refs: Iterable[str], within: Within) -> str:
+        """The sweeps of other measurements a change disturbs (allowing it
+        shares the devices); none where the caller shares them already."""
+        swept = self._swept(refs, within)
+        return f"{LeaseConflict(swept)}: it notes the change" if swept else ""
+
+    def _swept(self, refs: Iterable[str], within: Within) -> Tuple[Lease, ...]:
+        """Leases of other measurements sweeping these devices, but for those
+        the caller shares."""
+        return tuple(
             lease
+            for ref in refs
+            if not within.shares(ref)
             for lease in self.leases.of(ref)
             if lease.mode == EXCLUSIVE and lease.owner != within.owner
         )
-        return f"{LeaseConflict(swept)}: it notes the change" if swept else ""
 
     def safe_state(self, origin: str, share: bool = False) -> Tuple[SafeValue, ...]:
         """Every value of the profile's safe state, in its order; one that
@@ -301,33 +317,103 @@ class DeviceAccess:
         parsed by the action. Returns what the action returns (a trace)."""
         within = within or self.outside
         action, bound = self.bound(ref, key, arguments)
-        users = (
-            self._users(ref, share or within.shares(ref), within.owner)
-            if action.changes
-            else []
-        )
+        users = self._users((ref,), share, within) if action.changes else []
         result = self.bench.run(ref, lambda device: action.call(device, **bound))
         if action.changes:
             self.events.publish(ActionDone(ref, key, bound, origin))
             self._note(users, origin, ref, action=key, arguments=bound)
         return result
 
-    def _users(self, ref: str, share: bool, owner: Optional[int] = None) -> List[Lease]:
-        """The other runs using a device; one sweeping it refuses a change
-        without share."""
-        users = [lease for lease in self.leases.of(ref) if lease.owner != owner]
-        swept = [lease for lease in users if lease.mode == EXCLUSIVE]
+    def _users(self, refs: Iterable[str], share: bool, within: Within) -> List[Lease]:
+        """The other runs using the devices; one sweeping a device the caller
+        does not share refuses a change without share."""
+        refs = tuple(refs)
+        swept = self._swept(refs, within)
         if swept and not share:
             raise LabError(
                 ErrorCode.CONFLICT,
-                str(LeaseConflict(tuple(swept))),
+                str(LeaseConflict(swept)),
                 "call again with share to go on: the measurement notes it",
             )
-        return users
+        return [
+            lease
+            for ref in refs
+            for lease in self.leases.of(ref)
+            if lease.owner != within.owner
+        ]
+
+    def raw(
+        self,
+        instrument: str,
+        command: str,
+        answer: bool,
+        origin: str,
+        share: bool = False,
+        within: Optional[Within] = None,
+    ) -> RawReply:
+        """Send an instrument a command as typed (answer: read the answer of a
+        write too); a query (with ?) changes nothing and reads its answer."""
+        within = within or self.outside
+        refs = self.bench.raw_parts(instrument)
+        query = raw_query(command)
+        users = [] if query else self._users(refs, share, within)
+        unknown = () if query else tuple(refs)
+        sent = f"raw {instrument} {command!r} by {origin}"
+        try:
+            got = self.bench.raw(instrument, command, answer or query)
+        except InstrumentError as e:
+            logger.warning(f"{sent} failed: {e}")
+            raise
+        finally:
+            if unknown:  # a write that failed half way changed what it did
+                self.known.forget(unknown)
+                self.bench.station.forget_setpoints(instrument)
+        logger.info(f"{sent}: {got!r}")
+        self.events.publish(RawSent(instrument, command, got, unknown, origin))
+        if unknown:
+            self._note(users, origin, instrument, raw=command, answer=got)
+            for ref in unknown:
+                self._read_again(ref)
+        return RawReply(instrument, command, got, unknown)
+
+    def proposed_raw(
+        self, instrument: str, command: str, within: Optional[Within] = None
+    ) -> Ask:
+        """A raw command as a person reads it before allowing it: a write with
+        the warning that nothing checks it, and the sweeps it disturbs."""
+        refs = self.bench.raw_parts(instrument)
+        if raw_query(command):
+            return Ask(f"{instrument} · {RAW_QUERY}", command)
+        sweeps = self._sweeps(refs, within or self.outside)
+        return Ask(
+            f"{instrument} · {RAW_WRITE}",
+            command,
+            "; ".join(filter(None, (UNCHECKED, sweeps))),
+            risky=True,
+            grave=bool(sweeps),
+        )
+
+    def _read_again(self, ref: str) -> None:
+        """A device whose values nobody knows, read in its lane: a values
+        event, or read_failed."""
+        if any(quantity.readable for quantity in self.quantities(ref)):
+            self.read_later(ref, None, functools.partial(self._read, ref))
+
+    def _read(self, ref: str, values: Any, error: Optional[BaseException]) -> None:
+        if error is None:
+            self.events.publish(Values(ref, values))
+        else:
+            self.events.publish(ReadFailed(ref, str(error)))
 
     def _note(self, users: List[Lease], origin: str, ref: str, **what: Any) -> None:
-        """Who changed what, into the runs using the device."""
+        """Who changed what, into the runs using the devices: once a run, as a
+        conflict where it sweeps one of them."""
         change = {"at": wall_time(), "by": origin, "device": ref, **what}
+        kinds: Dict[int, str] = {}
         for lease in users:
-            kind = CONFLICTS if lease.mode == EXCLUSIVE else INTERACTIONS
-            self.note(lease.owner, kind, change)
+            if kinds.get(lease.owner) != CONFLICTS:
+                kinds[lease.owner] = (
+                    CONFLICTS if lease.mode == EXCLUSIVE else INTERACTIONS
+                )
+        for owner, kind in kinds.items():
+            self.note(owner, kind, change)

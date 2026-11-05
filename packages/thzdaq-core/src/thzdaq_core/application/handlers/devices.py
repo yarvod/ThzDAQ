@@ -1,4 +1,5 @@
-"""Operations on devices: list, describe, read, set, run an action, go safe."""
+"""Operations on devices: list, describe, read, set, run an action, send a raw
+command, go safe."""
 
 from typing import ClassVar, Tuple
 
@@ -16,7 +17,7 @@ from thzdaq_core.application.describe import (
     setting_info,
 )
 from thzdaq_core.application.devices import DeviceAccess
-from thzdaq_api.scripts import CALL, SET
+from thzdaq_api.scripts import CALL, RAW, SET
 
 from thzdaq_core.application.handlers import Handler
 from thzdaq_core.application.processes import ScriptProcesses
@@ -68,7 +69,7 @@ class ReadDevice(Handler[api.ReadDevice, api.Reading]):
 
 class _Change(Handler):
     """A change of a device, which a person may have allowed already: in the
-    caller's session, or to its script in advance (as kind: set or call)."""
+    caller's session, or to its script in advance (as kind: set, call or raw)."""
 
     kind: ClassVar[str]
 
@@ -129,6 +130,35 @@ class CallAction(_Change):
         return self.devices.proposed_action(
             args.ref, args.action, args.arguments, within
         )
+
+    def amended(self, args, answer):
+        return msgspec.structs.replace(args, share=True)
+
+
+class RawCommand(_Change):
+    """A query needs fewer rights than a write. A session a person allowed
+    does not cover raw writes: only allowing the script raw:<instrument> at
+    its start does."""
+
+    operation = api.RawCommand
+    kind = RAW
+
+    def handle(self, args, origin):
+        mode = READ if args.query else SHARED
+        within = self.sessions.within(args.session, origin, args.instrument, mode)
+        return self.devices.raw(
+            args.instrument, args.command, args.answer, origin, args.share, within
+        )
+
+    def needs(self, args):
+        return Rights.RAW_QUERY if args.query else self.operation.rights
+
+    def granted(self, args, origin):
+        return self.scripts.allows(origin, self.kind, args.instrument)
+
+    def approval(self, args, origin):
+        within = self.sessions.found(args.session)
+        return self.devices.proposed_raw(args.instrument, args.command, within)
 
     def amended(self, args, answer):
         return msgspec.structs.replace(args, share=True)

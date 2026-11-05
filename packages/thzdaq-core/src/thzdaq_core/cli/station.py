@@ -6,7 +6,7 @@ import time
 from typing import List, Optional
 
 from thzdaq_instruments import InstrumentError
-from thzdaq_instruments.capabilities import ALL_CAPABILITIES, Identifiable
+from thzdaq_instruments.capabilities import ACCESS, ALL_CAPABILITIES
 
 from thzdaq_core.adapters.legacy_profiles import import_legacy_settings
 from thzdaq_core.domain.station.station import Station
@@ -17,7 +17,7 @@ def capability_names(device) -> List[str]:
     return [
         c.__name__
         for c in ALL_CAPABILITIES
-        if c is not Identifiable and isinstance(device, c)
+        if c not in ACCESS and isinstance(device, c)
     ]
 
 
@@ -49,7 +49,7 @@ def cmd_show(args) -> int:
         for info in station.devices():
             if info.instrument != instrument_id or info.kind == "instrument":
                 continue
-            caps = [c.__name__ for c in info.capabilities if c is not Identifiable]
+            caps = [c.__name__ for c in info.capabilities if c not in ACCESS]
             print(f"  {info.ref:28} {info.kind:18} {info.title}: {', '.join(caps)}")
     return 0
 

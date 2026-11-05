@@ -88,6 +88,7 @@ def assemble(
             devices.ReadDevice(access, script_sessions),
             devices.SetQuantity(access, script_sessions, processes),
             devices.CallAction(access, script_sessions, processes),
+            devices.RawCommand(access, script_sessions, processes),
             devices.SafeState(access),
             state.SubscribePoll(polling),
             state.CancelPoll(polling),
