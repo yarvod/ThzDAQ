@@ -1,18 +1,34 @@
 """Ports: what the application needs from the outside, as protocols.
 
 Adapters implement them (json_store.MeasurementStore: MeasurementRepository,
+its RunningFile: MeasurementWriter,
 yaml_profiles.YamlProfiles: ProfileRepository, processes.Processes: Launcher;
 the daemon's process: DaemonControl); the composition root (a CLI, the GUI
 session, the daemon) passes them in.
 """
 
 from pathlib import Path
-from typing import Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Mapping, Optional, Protocol, Sequence, Tuple
 
 from thzdaq_api.daemon import ClientInfo, DaemonSettings, ProcessInfo
 
 from thzdaq_api.measurement_file import Measurement
 from thzdaq_core.domain.station.config import StationConfig
+
+
+class MeasurementWriter(Protocol):
+    """The file of a measurement while it runs. A failed write does not stop
+    the measurement: the writer tells it in the log."""
+
+    def append(self, table: str, record: Mapping[str, Any]) -> None:
+        """A record the measurement took (into its table already): on disk
+        when this returns, so a killed process loses none."""
+
+    def update(self) -> None:
+        """What else changed (comment, metadata, plots, results) into the file."""
+
+    def close(self) -> None:
+        """The whole measurement as it ended, in one file."""
 
 
 class MeasurementRepository(Protocol):
@@ -21,8 +37,12 @@ class MeasurementRepository(Protocol):
     def next_id(self) -> int:
         ...
 
+    def open(self, measurement: Measurement) -> MeasurementWriter:
+        """The file of a measurement that starts now (path_for), written as
+        it runs."""
+
     def save(self, measurement: Measurement, path: Optional[str] = None) -> Path:
-        """To its file (path_for), or to path."""
+        """The whole measurement to its file (path_for), or to path."""
 
     def load(self, path: str) -> Measurement:
         """ValueError when it is no measurement file."""

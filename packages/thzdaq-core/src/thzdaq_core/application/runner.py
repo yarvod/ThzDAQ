@@ -28,7 +28,7 @@ from thzdaq_api.measurement_file import (
 )
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.application.clock import wall_time
-from thzdaq_core.application.ports import MeasurementRepository
+from thzdaq_core.application.ports import MeasurementRepository, MeasurementWriter
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.procedure import Capabilities, Procedure
 
@@ -131,15 +131,16 @@ class Context:
         emit: Callable[..., None],
         cancel_event: threading.Event,
         procedure: Optional[Procedure] = None,
-        autosave: Optional[Callable[[], None]] = None,
+        written: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         total: Optional[int] = None,
     ):
+        """written: told every record once the measurement holds it (its file)."""
         self.devices = devices
         self.measurement = measurement
         self.procedure = procedure
         self._emit = emit
         self._cancel = cancel_event
-        self._autosave = autosave
+        self._written = written
         self._cleanups: List[Callable[[], None]] = []
         self.done = 0
         self.total = total
@@ -153,8 +154,8 @@ class Context:
             self.measurement.table(table, self.procedure.table_titles.get(table, ""))
         overrides = self.procedure.columns if self.procedure is not None else None
         self.measurement.append(table, record, overrides)
-        if self._autosave is not None:
-            self._autosave()
+        if self._written is not None:
+            self._written(table, record)
         self._emit("on_record", table, record)
         return record
 
@@ -238,6 +239,19 @@ def slot_devices(procedure: Procedure, devices: Mapping[str, str]) -> Dict[str, 
     return {slot: devices.get(slot) or slot for slot in required}
 
 
+class Unsaved:
+    """The file of a measurement run without a store: none (MeasurementWriter)."""
+
+    def append(self, table: str, record: Mapping[str, Any]) -> None:
+        ...
+
+    def update(self) -> None:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
 class MeasurementRunner:
     """Runs procedures against a station: devices, measurement, file, cleanup, status.
 
@@ -249,12 +263,15 @@ class MeasurementRunner:
         station: StationLike,
         store: Optional[MeasurementRepository] = None,
         observers: Sequence[RunObserver] = (),
-        autosave_interval: float = 5.0,
+        update_interval: float = 5.0,
     ):
+        """update_interval: how often, at most, its file takes what else
+        changed than records (comment, metadata, plots); records are written
+        as they come."""
         self.station = station
         self.store = store
         self.observers: List[RunObserver] = list(observers)
-        self.autosave_interval = autosave_interval
+        self.update_interval = update_interval
         self._cancel = threading.Event()
         self._lock = threading.Lock()
         self.current: Optional[Measurement] = None
@@ -334,25 +351,23 @@ class MeasurementRunner:
         else:
             measurement.id = self.store.next_id() if self.store else next(_LOCAL_IDS)
         self.current = measurement
-        saved = [0.0]
+        file: MeasurementWriter = (
+            self.store.open(measurement) if self.store else Unsaved()
+        )
+        updated = [time.monotonic()]
 
-        def save(force: bool = False) -> None:
-            if self.store is None:
-                return
-            if force or time.monotonic() - saved[0] >= self.autosave_interval:
-                try:
-                    self.store.save(measurement)
-                except OSError:
-                    logger.exception(f"[{procedure.name}] autosave failed")
-                saved[0] = time.monotonic()
+        def written(table: str, record: Dict[str, Any]) -> None:
+            file.append(table, record)
+            if time.monotonic() - updated[0] >= self.update_interval:
+                file.update()
+                updated[0] = time.monotonic()
 
         ctx = Context(
-            found, measurement, self._emit, self._cancel, procedure, save,
+            found, measurement, self._emit, self._cancel, procedure, written,
             procedure.estimate_steps(),
         )  # fmt: skip
         status, error = COMPLETED, None
         try:
-            save(force=True)
             self._emit("on_started", measurement)
             procedure.run(ctx)
         except Cancelled:
@@ -372,7 +387,7 @@ class MeasurementRunner:
             if cleanup_errors:
                 measurement.metadata["cleanup_errors"] = cleanup_errors
             measurement.finish(status, wall_time(), error)
-            save(force=True)
+            file.close()
             self.current = None
             self._emit("on_finished", measurement)
         return measurement

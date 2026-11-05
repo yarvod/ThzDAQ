@@ -9,7 +9,8 @@ import time
 
 import msgspec
 import pytest
-from lab_helpers import wait_for
+from lab_helpers import bodies, wait_for
+from thzdaq_api.data import encode_values
 from thzdaq_api.daemon import (
     API_VERSION,
     GetDaemonStatus,
@@ -21,7 +22,7 @@ from thzdaq_api.daemon import (
 )
 from thzdaq_api.devices import ListDevices
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.events import Resync
+from thzdaq_api.events import MeasurementRecords, Resync
 from thzdaq_api.host import (
     NO_AUTOSTART_ENV,
     DaemonFiles,
@@ -32,6 +33,7 @@ from thzdaq_api.host import (
     read_host,
     write_host,
 )
+from thzdaq_api.measurement_file import INTERRUPTED, read_measurement
 from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.procedures import MONITOR_TIME
 
@@ -145,6 +147,25 @@ def test_a_daemon_that_hangs_is_killed(home):
     assert kill(True) == lab.host.pid
     gone(lab.host.pid, DaemonFiles.of(True))
     assert kill(True) is None
+
+
+def test_a_killed_daemon_leaves_every_record_it_told_in_the_file(home):
+    lab = start(home)
+    heard = []
+    stop = lab.subscribe(heard.append)
+    run = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=FOREVER))
+    wait_for(lambda: len(bodies(heard, MeasurementRecords)) >= 10, timeout=15)
+    stop()
+    told = bodies(heard, MeasurementRecords)
+    assert kill(True) == lab.host.pid
+    gone(lab.host.pid, DaemonFiles.of(True))
+
+    found = read_measurement(run.path)
+    assert found.status == INTERRUPTED
+    rows = [row for body in told for row in body.rows]
+    kept = [encode_values(row) for row in found.records(told[0].table)]
+    assert len(kept) >= len(rows) >= 10
+    assert kept[: len(rows)] == rows
 
 
 def test_a_windowed_build_says_what_it_says_into_its_log(tmp_path, monkeypatch):
