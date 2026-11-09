@@ -19,6 +19,7 @@ a glitch, a small `uptime_s` means the board rebooted (its supply dipped), a
 grown `eth_restores` that the W5500 lost its settings and the firmware wrote
 them again. They log to Serial at 115200 (on the Iskra Neo, the USB port).
 
-`grid_2` turns the stepper driver off between moves (`HOLD_WHEN_IDLE`), so the
-motor carries no current while it is plugged in or out. `grid_1` has no ENABLE
-line: its coils always carry the holding current.
+Both turn the stepper driver off between moves (`HOLD_WHEN_IDLE`) by its ENABLE
+line (D9 on `grid_2`, D8 on `grid_1`), so the motor carries no current while it
+is plugged in or out. Where ENABLE is not wired, the driver pulls it low itself
+and holds the coils all the time.

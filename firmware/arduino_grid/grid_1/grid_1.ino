@@ -10,8 +10,6 @@
 //
 // Libraries: only those of the Arduino IDE (Ethernet 2.x drives the W5500).
 // Serial is the USB port here (log at any baud rate), so pin 1 is free for DIR.
-// The driver's ENABLE is not wired: its coils carry the holding current all
-// the time, the motor must not be plugged in or out while the board is on.
 
 #include <SPI.h>
 #include <Ethernet.h>
@@ -21,7 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// The W5500 is on the ICSP SPI of the 32U4; 10 selects it
+// The W5500 is on the ICSP SPI of the 32U4; 10 selects it. 4 selects the SD
+// card on Ethernet shields, so SLEEP, wired to it, never goes low
 const uint8_t DIR_PIN = 1;
 const uint8_t STEP_PIN = 2;
 const uint8_t RESET_PIN = 3;
@@ -29,11 +28,19 @@ const uint8_t SLEEP_PIN = 4;
 const uint8_t MS1_PIN = 5;
 const uint8_t MS2_PIN = 6;
 const uint8_t MS3_PIN = 7;
+const uint8_t ENABLE_PIN = 8;
 const uint8_t ETHERNET_CS_PIN = 10;
 
 const long STEPS_PER_TURN = 16000;  // microsteps (MS1-3 high: 1/16) per grid turn
 const unsigned int STEP_HALF_PERIOD_US = 350;
 const float MAX_ANGLE = 3600;  // of one move, deg: bounds the step count
+// false: the driver is off between moves, so no coil current flows while the
+// motor is plugged in or out, and no inductive spike reaches the shared 12 V.
+// true: the coils hold the grid between moves (the old firmware).
+const bool HOLD_WHEN_IDLE = false;
+// The coil current rises for a few ms after the driver is enabled, and the
+// rotor comes to rest before the driver lets it go
+const unsigned int COIL_SETTLE_MS = 20;
 
 byte MAC[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 const IPAddress IP(169, 254, 0, 52);
@@ -58,6 +65,10 @@ void setOutput(uint8_t pin, uint8_t level) {
   pinMode(pin, OUTPUT);
 }
 
+void setDriverEnabled(bool enabled) {
+  digitalWrite(ENABLE_PIN, enabled ? LOW : HIGH);
+}
+
 void rotate(float angle) {
   long steps = lround(fabs(angle) * STEPS_PER_TURN / 360.0);
   Serial.print(F("Rotate "));
@@ -66,12 +77,16 @@ void rotate(float angle) {
   Serial.print(steps);
   Serial.println(F(" steps"));
   digitalWrite(DIR_PIN, angle >= 0 ? HIGH : LOW);
+  setDriverEnabled(true);
+  delay(COIL_SETTLE_MS);
   for (long i = 0; i < steps; i++) {
     digitalWrite(STEP_PIN, HIGH);
     delayMicroseconds(STEP_HALF_PERIOD_US);
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(STEP_HALF_PERIOD_US);
   }
+  delay(COIL_SETTLE_MS);
+  setDriverEnabled(HOLD_WHEN_IDLE);
 }
 
 // Ethernet
@@ -213,8 +228,9 @@ void serve(EthernetClient &client) {
 }
 
 void setup() {
-  // Coils off (RESET low) while the W5500 starts, so their current does not
-  // load the supply then; the lines float until here
+  // Driver off before anything else: its lines float until here. RESET stays
+  // low while the W5500 starts, so no coil current loads the supply then
+  setOutput(ENABLE_PIN, HIGH);
   setOutput(RESET_PIN, LOW);
   setOutput(SLEEP_PIN, HIGH);
   setOutput(MS1_PIN, HIGH);
@@ -237,6 +253,7 @@ void setup() {
   Serial.println(linkOn ? F(", link up") : F(", link down"));
 
   digitalWrite(RESET_PIN, HIGH);
+  setDriverEnabled(HOLD_WHEN_IDLE);
 }
 
 void loop() {
