@@ -1,19 +1,27 @@
 """Scripts the daemon runs apart from any terminal, and what a person allowed
 them in advance (contract: LocalLab and RemoteLab)."""
 
+import copy
 import sys
 from pathlib import Path
 
 import pytest
 from lab_helpers import Window, bodies, calling, wait_for
-from thzdaq_api.daemon import GetDaemonStatus, StopDaemon, StopMode
-from thzdaq_api.devices import CallAction, ReadDevice, SetQuantity
+from thzdaq_api.daemon import (
+    GetDaemonStatus,
+    SetDaemonSettings,
+    StopDaemon,
+    StopMode,
+)
+from thzdaq_api.devices import RawCommand, ReadDevice, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import ALLOWED, read_measurement
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
-from thzdaq_api.origins import GUI, script
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
+from thzdaq_api.operation import Rights
+from thzdaq_api.origins import AGENT_CLI, GUI, script
+from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.rights import Decision
 from thzdaq_api.scripts import (
     Grant,
     ListScripts,
@@ -22,9 +30,14 @@ from thzdaq_api.scripts import (
     StopScript,
 )
 from thzdaq_api.sessions import EndSession, RestoreOnExit, StartSession
+from thzdaq_api.station import GetStation, UpdateStation
+from thzdaq_core.application.handlers.scripts import NOTHING_IN_ADVANCE
 
 PYTHON = (sys.executable,)
-MONITOR = {"watch": ["power_meter_1/power"], "interval": 0.02, "duration": 0.0}
+LIMITS = {
+    ref: {"voltage_set": {"min": -5e-3, "max": 5e-3, "warn_max": 4e-3}}
+    for ref in ("sis_bias_1", "sis_bias_2")
+}
 SLOW = "import time\ntime.sleep(60)\n"
 IV = dict(
     procedure=IV_CURVE,
@@ -194,40 +207,56 @@ def test_a_script_that_ends_ends_its_sessions_at_once(lab, lab_as, tmp_path):
     assert gone.status == "interrupted" and "exited" in gone.error
 
 
+def warned(lab):
+    """Both SIS biases warn above 4 mV."""
+    profile = copy.deepcopy(lab.call(GetStation()).profile)
+    profile["safety"] = {"limits": LIMITS}
+    lab.call(UpdateStation(profile=profile))
+
+
+def test_a_persons_script_has_the_persons_rights(lab, lab_as, tmp_path, quick_stop):
+    text = "import os\nprint(os.environ.get('CLAUDECODE'))\n" + SLOW
+    started = run(lab, tmp_path, "slow.py", text)  # the daemon's shell is an agent's
+    assert started.origin == script("slow", started.id) and started.by == "test"
+    wait_for(lambda: lab.call(ReadScriptLog(id=started.id)).text)
+    assert lab.call(ReadScriptLog(id=started.id)).text == "None\n"
+    itself = lab_as(started.origin, "script")
+    itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV"))
+    session = itself.call(StartSession(title="scan", devices=("sis_bias_2",)))
+    itself.call(EndSession(id=session.id))
+    run_ = itself.call(StartMeasurement(**IV))
+    assert lab.call(WaitMeasurement(id=run_.id, timeout=10)).status == "completed"
+    with pytest.raises(LabError) as caught:  # dangerous: nobody answers
+        itself.call(SetQuantity(ref="sis_bias_1", key="active", value=False))
+    assert caught.value.code == ErrorCode.DENIED
+    lab.call(StopScript(id=started.id))
+
+
 def test_what_a_script_was_allowed_goes_without_a_person(
     lab, lab_as, tmp_path, quick_stop
 ):
+    warned(lab)
     started = run(
         lab, tmp_path, "slow.py", SLOW,
-        allow=(Grant("set", "sis_bias_1"), Grant("call", "chopper_1"),
-               Grant("run", IV_CURVE)),
+        allow=(Grant("set", "sis_bias_1"), Grant("run", IV_CURVE)),
     )  # fmt: skip
     itself = lab_as(started.origin, "script")
-    itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV"))
-    itself.call(CallAction(ref="chopper_1", action="to_hot"))
-    session = itself.call(
-        StartSession(title="scan", devices=("sis_bias_1", "chopper_1"))
-    )
-    itself.call(EndSession(id=session.id))
+    # Beyond the warn range: what was allowed goes, the rest waits for a person
+    itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="4.5mV"))
     run_ = itself.call(StartMeasurement(**IV))
     noted = read_measurement(lab.call(WaitMeasurement(id=run_.id, timeout=10)).path)
-    assert noted.metadata[ALLOWED][0]["allow"] == [
-        "set:sis_bias_1", "call:chopper_1", f"run:{IV_CURVE}",
-    ]  # fmt: skip
-    # Nobody answers: what was not allowed is refused
+    assert noted.metadata[ALLOWED][0]["allow"] == ["set:sis_bias_1", f"run:{IV_CURVE}"]
     refused = [
-        SetQuantity(ref="sis_bias_2", key="voltage_set", value="1mV"),
+        SetQuantity(ref="sis_bias_2", key="voltage_set", value="4.5mV"),
         SetQuantity(ref="sis_bias_1", key="active", value=False),  # dangerous
-        StartSession(title="scan", devices=("sis_bias_2",)),
-        StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR),
     ]
-    for operation in refused:
+    for operation in refused:  # nobody answers
         with pytest.raises(LabError) as caught:
             itself.call(operation)
         assert caught.value.code == ErrorCode.DENIED, operation
     lab.call(StopScript(id=started.id))
     with pytest.raises(LabError) as caught:  # only while it runs
-        itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="2mV"))
+        itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="4.6mV"))
     assert caught.value.code == ErrorCode.DENIED
 
 
@@ -258,9 +287,38 @@ def test_an_agents_script_is_allowed_by_a_person(lab_as, tmp_path):
         thread, done = calling(agent, operation)
         approval = window.asked()
         assert approval.title.endswith("scan.py")
-        assert "may set:sis_bias_1 without asking" in approval.text
+        assert NOTHING_IN_ADVANCE in approval.text
         window.answer(allowed=False, text="not tonight")
         thread.join(5)
         assert done["error"].code == ErrorCode.DENIED
     finally:
         window.stop()
+
+
+def test_an_agents_script_has_the_agents_rights(lab, lab_as, tmp_path, quick_stop):
+    lab.call(SetDaemonSettings(agents={Rights.RUN: Decision.ALLOW}))
+    text = "import os\nprint(os.environ.get('THZDAQ_AGENT'))\n" + SLOW
+    started = lab_as(AGENT_CLI).call(
+        StartScript(
+            path=str(written(tmp_path, "slow.py", text)),
+            python=PYTHON,
+            workspace=str(tmp_path),
+            allow=(Grant("set", "sis_bias_1"),),
+            share=("sis_bias_1",),
+        )
+    )
+    assert started.origin == script("slow", started.id, by_agent=True)
+    assert (started.by, started.allow, started.share) == (AGENT_CLI, (), ())
+    wait_for(lambda: lab.call(ReadScriptLog(id=started.id)).text)
+    assert lab.call(ReadScriptLog(id=started.id)).text == "1\n"
+    # Asked as the agent's (nobody answers), whatever it calls itself
+    for origin in (started.origin, script("slow", started.id)):
+        itself = lab_as(origin, "script")
+        for operation in (
+            SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV"),
+            RawCommand(instrument="sis_block_1", command="DEV4:OFF"),
+        ):
+            with pytest.raises(LabError) as caught:
+                itself.call(operation)
+            assert caught.value.code == ErrorCode.DENIED, (origin, operation)
+    lab.call(StopScript(id=started.id))

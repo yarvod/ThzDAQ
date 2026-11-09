@@ -16,11 +16,16 @@ that waits for its end reads its log as it grows (the process writes it
 itself) and tells each new part, a character cut at the end of a part waits
 for its rest.
 
-What it was allowed (set:<ref>, call:<ref>, run:<procedure>,
+A script has the rights of whoever started it (thzdaq_core's Policy): the
+daemon keeps who started each (by), and runs an agent's script as the agent's
+(AGENT_ENV in its environment, so it names itself an agent's script) and a
+person's without the marks of an agent's shell the daemon may have inherited.
+
+What a person allowed it (set:<ref>, call:<ref>, run:<procedure>,
 raw:<instrument>) is not asked again while it runs, but for a dangerous step
-or another's sweep; a session it
-starts is allowed when every device it names is. The measurements it starts
-note what it was allowed.
+or another's sweep; a session it starts is allowed when every device it names
+is. The measurements it starts note what it was allowed. An agent's --allow
+and --share allow nothing: what its script does is asked as the agent's.
 """
 
 import codecs
@@ -34,7 +39,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import ALLOWED
 from thzdaq_api.measurements import DATA
-from thzdaq_api.origins import script, script_number
+from thzdaq_api.origins import AGENT_ENV, AGENT_SHELLS, script, script_number
 from thzdaq_api.workspace import WORKSPACE_ENV
 from thzdaq_api.scripts import (
     CALL,
@@ -131,7 +136,11 @@ class ScriptProcesses:
         self._last = 0
         self._lock = threading.Lock()
 
-    def start(self, args: StartScript, origin: str) -> ScriptInfo:
+    def start(self, args: StartScript, origin: str, by_agent: bool) -> ScriptInfo:
+        """by_agent: an agent (or its script) starts it: it runs as the
+        agent's, allowed nothing in advance."""
+        if by_agent:
+            args = msgspec.structs.replace(args, allow=(), share=())
         folder = self.workspaces.folder(args.workspace)
         path = folder / Path(args.path).expanduser()
         if not path.is_file():
@@ -148,17 +157,22 @@ class ScriptProcesses:
                 SCRIPT_ID_ENV: str(number),
                 SIMULATE_ENV: "1" if self.simulate() else "0",
                 WORKSPACE_ENV: str(folder),
+                **({AGENT_ENV: "1"} if by_agent else {}),
                 **UNBUFFERED,
             }
+            removed = () if by_agent else AGENT_SHELLS
             try:
-                launched = self.launcher.launch(command, folder, environment, log)
+                launched = self.launcher.launch(
+                    command, folder, environment, log, removed
+                )
             except OSError as e:
                 raise LabError(
                     ErrorCode.INVALID_ARGUMENTS, f"{command[0]} did not start: {e}"
                 ) from None
             info = ScriptInfo(
                 id=number, name=path.stem, path=str(path), command=command,
-                workspace=str(folder), log=str(log), origin=script(path.stem, number),
+                workspace=str(folder), log=str(log),
+                origin=script(path.stem, number, by_agent),
                 by=origin, pid=launched.pid, status=RUNNING, started=wall_time(),
                 allow=tuple(args.allow), share=tuple(args.share),
             )  # fmt: skip
@@ -255,6 +269,15 @@ class ScriptProcesses:
     def stop_all(self) -> None:
         for info in self.running():
             self.stop(info.id)
+
+    def started_by(self, origin: str) -> Optional[str]:
+        """Who started the script that calls as origin (the origin of the
+        call that started it), by its number whatever it calls itself; None
+        for a script the daemon did not run."""
+        number = script_number(origin)
+        with self._lock:
+            found = self._scripts.get(number) if number is not None else None
+        return None if found is None else found.info.by
 
     # What a person allowed in advance
     def _allowed(self, origin: str) -> Optional[ScriptInfo]:

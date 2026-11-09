@@ -70,7 +70,15 @@ from thzdaq_api.measurements import (
     fill_slots,
 )
 from thzdaq_api.operation import Operation
-from thzdaq_api.origins import ANSWERING_CLI, CLI, GUI, PLOTS, SCRIPT_CLIENT, script
+from thzdaq_api.origins import (
+    ANSWERING_CLI,
+    CLI,
+    GUI,
+    PLOTS,
+    SCRIPT_CLIENT,
+    agent_shell,
+    script,
+)
 from thzdaq_api.procedures import entry
 from thzdaq_api.remote import RemoteLab
 from thzdaq_api.script import (
@@ -484,8 +492,9 @@ def connect(
     workspace: Union[str, Path, None] = None,
 ) -> Bench:
     """The bench of this machine (its simulator with simulate) as this script
-    uses it, as script:<name> (the script's file name by default); the daemon
-    is started when none runs. A person at this terminal is asked here too
+    uses it, as script:<name> (the script's file name by default;
+    script:agent:<name> in a shell an agent drives: the script has the rights
+    of whoever started it); the daemon is started when none runs. A person at this terminal is asked here too
     what a measurement's start needs allowed. A script the daemon started
     (thzdaq script start) finds that daemon, its own number and its workspace
     by its environment, and is allowed what it was started with. Its
@@ -497,7 +506,7 @@ def connect(
     number = os.environ.get(SCRIPT_ID_ENV)
     if simulate is None:
         simulate = os.environ.get(SIMULATE_ENV) == "1"
-    origin = script(name, int(number) if number else None)
+    origin = script(name, int(number) if number else None, agent_shell())
     folder = chosen(workspace)
     lab = host.connect_or_start(
         simulate, expected_profile(folder), origin, SCRIPT_CLIENT

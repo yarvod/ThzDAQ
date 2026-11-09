@@ -3,7 +3,8 @@ runs apart from any terminal, so closing this one leaves them running; their
 output goes to data/scripts/<id>.log of their workspace. A script runs with
 this command's Python (a build's thzdaq-cli.exe run-script) or --python; what
 it may do without asking a person is given with --allow (set:<device>,
-call:<device>, run:<procedure>, raw:<instrument>). stop cancels its
+call:<device>, run:<procedure>, raw:<instrument>; an agent's allows
+nothing: a script has the rights of whoever started it). stop cancels its
 measurements, and ends it when it has not ended a few seconds later."""
 
 import runpy
@@ -41,7 +42,7 @@ def add(commands) -> None:
     start.add_argument(
         "--allow", action="append", default=[], metavar="KIND:TARGET",
         help="done without asking: set:<device>, call:<device>, run:<procedure>,"
-        " raw:<instrument> (raw writes, which no limit checks)",
+        " raw:<instrument> (raw writes, which no limit checks); a person's only",
     )  # fmt: skip
     start.add_argument(
         "--share", action="append", default=[], metavar="DEVICE",

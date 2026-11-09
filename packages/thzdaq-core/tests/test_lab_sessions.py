@@ -31,7 +31,8 @@ from thzdaq_api.sessions import (
     StartSession,
 )
 
-SCRIPT = script("scan")
+SCRIPT = script("scan")  # a person's script
+AGENTS = script("scan", by_agent=True)  # an agent's
 
 
 def bias(value, session=None):
@@ -266,14 +267,14 @@ def test_a_sweep_is_typed_as_people_type_it(lab):
     assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
 
 
-# What a script may do: a person allows its session once
-def test_a_scripts_session_is_allowed_by_a_person_once(lab_as, window):
-    scan = lab_as(SCRIPT, "script")
+# What a script may do: an agent's asks a person for its session once
+def test_an_agents_session_is_allowed_by_a_person_once(lab_as, window):
+    scan = lab_as(AGENTS, "script")
     thread, done = calling(
         scan, StartSession(title="scan", devices=("sis_bias_1",), comment="narrow")
     )
     approval = window.asked()
-    assert approval.title == "Start script scan" and approval.origin == SCRIPT
+    assert approval.title == "Start script scan" and approval.origin == AGENTS
     assert "sis_bias_1 shared" in approval.text and "narrow" in approval.text
     window.answer(allowed=True)
     thread.join(5)
@@ -287,8 +288,8 @@ def test_a_scripts_session_is_allowed_by_a_person_once(lab_as, window):
     scan.call(EndSession(id=run.id))
 
 
-def test_a_script_asks_for_a_device_it_did_not_name_once(lab, lab_as, window):
-    scan = lab_as(SCRIPT, "script")
+def test_an_agents_script_asks_for_a_device_it_did_not_name_once(lab, lab_as, window):
+    scan = lab_as(AGENTS, "script")
     thread, done = calling(scan, StartSession(title="scan"))
     window.answer(allowed=True)
     thread.join(5)
@@ -302,12 +303,21 @@ def test_a_script_asks_for_a_device_it_did_not_name_once(lab, lab_as, window):
     scan.call(EndSession(id=run.id))
 
 
+def test_a_persons_script_changes_the_bench_as_the_person_would(lab, lab_as, window):
+    scan = lab_as(SCRIPT, "script")
+    run = scan.call(StartSession(title="scan", devices=("sis_bias_1",)))
+    scan.call(bias("1mV", session=run.id))
+    scan.call(
+        SetQuantity(ref="sis_bias_2", key="voltage_set", value="1mV", session=run.id)
+    )  # not named: it joins
+    scan.call(bias("2mV"))  # outside its session too
+    assert not window.waiting() and bias_now(lab) == pytest.approx(2e-3)
+    scan.call(EndSession(id=run.id))
+
+
 def test_a_dangerous_step_of_a_session_is_still_asked(lab_as, window):
     scan = lab_as(SCRIPT, "script")
-    thread, done = calling(scan, StartSession(title="scan", devices=("sis_bias_1",)))
-    window.answer(allowed=True)
-    thread.join(5)
-    run = done["result"]
+    run = scan.call(StartSession(title="scan", devices=("sis_bias_1",)))
     thread, done = calling(
         scan,
         SetQuantity(ref="sis_bias_1", key="active", value=False, session=run.id),

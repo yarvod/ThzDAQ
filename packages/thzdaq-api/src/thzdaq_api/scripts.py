@@ -4,14 +4,16 @@ output goes to <workspace>/data/scripts/<id>.log; it finds the daemon that
 started it by THZDAQ_SCRIPT_ID and THZDAQ_SIMULATE, works in its workspace
 (THZDAQ_WORKSPACE) and calls the daemon as script:<name>@<id>.
 
-A script started without a person nearby may be allowed in advance what it
-would otherwise ask for (allow): set:<ref> its quantities, call:<ref> its
-actions, run:<procedure> a built-in procedure, raw:<instrument> raw writes to
-an instrument (lab.raw), which no limit checks; a session (lab.measurement)
-starts without asking when every device it names is allowed. A dangerous step
-is never allowed in advance. share names devices its measurements share while
-another one sweeps them. Who starts the script allows these: a person by
-typing them, an agent's start is asked of a person with them shown.
+A script has the rights of whoever started it (thzdaq_api.rights): a
+person's changes the bench as the person would in a dock, an agent's asks as
+the agent does. A person may allow their script in advance what it would
+otherwise ask for (allow): set:<ref> its quantities, call:<ref> its actions
+(a jump or a value beyond the warn range), run:<procedure> a procedure,
+raw:<instrument> raw writes to an instrument (lab.raw), which no limit checks;
+a session (lab.measurement) starts without asking when every device it names
+is allowed. A dangerous step is never allowed in advance. share names devices
+its measurements share while another one sweeps them. An agent's allow and
+share allow nothing.
 """
 
 from typing import Optional, Tuple

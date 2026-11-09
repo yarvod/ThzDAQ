@@ -7,9 +7,12 @@ answer for a person or write raw commands, a dangerous step is always asked,
 and a set an agent may do alone is still asked for a jump ×10 or a value
 beyond warn_min..warn_max.
 
-Scripts go by the same table, but for raw commands: they query an instrument
-as people do, and a raw write waits for a person unless the script was
-allowed it at its start (thzdaq script start --allow raw:<instrument>).
+A script has the rights of whoever started it. An agent's script goes by this
+table as its agent does. A person's script goes by PERSON_SCRIPTS: it changes
+the bench within its limits as the person would in a dock, and what a dock
+confirms (a dangerous step, a jump or a value beyond the warn range, another's
+sweep, a raw write, a change of the profile) waits for a person, unless the
+person allowed it at the script's start (thzdaq script start --allow).
 """
 
 from enum import Enum
@@ -45,9 +48,17 @@ FIXED: Mapping[Rights, Decision] = {
     Rights.RAW_WRITE: Decision.DENY,
 }
 
-# What scripts may do whatever the table says for agents: a person wrote or
-# started them for the bench, so a raw write is theirs to allow
-SCRIPTS: Mapping[Rights, Decision] = {
+# What a script a person started may do: what the person does in a dock goes
+# at once, what a dock confirms waits for a person (a call that may harm the
+# bench is asked besides, as an agent's)
+PERSON_SCRIPTS: Mapping[Rights, Decision] = {
+    Rights.READ: Decision.ALLOW,
+    Rights.STOP: Decision.ALLOW,
+    Rights.SET: Decision.ALLOW,
+    Rights.RUN: Decision.ALLOW,
+    Rights.DAEMON: Decision.ASK,
+    Rights.STATION: Decision.ASK,
+    Rights.ANSWER: Decision.DENY,
     Rights.RAW_QUERY: Decision.ALLOW,
     Rights.RAW_WRITE: Decision.ASK,
 }

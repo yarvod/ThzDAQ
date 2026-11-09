@@ -105,6 +105,7 @@ class Launcher(Protocol):
         folder: Path,
         environment: Mapping[str, str],
         log: Path,
+        removed: Sequence[str] = (),
     ) -> Launched:
-        """command run in folder with these variables added, its output into
-        log; OSError when it cannot start."""
+        """command run in folder with these variables added and the removed
+        ones left out, its output into log; OSError when it cannot start."""

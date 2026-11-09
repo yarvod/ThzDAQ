@@ -73,7 +73,7 @@ def assemble(
     )  # fmt: skip
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events, workspaces)
-    policy = Policy(lambda: control.settings().agents)
+    policy = Policy(lambda: control.settings().agents, processes.started_by)
     service = DaemonService(
         bench, runs, polling, events, access, control, policy, processes
     )
@@ -119,7 +119,7 @@ def assemble(
             sessions.CallOnExit(script_sessions, processes),
             sessions.EndSession(script_sessions, processes),
             sessions.ParseSweep(),
-            scripts.StartScript(processes),
+            scripts.StartScript(processes, policy),
             scripts.ListScripts(processes),
             scripts.ReadScriptLog(processes),
             scripts.StopScript(processes),

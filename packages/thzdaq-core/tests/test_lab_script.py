@@ -17,7 +17,7 @@ from thzdaq_api.measurements import CancelMeasurement
 from thzdaq_api.origins import ANSWERING_CLI, CLI, GUI, script
 from thzdaq_api.procedures import IV_CURVE
 from thzdaq_api.script import AnsweredHere, Cancelled
-from thzdaq_api.sessions import ScriptSource
+from thzdaq_api.sessions import EndSession, ScriptSource, StartSession
 
 SCRIPT = script("scan")
 SOURCE = ScriptSource("scripts/scan.py", "ab12", "...")
@@ -150,7 +150,21 @@ def test_the_script_is_kept_alive_while_it_works(bench):
     assert m.run.status == "completed"
 
 
-def test_a_person_at_the_scripts_terminal_allows_its_start(lab_as, tmp_path):
+def test_a_persons_script_starts_its_measurement_as_the_person_would(lab_as, tmp_path):
+    asked = []
+    approve = AnsweredHere(
+        lab_as(CLI, ANSWERING_CLI), SCRIPT, lambda p, g: asked.append(p)
+    )
+    bench = Bench(lab_as(SCRIPT, "script"), tmp_path, approve=approve)
+    with bench.measurement("scan", devices=["sis_bias_1"]) as m:
+        bench["sis_bias_1"].voltage_set = "1mV"
+        bench["sis_bias_2"].voltage_set = "1mV"  # not named: joins, not asked
+        m.record("t", x=1.0)
+    assert not asked and m.run.status == "completed"
+
+
+def test_a_person_at_the_scripts_terminal_allows_a_conflict(lab, lab_as, tmp_path):
+    sweep = lab.call(StartSession(title="sweep", exclusive=("sis_bias_1",)))
     asked = []
 
     def typed(prompt, gone):
@@ -160,18 +174,20 @@ def test_a_person_at_the_scripts_terminal_allows_its_start(lab_as, tmp_path):
     approve = AnsweredHere(lab_as(CLI, ANSWERING_CLI), SCRIPT, typed)
     bench = Bench(lab_as(SCRIPT, "script"), tmp_path, approve=approve)
     with bench.measurement("scan", devices=["sis_bias_1"]) as m:
-        bench["sis_bias_1"].voltage_set = "1mV"  # its own device: not asked
         m.record("t", x=1.0)
     assert asked == ["allow? [y/N] "] and m.run.status == "completed"
+    assert m.run.conflicts[0]["run"] == sweep.id
     refusing = AnsweredHere(lab_as(CLI, ANSWERING_CLI), SCRIPT, lambda p, g: "n")
     with pytest.raises(LabError) as caught:
         Bench(lab_as(SCRIPT, "script"), tmp_path, approve=refusing).measurement(
-            "scan"
+            "scan", devices=["sis_bias_1"]
         ).__enter__()
     assert caught.value.code == ErrorCode.DENIED
+    lab.call(EndSession(id=sweep.id))
 
 
-def test_a_window_may_answer_first(lab_as, tmp_path):
+def test_a_window_may_answer_first(lab, lab_as, tmp_path):
+    sweep = lab.call(StartSession(title="sweep", exclusive=("sis_bias_1",)))
     window = Window(lab_as(GUI))
     try:
         waited = threading.Event()
@@ -187,12 +203,13 @@ def test_a_window_may_answer_first(lab_as, tmp_path):
             target=lambda: (wait_for(waited.is_set), window.answer(allowed=True))
         )
         answer.start()
-        with bench.measurement("scan") as m:
+        with bench.measurement("scan", devices=["sis_bias_1"]) as m:
             pass
         answer.join(5)
         assert m.run.status == "completed"
     finally:
         window.stop()
+        lab.call(EndSession(id=sweep.id))
 
 
 def test_cancelled_is_the_scripts_to_catch_too(bench, lab_as):

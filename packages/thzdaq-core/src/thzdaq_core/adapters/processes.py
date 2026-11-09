@@ -31,14 +31,16 @@ class Processes:
         folder: Path,
         environment: Mapping[str, str],
         log: Path,
+        removed: Sequence[str] = (),
     ) -> Process:
         log.parent.mkdir(parents=True, exist_ok=True)
+        inherited = {k: v for k, v in os.environ.items() if k not in removed}
         with open(log, "ab") as output:
             return Process(
                 subprocess.Popen(
                     list(command),
                     cwd=folder,
-                    env={**os.environ, **environment},
+                    env={**inherited, **environment},
                     stdin=subprocess.DEVNULL,
                     stdout=output,
                     stderr=subprocess.STDOUT,

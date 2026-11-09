@@ -1,7 +1,7 @@
 """Raw commands: what a driver does not wrap yet, sent to an instrument as
-typed. A query is free to people and scripts and asked for agents; a write,
-which no limit checks, is refused to agents, asked for scripts unless allowed
-in advance, conflicts with another's sweep, is noted and leaves the
+typed. A query is free to people and their scripts and asked for agents; a
+write, which no limit checks, is refused to agents and their scripts, asked
+for a person's script unless allowed in advance, conflicts with another's sweep, is noted and leaves the
 instrument's devices unknown until read again (contract: LocalLab and
 RemoteLab)."""
 
@@ -117,6 +117,16 @@ def test_a_scripts_write_waits_for_a_person(lab_as, window):
     window.answer(allowed=True)
     thread.join(5)
     assert set(done["result"].unknown) >= {BLOCK, "sis_bias_1"}
+
+
+def test_an_agents_script_writes_no_raw_command(lab_as, window):
+    itself = lab_as(script("probe", by_agent=True), "script")
+    assert refused(itself, raw(WRITE)).code == ErrorCode.DENIED
+    thread, done = calling(itself, raw("*IDN?"))  # a query is asked
+    assert window.asked().text == "*IDN?"
+    window.answer(allowed=True)
+    thread.join(5)
+    assert done["result"].answer == IDENTITY
 
 
 def test_a_script_allowed_raw_writes_goes_without_a_person(
