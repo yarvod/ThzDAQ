@@ -18,7 +18,15 @@ from pathlib import Path
 from typing import Dict, List, Set
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = sorted(ROOT.glob("packages/*/src/**/*.py"))
+# Scripts a person copies and makes theirs (examples of the bench's own
+# measurements): package data written as a person writes, not modules of the
+# program that could import what they name
+EXAMPLES = ROOT / "packages/thzdaq-api/src/thzdaq_api/examples"
+SOURCES = sorted(
+    path
+    for path in ROOT.glob("packages/*/src/**/*.py")
+    if not path.is_relative_to(EXAMPLES)
+)
 
 ALLOWED = {
     "Voltage setpoint": "a column title of measurement files (data) and the label "

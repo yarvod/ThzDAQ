@@ -8,6 +8,7 @@ import msgspec
 from thzdaq_api import (
     analysis,
     approvals,
+    custom,
     daemon,
     devices,
     events,
@@ -51,6 +52,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     sessions.CallOnExit,
     sessions.EndSession,
     sessions.ParseSweep,
+    custom.ParseValue,
     scripts.StartScript,
     scripts.ListScripts,
     scripts.ReadScriptLog,

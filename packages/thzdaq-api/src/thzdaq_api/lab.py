@@ -44,6 +44,7 @@ from typing import (
 
 from thzdaq_api import host, windows
 from thzdaq_api.data import Measured, decode_values
+from thzdaq_api.declaring import STATE, Declaring
 from thzdaq_api.devices import (
     CallAction,
     DescribeDevice,
@@ -92,7 +93,7 @@ from thzdaq_api.script import (
     script_source,
 )
 from thzdaq_api.scripts import SCRIPT_ID_ENV, SIMULATE_ENV
-from thzdaq_api.sessions import SILENT_S, StartSession
+from thzdaq_api.sessions import SILENT_S, StartSession, Swept
 from thzdaq_api.terminal import person_here
 from thzdaq_api.workspace import chosen, expected_profile, profile_warning
 
@@ -128,7 +129,10 @@ class Readout(dict):
 
 
 def plain(value: Any) -> Any:
-    """A value as it travels: a Measured as a float."""
+    """A value as it travels: a Measured as a float, a declared sweep as
+    {start, stop, points} in SI."""
+    if isinstance(value, Swept):
+        return {"start": value.start, "stop": value.stop, "points": value.points}
     return float(value) if isinstance(value, float) else value
 
 
@@ -236,17 +240,20 @@ class Bench:
         script=None,
         approve: Optional[Callable[[Callable[[], Any]], Any]] = None,
         simulate: bool = False,
+        declared: Optional[Declaring] = None,
     ):
         """workspace: the folder whose data/ gets its measurements (None: the
         program's, where the daemon writes); script: the ScriptSource its
         sessions keep; approve: how a call a person allows is made (asked in
         this terminal too); simulate: the lab is the simulator's daemon,
-        the windows it opens work with it too."""
+        the windows it opens work with it too; declared: what the script
+        declared at its top (its plots are its measurements' from the start)."""
         self.lab = lab
         self.workspace = Path(workspace).resolve() if workspace else None
         self.script = script
         self.approve = approve or (lambda call: call())
         self.simulate = simulate
+        self.declared = declared or Declaring()
         self.session: Optional[Session] = None  # the with block running now
         self._described: Dict[str, DeviceDescription] = {}
 
@@ -466,19 +473,22 @@ class Bench:
     ) -> Session:
         """A measurement of this script (with ... as m): devices it uses,
         those it sweeps (exclusive), those it shares while another measurement
-        sweeps them (share); columns: (title, unit) of record keys."""
+        sweeps them (share); columns: (title, unit) of record keys. Its
+        parameters are the values the script declared, and those given."""
+        given = {name: found.value for name, found in self.declared.given.items()}
         start = StartSession(
             title=title,
             devices=tuple(ref_of(d) for d in devices),
             exclusive=tuple(ref_of(d) for d in exclusive),
             share=tuple(ref_of(d) for d in share),
-            parameters=dict(parameters or {}),
+            parameters={**given, **(parameters or {})},
             comment=comment,
             workspace=self._folder(),
             script=self.script,
             columns=tuple(described(k, c) for k, c in (columns or {}).items()),
             total=total,
             silent=silent,
+            plots=tuple(self.declared.plots),
         )
         return Session(self.lab, start, self.approve, self._entered, self.show)
 
@@ -500,7 +510,13 @@ def connect(
     by its environment, and is allowed what it was started with. Its
     measurements go to the workspace given, else to the nearest one from here
     up (thzdaq.toml), else to the program's; a daemon started here loads the
-    profile that workspace expects."""
+    profile that workspace expects. A script the daemon describes
+    (thzdaq_api.custom) ends here; one whose declarations connected already
+    gets that bench."""
+    if STATE.describing:
+        STATE.described()
+    if STATE.bench is not None:
+        return STATE.bench
     path = getattr(sys.modules["__main__"], "__file__", None)  # none in a notebook
     name = name or (Path(path).stem if path else "interactive")
     number = os.environ.get(SCRIPT_ID_ENV)
@@ -518,4 +534,4 @@ def connect(
     if person_here():
         person = RemoteLab(lab.host, CLI, ANSWERING_CLI, find=lab.find)
         approve = AnsweredHere(person, lab.origin)
-    return Bench(lab, folder, script_source(path, folder), approve, simulate)
+    return Bench(lab, folder, script_source(path, folder), approve, simulate, STATE)

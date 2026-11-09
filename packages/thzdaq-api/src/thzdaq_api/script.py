@@ -68,6 +68,7 @@ from thzdaq_api.sessions import (
     ScriptSource,
     SessionState,
     StartSession,
+    Swept,
 )
 from thzdaq_api.terminal import ALLOW, line, yes
 
@@ -206,11 +207,13 @@ class Session:
         self.check_cancel()
 
     def sweep(
-        self, values: Union[str, Iterable[float]], unit: str = ""
+        self, values: Union[str, Swept, Iterable[float]], unit: str = ""
     ) -> Iterator[Measured]:
         """The values of a sweep, typed as people type it ("2:3:51" with unit
-        "mV") or given (SI); each in SI units with its unit, after a look for
-        a cancel."""
+        "mV"), declared (value(...) of a sweep) or given (SI); each in SI
+        units with its unit, after a look for a cancel."""
+        if isinstance(values, Swept):
+            values, unit = values.typed(), values.unit
         if isinstance(values, str):
             parsed = self.lab.call(ParseSweep(text=values, unit=unit))
             values, unit = parsed.values, parsed.unit

@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMessageBox
-from thzdaq_api import host, templates
+from thzdaq_api import examples, host
 from thzdaq_api.measurement_file import SCRIPT, Measurement
 from thzdaq_api.scripts import StartScript
 from thzdaq_api.workspace import create
@@ -150,11 +150,11 @@ def test_scripts_of_other_clients_and_earlier_runs_are_shown(
 
 def test_a_new_script_comes_from_a_template(scripts, session, wait):
     titles = [action.text() for action in scripts.newMenu.actions()]
-    assert titles == [t.title for t in templates.templates()]
+    assert titles == [t.title for t in examples.examples()]
     sweep = next(a for a in scripts.newMenu.actions() if a.text().startswith("Bias"))
     sweep.trigger()
     made = session.workspace.scripts / "sweep.py"
-    assert made.read_text(encoding="utf-8") == templates.template("sweep").text
+    assert made.read_text(encoding="utf-8") == examples.example("sweep").text
     assert scripts.chosen_file() == made and scripts.btnRun.isEnabled()
     sweep.trigger()
     assert scripts.chosen_file() == session.workspace.scripts / "sweep_2.py"

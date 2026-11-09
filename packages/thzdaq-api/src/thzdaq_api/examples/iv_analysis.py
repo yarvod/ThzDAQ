@@ -8,27 +8,27 @@ their place; the measurement keeps its data either way.
 
 import numpy as np
 
-from thzdaq import connect
+from thzdaq import connect, device, value
 
-BIAS = "sis_bias_1"
-VOLTAGE = "0:7:351"  # mV: start:stop:points
-ABOVE_GAP_MV = 4.0  # the normal resistance is fitted above this bias
+bias = device("SIS bias", kind="sis_bias")
+voltage = value("Bias voltage", "0:7:351", unit="mV")
+above_gap = value("Fit above", 4, unit="mV", help="Rn is fitted above this bias")
 
 lab = connect()
-run = lab.run("sis.iv_curve", bias=lab[BIAS], voltage=VOLTAGE)
+run = lab.run("sis.iv_curve", bias=bias, voltage=voltage)
 print(f"#{run.id} {run.info.title} started")
 ended = run.wait(progress=False)
 if ended.status != "completed":
     raise SystemExit(f"#{run.id} {ended.status}: {ended.error or 'no analysis'}")
 
 iv = run.table("iv")
-voltage = np.asarray(iv["voltage"], dtype=float)  # V
+measured = np.asarray(iv["voltage"], dtype=float)  # V
 current = np.asarray(iv["current"], dtype=float)  # A
-above = voltage > ABOVE_GAP_MV * 1e-3
-slope, _ = np.polyfit(voltage[above], current[above], 1)
-rise = np.gradient(current, voltage)
-gap = voltage[int(np.nanargmax(rise))]
+above = measured > above_gap
+slope, _ = np.polyfit(measured[above], current[above], 1)
+rise = np.gradient(current, measured)
+gap = measured[int(np.nanargmax(rise))]
 
-print(f"Rn = {1 / slope:.2f} Ohm (above {ABOVE_GAP_MV} mV)")
+print(f"Rn = {1 / slope:.2f} Ohm (above {above_gap * 1e3:g} mV)")
 print(f"Vgap = {gap * 1e3:.3f} mV")
 print(f"#{run.id}: {ended.path}")

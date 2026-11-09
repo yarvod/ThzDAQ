@@ -12,7 +12,7 @@ import msgspec
 from thzdaq_api.approvals import Answer, Approval
 from thzdaq_api.devices import Value
 from thzdaq_api.leases import LeaseInfo
-from thzdaq_api.measurements import PlotInfo, RunInfo
+from thzdaq_api.measurements import PlotInfo, ProcedureSummary, RunInfo
 from thzdaq_api.operation import Operation
 from thzdaq_api.scripts import ScriptInfo
 
@@ -123,6 +123,13 @@ class ScriptEnded(msgspec.Struct, tag="script_ended", frozen=True):
     script: ScriptInfo
 
 
+class ProceduresChanged(msgspec.Struct, tag="procedures_changed", frozen=True):
+    """The procedures the bench runs changed: a measurement of its own was
+    added, saved, removed or described anew. procedures: all of them now."""
+
+    procedures: Tuple[ProcedureSummary, ...]
+
+
 class StationChanged(msgspec.Struct, tag="station_changed", frozen=True):
     """The profile changed (edited, or another loaded): devices may differ."""
 
@@ -168,6 +175,7 @@ Body = Union[
     ScriptStarted,
     ScriptOutput,
     ScriptEnded,
+    ProceduresChanged,
     StationChanged,
     LeasesChanged,
     ApprovalRequested,

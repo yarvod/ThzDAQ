@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import msgspec
 from PySide6.QtCore import QFileSystemWatcher, QObject, Signal
-from thzdaq_api import host, templates
+from thzdaq_api import examples, host
 from thzdaq_api.errors import LabError
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import SCRIPT, Measurement
@@ -161,13 +161,13 @@ class ScriptsModel(QObject):
         self.refresh_files()
 
     @staticmethod
-    def templates() -> Tuple[templates.Template, ...]:
-        return templates.templates()
+    def templates() -> Tuple[examples.Example, ...]:
+        return examples.examples()
 
     def new_script(self, template: str) -> Path:
         """A copy of a template in scripts/, shown (OSError when it cannot be
         written)."""
-        path = templates.create(template, self.session.workspace.scripts)
+        path = examples.create(template, self.session.workspace.scripts)
         self._show(path)
         return path
 
@@ -190,7 +190,7 @@ class ScriptsModel(QObject):
             path = (
                 copy
                 if same_text(copy, source)
-                else templates.write_new(workspace.scripts, name, source.text)
+                else examples.write_new(workspace.scripts, name, source.text)
             )
         self._show(path)
         return path

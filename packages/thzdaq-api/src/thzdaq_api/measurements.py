@@ -164,6 +164,10 @@ class ProcedureSummary(msgspec.Struct, frozen=True):
     title: str
     description: str
     plots: Tuple[PlotInfo, ...] = ()  # every plot it may fill
+    # Why the bench's own measurement (custom.<name>) cannot run: its script
+    # is not described (a syntax error, a declaration after connect()), with
+    # its traceback; empty when it can
+    error: str = ""
 
 
 def saved_plots(

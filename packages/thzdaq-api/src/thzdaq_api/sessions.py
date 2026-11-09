@@ -47,6 +47,20 @@ class SweepValues(msgspec.Struct, frozen=True):
     unit: str  # the SI unit of the values
 
 
+class Swept(msgspec.Struct, frozen=True):
+    """A sweep a script was given (a form's value): SI start and stop, points,
+    the SI unit; m.sweep(it) goes over its values."""
+
+    start: float
+    stop: float
+    points: int
+    unit: str = ""
+
+    def typed(self) -> str:
+        """As people type it, in its SI unit: start:stop:points."""
+        return f"{self.start!r}:{self.stop!r}:{self.points}"
+
+
 class StartSession(Operation[RunInfo]):
     """Start a script's own measurement (a session) named title: its file,
     number and events as any measurement has. devices it uses (shared), those
@@ -54,7 +68,8 @@ class StartSession(Operation[RunInfo]):
     it agrees to share while another measurement sweeps them (share). A device
     it uses later without naming it joins then. silent: seconds without a word
     from the script (keep_session) before the session ends interrupted and the
-    daemon restores what the script asked to restore."""
+    daemon restores what the script asked to restore. plots: those it fills
+    from its start, as plot_session takes them."""
 
     rights = Rights.RUN
     title: str
@@ -68,6 +83,7 @@ class StartSession(Operation[RunInfo]):
     columns: Tuple[Column, ...] = ()  # titles and units of record keys
     total: Optional[int] = None  # steps, when known
     silent: float = SILENT_S
+    plots: Tuple[PlotInfo, ...] = ()  # those it fills from its start (declared)
 
 
 class KeepSession(Operation[SessionState]):
