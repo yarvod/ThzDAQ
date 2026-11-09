@@ -41,11 +41,15 @@ class StartSession(_OfSession):
         return msgspec.structs.replace(args, share=shared)
 
     def granted(self, args, origin):
-        """Every device it names was allowed to its script in advance."""
-        return self.scripts.allows_devices(origin, args.devices + args.exclusive)
+        """Every device it names was allowed to its script in advance, or a
+        session was made for it with a run that was allowed (the bench's own
+        measurement)."""
+        return self.sessions.adopting(origin) or self.scripts.allows_devices(
+            origin, args.devices + args.exclusive
+        )
 
     def approval(self, args, origin):
-        return self.sessions.approval(self._shared(args, origin))
+        return self.sessions.approval(self._shared(args, origin), origin)
 
     def amended(self, args, answer):
         """The sweeps the person saw are shared."""

@@ -2,14 +2,17 @@
 
 Adapters implement them (json_store.MeasurementStore: MeasurementRepository,
 its RunningFile: MeasurementWriter,
-yaml_profiles.YamlProfiles: ProfileRepository, processes.Processes: Launcher;
+yaml_profiles.YamlProfiles: ProfileRepository, processes.Processes: Launcher,
+library.FolderLibrary: Library;
 the daemon's process: DaemonControl); the composition root (a CLI, the GUI
 session, the daemon) passes them in.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Sequence, Tuple
 
+from thzdaq_api.custom import Declarations
 from thzdaq_api.daemon import ClientInfo, DaemonSettings, ProcessInfo
 
 from thzdaq_api.measurement_file import Measurement
@@ -109,3 +112,30 @@ class Launcher(Protocol):
     ) -> Launched:
         """command run in folder with these variables added and the removed
         ones left out, its output into log; OSError when it cannot start."""
+
+
+@dataclass(frozen=True)
+class LibraryFile:
+    """A script of the bench's library: its name (the file's without .py),
+    its file, text and hash."""
+
+    name: str
+    path: str
+    text: str
+    sha256: str
+
+
+class DescribeFailed(Exception):
+    """A script that could not be described: why, with its traceback."""
+
+
+class Library(Protocol):
+    """The bench's own measurements: the scripts of a folder (measurements/
+    of the program's)."""
+
+    def files(self) -> Tuple[LibraryFile, ...]:
+        """The scripts there now, by name."""
+
+    def describe(self, file: LibraryFile) -> Declarations:
+        """What the script declares at its top, as its process tells when it
+        runs described; DescribeFailed when it cannot be."""

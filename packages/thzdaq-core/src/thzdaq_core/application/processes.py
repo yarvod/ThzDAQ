@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import msgspec
+from thzdaq_api.custom import INPUTS_ENV, Inputs
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.measurement_file import ALLOWED
@@ -68,9 +69,10 @@ from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.scripts import Sessions
 from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.errors import ProcedureError
-from thzdaq_core.domain.measurements.catalog import get_procedure
 
 LOG_PART = 65536  # bytes of a script's log one read gives at most
+LAST_WORDS = 8192  # bytes of the end of a log that tell how a script ended
+TRACEBACK = "Traceback (most recent call last):"
 OUTPUT_S = 0.2  # how often a running script's log is looked at for its output
 KEPT = 100  # scripts that ended, remembered for list and logs
 UNBUFFERED = {"PYTHONUNBUFFERED": "1"}  # its output reaches the log as it prints
@@ -104,10 +106,28 @@ def read_part(log: str, since: int, final: bool) -> Tuple[str, int]:
     return text, since + len(data) - len(waiting)
 
 
+def last_words(log: str) -> str:
+    """How a script ended, by the end of its log: its last traceback, else
+    its last lines."""
+    try:
+        with open(log, "rb") as file:
+            file.seek(0, 2)
+            file.seek(max(0, file.tell() - LAST_WORDS))
+            text = file.read().decode("utf-8", errors="replace")
+    except FileNotFoundError:
+        return ""
+    found = text.rfind(TRACEBACK)
+    return (text[found:] if found >= 0 else text).strip()
+
+
 def last_log(folder: Path) -> int:
     """The highest number of the logs a folder holds; 0 for none."""
     numbers = [int(p.stem) for p in folder.glob("*.log") if p.stem.isdigit()]
     return max(numbers, default=0)
+
+
+def inputs_text(inputs: Inputs) -> str:
+    return msgspec.json.encode(inputs).decode()
 
 
 class ScriptProcesses:
@@ -120,11 +140,14 @@ class ScriptProcesses:
         sessions: Sessions,
         launcher: Launcher,
         simulate: Callable[[], bool],
+        procedure: Callable[[str], object],
         grace: float = STOP_S,
     ):
         """simulate: whether the daemon works on simulators (its scripts too);
+        procedure(name): a procedure of the catalog (ProcedureError for none);
         grace: how long a stopped script has to end after its cancel."""
         self.bench = bench
+        self.procedure = procedure
         self.grace = grace
         self.workspaces = workspaces
         self.runs = runs
@@ -136,9 +159,18 @@ class ScriptProcesses:
         self._last = 0
         self._lock = threading.Lock()
 
-    def start(self, args: StartScript, origin: str, by_agent: bool) -> ScriptInfo:
+    def start(
+        self,
+        args: StartScript,
+        origin: str,
+        by_agent: bool,
+        inputs: Optional[Inputs] = None,
+        starting: Callable[[str], None] = lambda origin: None,
+    ) -> ScriptInfo:
         """by_agent: an agent (or its script) starts it: it runs as the
-        agent's, allowed nothing in advance."""
+        agent's, allowed nothing in advance. inputs: what a run of the bench's
+        own measurement gives its script; starting(origin): told what the
+        script will call itself, before it starts."""
         if by_agent:
             args = msgspec.structs.replace(args, allow=(), share=())
         folder = self.workspaces.folder(args.workspace)
@@ -158,9 +190,11 @@ class ScriptProcesses:
                 SIMULATE_ENV: "1" if self.simulate() else "0",
                 WORKSPACE_ENV: str(folder),
                 **({AGENT_ENV: "1"} if by_agent else {}),
+                **({} if inputs is None else {INPUTS_ENV: inputs_text(inputs)}),
                 **UNBUFFERED,
             }
             removed = () if by_agent else AGENT_SHELLS
+            starting(script(path.stem, number, by_agent))
             try:
                 launched = self.launcher.launch(
                     command, folder, environment, log, removed
@@ -190,7 +224,7 @@ class ScriptProcesses:
         exists: Dict[str, Callable[[str], object]] = {
             SET: self.bench.info,
             CALL: self.bench.info,
-            RUN: get_procedure,
+            RUN: self.procedure,
             RAW: self.bench.raw_parts,
         }
         for grant in allow:
@@ -215,7 +249,9 @@ class ScriptProcesses:
             found.info, status=status, ended=wall_time(), exit_code=code, pid=None
         )
         found.ended.set()
-        self.sessions.interrupt(found.info.origin, f"its script {status}")
+        self.sessions.ended(
+            found.info.origin, code, f"its script {status}", last_words(found.info.log)
+        )
         self.events.publish(ScriptEnded(found.info))
 
     def _tell(self, info: ScriptInfo, since: int, final: bool) -> int:

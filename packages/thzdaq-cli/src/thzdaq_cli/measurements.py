@@ -95,11 +95,19 @@ def given(command) -> None:
     )  # fmt: skip
 
 
+def broken(error: str) -> str:
+    """Why a procedure cannot run, in a line: the last of its error."""
+    lines = error.strip().splitlines()
+    return f"not described: {lines[-1]}" if lines else ""
+
+
 def list_procedures(args, client: Client) -> int:
     found = client.call(ListProcedures())
     client.out(
         found,
-        lambda p: show.table(("procedure", "title"), [(i.name, i.title) for i in p]),
+        lambda p: show.table(
+            ("procedure", "title", ""), [(i.name, i.title, broken(i.error)) for i in p]
+        ),
     )
     return OK
 
@@ -295,6 +303,7 @@ LINES: Dict[type, Callable[[Any], str]] = {
     events.ScriptStarted: lambda b: f"{show.script(b.script)} ({b.script.by})",
     events.ScriptOutput: lambda b: show.output(b.id, b.text),
     events.ScriptEnded: lambda b: show.script(b.script),
+    events.ProceduresChanged: lambda b: f"procedures: {len(b.procedures)}",
     events.StationChanged: lambda b: f"profile {show.profile(b.name, b.path)}",
     events.LeasesChanged: lambda b: "in use: "
     + (", ".join(f"{l.device} {l.mode} by #{l.run}" for l in b.leases) or "nothing"),

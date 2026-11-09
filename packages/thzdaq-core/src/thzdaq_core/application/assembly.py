@@ -4,11 +4,13 @@ connections go) to stop at the end."""
 
 from dataclasses import dataclass
 
+from thzdaq_api.host import script_python
 from thzdaq_api.origins import answers
 
 from thzdaq_core.application.approvals import Approvals
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.connections import IdleConnections
+from thzdaq_core.application.custom import CustomMeasurements, CustomRuns
 from thzdaq_core.application.daemon import DaemonService
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.dispatch import Dispatcher
@@ -16,6 +18,7 @@ from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.handlers import (
     analysis,
     approvals,
+    custom,
     daemon,
     devices,
     measurements,
@@ -26,7 +29,13 @@ from thzdaq_core.application.handlers import (
 )
 from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
-from thzdaq_core.application.ports import DaemonControl, Launcher, ProfileRepository
+from thzdaq_core.application.ports import (
+    DaemonControl,
+    Launcher,
+    Library,
+    ProfileRepository,
+)
+from thzdaq_core.application.procedures import Procedures
 from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.scripts import Sessions
@@ -46,8 +55,10 @@ class Assembled:
     idle: IdleConnections
     control: DaemonControl
     scripts: ScriptProcesses
+    customs: CustomMeasurements
 
     def close(self) -> None:
+        self.customs.stop()
         self.scripts.stop_all()
         self.runs.stop()
         self.polling.stop()
@@ -60,17 +71,22 @@ def assemble(
     profiles: ProfileRepository,
     control: DaemonControl,
     launcher: Launcher,
+    library: Library,
 ) -> Assembled:
-    """launcher: how scripts the daemon runs are started (adapters.processes)."""
+    """launcher: how scripts the daemon runs are started (adapters.processes);
+    library: the bench's own measurements (adapters.library)."""
     events = EventBus()
     known = KnownValues()
     runs = Runs(bench, workspaces, events, Leases(), known, profiles)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     script_sessions = Sessions(runs, access)
+    customs = CustomMeasurements(library, events)
+    procedures = Procedures(customs)
     processes = ScriptProcesses(
         bench, workspaces, runs, events, script_sessions, launcher,
-        lambda: control.process().simulate,
+        lambda: control.process().simulate, procedures.get,
     )  # fmt: skip
+    custom_runs = CustomRuns(customs, processes, script_sessions, script_python)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events, workspaces)
     policy = Policy(lambda: control.settings().agents, processes.started_by)
@@ -99,9 +115,11 @@ def assemble(
             approvals.AnswerApproval(waiting),
             approvals.AskUser(waiting),
             approvals.WaitAnswer(waiting),
-            measurements.ListProcedures(),
-            measurements.DescribeProcedure(access),
-            measurements.StartMeasurement(runs, processes),
+            measurements.ListProcedures(procedures),
+            measurements.DescribeProcedure(access, procedures),
+            measurements.StartMeasurement(
+                runs, processes, procedures, custom_runs, policy
+            ),
             measurements.ListRuns(runs),
             measurements.GetRunSnapshot(runs),
             measurements.WaitMeasurement(runs),
@@ -119,6 +137,7 @@ def assemble(
             sessions.CallOnExit(script_sessions, processes),
             sessions.EndSession(script_sessions, processes),
             sessions.ParseSweep(),
+            custom.ParseValue(),
             scripts.StartScript(processes, policy),
             scripts.ListScripts(processes),
             scripts.ReadScriptLog(processes),
@@ -145,7 +164,8 @@ def assemble(
         policy,
         waiting,
     )
+    customs.start()
     return Assembled(
         dispatcher, events, polling, runs, service, IdleConnections(bench), control,
-        processes,
+        processes, customs,
     )  # fmt: skip

@@ -1298,6 +1298,8 @@ class TestHangs:
 
     def test_connections_group(self, app, wait, tmp_path):
         from thzdaq_core.adapters.json_store import MeasurementStore
+        from thzdaq_api.custom import LIBRARY
+        from thzdaq_core.adapters.library import FolderLibrary
         from thzdaq_core.adapters.processes import Processes
         from thzdaq_core.adapters.yaml_profiles import YamlProfiles
         from thzdaq_core.application.assembly import assemble
@@ -1323,7 +1325,7 @@ class TestHangs:
         workspaces = Workspaces(tmp_path, tmp_path / "data", MeasurementStore)
         assembled = assemble(
             Bench(station, Lanes()), workspaces, YamlProfiles(), LocalControl(),
-            Processes(),
+            Processes(), FolderLibrary(tmp_path / LIBRARY),
         )  # fmt: skip
 
         class Client:

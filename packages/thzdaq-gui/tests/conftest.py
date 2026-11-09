@@ -116,6 +116,8 @@ def connect(bench, tmp_path):
     daemon outlives its window."""
     from thzdaq_api.measurements import DATA
     from thzdaq_core.adapters.json_store import MeasurementStore
+    from thzdaq_api.custom import LIBRARY
+    from thzdaq_core.adapters.library import FolderLibrary
     from thzdaq_core.adapters.processes import Processes
     from thzdaq_core.adapters.yaml_profiles import YamlProfiles
     from thzdaq_core.application.assembly import assemble
@@ -124,8 +126,9 @@ def connect(bench, tmp_path):
 
     workspaces = Workspaces(tmp_path, tmp_path / DATA, MeasurementStore)
     assembled = assemble(
-        bench, workspaces, YamlProfiles(), LocalControl(True), Processes()
-    )
+        bench, workspaces, YamlProfiles(), LocalControl(True), Processes(),
+        FolderLibrary(tmp_path / LIBRARY),
+    )  # fmt: skip
     yield lambda simulate: LocalLab(assembled, origin="gui", kind="gui")
     assembled.close()
 

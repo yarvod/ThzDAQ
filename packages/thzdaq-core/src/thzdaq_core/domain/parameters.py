@@ -215,6 +215,20 @@ class ChoiceParameter(Parameter):
         return {**super().describe(), "choices": list(self.choices)}
 
 
+class TextParameter(Parameter):
+    """A free text: a label, a name."""
+
+    kind = "text"
+
+    def validate(self, value: Any) -> str:
+        if not isinstance(value, str):
+            raise ProcedureError(f"expected a text, got {value!r}")
+        return value
+
+    def parse(self, text: str) -> str:
+        return self.validate(str(text))
+
+
 class FloatListParameter(Parameter):
     kind = "float_list"
 

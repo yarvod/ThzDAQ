@@ -1,79 +1,73 @@
-"""Every template of a new script runs as the daemon runs a script, on the
-simulators of the example profile, made short for a test: its sizes are the
-only lines changed. Each is allowed in advance what a person would allow it
-in the window."""
+"""Every example runs as the bench's own measurement (custom.<name>) on a daemon
+of the simulators, as a window's Start or thzdaq run custom.x --set runs it:
+its form given short values, its script started by the daemon, its session
+taken over by the script. One runs as it is too (python x.py, here thzdaq
+script start): its defaults are parsed by the daemon."""
 
 import pytest
 from lab_helpers import wait_for
 from test_process import start
-from thzdaq_api import templates
+from thzdaq_api import examples
+from thzdaq_api.custom import LIBRARY
 from thzdaq_api.devices import ReadDevice, SetQuantity
 from thzdaq_api.host import script_python
 from thzdaq_api.measurement_file import read_measurement
-from thzdaq_api.measurements import ListRuns
-from thzdaq_api.scripts import (
-    Grant,
-    ListScripts,
-    ReadScriptLog,
-    StartScript,
-    StopScript,
+from thzdaq_api.measurements import (
+    CancelMeasurement,
+    ListRuns,
+    StartMeasurement,
+    WaitMeasurement,
 )
-from thzdaq_api.workspace import SCRIPT_FOLDER
+from thzdaq_api.scripts import ListScripts, ReadScriptLog, StartScript
 
-# A template's lines as it is, and as the test runs it
+# The form's values that make each short
 SHORT = {
-    "sweep": {'VOLTAGE = "0:7:351"': 'VOLTAGE = "0:7:21"'},
-    "hot_cold": {
-        'VOLTAGE = "0:7:351"': 'VOLTAGE = "0:7:21"',
-        "LOAD_SETTLE_S = 2.0": "LOAD_SETTLE_S = 0.05",
-    },
-    "monitor": {"INTERVAL_S = 1.0": "INTERVAL_S = 0.05", "DURATION_S = 0": ""},
-    "iv_analysis": {'VOLTAGE = "0:7:351"': 'VOLTAGE = "0:7:141"'},
+    "sweep": {"voltage": "0:7:21", "settle": "1"},
+    "hot_cold": {"voltage": "0:7:21", "settle": "1", "load_settle": "0.05"},
+    "monitor": {"interval": "0.05", "duration": "0.5"},
+    "iv_analysis": {"voltage": "0:7:141"},
+    "map": {"voltage": "0:7:5", "current": "0:10:3", "settle": "1"},
 }
-# What a person allows each in advance
-ALLOW = {
-    "sweep": ("set:sis_bias_1", "set:power_meter_1"),
-    "hot_cold": ("set:sis_bias_1", "set:power_meter_1", "call:chopper_1"),
-    "monitor": ("set:sis_bias_1", "set:power_meter_1"),
-    "iv_analysis": ("run:sis.iv_curve",),
+# The devices of the form, as a window or the command line fills the slots
+BENCH = {
+    "bias": "sis_bias_1", "detector": "power_meter_1", "load": "chopper_1",
+    "coil": "sis_coil_1",
+}  # fmt: skip
+DEVICES = {
+    "sweep": ("bias", "detector"),
+    "hot_cold": ("bias", "detector", "load"),
+    "monitor": ("detector", "bias"),
+    "iv_analysis": ("bias",),
+    "map": ("bias", "coil", "detector"),
 }
-# The table each measures, at least how many records, what it prints at the end
+# The table each measures (in its own measurement), at least how many
+# records, what it prints at the end
 MEASURES = {
     "sweep": ("iv", 21, "completed"),
     "hot_cold": ("pv", 42, "Tn "),
     "monitor": ("samples", 3, "readings in"),
-    "iv_analysis": ("iv", 141, "Vgap = "),
+    "iv_analysis": (None, 0, "Vgap = "),  # its records are the I-V run's
+    "map": ("map", 15, "completed"),
 }
 
 
-def shortened(name: str, folder, duration: str = "0.5"):
-    """The template as a script in folder, its sizes made short."""
-    path = templates.create(name, folder)
-    text = path.read_text(encoding="utf-8")
-    for line, short in SHORT[name].items():
-        assert line in text, f"{name}: {line!r} is no longer in the template"
-        text = text.replace(line, short or f"DURATION_S = {duration}")
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def started(lab, path, name, workspace):
-    return lab.call(
-        StartScript(
-            path=str(path),
-            python=script_python(),
-            workspace=str(workspace),
-            allow=tuple(Grant.parse(grant) for grant in ALLOW[name]),
-        )
-    )
-
-
 def ended(lab, id, timeout=60):
-    def info():
-        return next(s for s in lab.call(ListScripts()) if s.id == id)
+    info = lab.call(WaitMeasurement(id=id, timeout=0))
+    wait_for(
+        lambda: lab.call(WaitMeasurement(id=id, timeout=1)).status != "running",
+        timeout=timeout,
+    )
+    return lab.call(WaitMeasurement(id=id, timeout=0)) if info else info
 
-    wait_for(lambda: info().status != "running", timeout=timeout)
-    return info()
+
+def log_of(lab, name):
+    (script,) = [s for s in lab.call(ListScripts()) if s.name == name]
+    wait_for(
+        lambda: next(s for s in lab.call(ListScripts()) if s.id == script.id).status
+        != "running",
+        timeout=30,
+    )
+    return lab.call(ReadScriptLog(id=script.id)).text
 
 
 def bias_now(lab):
@@ -81,46 +75,73 @@ def bias_now(lab):
     return reading.values["voltage_set"]
 
 
-def test_every_template_is_tested():
-    assert sorted(SHORT) == sorted(t.name for t in templates.templates())
+def test_every_example_is_tested():
+    assert (
+        sorted(SHORT) == sorted(DEVICES) == sorted(e.name for e in examples.examples())
+    )
 
 
 @pytest.mark.parametrize("name", sorted(SHORT))
-def test_a_template_runs_on_simulators(home, tmp_path, name):
+def test_an_example_runs_as_the_benchs_own_measurement(home, tmp_path, name):
     lab = start(home)
     lab.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV"))
+    examples.create(name, home / LIBRARY)
     workspace = tmp_path / "experiment"
-    script = started(lab, shortened(name, workspace / SCRIPT_FOLDER), name, workspace)
-    done = ended(lab, script.id)
-    log = lab.call(ReadScriptLog(id=script.id)).text
-    assert (done.status, done.exit_code) == ("exited", 0), log
+    workspace.mkdir()
+    run = lab.call(
+        StartMeasurement(
+            procedure=f"custom.{name}", typed=SHORT[name], workspace=str(workspace),
+            devices={slot: BENCH[slot] for slot in DEVICES[name]},
+        )  # fmt: skip
+    )
+    done = ended(lab, run.id)
+    log = log_of(lab, name)
+    assert done.status == "completed", (done.error, log)
     table, rows, told = MEASURES[name]
     assert told in log
-    (run,) = [r for r in lab.call(ListRuns()) if r.workspace == str(workspace)]
-    assert run.status == "completed", run.error
-    measurement = read_measurement(run.path)
-    assert len(measurement.records(table)) >= rows
-    if name != "iv_analysis":  # a script's own: its text is kept with it
-        kept = measurement.metadata["script"]
-        assert kept["path"] == f"{SCRIPT_FOLDER}/{name}.py"
-        assert kept["text"] == (workspace / kept["path"]).read_text(encoding="utf-8")
+    measurement = read_measurement(done.path)
+    assert measurement.procedure == f"custom.{name}"
+    assert measurement.metadata["script"]["text"] == examples.example(name).text
+    if table is not None:
+        assert len(measurement.records(table)) >= rows
     assert bias_now(lab) == pytest.approx(1e-3)  # set back
 
 
 def test_a_monitor_runs_until_it_is_stopped(home, tmp_path):
     lab = start(home)
-    workspace = tmp_path / "experiment"
-    path = shortened("monitor", workspace / SCRIPT_FOLDER, duration="0")
-    script = started(lab, path, "monitor", workspace)
+    examples.create("monitor", home / LIBRARY)
+    run = lab.call(
+        StartMeasurement(
+            procedure="custom.monitor", typed={"interval": "0.05", "duration": "0"},
+            devices={slot: BENCH[slot] for slot in DEVICES["monitor"]},
+        )  # fmt: skip
+    )
+    wait_for(lambda: lab.call(WaitMeasurement(id=run.id)).done >= 3, timeout=30)
+    lab.call(CancelMeasurement(id=run.id))
+    done = ended(lab, run.id)
+    log = log_of(lab, "monitor")
+    assert done.status == "cancelled", (done.error, log)
+    assert "cancelled" in log
+    assert len(read_measurement(done.path).records("samples")) >= 3
 
-    def measured():
-        runs = lab.call(ListRuns())
-        return runs and runs[0].done >= 3
 
-    wait_for(measured, timeout=30)
-    stopped = lab.call(StopScript(id=script.id))
-    log = lab.call(ReadScriptLog(id=script.id)).text
-    assert (stopped.status, stopped.exit_code) == ("stopped", 0), log
+def test_an_example_runs_as_it_is(home, tmp_path):
+    lab = start(home)
+    lab.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1mV"))
+    path = examples.create("sweep", tmp_path / "scripts")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace('"0:7:351"', '"0:7:11"'),
+        encoding="utf-8",
+    )
+    lab.call(StartScript(path=str(path), python=script_python()))
+    log = log_of(lab, "sweep")
     (run,) = lab.call(ListRuns())
-    assert run.status == "cancelled" and "cancelled" in log
-    assert len(read_measurement(run.path).records("samples")) >= 3
+    assert run.status == "completed", (run.error, log)
+    measurement = read_measurement(run.path)
+    assert measurement.procedure == "script:bias_sweep"
+    assert len(measurement.records("iv")) == 11
+    assert measurement.parameters["voltage"] == {
+        "start": 0.0, "stop": 0.007, "points": 11,
+    }  # fmt: skip
+    assert measurement.devices["sis_bias_1"]  # the first that suits the slot
+    assert bias_now(lab) == pytest.approx(1e-3)

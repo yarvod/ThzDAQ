@@ -1,13 +1,16 @@
 """The daemon's composition root: the station of a profile on the clock of this
 process, the lanes of its instruments, the workspaces with a measurement store
-each, and the use cases with the daemon's process as their DaemonControl."""
+each, the bench's own measurements (measurements/ of home), and the use cases
+with the daemon's process as their DaemonControl."""
 
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from thzdaq_api.custom import LIBRARY
 from thzdaq_core.adapters.json_store import MeasurementStore
+from thzdaq_core.adapters.library import FolderLibrary
 from thzdaq_core.adapters.processes import Processes
 from thzdaq_core.adapters.yaml_profiles import YamlProfiles, load_station
 from thzdaq_core.application.assembly import Assembled, assemble
@@ -52,5 +55,8 @@ def compose(
     )
     lanes = Lanes()
     bench = Bench(bench_station, lanes, path)
-    assembled = assemble(bench, workspaces, YamlProfiles(), control, Processes())
+    assembled = assemble(
+        bench, workspaces, YamlProfiles(), control, Processes(),
+        FolderLibrary(workspaces.home / LIBRARY),
+    )  # fmt: skip
     return Composed(bench, lanes, assembled)

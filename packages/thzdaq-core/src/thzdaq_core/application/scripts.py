@@ -13,12 +13,16 @@ to the end.
 
 A device the script reads or sets without naming it at the start joins the
 session then (a lease, a place among its devices); the log says to name it.
+
+A session may be made before its script starts (a run of the bench's own
+measurement, application.custom): the script's lab.measurement then takes it
+over (adopt) instead of starting another, and the end of its process ends it.
 """
 
 import threading
 import time
 from dataclasses import replace
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Tuple
 
 import msgspec
 from thzdaq_api.data import decode_values
@@ -46,6 +50,7 @@ from thzdaq_core.application.runner import Cancelled, Context, Failed, Interrupt
 from thzdaq_core.application.runs import STRENGTH, Runs
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.leases import Lease, LeaseConflict
+from thzdaq_core.domain.measurements.custom import plot_key
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import SweepParameter
 
@@ -73,7 +78,9 @@ class ScriptSession(Procedure):
         silent: float = 10.0,
         source: Optional[ScriptSource] = None,
         clock: Callable[[], float] = time.monotonic,
+        plots: Iterable[PlotInfo] = (),
     ):
+        """plots: those it fills from its start (the script declared them)."""
         self.name = script(title)
         self.title = title
         self.origin = origin
@@ -95,6 +102,8 @@ class ScriptSession(Procedure):
         self._heard = clock()
         self._keeping = 0  # keep_session calls waiting now: the script is there
         self._cancelled_at: Optional[float] = None
+        self.declared = tuple(plots)
+        self._plotted: Dict[str, PlotInfo] = {}  # by key, as drawn
 
     # A procedure as the runner runs it
     def slots(self):
@@ -108,6 +117,12 @@ class ScriptSession(Procedure):
 
     def estimate_steps(self) -> Optional[int]:
         return self.total
+
+    def active_plots(self, quantities=None) -> Tuple[PlotInfo, ...]:
+        """The plots it declared, as drawn."""
+        drawn = tuple(self._drawn(plot) for plot in self.declared)
+        self._plotted.update((plot.key, plot) for plot in drawn)
+        return drawn
 
     def run(self, ctx: Context) -> None:
         with self._changed:
@@ -133,11 +148,19 @@ class ScriptSession(Procedure):
         if ctx.cancelled and self._cancelled_at is None:
             self._cancelled_at = now
             self._changed.notify_all()  # keep_session answers at once
+            self._cancelling()
         if self._cancelled_at is not None and now - self._cancelled_at > CANCEL_S:
             self._end(CANCELLED, Cancelled())
-        elif not self._keeping and now - self._heard > self.silent:
+        elif self._silent(now):
             silent = Interrupted(f"the script was silent for {self.silent:g} s")
             self._end(INTERRUPTED, silent)
+
+    def _silent(self, now: float) -> bool:
+        """The script fell silent: it died, or its terminal closed."""
+        return not self._keeping and now - self._heard > self.silent
+
+    def _cancelling(self) -> None:
+        """It was asked to stop: the script hears it in keep_session."""
 
     def _end(self, status: str, outcome: Optional[BaseException]) -> None:
         self.status, self._outcome, self._ending = status, outcome, True
@@ -210,21 +233,31 @@ class ScriptSession(Procedure):
         with self._changed:
             self._live().log(message)
 
-    def plot(self, plot: PlotInfo) -> PlotInfo:
+    def _drawn(self, plot: PlotInfo) -> PlotInfo:
         """The plot with what was left empty: labels from the columns, a
-        title and a key of its own."""
+        title and a key of its own (a declared one's by its name)."""
+        x, y = (column_for(key, self.columns) for key in (plot.x, plot.y))
+        return msgspec.structs.replace(
+            plot,
+            key=(
+                plot_key(self.name, plot.key)
+                if plot.key
+                else f"{self.name}.{plot.table}.{plot.x}.{plot.y}"
+            ),
+            title=plot.title or f"{y.title} – {x.title} ({self.title})",
+            x_label=plot.x_label or x.label,
+            y_label=plot.y_label or y.label,
+        )
+
+    def plot(self, plot: PlotInfo) -> PlotInfo:
+        """The plot as drawn from now on; one it draws already as it is."""
         with self._changed:
             ctx = self._live()
-            x, y = (column_for(key, self.columns) for key in (plot.x, plot.y))
-            drawn = msgspec.structs.replace(
-                plot,
-                key=plot.key or f"{self.name}.{plot.table}.{plot.x}.{plot.y}",
-                title=plot.title or f"{y.title} – {x.title} ({self.title})",
-                x_label=plot.x_label or x.label,
-                y_label=plot.y_label or y.label,
-            )
-            ctx.plot(drawn)
-            return drawn
+            drawn = self._drawn(plot)
+            if drawn.key not in self._plotted:
+                self._plotted[drawn.key] = drawn
+                ctx.plot(drawn)
+            return self._plotted[drawn.key]
 
     def on_exit(self, callback: Callable[[], None]) -> None:
         with self._changed:
@@ -239,6 +272,11 @@ class ScriptSession(Procedure):
             if status == COMPLETED and self.cancelled:
                 status, outcome = CANCELLED, Cancelled()
             self._end(status, outcome)
+
+    def process_ended(self, code: Optional[int], why: str, told: str) -> None:
+        """Its script's process ended (code: its exit code, told: the end of
+        what it printed): a session it left open is interrupted."""
+        self.end(INTERRUPTED, Interrupted(why))
 
     # The devices it holds, and its calls as Within
     def holds(self, ref: str, mode: str) -> bool:
@@ -296,14 +334,46 @@ def sweep_values(text: str, unit: str) -> SweepValues:
         raise LabError(ErrorCode.INVALID_ARGUMENTS, f"{text!r}: {e}") from None
 
 
+class Adoptable(Protocol):
+    """A session made before its script started (a run of the bench's own
+    measurement): the script's start takes it over."""
+
+    origin: str  # its script's
+    owner: Optional[int]  # its number, once it runs
+
+    def adopt(self, args: StartSession, runs: Runs) -> None:
+        """The script's start, which takes it over."""
+
+    def process_ended(self, code: Optional[int], why: str, told: str) -> None:
+        ...
+
+
 class Sessions:
     def __init__(self, runs: Runs, devices: DeviceAccess):
         self.runs = runs
         self.devices = devices
         self._sessions: Dict[int, ScriptSession] = {}
+        self._waiting: Dict[str, Adoptable] = {}  # by their scripts' origin
         self._lock = threading.Lock()
 
+    def made(self, session: Adoptable, id: int) -> None:
+        """A session made before its script starts (the session of measurement
+        id): the script calling as its origin takes it over."""
+        with self._lock:
+            self._sessions[id] = session
+            self._waiting[session.origin] = session
+
+    def adopting(self, origin: str) -> bool:
+        """The script calling as origin has a session made for it to take."""
+        with self._lock:
+            return origin in self._waiting
+
     def start(self, args: StartSession, origin: str) -> RunInfo:
+        with self._lock:
+            waiting = self._waiting.pop(origin, None)
+        if waiting is not None:
+            waiting.adopt(args, self.runs)
+            return self.runs.get(waiting.owner)
         session = self._session(args, origin)
         info = self.runs.start(
             session,
@@ -323,12 +393,15 @@ class Sessions:
     def _session(self, args: StartSession, origin: str) -> ScriptSession:
         return ScriptSession(
             args.title, origin, modes_of(args), args.share, args.parameters,
-            args.columns, args.total, args.silent, args.script,
+            args.columns, args.total, args.silent, args.script, plots=args.plots,
         )  # fmt: skip
 
-    def approval(self, args: StartSession) -> Ask:
+    def approval(self, args: StartSession, origin: str) -> Ask:
         """The session a start would make, checked as a dry run; a conflict
-        is the person's to allow (both measurements note it)."""
+        is the person's to allow (both measurements note it). A session made
+        for the script was allowed with its run."""
+        if self.adopting(origin):
+            return Ask(f"Start script {args.title}", "the run it was started for")
         planned = self.runs.start(
             self._session(args, ""), {ref: ref for ref in modes_of(args)},
             args.comment, "", workspace=args.workspace, dry_run=True, share=True,
@@ -371,12 +444,14 @@ class Sessions:
             )
         return session
 
-    def interrupt(self, origin: str, why: str) -> None:
-        """The sessions of a script that ended or was stopped end now."""
+    def ended(self, origin: str, code: Optional[int], why: str, told: str) -> None:
+        """The process of the script calling as origin ended (code: its exit
+        code; told: the end of what it printed): its sessions end now."""
         with self._lock:
+            self._waiting.pop(origin, None)
             found = [s for s in self._sessions.values() if s.origin == origin]
         for session in found:
-            session.end(INTERRUPTED, Interrupted(why))
+            session.process_ended(code, why, told)
 
     def found(self, id: Optional[int]) -> Within:
         """Where a call is made, as a person reads it before allowing it."""

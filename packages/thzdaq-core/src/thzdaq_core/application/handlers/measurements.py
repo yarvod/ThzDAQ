@@ -5,29 +5,33 @@ from typing import Any, Mapping, Tuple
 from thzdaq_api import measurements as api
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.operation import Rights
-
-from thzdaq_core.application.approvals import Ask
-from thzdaq_core.application.describe import procedure_info, procedure_summary
-from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_api.scripts import RUN
 
+from thzdaq_core.application.approvals import Ask
+from thzdaq_core.application.custom import CustomRuns
+from thzdaq_core.application.describe import procedure_info
+from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.policy import Policy
+from thzdaq_core.application.procedures import Procedures
 from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runs import Runs
 from thzdaq_core.domain.errors import ProcedureError
-from thzdaq_core.domain.measurements.catalog import get_procedure, list_procedures
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 MAX_WAIT_S = 60.0  # a client waits again rather than holding a request longer
 
 
 def build(
-    name: str, parameters: Mapping[str, Any], typed: Mapping[str, str]
+    procedures: Procedures,
+    name: str,
+    parameters: Mapping[str, Any],
+    typed: Mapping[str, str],
 ) -> Procedure:
     """A procedure with parameters as JSON gives them (SI, sweeps as dicts) and
     as people type them (display units, sweeps as start:stop:points)."""
     try:
-        cls = get_procedure(name)
+        cls = procedures.get(name)
     except ProcedureError as e:
         raise LabError(ErrorCode.NOT_FOUND, str(e)) from None
     try:
@@ -39,18 +43,22 @@ def build(
 class ListProcedures(Handler[api.ListProcedures, Tuple[api.ProcedureSummary, ...]]):
     operation = api.ListProcedures
 
+    def __init__(self, procedures: Procedures):
+        self.procedures = procedures
+
     def handle(self, args, origin):
-        return tuple(procedure_summary(cls) for cls in list_procedures())
+        return self.procedures.summaries()
 
 
 class DescribeProcedure(Handler[api.DescribeProcedure, api.ProcedureInfo]):
     operation = api.DescribeProcedure
 
-    def __init__(self, devices: DeviceAccess):
+    def __init__(self, devices: DeviceAccess, procedures: Procedures):
         self.devices = devices
+        self.procedures = procedures
 
     def handle(self, args, origin):
-        procedure = build(args.procedure, args.parameters, args.typed)
+        procedure = build(self.procedures, args.procedure, args.parameters, args.typed)
 
         def quantities(slot: str):
             ref = args.devices.get(slot)
@@ -60,14 +68,31 @@ class DescribeProcedure(Handler[api.DescribeProcedure, api.ProcedureInfo]):
 
 
 class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
+    """A run of the bench's own measurement is its script's, started as the
+    caller would start it (an agent's runs as the agent's)."""
+
     operation = api.StartMeasurement
 
-    def __init__(self, runs: Runs, scripts: ScriptProcesses):
+    def __init__(
+        self,
+        runs: Runs,
+        scripts: ScriptProcesses,
+        procedures: Procedures,
+        custom: CustomRuns,
+        policy: Policy,
+    ):
         self.runs = runs
         self.scripts = scripts
+        self.procedures = procedures
+        self.custom = custom
+        self.policy = policy
 
     def handle(self, args, origin):
-        procedure = build(args.procedure, args.parameters, args.typed)
+        procedure = build(self.procedures, args.procedure, args.parameters, args.typed)
+        if not args.dry_run:
+            procedure = self.custom.runnable(
+                procedure, origin, self.policy.agent(origin), args.workspace
+            )
         started = self.runs.start(
             procedure,
             args.devices,
@@ -93,7 +118,7 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
     def approval(self, args, origin):
         """The run it would be, checked as a dry run: one that could not start
         is refused before anybody is asked."""
-        procedure = build(args.procedure, args.parameters, args.typed)
+        procedure = build(self.procedures, args.procedure, args.parameters, args.typed)
         planned = self.runs.start(
             procedure, args.devices, args.comment, "", args.share, args.workspace,
             dry_run=True, shares=self.scripts.shared(origin),
