@@ -1,8 +1,9 @@
 """Names of docks, as ADS saves them in layouts and perspectives.
 
-A dock of a measurement, graph or device is named by its kind and key
-(measure:sis.iv_curve, graph:I-V, device:sis_bias_1); the base docks and the
-Lite Measurement dock by their kind alone. Saved layouts hold these names:
+A dock of a measurement, graph, device or script's file is named by its kind
+and key (measure:sis.iv_curve, graph:I-V, device:sis_bias_1,
+code:/path/to/pv.py); the base docks and the Lite Measurement dock by their
+kind alone. Saved layouts hold these names:
 they never change.
 """
 
@@ -17,7 +18,7 @@ DATA = "data"
 LOG = "log"
 PROCESSES = "processes"
 DAEMON = "daemon"
-SCRIPTS = "scripts"
+CODE = "code"  # the dock of a script's file
 
 
 def dock_name(kind: str, key: str) -> str:

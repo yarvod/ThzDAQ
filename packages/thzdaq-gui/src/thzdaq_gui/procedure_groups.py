@@ -3,6 +3,7 @@ their order in the run bar and menus, title and icon, in one place."""
 
 from dataclasses import dataclass
 
+from thzdaq_api.custom import GROUP as CUSTOM
 from thzdaq_api.procedures import GRID, IF, MONITOR, SIS, TWO_SB, group_of
 
 
@@ -19,6 +20,7 @@ GROUPS = (
     Group(TWO_SB, "2SB", "chart-bell-curve-cumulative"),
     Group(MONITOR, "Monitor", "monitor-eye"),
     Group(GRID, "Grid", "rotate-3d-variant"),
+    Group(CUSTOM, "Custom", "language-python"),  # the bench's own measurements
 )
 _BY_KEY = {group.key: group for group in GROUPS}
 

@@ -209,6 +209,9 @@ def make_editor(parameter: ParameterInfo) -> Editor:
                 check.setChecked(choice in values)
 
         return Editor(box, get_multi, set_multi)
+    if kind == "text":
+        line = QLineEdit()
+        return Editor(line, line.text, lambda v: line.setText(f"{v}"))
     if kind == "string_list":
         line = QLineEdit()
         line.setPlaceholderText("comma separated")

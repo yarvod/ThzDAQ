@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, Signal
+from thzdaq_api.custom import CustomInfo, CustomLibrary, ListCustom
 from thzdaq_api.devices import (
     DescribeDevice,
     DeviceDescription,
@@ -65,6 +66,7 @@ class Session(QObject):
     """
 
     station_changed = Signal()  # another profile, or another lab: build anew
+    procedures_changed = Signal()  # the bench's own measurements changed
     config_changed = Signal()  # the profile was edited: devices may differ
     leases_changed = Signal()  # measurements took or gave back devices
 
@@ -96,9 +98,11 @@ class Session(QObject):
         self.bridge.quantity_set.connect(self._quantity_heard)
         self.bridge.raw_sent.connect(self._raw_heard)
         self.bridge.station_changed.connect(self._profile_changed)
+        self.bridge.procedures_changed.connect(self._procedures_heard)
         self.bridge.resync.connect(self._resynced)
         self.bridge.leases_changed.connect(self._leases_heard)
         self._procedures: Optional[Tuple[ProcedureSummary, ...]] = None
+        self._library: Optional[CustomLibrary] = None
         self._drivers: Optional[Dict[str, DriverInfo]] = None
         self._connection_kinds: Optional[Tuple[ConnectionKindInfo, ...]] = None
         self._path: Optional[str] = None  # of the profile heard last
@@ -145,14 +149,32 @@ class Session(QObject):
         return self.lab.call(operation)
 
     def procedures(self) -> Tuple[ProcedureSummary, ...]:
-        """The procedures the bench runs, with their plots; asked once, they
-        do not change."""
+        """The procedures the bench runs, with their plots: asked once, then
+        as the daemon tells them changed (its own measurements)."""
         if self._procedures is None:
             self._procedures = self.lab.call(ListProcedures())
         return self._procedures
 
-    def procedure(self, name: str) -> ProcedureSummary:
-        return next(p for p in self.procedures() if p.name == name)
+    def procedure(self, name: str) -> Optional[ProcedureSummary]:
+        """None for one the bench runs no more (a script taken away)."""
+        return next((p for p in self.procedures() if p.name == name), None)
+
+    def _procedures_heard(self, body) -> None:
+        self._procedures = body.procedures
+        self._library = None
+        self.procedures_changed.emit()
+
+    def library(self) -> CustomLibrary:
+        """The bench's own measurements: their scripts, where they are."""
+        if self._library is None:
+            self._library = self.lab.call(ListCustom())
+        return self._library
+
+    def custom(self, procedure: str) -> Optional[CustomInfo]:
+        """The script of one of the bench's own measurements."""
+        return next(
+            (m for m in self.library().measurements if m.procedure == procedure), None
+        )
 
     def drivers(self) -> Dict[str, DriverInfo]:
         """Drivers a profile may name, by key."""

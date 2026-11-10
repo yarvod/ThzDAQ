@@ -7,6 +7,9 @@ dialogs start in the folder used last (Session.folders).
 """
 
 import json
+from pathlib import Path
+
+import msgspec
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -24,7 +27,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.measurement_file import RUNNING, dumps, export_csv
+from thzdaq_api.measurement_file import SCRIPT, RUNNING, dumps, export_csv
+from thzdaq_api.sessions import ScriptSource
 
 from thzdaq_gui import theme
 from thzdaq_gui.folders import MEASUREMENTS
@@ -80,6 +84,7 @@ class Shown(QSortFilterProxyModel):
 
 class DataWidget(QWidget):
     plot_requested = Signal(object)  # Measurement
+    script_requested = Signal(str, str)  # the script it ran: a title, its text
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -183,20 +188,23 @@ class DataWidget(QWidget):
                 export_csv(measurement, table, path)
 
     def script(self) -> None:
-        """In the Scripts dock: the file it ran, or a copy of its text."""
+        """The text it ran as it was then, in the editor: titled by the
+        measurement, to be saved into the library."""
         for measurement in self.selected()[:1]:
-            try:
-                found = self.session.scripts.script_of(measurement)
-            except OSError as e:
-                QMessageBox.warning(self, SCRIPT_TITLE, str(e))
-                return
-            if found is None:
+            kept = measurement.metadata.get(SCRIPT)
+            if not kept:
                 QMessageBox.information(
                     self,
                     SCRIPT_TITLE,
                     "No script measured it: its text is kept only with the "
-                    "measurements of a script (lab.measurement).",
+                    "measurements of a script (lab.measurement) and of the "
+                    "bench's own.",
                 )
+                return
+            source = msgspec.convert(kept, ScriptSource)
+            self.script_requested.emit(
+                f"#{measurement.id} {Path(source.path).name}", source.text
+            )
 
     def details(self) -> None:
         for measurement in self.selected()[:1]:

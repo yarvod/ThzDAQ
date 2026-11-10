@@ -24,6 +24,8 @@ icon = "assets/thzdaq.ico" if sys.platform == "win32" else "assets/thzdaq.icns"
 datas = [("assets", "assets")]
 datas += collect_data_files("thzdaq_gui")
 datas += collect_data_files("qtawesome")
+# The script editor completes by jedi: its stubs and parso's grammars are data
+datas += collect_data_files("jedi") + collect_data_files("parso")
 
 window = Analysis(["main.py"], datas=datas)
 # Commands that packages add to the command line (thzdaq mcp) are found by

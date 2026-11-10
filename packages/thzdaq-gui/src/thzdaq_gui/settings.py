@@ -73,6 +73,12 @@ def procedure_key(procedure: str) -> str:
     return f"procedures/{procedure}"
 
 
+def graph_choice_key(procedure: str, plot: str) -> str:
+    """Where a declared plot of the bench's own measurement is drawn: the
+    title of a graph of the window, empty for one of its own."""
+    return f"procedures/{procedure}/into/{plot}"
+
+
 def sections_path(procedure: str, scan: bool = False) -> str:
     """Folded sections of a procedure: in its dock, or of its scan in a device dock."""
     return f"scan/{procedure}" if scan else procedure

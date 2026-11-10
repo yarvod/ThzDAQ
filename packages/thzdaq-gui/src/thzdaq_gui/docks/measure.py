@@ -29,7 +29,6 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import DescribeProcedure, ProcedureInfo
 from thzdaq_api.procedures import (
     KEY_SEPARATOR,
-    MONITOR_TIME,
     default_quantities,
     monitor_quantities,
     split_entry,
@@ -82,9 +81,9 @@ class ProcedureBox(QWidget):
         self.hub = hub
         self.procedure = procedure  # its name
         # Records of a run go to every plot the procedure may fill
-        self.plots = session.procedure(procedure).plots
+        self.plots = self.known_plots()
         # As the parameters in the form describe it: their slots
-        self.info: ProcedureInfo = session.call(DescribeProcedure(procedure=procedure))
+        self.info: ProcedureInfo = self.described()
         self.fixed = dict(fixed or {})
         self.compact = compact
         self.process = None  # in the session's Processes while running
@@ -176,6 +175,28 @@ class ProcedureBox(QWidget):
         session.config_changed.connect(self.refresh_devices)
         self.form.changed.connect(self.refresh_devices)
         self.restore()
+        self.refresh_devices()
+
+    def known_plots(self):
+        about = self.session.procedure(self.procedure)
+        return about.plots if about is not None else ()
+
+    def described(self) -> ProcedureInfo:
+        """The procedure as its parameters' defaults describe it."""
+        return self.session.call(DescribeProcedure(procedure=self.procedure))
+
+    def reload(self) -> None:
+        """The procedure described anew (its script saved): its form and
+        devices, the values typed kept where their parameters stay."""
+        try:
+            typed = self.form.values()
+        except ValueError:
+            typed = {}
+        self.plots = self.known_plots()
+        self.info = self.described()
+        self.form.set_parameters(self.info.parameters)
+        self.form.set_values(typed)
+        self.parameters_box.setVisible(bool(self.info.parameters))
         self.refresh_devices()
 
     # Devices
@@ -308,7 +329,10 @@ class ProcedureBox(QWidget):
         self.window = run.plot_window
         self.raised = False
         self.reached = []
-        self.expected = [plot.title for plot in run.plots]
+        self.expected = [
+            plot.title
+            for plot in self.hub.route(self.chosen_plots(run.plots), lambda _: None)
+        ]
         self.hub.show_run(self.expected)
         self.log.clear()
         self.log_box.set_summary("")
@@ -384,9 +408,13 @@ class ProcedureBox(QWidget):
             self.note("the measurement thread has ended")
             self.on_running(False)
 
+    def chosen_plots(self, plots):
+        """The plots of a run as the dock draws them (where each goes)."""
+        return plots
+
     def on_started(self, measurement) -> None:
         self.measurement = measurement
-        self.plots = self.runner.plots
+        self.plots = self.hub.route(self.chosen_plots(self.runner.plots), self.note)
         self.hub.register_plots(self.plots)
         self.update_status(state=RUNNING)
         self.note(f"started #{measurement.id}")
@@ -467,7 +495,13 @@ class MeasureWidget(QWidget):
 
     def __init__(self, session, hub, procedure: str, parent=None):
         super().__init__(parent)
-        about = session.procedure(procedure)
+        header = self.make_header(session.procedure(procedure))
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.box = self.make_box(session, hub, procedure, header)
+        layout.addWidget(self.box)
+
+    def make_header(self, about) -> QWidget:
         header = QWidget()
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
@@ -479,10 +513,7 @@ class MeasureWidget(QWidget):
             text.setWordWrap(True)
             text.setProperty("role", "muted")
             header_layout.addWidget(text)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.box = self.make_box(session, hub, procedure, header)
-        layout.addWidget(self.box)
+        return header
 
     def make_box(self, session, hub, procedure, header):
         return ProcedureBox(session, hub, procedure, header=header)
@@ -626,11 +657,3 @@ class MonitorBox(ProcedureBox):
 class MonitorWidget(MeasureWidget):
     def make_box(self, session, hub, procedure, header):
         return MonitorBox(session, hub, procedure, header=header)
-
-
-# Docks with their own widget class by procedure name
-SPECIAL = {MONITOR_TIME: MonitorWidget}
-
-
-def measure_widget(session, hub, procedure: str) -> MeasureWidget:
-    return SPECIAL.get(procedure, MeasureWidget)(session, hub, procedure)

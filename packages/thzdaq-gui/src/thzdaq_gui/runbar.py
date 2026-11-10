@@ -9,7 +9,7 @@ measurement leaves a running one running.
 
 from typing import Dict, Iterable, List, Optional
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSignalBlocker, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QToolButton, QVBoxLayout, QWidget
 from thzdaq_api.measurements import ProcedureSummary
 
@@ -31,21 +31,7 @@ class RunBar(QWidget):
         self.combo = QComboBox()
         self.combo.setToolTip("Measurement to run")
         self.combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        groups: Dict[str, List[ProcedureSummary]] = {}
-        for procedure in sorted(
-            procedures, key=lambda p: procedure_groups.rank(p.name)
-        ):
-            group = procedure_groups.group(procedure.name).key
-            groups.setdefault(group, []).append(procedure)
-        for group in groups:
-            if self.combo.count():
-                self.combo.insertSeparator(self.combo.count())
-            for procedure in groups[group]:
-                self.combo.addItem(
-                    theme.icon(procedure_groups.group(procedure.name).icon),
-                    procedure.title or procedure.name,
-                    procedure.name,
-                )
+        self.set_procedures(procedures)
         self.combo.activated.connect(
             lambda index: self.chosen.emit(self.combo.itemData(index))
         )
@@ -57,6 +43,31 @@ class RunBar(QWidget):
         layout.addWidget(self.btnParameters)
         self.controls = RunControls(row=True)
         layout.addWidget(self.controls, 1)
+
+    def set_procedures(self, procedures: Iterable[ProcedureSummary]) -> None:
+        """The measurements to choose from, by group (the bench's own last);
+        the one chosen stays chosen while it is among them."""
+        chosen = self.combo.currentData()
+        groups: Dict[str, List[ProcedureSummary]] = {}
+        for procedure in sorted(
+            procedures, key=lambda p: procedure_groups.rank(p.name)
+        ):
+            group = procedure_groups.group(procedure.name).key
+            groups.setdefault(group, []).append(procedure)
+        with QSignalBlocker(self.combo):
+            self.combo.clear()
+            for group in groups:
+                if self.combo.count():
+                    self.combo.insertSeparator(self.combo.count())
+                for procedure in groups[group]:
+                    self.combo.addItem(
+                        theme.icon(procedure_groups.group(procedure.name).icon),
+                        procedure.title or procedure.name,
+                        procedure.name,
+                    )
+            index = self.combo.findData(chosen)
+            if index >= 0:
+                self.combo.setCurrentIndex(index)
 
     def show_run(self, procedure: str, run: Run) -> None:
         """The chosen measurement, driven from the bar from now on."""

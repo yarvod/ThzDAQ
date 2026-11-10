@@ -1,9 +1,14 @@
-"""Graphs of observed runs, independent of any procedure configuration form."""
+"""Graphs of observed runs, independent of any procedure configuration form.
+A plot drawn into a graph of the window (into) goes there when it can; why
+it cannot goes to the log."""
 
+import logging
 from typing import Tuple
 
 from PySide6.QtCore import QObject
 from thzdaq_api.measurements import PlotInfo
+
+logger = logging.getLogger(__name__)
 
 
 class RunGraphs(QObject):
@@ -34,7 +39,7 @@ class RunGraphs(QObject):
             self.hub.show_measurement(model.measurement, self.plots(model))
 
     def plots(self, model) -> Tuple[PlotInfo, ...]:
-        return self.chosen or model.plots
+        return self.chosen or self.hub.route(model.plots, logger.info)
 
     def started(self, model) -> None:
         plots = self.plots(model)
@@ -45,5 +50,6 @@ class RunGraphs(QObject):
         """A plot the run added while it runs (a script's): on screen too,
         unless other plots were chosen."""
         if not self.chosen:
-            self.hub.register_plots([plot])
-            self.hub.show_run([plot.title])
+            routed = self.hub.route([plot], logger.info)
+            self.hub.register_plots(routed)
+            self.hub.show_run([spec.title for spec in routed])

@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+import msgspec
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.graphicsItems.GraphicsWidgetAnchor import GraphicsWidgetAnchor
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_api.measurement_file import Column, Measurement
-from thzdaq_api.measurements import PlotInfo, ProcedureSummary
+from thzdaq_api.measurements import PlotInfo, ProcedureSummary, unit_of
 from thzdaq_api.procedures import plot_for
 
 from thzdaq_gui import theme
@@ -59,6 +60,11 @@ class Axis:
         if column.unit in SI_UNITS:
             return cls(title, column.unit)
         return cls(column.label)
+
+
+def same_units(found: Tuple[str, str], other: Tuple[str, str]) -> bool:
+    """Axes of the same units; an axis without one goes with any."""
+    return all(a == b or not a or not b for a, b in zip(found, other))
 
 
 def _names_devices(measurement: Measurement) -> bool:
@@ -442,6 +448,7 @@ class GraphHub(QObject):
     graph_renamed = Signal(object)  # a custom graph, its new title
     graph_removed = Signal(object)  # a custom graph to delete
     custom_changed = Signal()  # the custom graphs to remember
+    titles_added = Signal(list)  # graphs of procedures new to the catalog
 
     def __init__(
         self,
@@ -458,10 +465,54 @@ class GraphHub(QObject):
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
         self.plots: Dict[str, Tuple[PlotInfo, ...]] = {}
         self._map_runs = {}  # title -> measurement id shown in this map
-        for procedure in procedures:
-            self.plots[procedure.name] = procedure.plots
-            for spec in procedure.plots:
+        self.set_procedures(procedures)
+
+    def set_procedures(self, procedures: Iterable[ProcedureSummary]) -> None:
+        """The catalog as it is now (the bench's own measurements come and
+        go): graphs of plots new to it are told."""
+        before = set(self.titles())
+        self.plots = {procedure.name: procedure.plots for procedure in procedures}
+        for plots in self.plots.values():
+            for spec in plots:
                 self.specs.setdefault(spec.title, spec)
+        added = [title for title in self.titles() if title not in before]
+        if added:
+            self.titles_added.emit(added)
+
+    def units_of(self, title: str) -> Optional[Tuple[str, str]]:
+        """The units of the axes of a graph of the window, by its title;
+        None: no such graph."""
+        spec = self.specs.get(title)
+        if spec is not None:
+            return spec.units()
+        widget = self.graphs.get(title)
+        if isinstance(widget, GraphWidget):
+            return tuple(a.unit or unit_of(a.label) for a in (widget.x, widget.y))
+        return None
+
+    def route(
+        self, specs: Iterable[PlotInfo], told: Callable[[str], None]
+    ) -> Tuple[PlotInfo, ...]:
+        """Plots as they are drawn here: one into a graph of the window
+        (into) goes there when the window has it with the same units, else
+        into a graph of its own, and told(why)."""
+        routed = []
+        for spec in specs:
+            target = None if spec.into is None else self.units_of(spec.into)
+            if spec.into is None or spec.into == spec.title:
+                routed.append(spec)
+            elif target is None:
+                told(f"{spec.title}: no graph {spec.into!r} here, drawn in its own")
+                routed.append(spec)
+            elif not same_units(spec.units(), target):
+                told(
+                    f"{spec.title}: its units {spec.units()} are not those of"
+                    f" {spec.into!r} {target}, drawn in a graph of its own"
+                )
+                routed.append(spec)
+            else:
+                routed.append(msgspec.structs.replace(spec, title=spec.into))
+        return tuple(routed)
 
     def plots_of(self, procedure: str) -> Tuple[PlotInfo, ...]:
         """The plots of a procedure; none for one this bench does not know."""

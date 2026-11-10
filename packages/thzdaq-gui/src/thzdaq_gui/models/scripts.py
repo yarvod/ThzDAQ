@@ -1,6 +1,6 @@
-"""The scripts of a window: the files in the script folders of its workspace
-(scripts/ and the folders added to it), and the scripts the daemon runs or
-ran, whoever started them, with what they printed.
+"""The scripts the daemon runs or ran, whoever started them, with what they
+printed: the window's own (Run of a script's file, the bench's own
+measurements started here) and the others'.
 
 Run is StartScript with this program's Python (host.script_python) in the
 window's workspace; Stop is StopScript: their measurements are cancelled,
@@ -9,23 +9,15 @@ start, what it prints, part by part, and its end; a run heard of later (the
 daemon's list), or one whose part was missed, reads its log up to the parts
 first (ReadScriptLog). A stop may wait seconds for its script, so the calls
 of scripts have a worker of their own, apart from the devices'.
-
-A new script is a copy of a template (thzdaq_api.templates) in scripts/; the
-script of a measurement (its text kept with it) is the file it ran while that
-holds the same text, else a copy, scripts/<name>_<id>.py.
 """
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-import msgspec
-from PySide6.QtCore import QFileSystemWatcher, QObject, Signal
-from thzdaq_api import examples, host
-from thzdaq_api.errors import LabError
+from PySide6.QtCore import QObject, Signal
+from thzdaq_api import host
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
-from thzdaq_api.measurement_file import SCRIPT, Measurement
 from thzdaq_api.scripts import (
     RUNNING,
     ListScripts,
@@ -34,16 +26,13 @@ from thzdaq_api.scripts import (
     StartScript,
     StopScript,
 )
-from thzdaq_api.sessions import ScriptSource
 
-from thzdaq_gui.dock_names import SCRIPTS
 from thzdaq_gui.processes import Process
 from thzdaq_gui.workers import DeviceWorker
 
 OUTPUT_KEPT = 200_000  # characters of a run's output kept here; its log has all
-SUFFIX = ".py"
 CALLS, STOPS = "scripts", "stops"  # lanes: a stop does not hold a start
-SKIPPED = ("__pycache__",)  # folders of no scripts; hidden ones too
+SCRIPT_ICON = "language-python"
 
 
 @dataclass
@@ -66,33 +55,10 @@ class ScriptRun:
         return self.info.status == RUNNING
 
 
-def same_text(path: Path, source: ScriptSource) -> bool:
-    """The file holds the text the script was run with."""
-    return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == (
-        source.sha256
-    )
-
-
-def scripts_in(folder: Path) -> List[Path]:
-    """The scripts of a folder and its folders (not hidden ones, no caches)."""
-    if not folder.is_dir():
-        return []
-    return sorted(
-        path
-        for path in folder.rglob(f"*{SUFFIX}")
-        if not any(
-            part.startswith(".") or part in SKIPPED
-            for part in path.relative_to(folder).parts
-        )
-    )
-
-
 class ScriptsModel(QObject):
-    files_changed = Signal()  # folders, or the scripts in them
     runs_changed = Signal()  # a run started, ended, or the daemon listed them
     printed = Signal(int, str)  # a run's id, what it printed more
     output_reset = Signal(int)  # a run's output is told anew (whole)
-    chosen = Signal(object)  # a script to show: made, or kept from a measurement
     started_here = Signal(int)  # a run this window started
     failed = Signal(str)  # a call refused or failed: why
 
@@ -103,101 +69,16 @@ class ScriptsModel(QObject):
         self.runs: Dict[int, ScriptRun] = {}
         self._heard: Set[int] = set()  # runs told of while the list is asked
         self.processes: Dict[int, Process] = {}  # the runs this window started
-        self.watcher = QFileSystemWatcher(self)
-        self.watcher.directoryChanged.connect(self.refresh_files)
-        session.workspace.changed.connect(self._moved)
+        session.workspace.changed.connect(self.runs_changed)
         bridge = session.bridge
         bridge.script_started.connect(self._started)
         bridge.script_output.connect(self._printed)
         bridge.script_ended.connect(self._ended)
         session.station_changed.connect(self.load)  # another lab, or events lost
-        self.refresh_files()
-
-    def _moved(self) -> None:
-        """Another workspace: its scripts; runs here are others now."""
-        self.refresh_files()
-        self.runs_changed.emit()
 
     def close(self, timeout: float = 2.0) -> None:
         """The window goes: no more calls (scripts run on in the daemon)."""
         self.calls.stop(timeout)
-
-    # Files
-    def folders(self) -> Tuple[Path, ...]:
-        """scripts/ of the workspace, then the folders added to it (a broken
-        thzdaq.toml is told, and only scripts/ shown)."""
-        workspace = self.session.workspace
-        try:
-            return workspace.script_folders()
-        except LabError as e:
-            self.failed.emit(str(e))
-            return (workspace.scripts,)
-
-    def files(self) -> Dict[Path, List[Path]]:
-        """The scripts of each folder."""
-        return {folder: scripts_in(folder) for folder in self.folders()}
-
-    def refresh_files(self, *_) -> None:
-        """Watch the folders (each folder within them too) and tell anew."""
-        watched = self.watcher.directories()
-        if watched:
-            self.watcher.removePaths(watched)
-        for folder in self.folders():
-            if folder.is_dir():
-                inner = (p for p in folder.rglob("*") if p.is_dir())
-                self.watcher.addPaths([str(folder), *(str(p) for p in inner)])
-        self.files_changed.emit()
-
-    def keeps_folders(self) -> bool:
-        return self.session.workspace.keeps_folders()
-
-    def add_folder(self, folder: Path) -> None:
-        """LabError when the workspace cannot keep it."""
-        self.session.workspace.add_script_folder(folder)
-        self.refresh_files()
-
-    def remove_folder(self, folder: Path) -> None:
-        self.session.workspace.remove_script_folder(folder)
-        self.refresh_files()
-
-    @staticmethod
-    def templates() -> Tuple[examples.Example, ...]:
-        return examples.examples()
-
-    def new_script(self, template: str) -> Path:
-        """A copy of a template in scripts/, shown (OSError when it cannot be
-        written)."""
-        path = examples.create(template, self.session.workspace.scripts)
-        self._show(path)
-        return path
-
-    def script_of(self, measurement: Measurement) -> Optional[Path]:
-        """The script that measured it, as a file of the window's workspace:
-        the one it ran while it holds the same text, else a copy in scripts/
-        named after it and the measurement; shown. None: no script measured
-        it (a built-in procedure, a file of an older version)."""
-        kept = measurement.metadata.get(SCRIPT)
-        if not kept:
-            return None
-        source = msgspec.convert(kept, ScriptSource)
-        workspace = self.session.workspace
-        ran = workspace.folder / source.path  # a path outside it is whole
-        if same_text(ran, source):
-            path = ran
-        else:
-            name = f"{Path(source.path).stem}_{measurement.id}"
-            copy = workspace.scripts / f"{name}{SUFFIX}"
-            path = (
-                copy
-                if same_text(copy, source)
-                else examples.write_new(workspace.scripts, name, source.text)
-            )
-        self._show(path)
-        return path
-
-    def _show(self, path: Path) -> None:
-        self.refresh_files()
-        self.chosen.emit(path)
 
     # Runs
     def load(self, *_) -> None:
@@ -237,12 +118,19 @@ class ScriptsModel(QObject):
             None,
         )
 
+    def of_measurement(self, id: int) -> Optional[ScriptRun]:
+        """The script started for a run of the bench's own measurement."""
+        return next(
+            (run for run in self.runs.values() if run.info.measurement == id), None
+        )
+
     def here(self, run: ScriptRun) -> bool:
         """Run in the window's workspace."""
         return self.session.workspace.holds(run.info.workspace)
 
-    def run(self, path: Path) -> None:
-        """Start the script in the daemon, apart from the window."""
+    def run(self, path: Path, dock: str) -> None:
+        """Start the script in the daemon, apart from the window; dock: where
+        the window shows it (its Processes entry leads there)."""
         start = StartScript(
             path=str(path),
             python=host.script_python(),
@@ -250,17 +138,20 @@ class ScriptsModel(QObject):
         )
         lab = self.session.lab
         self.calls.submit(
-            lambda: lab.call(start), self._run_started, self._failed, key=CALLS
+            lambda: lab.call(start),
+            lambda info: self._run_started(info, dock),
+            self._failed,
+            key=CALLS,
         )
 
-    def _run_started(self, info: ScriptInfo) -> None:
+    def _run_started(self, info: ScriptInfo, dock: str) -> None:
         self._heard.add(info.id)
         run = self._know(info)
         if run.running and info.id not in self.processes:
             self.processes[info.id] = self.session.processes.start(
                 f"Script {info.name}",
-                "language-python",
-                SCRIPTS,
+                SCRIPT_ICON,
+                dock,
                 stop=lambda: self.stop(info.id),
             )
         self.runs_changed.emit()

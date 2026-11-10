@@ -31,11 +31,11 @@ from PySide6.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
-from thzdaq_api.measurements import ProcedureSummary
+from thzdaq_api import examples
 from thzdaq_api.daemon import StopMode
 from thzdaq_api.errors import LabError
 
-from thzdaq_gui import procedure_groups, theme
+from thzdaq_gui import theme
 from thzdaq_gui.device_docks import DeviceDocks
 from thzdaq_gui.dock_names import (
     DAEMON,
@@ -46,17 +46,13 @@ from thzdaq_gui.dock_names import (
     MEASURE,
     MEASUREMENT,
     PROCESSES,
-    SCRIPTS,
     SETUP,
     dock_name,
 )
 from thzdaq_gui.docking import SECTIONS, DockSpace, configure_docking, one_repaint
-from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.log import LogWidget
-from thzdaq_gui.docks.measure import measure_widget
 from thzdaq_gui.docks.processes import ProcessesWidget
-from thzdaq_gui.docks.scripts import ScriptsWidget
 from thzdaq_gui.docks.setup import SetupWidget
 from thzdaq_gui.docks.daemon import DaemonIndicator, DaemonWidget, LostBanner
 from thzdaq_gui.approval_dialog import ApprovalPrompts
@@ -67,7 +63,9 @@ from thzdaq_gui.exit_dialog import (
     stop_mode,
 )
 from thzdaq_gui.folders import PROFILES
+from thzdaq_gui.code_docks import CodeDocks
 from thzdaq_gui.graph_docks import GraphDocks
+from thzdaq_gui.measure_docks import MeasureDocks
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
@@ -136,6 +134,10 @@ class MainWindow(QMainWindow):
         self.hub = GraphHub(session.procedures(), session.call, self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
+        self.code = CodeDocks(session, self.docks, self, self.start_measurement)
+        self.measures = MeasureDocks(
+            session, self.hub, self.docks, self.code.open_custom
+        )
 
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
@@ -164,8 +166,7 @@ class MainWindow(QMainWindow):
         self.hangWatch.message.connect(lambda m: self.statusBar().showMessage(m, 2500))
 
         self.add_base_docks()
-        for procedure in session.procedures():
-            self.add_measure_dock(procedure)
+        self.measures.sync()
         self.docks.add(
             MEASUREMENT, "Measurement", self.measurementHost, "Measures",
             theme.icon("play-circle-outline"), QtAds.RightDockWidgetArea,
@@ -175,6 +176,8 @@ class MainWindow(QMainWindow):
         self.devices.sync()
         session.station_changed.connect(self.on_station_changed)
         self.dataWidget.plot_requested.connect(self.graphs.plot)
+        self.dataWidget.script_requested.connect(self.code.open_text)
+        session.procedures_changed.connect(self.on_procedures_changed)
         self.show_station()
 
         restored = restore_layout and self.restore_state()
@@ -228,6 +231,20 @@ class MainWindow(QMainWindow):
         self.menuBase = bar.addMenu("&Base")
         self.menuDevices = bar.addMenu("&Devices")
         self.menuMeasures = bar.addMenu("&Measures")
+        new_measurement = QAction(theme.icon("plus"), "New measurement…", self)
+        new_measurement.setToolTip("A measurement of the bench's own: a script")
+        new_measurement.triggered.connect(self.code.new_measurement)
+        self.menuMeasures.addAction(new_measurement)
+        from_example = self.menuMeasures.addMenu(
+            theme.icon("book-open-outline"), "From an example"
+        )
+        for example in examples.examples():
+            action = from_example.addAction(example.title)
+            action.setToolTip(example.about)
+            action.triggered.connect(
+                lambda _=False, name=example.name: self.code.from_example(name)
+            )
+        self.menuMeasures.addSeparator()
         self.menuGraphs = bar.addMenu("&Graphs")
         new_graph = QAction(theme.icon("plus"), "New graph…", self)
         new_graph.triggered.connect(self.graphs.new)
@@ -328,7 +345,6 @@ class MainWindow(QMainWindow):
         self.processesWidget = ProcessesWidget(self.session.processes)
         self.processesWidget.show_requested.connect(self.show_dock)
         self.daemonWidget = DaemonWidget(self.daemon)
-        self.scriptsWidget = ScriptsWidget(self.session.scripts)
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
@@ -341,37 +357,33 @@ class MainWindow(QMainWindow):
                 QtAds.SideBarBottom,
             ),
             (DAEMON, "Daemon", self.daemonWidget, "server", QtAds.SideBarBottom),
-            (
-                SCRIPTS,
-                "Scripts",
-                self.scriptsWidget,
-                "language-python",
-                QtAds.SideBarBottom,
-            ),
         ):
             dock = self.docks.add(
                 name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
             )
             self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
         self.processesWidget.count_changed.connect(self.show_process_count)
-        # A script made or kept from a measurement is shown where it is
-        self.session.scripts.chosen.connect(lambda _: self.show_dock(SCRIPTS))
 
     def show_process_count(self, count: int) -> None:
         """How many run, on the Processes tab and toolbar button."""
         self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
-    def add_measure_dock(self, procedure: ProcedureSummary) -> None:
-        name = procedure.name
-        group = procedure_groups.group(name)
-        icon = theme.icon(group.icon)
-        # Built when the dock is first opened (DockBody)
-        body = DockBody(lambda: measure_widget(self.session, self.hub, name))
-        self.docks.add(
-            dock_name(MEASURE, name), procedure.title or name, body, "Measures",
-            icon, QtAds.RightDockWidgetArea,
-            group=group.title, hint=name,
-        )  # fmt: skip
+    def on_procedures_changed(self) -> None:
+        """The bench's own measurements changed: the mode lets go of one that
+        goes, then the docks, the bar and the graphs follow."""
+        procedures = self.session.procedures()
+        self.mode.procedures_changed([p.name for p in procedures])
+        self.measures.sync()
+        self.runBar.set_procedures(procedures)
+
+    def start_measurement(self, procedure: str) -> None:
+        """Start a measurement as its dock does, with the values of its form
+        (Run in the dock of its script)."""
+        name = dock_name(MEASURE, procedure)
+        if name not in self.docks:
+            return
+        self.show_dock(name)
+        self.docks[name].widget().content().box.start()
 
     # Docks as the mode shows them (menus, Ctrl+K, Processes)
     def dock_state(self, name: str) -> str:
@@ -549,6 +561,13 @@ class MainWindow(QMainWindow):
             logger.warning(f"The daemon was not stopped: {e}")
 
     def closeEvent(self, event) -> None:
+        if self.confirm_exit and self.code.unsaved():
+            answer = QMessageBox.question(
+                self, "Quit", "Scripts have changes not saved: quit without them?"
+            )
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
         store_state, dump = True, False
         status = self.daemon.ask()
         running = len(status.runs) if status is not None else 0

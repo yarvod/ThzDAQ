@@ -9,7 +9,7 @@ DockBody contents exist only while their docks are open (sync_bodies).
 
 from collections import Counter
 from contextlib import contextmanager
-from typing import Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import Qt
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QSplitter, QStyle, QWidget
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import (
+    CODE,
     DATA,
     DEVICE,
     GRAPH,
@@ -24,7 +25,6 @@ from thzdaq_gui.dock_names import (
     MEASURE,
     MEASUREMENT,
     PROCESSES,
-    SCRIPTS,
     SETUP,
     kind_of,
 )
@@ -33,7 +33,8 @@ from thzdaq_gui.graphs import close_views
 from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
 
 SECTIONS = ("Base", "Devices", "Measures", "Graphs")  # of the menus, in order
-AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220, SCRIPTS: 380}
+AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
+CENTRED = (GRAPH, CODE)  # the first of these kinds opens between the columns
 FIT_SHARE = 0.4  # a column takes at most this part of the window
 # The side of the window where the first open dock of a kind makes its column;
 # graphs go between the columns (open_center)
@@ -172,13 +173,21 @@ class DockSpace(Mapping):
         group: str = "",
         hint: str = "",
         listed: bool = True,
+        closing: Optional[Callable[[], bool]] = None,
     ) -> QtAds.CDockWidget:
+        """closing(): whether a dock whose content may hold unsaved work
+        closes now; such a dock is removed when it closes."""
         dock = QtAds.CDockWidget(name)
         dock.setWindowTitle(title)
         dock.setWidget(widget)
         if icon is not None:
             dock.setIcon(icon)
         dock.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, False)
+        if closing is not None:
+            # ADS closes a dock at once; CustomCloseHandling hands the close
+            # to closeRequested, so the content may ask first
+            dock.setFeature(QtAds.CDockWidget.CustomCloseHandling, True)
+            dock.closeRequested.connect(lambda: closing() and self.remove(name))
         dock.toggleViewAction().setText(title)
         if listed:
             self.entries[name] = DockEntry(
@@ -305,7 +314,7 @@ class DockSpace(Mapping):
                 elif kind in SIDES:
                     self.manager.addDockWidget(SIDES[kind], dock)
                     self.fit_columns()
-                elif kind == GRAPH:
+                elif kind in CENTRED:
                     self.open_center(dock)
             activate = True  # a dock just opened is the one to see
         if activate:

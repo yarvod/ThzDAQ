@@ -5,7 +5,7 @@ layout; the measurement chosen in the bar on top runs from there, its setup
 in the Measurement dock. Each mode keeps its own layout.
 """
 
-from typing import Mapping, Optional, Tuple
+from typing import Iterable, Mapping, Optional, Tuple
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
@@ -40,6 +40,10 @@ class Mode:
     def reveal(self, name: str) -> str:
         """Get the dock `name` shown; the dock to bring to the front."""
         return name
+
+    def procedures_changed(self, names: Iterable[str]) -> None:
+        """The catalog is to change (the bench's own measurements): before
+        the docks of those no more in it go."""
 
 
 class Pro(Mode):
@@ -104,6 +108,12 @@ class Lite(Mode):
         dock.setIcon(pro.icon())
         self.chosen = procedure
         self.settings.setValue(CHOSEN_MEASUREMENT, procedure)
+
+    def procedures_changed(self, names: Iterable[str]) -> None:
+        """The chosen one gone (its script taken away): its widget goes back
+        to its dock first, the default is chosen."""
+        if self.chosen is not None and self.chosen not in names:
+            self.choose(DEFAULT_MEASUREMENT)
 
     def dock_of(self, name: str) -> Optional[str]:
         procedure = key_of(name, MEASURE)

@@ -6,12 +6,12 @@ scripts/). Several windows in several folders are several clients of one
 daemon."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api import workspace
 from thzdaq_api.measurements import DATA
-from thzdaq_api.workspace import SCRIPT_FOLDER, expected_profile, is_workspace
+from thzdaq_api.workspace import SCRIPT_FOLDER, expected_profile
 
 from thzdaq_gui.settings import (
     DEFAULT_WORKSPACE,
@@ -50,25 +50,9 @@ class Workspace(QObject):
 
     @property
     def scripts(self) -> Path:
-        """Where its new scripts go."""
+        """Where its scripts of its own go (the bench's own measurements are
+        the program's)."""
         return self.folder / SCRIPT_FOLDER
-
-    def script_folders(self) -> Tuple[Path, ...]:
-        """Where its scripts are: scripts/, then the folders added to it;
-        LabError for a broken thzdaq.toml."""
-        return workspace.script_folders(self.folder)
-
-    def keeps_folders(self) -> bool:
-        """Folders of scripts can be added to it: it has thzdaq.toml (the
-        program's folder, the default, has none)."""
-        return is_workspace(self.folder)
-
-    def add_script_folder(self, folder) -> None:
-        """LabError when it cannot keep it."""
-        workspace.add_script_folder(self.folder, folder)
-
-    def remove_script_folder(self, folder) -> None:
-        workspace.remove_script_folder(self.folder, folder)
 
     def holds(self, folder: Optional[str]) -> bool:
         """Whether a measurement made in folder is one of this workspace's."""

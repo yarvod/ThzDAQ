@@ -8,11 +8,13 @@ settings.
 """
 
 import json
+import logging
 from typing import List
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
+from thzdaq_api.measurements import saved_plots
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
@@ -20,6 +22,8 @@ from thzdaq_gui.docking import DockSpace, even_out
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.graphs import AddCurveDialog, GraphHub
 from thzdaq_gui.settings import CUSTOM_GRAPHS
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_GRAPHS = ("I-V", "P-V", "Y-V", "P-IF")  # the centre of a default layout
 # Splits that grow the graph groups of a run to 2 x 2, by groups in use:
@@ -58,19 +62,27 @@ class GraphDocks:
         hub.run_requested.connect(self.show_run)
         hub.graph_renamed.connect(self.rename)
         hub.graph_removed.connect(self.delete)
+        hub.titles_added.connect(self.add_titles)
 
     def add_all(self) -> None:
         """Docks of the graphs of the procedures, not built yet, and of the
         custom ones."""
-        for title in self.hub.titles():
+        self.add_titles(self.hub.titles())
+        self.load_custom()
+        self.hub.custom_changed.connect(self.save_custom)
+
+    def add_titles(self, titles) -> None:
+        """Docks of graphs of the procedures (the bench's own measurements
+        add some), not built yet."""
+        for title in titles:
+            if dock_name(GRAPH, title) in self.docks:
+                continue
             self.add_dock(
                 dock_name(GRAPH, title),
                 title,
                 lambda title=title: self.hub.graph(title),
                 self.hub.type_of(title).icon,
             )
-        self.load_custom()
-        self.hub.custom_changed.connect(self.save_custom)
 
     def add(self, widget) -> None:
         """A graph the hub built, held by its dock from then on: one of the
@@ -178,9 +190,12 @@ class GraphDocks:
         AddCurveDialog(self.session.measurements.measured(), graph, self.window).exec()
 
     def plot(self, measurement) -> None:
-        """A saved measurement on the graphs of its procedure."""
-        specs = self.hub.plots_of(measurement.procedure)
-        for title in self.hub.show_measurement(measurement, specs):
+        """A saved measurement on the graphs of its procedure, and on those
+        its script added while it ran (m.plot)."""
+        specs = saved_plots(measurement, self.session.procedures())
+        routed = self.hub.route(specs, logger.info)
+        self.hub.register_plots(routed)
+        for title in self.hub.show_measurement(measurement, routed):
             self.hub.raise_graph(title)
 
     def default_docks(self) -> List[str]:
