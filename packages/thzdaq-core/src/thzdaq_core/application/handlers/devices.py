@@ -137,8 +137,9 @@ class CallAction(_Change):
 
 class RawCommand(_Change):
     """A query needs fewer rights than a write. A session a person allowed
-    does not cover raw writes: only allowing the script raw:<instrument> at
-    its start does."""
+    does not cover raw writes: allowing the script raw:<instrument> at its
+    start does, and so does a person's yes to its first raw write to the
+    instrument within the session, until the session ends."""
 
     operation = api.RawCommand
     kind = RAW
@@ -146,15 +147,22 @@ class RawCommand(_Change):
     def handle(self, args, origin):
         mode = READ if args.query else SHARED
         within = self.sessions.within(args.session, origin, args.instrument, mode)
-        return self.devices.raw(
+        reply = self.devices.raw(
             args.instrument, args.command, args.answer, origin, args.share, within
         )
+        if not args.query:
+            within.allow_raw(args.instrument, args.command)
+        return reply
 
     def needs(self, args):
         return Rights.RAW_QUERY if args.query else self.operation.rights
 
     def granted(self, args, origin):
-        return self.scripts.allows(origin, self.kind, args.instrument)
+        """Allowed to the script at its start, or within its session since a
+        person allowed its first write there."""
+        return self.scripts.allows(
+            origin, self.kind, args.instrument
+        ) or self.sessions.grants_raw(args.session, origin, args.instrument)
 
     def approval(self, args, origin):
         within = self.sessions.found(args.session)

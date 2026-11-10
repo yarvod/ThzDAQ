@@ -335,7 +335,10 @@ class Bench:
         what its driver does not wrap yet; returns its answer: of a query
         (with ?), or of a write with answer. No limit checks a write: it waits
         for a person, unless the script was started with --allow
-        raw:<instrument>. Put a command used often into the driver."""
+        raw:<instrument>; within a measurement (with lab.measurement) the
+        person's yes to the first holds until it ends. Put a command used
+        often into the driver, or name it (instrument(...): reading,
+        setting)."""
         command = RawCommand(
             instrument=instrument, command=command, answer=answer, share=share,
             session=self._session_id(),

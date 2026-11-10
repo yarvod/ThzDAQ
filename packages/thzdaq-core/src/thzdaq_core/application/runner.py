@@ -172,6 +172,10 @@ class Context:
         )
         self._emit("on_plot", plot)
 
+    def note(self, key: str, entry: Dict[str, Any]) -> None:
+        """Into the measurement's metadata (saved with it): what was allowed."""
+        self.measurement.metadata.setdefault(key, []).append(entry)
+
     def told(self, ref: str, key: str, value: float) -> None:
         """The run set a quantity another way than through its devices (a
         script's set through the daemon)."""

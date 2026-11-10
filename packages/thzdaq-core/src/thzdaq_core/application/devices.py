@@ -58,9 +58,14 @@ class Within(Protocol):
     def tell(self, ref: str, key: str, value: Any, before: Any, origin: str) -> None:
         """What a set set."""
 
+    def allow_raw(self, instrument: str, command: str) -> None:
+        """A raw write to the instrument went (a person allowed it): within a
+        measurement, its next ones go without asking until it ends."""
+
 
 class Outside:
-    """A call outside any measurement: a set is an event of its own."""
+    """A call outside any measurement: a set is an event of its own, and
+    every raw write is asked."""
 
     owner = None
 
@@ -72,6 +77,9 @@ class Outside:
 
     def tell(self, ref: str, key: str, value: Any, before: Any, origin: str) -> None:
         self.events.publish(QuantitySet(ref, key, value, before, origin))
+
+    def allow_raw(self, instrument: str, command: str) -> None:
+        pass
 
 
 def shown(spec: Any, value: Any) -> str:
@@ -384,11 +392,18 @@ class DeviceAccess:
         refs = self.bench.raw_parts(instrument)
         if raw_query(command):
             return Ask(f"{instrument} · {RAW_QUERY}", command)
-        sweeps = self._sweeps(refs, within or self.outside)
+        within = within or self.outside
+        sweeps = self._sweeps(refs, within)
+        until = (
+            f"allowed, measurement #{within.owner} writes to {instrument}"
+            " without asking until it ends"
+            if within.owner is not None
+            else ""
+        )
         return Ask(
             f"{instrument} · {RAW_WRITE}",
             command,
-            "; ".join(filter(None, (UNCHECKED, sweeps))),
+            "; ".join(filter(None, (UNCHECKED, until, sweeps))),
             risky=True,
             grave=bool(sweeps),
         )

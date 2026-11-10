@@ -14,11 +14,17 @@ from test_lab_scripts import SLOW, quick_stop, run  # noqa: F401
 from thzdaq_api.devices import UNCHECKED, ListDevices, RawCommand, ReadDevice
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import GetSnapshot, RawSent, Values
-from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS, read_measurement
+from thzdaq_api.measurement_file import (
+    ALLOWED,
+    CONFLICTS,
+    INTERACTIONS,
+    read_measurement,
+)
 from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.origins import GUI, script
 from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
 from thzdaq_api.scripts import Grant, StartScript
+from thzdaq_api.sessions import EndSession, StartSession
 
 AGENT = "mcp:claude"
 BLOCK = "sis_block_1"  # a SIS block: sis_bias_1 and the others are on it
@@ -145,6 +151,29 @@ def test_a_script_allowed_raw_writes_goes_without_a_person(
         ),
     )  # fmt: skip
     assert typo.code == ErrorCode.NOT_ALLOWED
+
+
+def test_a_yes_in_a_session_lets_it_write_raw_commands_until_it_ends(lab_as, window):
+    itself = lab_as(script("probe"), "script")
+    run = itself.call(StartSession(title="probe", devices=("sis_bias_1",)))
+    thread, done = calling(itself, raw(WRITE, session=run.id))
+    approval = window.asked()
+    assert f"#{run.id} writes to {BLOCK} without asking until it ends" in (
+        approval.warning
+    )
+    window.answer(allowed=True)
+    thread.join(5)
+    assert "error" not in done
+    assert itself.call(raw("DEV3:OFF", session=run.id)).unknown  # nobody asked
+    assert not window.waiting()
+    thread, done = calling(itself, raw(WRITE))  # outside it: asked again
+    window.asked()
+    window.answer(allowed=False)
+    thread.join(5)
+    assert done["error"].code == ErrorCode.DENIED
+    ended = itself.call(EndSession(id=run.id))
+    allowed = read_measurement(ended.path).metadata[ALLOWED]
+    assert [(a["allow"], a["first"]) for a in allowed] == [([f"raw:{BLOCK}"], WRITE)]
 
 
 def test_a_write_to_a_swept_instrument_conflicts_and_is_noted(lab):

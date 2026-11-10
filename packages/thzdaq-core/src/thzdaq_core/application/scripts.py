@@ -22,13 +22,24 @@ over (adopt) instead of starting another, and the end of its process ends it.
 import threading
 import time
 from dataclasses import replace
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Protocol,
+    Set,
+    Tuple,
+)
 
 import msgspec
 from thzdaq_api.data import decode_values
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED
 from thzdaq_api.measurement_file import (
+    ALLOWED,
     CANCELLED,
     COMPLETED,
     FAILED,
@@ -41,10 +52,12 @@ from thzdaq_api.measurement_file import (
 )
 from thzdaq_api.measurements import PlotInfo, RunInfo
 from thzdaq_api.origins import script
+from thzdaq_api.scripts import RAW, Grant
 from thzdaq_api.sessions import ScriptSource, SessionState, StartSession, SweepValues
 from thzdaq_instruments.units import unit_scale
 
 from thzdaq_core.application.approvals import Ask
+from thzdaq_core.application.clock import wall_time
 from thzdaq_core.application.devices import DeviceAccess, Within
 from thzdaq_core.application.runner import Cancelled, Context, Failed, Interrupted
 from thzdaq_core.application.runs import STRENGTH, Runs
@@ -104,6 +117,7 @@ class ScriptSession(Procedure):
         self._cancelled_at: Optional[float] = None
         self.declared = tuple(plots)
         self._plotted: Dict[str, PlotInfo] = {}  # by key, as drawn
+        self._raw: Set[str] = set()  # instruments it writes raw commands to
 
     # A procedure as the runner runs it
     def slots(self):
@@ -306,6 +320,21 @@ class ScriptSession(Procedure):
         with self._changed:
             self._ctx.told(ref, key, value)
 
+    def allow_raw(self, instrument: str, command: str) -> None:
+        """Its first raw write to the instrument went: the next ones go
+        without asking, as the measurement notes."""
+        with self._changed:
+            if instrument in self._raw:
+                return
+            self._raw.add(instrument)
+            grant = str(Grant(RAW, instrument))
+            ctx = self._live()
+            ctx.note(ALLOWED, {"at": wall_time(), "allow": [grant], "first": command})
+            ctx.log(f"{grant} allowed until it ends, the first: {command}")
+
+    def allows_raw(self, instrument: str) -> bool:
+        return instrument in self._raw
+
 
 ENDINGS: Dict[str, Callable[[str, str], Optional[BaseException]]] = {
     COMPLETED: lambda error, traceback: None,
@@ -467,6 +496,15 @@ class Sessions:
         """A set of the device belongs to the caller's session, which a person
         allowed to set it."""
         return id is not None and self.owns(id, origin) and self._found(id).grants(ref)
+
+    def grants_raw(self, id: Optional[int], origin: str, instrument: str) -> bool:
+        """A raw write belongs to the caller's session, whose first write to
+        the instrument a person allowed."""
+        return (
+            id is not None
+            and self.owns(id, origin)
+            and self._found(id).allows_raw(instrument)
+        )
 
     def within(self, id: Optional[int], origin: str, ref: str, mode: str) -> Within:
         """Where a call on a device is made; a device the session did not hold
