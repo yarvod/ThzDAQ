@@ -3,8 +3,9 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from typing import Callable, Iterator, Optional
+from urllib.parse import quote, unquote
 
 from thzdaq_instruments.errors import (
     ConfigurationError,
@@ -112,6 +113,113 @@ class ConnectionSpec:
 
     def with_gpib(self, gpib: int) -> "ConnectionSpec":
         return replace(self, gpib=gpib)
+
+
+# A connection as one line of text (a script's instrument(...)): its kind by a
+# scheme, its address after it, any other field as a query
+SCHEMES = {
+    "tcp": SOCKET,
+    "prologix": PROLOGIX,
+    "prologix-usb": PROLOGIX_USB,
+    "serial": SERIAL,
+    "visa": VISA,
+    "http": HTTP,
+    "modbus-tcp": MODBUS_TCP,
+    "modbus-rtu": MODBUS_RTU,
+}
+URL_EXAMPLES = (
+    "tcp://169.254.0.50:5025",
+    "prologix://169.254.156.103/19",
+    "serial://COM3?baudrate=115200",
+    "visa://GPIB0::19::INSTR",
+)
+_INTS = ("port", "gpib", "baudrate")
+_FLOATS = ("timeout", "read_delay")
+_NONE = "none"  # read_termination=none: one chunk per read
+
+
+def _field(name: str, text: str):
+    if name in _INTS:
+        return int(text)
+    if name in _FLOATS:
+        return float(text)
+    return None if text.lower() == _NONE else text
+
+
+def _host(address: str) -> dict:
+    """host[:port]"""
+    host, colon, port = address.partition(":")
+    return {"host": host, **({"port": port} if colon else {})}
+
+
+def parse_connection(text: str) -> ConnectionSpec:
+    """A connection from its line: tcp://host:port, prologix://host[:port]/gpib,
+    prologix-usb://COM3/gpib, serial://COM3 (serial:///dev/ttyUSB0),
+    visa://<resource>, http://host[:port], modbus-tcp://host:port,
+    modbus-rtu://COM3; other fields after ?, as ?timeout=5&baudrate=115200."""
+    scheme, separator, rest = text.strip().partition("://")
+    kind = SCHEMES.get(scheme.lower()) if separator else None
+    if kind is None:
+        raise ConfigurationError(
+            f"{text!r} is no connection: write it as {', '.join(URL_EXAMPLES)}"
+            f" ({', '.join(SCHEMES)})"
+        )
+    address, _, query = rest.partition("?")
+    if kind in (PROLOGIX, PROLOGIX_USB):
+        address, slash, gpib = address.rpartition("/")
+        if not slash:
+            raise ConfigurationError(
+                f"{text!r}: name the GPIB address after /, as {URL_EXAMPLES[1]}"
+            )
+    given = {}
+    if kind in (SOCKET, HTTP, MODBUS_TCP):
+        given = _host(address)
+    elif kind == PROLOGIX:
+        given = {**_host(address), "gpib": gpib}
+    elif kind == PROLOGIX_USB:
+        given = {"serial_port": address, "gpib": gpib}
+    elif kind == VISA:
+        given = {"resource": address}
+    else:
+        given = {"serial_port": address}
+    for pair in filter(None, query.split("&")):
+        name, _, value = pair.partition("=")
+        given[name] = unquote(value)
+    known = {item.name for item in fields(ConnectionSpec)} - {"kind"}
+    unknown = sorted(set(given) - known)
+    if unknown:
+        raise ConfigurationError(
+            f"{text!r}: no connection field {', '.join(unknown)}"
+            f" (fields: {', '.join(sorted(known))})"
+        )
+    try:
+        values = {name: _field(name, value) for name, value in given.items()}
+    except ValueError as e:
+        raise ConfigurationError(f"{text!r}: {e}") from None
+    return ConnectionSpec(kind, **values)
+
+
+def connection_url(spec: ConnectionSpec) -> str:
+    """The line parse_connection reads back as the same connection."""
+    scheme = next(name for name, kind in SCHEMES.items() if kind == spec.kind)
+    if spec.kind in (SOCKET, HTTP, MODBUS_TCP, PROLOGIX):
+        default = PROLOGIX_DEFAULT_PORT if spec.kind == PROLOGIX else None
+        address = spec.host + (f":{spec.port}" if spec.port != default else "")
+    elif spec.kind == VISA:
+        address = spec.resource
+    else:
+        address = spec.serial_port
+    if spec.is_prologix:
+        address += f"/{spec.gpib}"
+    shown = {"host", "port", "serial_port", "resource", "gpib"}
+    query = [
+        f"{item.name}={quote(_NONE if value is None else str(value), safe='')}"
+        for item in fields(ConnectionSpec)
+        if item.name not in shown | {"kind"}
+        for value in (getattr(spec, item.name),)
+        if value != item.default
+    ]
+    return f"{scheme}://{address}" + (f"?{'&'.join(query)}" if query else "")
 
 
 def serial_or_gateway(

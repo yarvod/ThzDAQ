@@ -1,5 +1,6 @@
 from thzdaq_instruments.sim.analyzers import SimNetworkAnalyzer, SimSpectrumAnalyzer
 from thzdaq_instruments.sim.chopper import SimChopper
+from thzdaq_instruments.sim.generic import SimGenericScpi
 from thzdaq_instruments.sim.power_meter import SimPowerMeter
 from thzdaq_instruments.sim.power_supply import SimPowerSupply, SimSupplyChannel
 from thzdaq_instruments.sim.rotator import SimRotator
@@ -30,6 +31,7 @@ SIMULATORS = (
     (SimVacuumGauge, "Simulated vacuum gauge"),
     (SimCompressor, "Simulated compressor"),
     (SimRotator, "Simulated rotator"),
+    (SimGenericScpi, "Simulated generic instrument"),
 )
 
 
@@ -42,6 +44,7 @@ __all__ = [
     "SIMULATORS",
     "SimChopper",
     "SimCompressor",
+    "SimGenericScpi",
     "SimNetworkAnalyzer",
     "SimRotator",
     "SimSpectrumAnalyzer",

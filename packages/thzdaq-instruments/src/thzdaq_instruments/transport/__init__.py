@@ -12,6 +12,8 @@ from thzdaq_instruments.transport.base import (
     Link,
     MessageTransport,
     Transport,
+    connection_url,
+    parse_connection,
 )
 from thzdaq_instruments.transport.links import SerialLink, SocketLink, VisaLink
 from thzdaq_instruments.transport.pool import (
@@ -42,6 +44,8 @@ __all__ = [
     "Transport",
     "VISA",
     "VisaLink",
+    "connection_url",
+    "parse_connection",
     "TransportPool",
     "default_link_factory",
     "default_pool",

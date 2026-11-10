@@ -10,6 +10,7 @@ from emulators import (
     AgilentEmulator,
     F70Emulator,
     FakeJsonClient,
+    GaugeEmulator,
     FsekEmulator,
     HmpEmulator,
     KeithleyEmulator,
@@ -44,6 +45,7 @@ from thzdaq_instruments.capabilities import (
 from thzdaq_instruments.drivers import (
     AgilentE8247C,
     ArduinoGrid,
+    GenericScpi,
     Keithley2200,
     LakeShore336,
     ModbusChopper,
@@ -62,6 +64,7 @@ from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
 from thzdaq_instruments.sim import (
     SimChopper,
     SimCompressor,
+    SimGenericScpi,
     SimNetworkAnalyzer,
     SimPowerMeter,
     SimPowerSupply,
@@ -122,6 +125,10 @@ def sr830():
 
 def f70():
     return driver(SumitomoF70, F70Emulator())
+
+
+def generic():
+    return driver(GenericScpi, GaugeEmulator())
 
 
 class FakeF70Service(FakeJsonClient):
@@ -294,6 +301,8 @@ CONTRACTS = {
             "f70": f70,
             "f70 rest": f70_rest,
             "grid": grid,
+            "generic": generic,
+            "sim generic": SimGenericScpi,
         },
     ),
     RawCommands: (
@@ -316,6 +325,8 @@ CONTRACTS = {
             "lakeshore": lakeshore,
             "sr830": sr830,
             "zva": zva,
+            "generic": generic,
+            "sim generic": SimGenericScpi,
         },
     ),
     Switchable: (

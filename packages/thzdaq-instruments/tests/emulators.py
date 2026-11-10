@@ -48,6 +48,21 @@ class SupplyState:
         return self.voltage, min(self.voltage / self.load, self.current)
 
 
+class GaugeEmulator(ScpiEmulator):
+    """A vacuum gauge no driver knows: PR1? answers P=<mbar>, VOLT sets an
+    output it answers with."""
+
+    def __init__(self):
+        super().__init__()
+        self.pressure = 1.2e-3  # mbar
+        self.voltage = 0.0
+        self.route(r"\*IDN\?", lambda: "ACME,GAUGE-1,0042,2.1")
+        self.route(r"\*CLS", lambda: None)
+        self.route(r"PR1\?", lambda: f"P={self.pressure:.3E}")
+        self.route(r"VOLT (\S+)", lambda v: setattr(self, "voltage", float(v)))
+        self.route(r"VOLT\?", lambda: f"{self.voltage:.6f}")
+
+
 class RigolEmulator(ScpiEmulator):
     def __init__(self):
         super().__init__()

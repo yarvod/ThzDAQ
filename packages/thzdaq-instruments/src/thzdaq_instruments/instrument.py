@@ -5,6 +5,10 @@ from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseErro
 from thzdaq_instruments.limits import Limit
 from thzdaq_instruments.transport.base import Transport
 
+# The device type of an instrument without a driver of its own: it takes raw
+# commands only (drivers/generic.py)
+GENERIC = "generic"
+
 
 class Channel:
     """Addressable part of an instrument: supply output, SIS bias device, ..."""

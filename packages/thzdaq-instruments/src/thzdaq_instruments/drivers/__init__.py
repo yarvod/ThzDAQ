@@ -1,6 +1,7 @@
 from thzdaq_instruments.drivers.agilent import AgilentE8247C
 from thzdaq_instruments.drivers.arduino import ArduinoGrid
 from thzdaq_instruments.drivers.chopper import ModbusChopper
+from thzdaq_instruments.drivers.generic import GenericScpi
 from thzdaq_instruments.drivers.keithley import Keithley2200
 from thzdaq_instruments.drivers.lakeshore import (
     HeaterOutput,
@@ -28,6 +29,7 @@ from thzdaq_instruments.drivers.sumitomo import SumitomoF70, SumitomoF70Rest
 from thzdaq_instruments.sim import (
     SimChopper,
     SimCompressor,
+    SimGenericScpi,
     SimNetworkAnalyzer,
     SimPowerMeter,
     SimPowerSupply,
@@ -56,6 +58,7 @@ DRIVERS = (
     (SumitomoF70, "Sumitomo F-70 compressor (RS-232)", SimCompressor),
     (SumitomoF70Rest, "Sumitomo F-70 compressor (REST)", SimCompressor),
     (ArduinoGrid, "Arduino wire grid rotator", SimRotator),
+    (GenericScpi, "Generic instrument: text commands (SCPI)", SimGenericScpi),
 )
 
 
@@ -68,6 +71,7 @@ __all__ = [
     "DRIVERS",
     "AgilentE8247C",
     "ArduinoGrid",
+    "GenericScpi",
     "HeaterOutput",
     "LakeShore336",
     "RohdeSchwarzFSEK30",
