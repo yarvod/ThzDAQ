@@ -102,9 +102,9 @@ def test_a_slot_lists_the_devices_that_suit_it():
     from thzdaq_api.devices import DeviceInfo
     from thzdaq_api.measurements import SlotInfo
 
-    def device(ref, kind, *capabilities):
+    def device(ref, kind, *capabilities, type=None):
         return DeviceInfo(
-            ref, ref.upper(), "block", "sim.block", kind, kind, capabilities
+            ref, ref.upper(), "block", "sim.block", kind, type or kind, capabilities
         )
 
     sis = device("sis_bias_1", "sis_bias", "VoltageSource", "VoltageCurrentMeter")
@@ -115,6 +115,9 @@ def test_a_slot_lists_the_devices_that_suit_it():
     assert bias.candidates([supply, meter]) == [supply]  # else any that suits
     anything = SlotInfo("power_meter_1", "Power meter", ())
     assert anything.candidates([sis, meter]) == [sis, meter]
+    gauge = device("gauge_1", "instrument", "RawCommands", type="generic")
+    raw = SlotInfo("gauge", "Gauge", (), kind="generic")  # by the instrument's type
+    assert raw.candidates([sis, meter, gauge]) == [gauge]
 
 
 def test_lists_are_typed_with_commas_semicolons_or_spaces():

@@ -1,16 +1,24 @@
-"""The profile, the drivers and the connections through LocalLab."""
+"""The profile, the drivers and the connections through LocalLab; an
+instrument a script declares goes into the profile once a person allows it."""
 
 import copy
+from pathlib import Path
 
 import pytest
-from lab_helpers import bodies
-from thzdaq_api.devices import ListDevices
+from lab_helpers import Window, bodies, calling
+from thzdaq_api.devices import ListDevices, RawCommand
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import StationChanged
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement, WaitMeasurement
 from thzdaq_api.procedures import MONITOR_TIME
+from thzdaq_api.origins import GUI, script
 from thzdaq_api.station import (
+    ADDED,
+    GENERIC,
+    KEPT,
+    UPDATED,
     ConnectInstrument,
+    DeclareInstrument,
     GetSisCalibration,
     GetStation,
     ListConnectionKinds,
@@ -22,7 +30,7 @@ from thzdaq_api.station import (
     SetSisCalibration,
     UpdateStation,
 )
-from thzdaq_core.adapters.yaml_profiles import load_station
+from thzdaq_core.adapters.yaml_profiles import load_station, versions
 
 
 def titles(lab):
@@ -127,3 +135,115 @@ def test_a_sis_calibration_is_checked_and_kept_in_the_profile(lab):
     with pytest.raises(LabError) as error:
         lab.call(GetSisCalibration(ref="power_supply_1:1"))
     assert error.value.code == ErrorCode.NOT_ALLOWED
+
+
+GAUGE = "gauge_1"
+AT = "tcp://169.254.0.50:5025"
+
+
+def gauge(connection=AT, driver="generic.scpi"):
+    return DeclareInstrument(instrument=GAUGE, driver=driver, connection=connection)
+
+
+@pytest.fixture
+def window(lab_as):
+    window = Window(lab_as(GUI))
+    yield window
+    window.stop()
+
+
+def test_a_persons_script_adds_an_instrument_once_allowed(lab, lab_as, window):
+    path = lab.call(GetStation()).path
+    itself = lab_as(script("degas"), "script")
+    thread, done = calling(itself, gauge())
+    approval = window.asked()
+    assert approval.title == f"{GAUGE} · add to the profile"
+    assert f"{GAUGE} (generic.scpi, {AT}) to the profile 2sb" in approval.text
+    window.answer(allowed=True)
+    thread.join(5)
+    assert done["result"] == ADDED
+    saved = load_station(path).instruments[GAUGE]
+    assert (saved.driver, saved.connection.host, saved.connection.port) == (
+        "generic.scpi", "169.254.0.50", 5025,
+    )  # fmt: skip
+    assert not saved.title and not saved.devices  # only how it is reached
+    assert len(versions(path)) == 1  # the profile before it, kept
+    found = {d.ref: d for d in lab.call(ListDevices())}[GAUGE]
+    assert found.type == GENERIC and found.raw
+    assert (
+        "SimGenericScpi"
+        in itself.call(RawCommand(instrument=GAUGE, command="*IDN?")).answer
+    )
+
+
+def test_an_instrument_declared_as_the_profile_has_it_asks_nobody(lab, lab_as, window):
+    assert lab.call(gauge()) == ADDED  # a person: not asked
+    path = lab.call(GetStation()).path
+    kept = len(versions(path))
+    for origin in (script("degas"), script("degas", by_agent=True)):
+        same = gauge({"kind": "socket", "host": "169.254.0.50", "port": 5025})
+        assert lab_as(origin, "script").call(same) == KEPT
+    assert not window.waiting() and len(versions(path)) == kept
+
+
+def test_another_address_is_asked_and_refused_leaves_the_profile(lab, lab_as, window):
+    lab.call(gauge())
+    before = lab.call(GetStation()).profile
+    thread, done = calling(
+        lab_as(script("degas"), "script"), gauge("tcp://10.0.0.7:5025")
+    )
+    approval = window.asked()
+    assert approval.title == f"{GAUGE} · change in the profile"
+    assert approval.text.endswith(f"{AT} → generic.scpi, tcp://10.0.0.7:5025")
+    window.answer(allowed=False, text="wrong gauge")
+    thread.join(5)
+    assert done["error"].code == ErrorCode.DENIED
+    assert lab.call(GetStation()).profile == before
+    assert lab.call(gauge("tcp://10.0.0.7:5025")) == UPDATED  # a person changes it
+
+
+def test_an_agents_script_never_changes_the_profile(lab, lab_as, window):
+    agents = lab_as(script("degas", by_agent=True), "script")
+    with pytest.raises(LabError) as refused:
+        agents.call(gauge())
+    assert refused.value.code == ErrorCode.DENIED and not window.waiting()
+    assert GAUGE not in lab.call(GetStation()).profile["instruments"]
+
+
+@pytest.mark.parametrize(
+    "declared, told",
+    [
+        (gauge("169.254.0.50:5025"), "is no connection"),
+        (gauge(driver="acme.gauge"), "No driver 'acme.gauge'"),
+        (
+            DeclareInstrument(
+                instrument="sis_bias_1", driver="generic.scpi", connection=AT
+            ),
+            "used twice",
+        ),
+    ],
+)
+def test_what_the_profile_cannot_take_is_refused_before_asking(
+    lab_as, window, declared, told
+):
+    with pytest.raises(LabError) as refused:
+        lab_as(script("degas"), "script").call(declared)
+    assert refused.value.code == ErrorCode.INVALID_ARGUMENTS and told in str(
+        refused.value
+    )
+    assert not window.waiting()
+
+
+def test_a_profile_keeps_its_earlier_versions(lab, monkeypatch):
+    from thzdaq_core.adapters import yaml_profiles
+
+    monkeypatch.setattr(yaml_profiles, "KEPT", 2)
+    station = lab.call(GetStation())
+    for title in ("one", "two", "three"):
+        profile = copy.deepcopy(station.profile)
+        profile["instruments"]["power_meter_1"]["title"] = title
+        lab.call(UpdateStation(profile=profile))
+    lab.call(UpdateStation(profile=profile))  # the same: nothing written
+    kept = versions(station.path)
+    assert len(kept) == 2 and kept[0].parent == Path(station.path).parent / ".history"
+    assert load_station(kept[-1]).instruments["power_meter_1"].title == "two"

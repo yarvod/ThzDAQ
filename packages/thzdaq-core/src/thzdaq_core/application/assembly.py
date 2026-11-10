@@ -152,6 +152,7 @@ def assemble(
             station.LoadStation(profile),
             station.NewStation(profile),
             station.UpdateStation(profile),
+            station.DeclareInstrument(profile),
             station.ListDrivers(profile),
             station.ListConnectionKinds(profile),
             station.ConnectInstrument(profile),

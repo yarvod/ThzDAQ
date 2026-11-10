@@ -65,6 +65,7 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     station.LoadStation,
     station.NewStation,
     station.UpdateStation,
+    station.DeclareInstrument,
     station.ListDrivers,
     station.ListConnectionKinds,
     station.ConnectInstrument,

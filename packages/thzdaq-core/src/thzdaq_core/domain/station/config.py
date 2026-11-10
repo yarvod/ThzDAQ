@@ -11,7 +11,7 @@ unique within the station. The safety section limits devices by ref.
 """
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Hashable, Iterator, List, Optional, Tuple
 
 from thzdaq_api.station import free_id
@@ -98,6 +98,16 @@ class StationConfig:
         if problems:
             raise StationError(f"Station {self.name!r}: " + "; ".join(problems))
         return self
+
+    def declared(
+        self, instrument_id: str, driver: str, connection: ConnectionSpec
+    ) -> InstrumentConfig:
+        """An instrument as a script declares it: its driver and connection;
+        what the profile has of it besides (title, devices) stays."""
+        found = self.instruments.get(instrument_id)
+        if found is None:
+            return InstrumentConfig(driver, connection)
+        return replace(found, driver=driver, connection=connection)
 
     def next_id(self, prefix: str) -> str:
         """Free id like power_supply_3 or sis_bias_2."""

@@ -29,6 +29,15 @@ LIMITS = "limits"
 SAFE_STATE = "safe_state"
 HARDWARE_PROTECTION = "hardware_protection"
 
+# DriverInfo.type of the drivers that only reach an instrument (generic.scpi):
+# without a driver of its own it takes raw commands only
+GENERIC = "generic"
+
+# What declare_instrument did to the profile
+ADDED = "added"
+UPDATED = "updated"
+KEPT = "kept"  # the profile has it as declared: nothing changed
+
 
 class StationProfile(msgspec.Struct, frozen=True):
     """The profile as its YAML file holds it (version 2: instruments with their
@@ -109,6 +118,22 @@ class UpdateStation(Operation[StationProfile]):
 
     rights = Rights.STATION
     profile: Dict[str, Any]
+
+
+class DeclareInstrument(Operation[str]):
+    """An instrument a script declares (instrument(...) of thzdaq), put into
+    the profile: added when the profile has no instrument of that id, its
+    driver and connection changed when they differ; nothing changes and
+    nobody is asked when the profile has it as declared. A person allows a
+    change, agents and their scripts never change the profile; no instrument
+    is removed this way. connection: one line (tcp://169.254.0.50:5025,
+    prologix://169.254.156.103/19, serial://COM3) or its fields as the
+    profile holds them. Returns added, updated or kept."""
+
+    rights = Rights.STATION
+    instrument: str
+    driver: str
+    connection: Union[str, Dict[str, Any]]
 
 
 class ListDrivers(Operation[Tuple[DriverInfo, ...]]):

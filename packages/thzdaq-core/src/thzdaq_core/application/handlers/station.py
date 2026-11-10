@@ -3,6 +3,7 @@
 from typing import Any, Dict, Tuple
 
 from thzdaq_api import station as api
+from thzdaq_api.operation import Rights
 
 from thzdaq_core.application.handlers import Handler
 from thzdaq_core.application.station import StationService
@@ -46,6 +47,30 @@ class UpdateStation(Handler[api.UpdateStation, api.StationProfile]):
 
     def handle(self, args, origin):
         return self.station.update(args.profile)
+
+
+class DeclareInstrument(Handler[api.DeclareInstrument, str]):
+    """A change of the profile, which a person allows; an instrument the
+    profile has as declared changes nothing and needs no more than a look."""
+
+    operation = api.DeclareInstrument
+
+    def __init__(self, station: StationService):
+        self.station = station
+
+    def _declared(self, args):
+        return self.station.declaration(args.instrument, args.driver, args.connection)
+
+    def handle(self, args, origin):
+        return self.station.declare(self._declared(args))
+
+    def needs(self, args):
+        if self._declared(args).change == api.KEPT:
+            return Rights.READ
+        return self.operation.rights
+
+    def approval(self, args, origin):
+        return self._declared(args).ask()
 
 
 class ListDrivers(Handler[api.ListDrivers, Tuple[api.DriverInfo, ...]]):

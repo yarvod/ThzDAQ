@@ -1,5 +1,5 @@
 """The profile of the bench: shown, edited, replaced; its instruments opened, its
-shared connections.
+shared connections; an instrument a script declares put into it (as an edit).
 
 An edited profile is checked, saved to its file and applied (only instruments
 whose setup changed reopen); another profile replaces the station, which is
@@ -7,12 +7,14 @@ refused while measurements run. Either way clients hear station_changed.
 """
 
 import copy
-from typing import Any, Dict, Mapping, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Mapping, Optional, Tuple, Union
 
 from thzdaq_api import station as api
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import StationChanged
 
+from thzdaq_core.application.approvals import Ask
 from thzdaq_core.application.bench import Bench
 from thzdaq_core.application.describe import (
     connection_info,
@@ -30,10 +32,70 @@ from thzdaq_core.domain.sis.calibration import (
     calibration_for,
     normalize_sis_calibration,
 )
-from thzdaq_core.domain.station.config import DeviceConfig, StationConfig
-from thzdaq_core.domain.station.profile import station_from_dict, station_to_dict
+from thzdaq_core.domain.station.config import (
+    DeviceConfig,
+    InstrumentConfig,
+    StationConfig,
+)
+from thzdaq_core.domain.station.profile import (
+    connection_from_dict,
+    station_from_dict,
+    station_to_dict,
+)
 from thzdaq_core.domain.station.station import Station, touched
 from thzdaq_instruments.capabilities import Identifiable, capabilities_of
+from thzdaq_instruments.errors import ConfigurationError
+from thzdaq_instruments.transport.base import connection_url, parse_connection
+
+
+# What a person allows a script to do to the profile: "gauge_1 · add to the profile"
+ADD, CHANGE = "add to the profile", "change in the profile"
+
+
+@dataclass(frozen=True)
+class Declared:
+    """An instrument as a script declares it (instrument(...)), as the
+    profile has it now, and the profile with it, checked."""
+
+    instrument: str
+    entry: InstrumentConfig
+    found: Optional[InstrumentConfig]  # None: the profile has no such instrument
+    config: StationConfig
+
+    @property
+    def change(self) -> str:
+        if self.found is None:
+            return api.ADDED
+        same = (self.found.driver, self.found.connection) == (
+            self.entry.driver,
+            self.entry.connection,
+        )
+        return api.KEPT if same else api.UPDATED
+
+    def ask(self) -> Ask:
+        """What a person reads to allow it."""
+        declared = described(self.entry)
+        if self.found is None:
+            return Ask(
+                f"{self.instrument} · {ADD}",
+                f"The script adds {self.instrument} ({declared}) to the profile"
+                f" {self.config.name}",
+            )
+        return Ask(
+            f"{self.instrument} · {CHANGE}",
+            f"The script changes {self.instrument} in the profile {self.config.name}:"
+            f" {described(self.found)} → {declared}",
+        )
+
+
+def described(entry: InstrumentConfig) -> str:
+    """generic.scpi, tcp://169.254.0.50:5025"""
+    where = (
+        "without a connection"
+        if entry.connection is None
+        else connection_url(entry.connection)
+    )
+    return f"{entry.driver}, {where}"
 
 
 class StationService:
@@ -94,6 +156,44 @@ class StationService:
         self.bench.station.reconfigure(config)
         self._changed()
         return self.profile()
+
+    def declaration(
+        self, instrument_id: str, driver: str, connection: Union[str, Mapping]
+    ) -> Declared:
+        """What a script's instrument(...) changes in the profile; LabError
+        for one the profile cannot take."""
+        if self.bench.path is None:
+            raise LabError(
+                ErrorCode.NOT_ALLOWED,
+                f"No profile to put {instrument_id} into",
+                "load one first (thzdaq station load <profile>)",
+            )
+        if driver not in self.bench.station.registry:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"No driver {driver!r}",
+                "list_drivers names the drivers there are",
+            )
+        try:
+            spec = (
+                parse_connection(connection)
+                if isinstance(connection, str)
+                else connection_from_dict(dict(connection))
+            )
+            config = copy.deepcopy(self.bench.station.config)
+            entry = config.declared(instrument_id, driver, spec)
+            found = config.instruments.get(instrument_id)
+            config.instruments[instrument_id] = entry
+            config.validate()
+        except (ConfigurationError, StationError) as e:
+            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+        return Declared(instrument_id, entry, found, config)
+
+    def declare(self, declared: Declared) -> str:
+        """The instrument into the profile, unless it is there as declared."""
+        if declared.change != api.KEPT:
+            self.update(station_to_dict(declared.config))
+        return declared.change
 
     def drivers(self) -> Tuple[api.DriverInfo, ...]:
         return tuple(driver_info(info) for info in self.bench.station.registry.all())

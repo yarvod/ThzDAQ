@@ -1,9 +1,12 @@
 """Station profiles in YAML files: the profile format (domain/station/profile.py)
-read from and written to disk."""
+read from and written to disk. A profile written over keeps its earlier
+versions in .history/ next to it (stations/.history/lab.20261110-142501-123456.yaml)."""
 
 import re
+import shutil
+from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 import yaml
 
@@ -56,6 +59,33 @@ def save_station(config: StationConfig, path: PathLike) -> None:
     Path(path).write_text(dump_station(config), encoding="utf-8")
 
 
+HISTORY = ".history"  # the folder next to a profile with its earlier versions
+KEPT = 50  # versions of one profile kept there
+STAMP = "%Y%m%d-%H%M%S-%f"
+
+
+def versions(path: PathLike) -> List[Path]:
+    """The earlier versions of a profile, oldest first."""
+    path = Path(path)
+    name = re.compile(
+        re.escape(path.stem) + r"\.\d{8}-\d{6}-\d{6}" + re.escape(path.suffix)
+    )
+    folder = path.parent / HISTORY
+    if not folder.is_dir():
+        return []
+    return sorted(item for item in folder.iterdir() if name.fullmatch(item.name))
+
+
+def keep_version(path: Path) -> None:
+    """The profile as it is now into .history/; the oldest beyond KEPT go."""
+    folder = path.parent / HISTORY
+    folder.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime(STAMP)
+    shutil.copy2(path, folder / f"{path.stem}.{stamp}{path.suffix}")
+    for old in versions(path)[:-KEPT]:
+        old.unlink()
+
+
 class YamlProfiles:
     """Station profiles as YAML files (application.ports.ProfileRepository)."""
 
@@ -63,7 +93,15 @@ class YamlProfiles:
         return load_station(path)
 
     def save(self, config: StationConfig, path: PathLike) -> None:
-        save_station(config, path)
+        """Written over, the file it was is kept in .history/ (unless the
+        profile is the same)."""
+        path = Path(path)
+        text = dump_station(config)
+        if path.exists():
+            if path.read_text(encoding="utf-8") == text:
+                return
+            keep_version(path)
+        path.write_text(text, encoding="utf-8")
 
     def text(self, config: StationConfig) -> str:
         return dump_station(config)

@@ -61,7 +61,9 @@ class SlotInfo(msgspec.Struct, frozen=True):
     name: str
     title: str
     capabilities: Tuple[str, ...]
-    kind: Optional[str] = None  # the device kind preferred: sis_bias
+    # The device kind preferred: sis_bias, or the type of an instrument
+    # (generic: one without a driver of its own)
+    kind: Optional[str] = None
 
     def suits(self, device: DeviceInfo) -> bool:
         return set(self.capabilities) <= set(device.capabilities)
@@ -70,7 +72,7 @@ class SlotInfo(msgspec.Struct, frozen=True):
         """Devices that suit it; only those of the preferred kind when there
         are any (a SIS bias slot lists SIS biases, not every supply channel)."""
         suitable = [device for device in devices if self.suits(device)]
-        preferred = [device for device in suitable if device.kind == self.kind]
+        preferred = [d for d in suitable if self.kind in (d.kind, d.type)]
         return preferred or suitable
 
 
