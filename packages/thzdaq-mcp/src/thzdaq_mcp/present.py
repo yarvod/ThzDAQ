@@ -7,6 +7,7 @@ it from 1 to 999 ("2.3 mV"), as the daemon reads it back when it is typed.
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from thzdaq_api.approvals import UserAnswer
+from thzdaq_api.custom import CustomCheck, CustomLibrary, CustomText
 from thzdaq_api.daemon import DaemonStatus
 from thzdaq_api.devices import (
     ActionInfo,
@@ -161,8 +162,52 @@ def connections(found: Sequence[ConnectionInfo]) -> str:
     )
 
 
+def last_line(error: str) -> str:
+    """An error with its traceback, in a line: its last."""
+    told = error.strip().splitlines()
+    return told[-1] if told else error
+
+
 def procedures(found: Sequence[ProcedureSummary]) -> str:
-    return lines(f"{p.name}: {p.title}. {p.description}" for p in found)
+    return lines(
+        f"{p.name}: {p.title}. {p.description}"
+        + (f" Not described: {last_line(p.error)}" if p.error else "")
+        for p in found
+    )
+
+
+def library(found: CustomLibrary) -> str:
+    """The bench's own measurements: run each as its procedure."""
+    head = f"library {found.folder}:"
+    if not found.measurements:
+        return f"{head} no measurement of its own yet; write_custom adds one"
+    return "\n".join(
+        [head]
+        + [
+            f"  {m.name}: {m.procedure}, {m.title}"
+            + (f"; not described: {last_line(m.error)}" if m.error else "")
+            for m in found.measurements
+        ]
+    )
+
+
+def custom_text(found: CustomText) -> str:
+    return f"{found.info.path} ({found.info.procedure}):\n{found.text}"
+
+
+def check(found: CustomCheck) -> str:
+    """Its problems by line, then the form it describes."""
+    parts = [
+        f"line {p.line} ({p.kind}): {p.text}" if p.line else f"({p.kind}) {p.text}"
+        for p in found.problems
+    ] or ["no problems found"]
+    info = found.procedure
+    if info is not None:
+        parts += [f"{info.name}: {info.title}", "parameters:"]
+        parts += [f"  {parameter(p)}" for p in info.parameters] or ["  none"]
+        slots = ", ".join(f"{s.name} ({s.title})" for s in info.slots)
+        parts.append(f"slots: {slots or NOTHING}")
+    return "\n".join(parts)
 
 
 def parameter(p: ParameterInfo) -> str:

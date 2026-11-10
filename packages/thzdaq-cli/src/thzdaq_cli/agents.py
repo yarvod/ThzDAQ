@@ -7,8 +7,11 @@ point, so the command line never imports it. agent-setup writes into a folder
 what the agents read there: the MCP server as this very command starts it
 from any folder (.mcp.json for Claude Code, .codex/config.toml for Codex),
 and the guide for agents (AGENTS.md, CLAUDE.md refers to it); the folder
-becomes a workspace (thzdaq.toml) when it is none. Files a person wrote stay:
-the MCP entry is added to theirs.
+becomes a workspace (thzdaq.toml) when it is none. Agents write only in the
+folder they work in, and the bench's own measurements live in the program's
+folder (measurements/): it is opened to them (additionalDirectories of
+.claude/settings.json, writable_roots of Codex). Files a person wrote stay:
+our entries are added to theirs.
 """
 
 import json
@@ -20,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from thzdaq_api import guides, host
+from thzdaq_api.custom import ListCustom
 from thzdaq_api.workspace import FILE, create
 
 from thzdaq_cli.client import (
@@ -38,7 +42,9 @@ SERVER = "thzdaq"  # the MCP server's name in the agents' configs
 INSTALL = "thzdaq mcp needs the thzdaq-mcp package: uv tool install 'thzdaq[mcp]'"
 
 CLAUDE_CONFIG = ".mcp.json"
+CLAUDE_SETTINGS = Path(".claude") / "settings.json"
 CODEX_CONFIG = Path(".codex") / "config.toml"
+CODEX_SANDBOX = "sandbox_workspace_write"  # the table of what Codex may write
 GUIDE = "AGENTS.md"
 CLAUDE_GUIDE = "CLAUDE.md"
 REFERENCE = f"@{GUIDE}"  # how CLAUDE.md takes another file in
@@ -109,6 +115,25 @@ def claude_config(path: Path, started: List[str]) -> str:
     return told
 
 
+def claude_settings(path: Path, library: Path) -> str:
+    """The library among the folders Claude Code may work in besides this one."""
+    told = ADDED if path.exists() else WRITTEN
+    try:
+        config: Dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        config = {}
+    except json.JSONDecodeError as e:
+        raise Mistyped(f"{path} is not JSON ({e}): fix it, then run again") from None
+    permissions = config.setdefault("permissions", {})
+    folders = permissions.setdefault("additionalDirectories", [])
+    if str(library) in folders:
+        return KEPT
+    folders.append(str(library))
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", "utf-8")
+    return told
+
+
 def codex_block(started: List[str]) -> str:
     """The server's table of config.toml (JSON strings are TOML strings)."""
     return (
@@ -119,21 +144,42 @@ def codex_block(started: List[str]) -> str:
     )
 
 
-def codex_config(path: Path, started: List[str]) -> str:
-    """Added to the folder's config when it has no server of that name."""
+def sandbox_block(library: Path) -> str:
+    """What Codex may write besides the folder: the library."""
+    roots = json.dumps([str(library)], ensure_ascii=False)
+    return f"[{CODEX_SANDBOX}]\nwritable_roots = {roots}\n"
+
+
+def codex_config(path: Path, started: List[str], library: Path) -> str:
+    """The server and the library added to the folder's config where it has
+    none of them. A table of what Codex may write that a person wrote stays
+    as it is (agent_setup tells when the library is not in it)."""
     if not path.exists():
         path.parent.mkdir(exist_ok=True)
-        path.write_text(codex_block(started), encoding="utf-8")
+        path.write_text(
+            f"{codex_block(started)}\n{sandbox_block(library)}", encoding="utf-8"
+        )
         return WRITTEN
     text = path.read_text(encoding="utf-8")
     try:
-        servers = tomllib.loads(text).get("mcp_servers", {})
+        config = tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
         raise Mistyped(f"{path} is not TOML ({e}): fix it, then run again") from None
-    if SERVER in servers:
+    blocks = []
+    if SERVER not in config.get("mcp_servers", {}):
+        blocks.append(codex_block(started))
+    if CODEX_SANDBOX not in config:
+        blocks.append(sandbox_block(library))
+    if not blocks:
         return KEPT
-    path.write_text(f"{text.rstrip()}\n\n{codex_block(started)}", encoding="utf-8")
+    path.write_text("\n".join([text.rstrip() + "\n", *blocks]), encoding="utf-8")
     return ADDED
+
+
+def codex_writes(path: Path, library: Path) -> bool:
+    """Codex may write the library, by the folder's config."""
+    roots = tomllib.loads(path.read_text(encoding="utf-8")).get(CODEX_SANDBOX, {})
+    return str(library) in roots.get("writable_roots", ())
 
 
 def guide(path: Path, force: bool) -> str:
@@ -155,17 +201,32 @@ def claude_guide(path: Path) -> str:
     return ADDED
 
 
-def setup(folder: Path, simulate: bool, force: bool = False) -> Dict[str, Any]:
-    """The files agents read, written into folder: what became of each."""
+def setup(
+    folder: Path, simulate: bool, library: Path, force: bool = False
+) -> Dict[str, Any]:
+    """The files agents read, written into folder: what became of each.
+    library: the bench's own measurements, which agents may write too."""
     folder.mkdir(parents=True, exist_ok=True)
     started = server_command(simulate, folder)
     files = {
         CLAUDE_CONFIG: claude_config(folder / CLAUDE_CONFIG, started),
-        str(CODEX_CONFIG): codex_config(folder / CODEX_CONFIG, started),
+        str(CLAUDE_SETTINGS): claude_settings(folder / CLAUDE_SETTINGS, library),
+        str(CODEX_CONFIG): codex_config(folder / CODEX_CONFIG, started, library),
         GUIDE: guide(folder / GUIDE, force),
         CLAUDE_GUIDE: claude_guide(folder / CLAUDE_GUIDE),
     }
-    return {"folder": str(folder), "server": started, "files": files}
+    return {
+        "folder": str(folder),
+        "server": started,
+        "files": files,
+        "library": str(library),
+        "codex_writes_library": codex_writes(folder / CODEX_CONFIG, library),
+    }
+
+
+def library(client: Client) -> Path:
+    """The bench's own measurements: the folder the daemon keeps them in."""
+    return Path(client.call(ListCustom()).folder)
 
 
 def agent_setup(args, client: Client) -> int:
@@ -173,7 +234,7 @@ def agent_setup(args, client: Client) -> int:
     profile): what the agent runs there with thzdaq measures there as well."""
     folder = Path(args.folder).resolve()
     made = create(folder, client.daemons_profile())
-    told = setup(folder, args.simulate, args.force)
+    told = setup(folder, args.simulate, library(client), args.force)
     told["files"] = {FILE: WRITTEN if made else KEPT, **told["files"]}
     client.out(told, setup_text)
     return OK
@@ -187,6 +248,12 @@ def setup_text(told: Dict[str, Any]) -> str:
         f"Claude Code reads {CLAUDE_CONFIG} when it starts in {told['folder']}; "
         f"Codex reads {CODEX_CONFIG} of a trusted project (or copy its table "
         "into ~/.codex/config.toml).",
+        f"Agents may write the bench's own measurements in {told['library']}.",
         "What agents change waits for a person in the ThzDAQ window.",
     ]
+    if not told["codex_writes_library"]:
+        lines.append(
+            f"Codex: add {told['library']} to writable_roots of [{CODEX_SANDBOX}]"
+            f" in {CODEX_CONFIG}."
+        )
     return "\n".join(lines)

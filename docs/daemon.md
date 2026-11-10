@@ -1690,10 +1690,15 @@ with lab.measurement("pv_hot_cold", devices=[bias, detector, load], exclusive=[b
   - `agent-setup` открывает агентам доступ к `measurements/` программы:
     `additionalDirectories` в `.claude/settings.json` у Claude Code, `writable_roots` в
     `[sandbox_workspace_write]` у Codex;
-  - в MCP — `custom_list`, `custom_read`, `custom_write`, `custom_check` (описание и
-    ошибки), так что агент может обойтись и без доступа к файлам; запуск — обычный `run`.
-    Права агента: `custom_write` — `ask` (человек видит правку), запуск — по правилам
-    `run`.
+  - в MCP — `list_custom`, `read_custom`, `write_custom`, `check_custom` (операции области
+    `thzdaq_api.custom`, названы как остальные: глагол, потом предмет), так что агент может
+    обойтись и без доступа к файлам; запуск — обычный `start_measurement custom.<имя>`.
+    Права агента: `write_custom` — класс `library`, по умолчанию `ask` (человек видит
+    правку — изменённые строки), запуск — по правилам `run`. `check_custom` проверяет и
+    несохранённый текст: синтаксис, pyflakes, объявления (форму) и стенд — устройства
+    `lab["…"]`, слоты без подходящего устройства, величины и действия после точки,
+    развёртку `m.sweep` за пределами величины, которую она ставит
+    (`application/check.py`).
 - Гайд агентов описывает формат.
 - Встроенный ассистент (М4) правит открытую вкладку с inline-diff.
 
@@ -2299,8 +2304,9 @@ GUI, а отказ доходит до агента текстом.
      примеры; jedi и наши подсказки; изменения с диска;
    - [ ] шаблоны шага 8 → примеры с объявлениями; Data → «скрипт этого измерения»
      открывает редактор; док Scripts убрать;
-   - [ ] агенты: `custom_list`, `custom_read`, `custom_write`, `custom_check` в MCP;
-     `agent-setup` открывает агентам `measurements/` программы; гайд;
+   - [x] агенты: `list_custom`, `read_custom`, `write_custom` (права `library`, `ask`),
+     `check_custom` в MCP; `agent-setup` открывает агентам `measurements/` программы
+     (`additionalDirectories`, `writable_roots`); гайд;
    - [x] права скрипта — того, кто его запустил (раздел «Своё измерение — сессия из
      скрипта» → «Права»): демон запоминает вид запустившего клиента; скрипт человека — права
      человека, скрипт агента — права агента; `--allow` агента ничего не разрешает

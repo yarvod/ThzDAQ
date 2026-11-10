@@ -368,6 +368,12 @@ def test_agent_setup_writes_what_agents_read_in_a_folder(thzdaq, tmp_path):
     assert (folder / "AGENTS.md").read_text() == guides.guide(guides.AGENTS)
     assert (folder / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     assert "written .mcp.json" in out and " ".join(started + args) in out
+    # The bench's own measurements: agents may write them too
+    library = str(tmp_path / "measurements")
+    settings = json.loads((folder / ".claude" / "settings.json").read_text())
+    assert settings["permissions"]["additionalDirectories"] == [library]
+    assert codex["sandbox_workspace_write"]["writable_roots"] == [library]
+    assert f"write the bench's own measurements in {library}" in out
     # A workspace: what the agent runs there with thzdaq measures there too
     assert "written thzdaq.toml" in out and (folder / "thzdaq.toml").exists()
 
@@ -396,6 +402,7 @@ def test_agent_setup_keeps_what_a_person_wrote(thzdaq, tmp_path, monkeypatch):
     assert codex.startswith('model = "o4"\n') and "[mcp_servers.thzdaq]" in codex
     code, out, _ = thzdaq("agent-setup")  # again: nothing twice
     assert "kept .codex/config.toml" in out and "kept CLAUDE.md" in out
+    assert "kept .claude/settings.json" in out
     assert (tmp_path / ".codex" / "config.toml").read_text() == codex
     code, out, _ = thzdaq("agent-setup", "--force")
     assert (

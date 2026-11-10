@@ -53,7 +53,7 @@ def init_workspace(args, client: Client) -> int:
         "station": read(folder).station,
     }
     if args.agents:
-        told["agents"] = agents.setup(folder, args.simulate)
+        told["agents"] = agents.setup(folder, args.simulate, agents.library(client))
     client.out(told, init_text)
     return OK
 

@@ -4,7 +4,8 @@ short text it answers with.
 
 The set is chosen: an agent looks at the bench, sets and calls with a person's
 consent, asks an instrument a raw query with a person's consent, runs
-measurements and follows them, asks the person. It does not edit the profile,
+measurements and follows them, reads, checks and (with a person's consent)
+writes the bench's own measurements, asks the person. It does not edit the profile,
 answer for a person, write raw commands or stop the daemon (those are a
 person's, and the daemon would refuse them anyway), nor take what it cannot
 use (polls, streams of records).
@@ -18,7 +19,15 @@ import anyio.from_thread
 import anyio.lowlevel
 import mcp_types as types
 import msgspec
-from thzdaq_api import approvals, catalog, daemon, devices, measurements, station
+from thzdaq_api import (
+    approvals,
+    catalog,
+    custom,
+    daemon,
+    devices,
+    measurements,
+    station,
+)
 from thzdaq_api.events import Event, MeasurementProgress
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.operation import Operation, Rights
@@ -160,6 +169,10 @@ def tools(workspace: Optional[Path]) -> Tuple[Tool, ...]:
         Plain(measurements.SummarizeMeasurement, present.summary),
         Plain(measurements.CancelMeasurement, present.run),
         Plain(measurements.ListRuns, present.runs),
+        Plain(custom.ListCustom, present.library),
+        Plain(custom.ReadCustom, present.custom_text),
+        Plain(custom.CheckCustom, present.check),
+        Plain(custom.WriteCustom, present.check),
         Plain(approvals.AskUser, present.answer),
         Plain(approvals.WaitAnswer, present.answer),
         Plain(daemon.GetDaemonStatus, present.status),

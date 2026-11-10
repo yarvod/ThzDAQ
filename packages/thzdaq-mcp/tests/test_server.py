@@ -227,3 +227,41 @@ async def test_resources_tell_procedures_profile_and_guides(connect):
     assert '"kind": "socket"' in profile and "169.254" not in profile  # no addresses
     assert "bias: sis_bias_1, sis_bias_2" in procedure.contents[0].text
     assert guide.contents[0].text == guides.guide(guides.AGENTS)
+
+
+SCAN = '''"""Scan
+
+A short bias sweep.
+"""
+from thzdaq import connect, device, value
+
+bias = device("SIS bias", kind="sis_bias")
+voltage = value("Bias voltage", "0:1:5", unit="mV")
+lab = connect()
+'''
+
+
+async def test_an_agent_writes_checks_and_lists_the_benchs_own_measurements(
+    connect, window, served
+):
+    async with connect() as client:
+        empty = text(await client.call_tool("list_custom", {}))
+        assert "no measurement of its own yet" in empty
+        checked = await client.call_tool(
+            "check_custom", {"script": "scan", "text": SCAN + "print(nothing)\n"}
+        )
+        assert "line 10 (names): undefined name 'nothing'" in text(checked)
+        assert "voltage: Bias voltage, sweep, mV; default 0:1:5" in text(checked)
+        written = await answering(
+            window,
+            client.call_tool("write_custom", {"script": "scan", "text": SCAN}),
+            allowed=True,
+        )
+        assert not written.is_error and "no problems found" in text(written)
+        assert window.heard  # the person saw the new script first
+        listed = text(await client.call_tool("list_custom", {}))
+        assert "scan: custom.scan, Scan" in listed
+        read = text(await client.call_tool("read_custom", {"script": "scan"}))
+        assert read.endswith(SCAN)
+        procedures = text(await client.call_tool("list_procedures", {}))
+        assert "custom.scan: Scan. A short bias sweep." in procedures

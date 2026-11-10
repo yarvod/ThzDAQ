@@ -48,6 +48,12 @@ do is seen in the window, and what you change waits for the person's consent.
     device on it). A query (with `?`, `*IDN?`) waits for the person like a set. A write
     is refused to agents whatever you are allowed: no limit checks it. When the bench
     needs one, say which command and why (`ask_user`); the person sends it.
+11. **The bench's own measurements** (`custom.<name>`) are Python scripts in the bench's
+    library (`measurements/` of the program's folder, `list_custom` names it). Read one
+    (`read_custom`), check a change (`check_custom` with `text`) before you write it
+    (`write_custom`: the person sees the change first), and run it with
+    `start_measurement(procedure="custom.<name>", typed=..., devices=...)` as any
+    procedure. The format is below.
 
 ## Tools of the MCP server `thzdaq`
 
@@ -62,6 +68,9 @@ do is seen in the window, and what you change waits for the person's consent.
 | `start_measurement` | start a procedure; a person allows it |
 | `wait_measurement`, `summarize_measurement` | follow a run, what it holds so far |
 | `cancel_measurement`, `list_runs` | stop a run; the runs of the daemon |
+| `list_custom`, `read_custom` | the bench's own measurements: their scripts |
+| `check_custom(script, text)` | what is wrong with a script, by line; the form it declares |
+| `write_custom(script, text)` | save a script of the library; a person allows it |
 | `ask_user`, `wait_answer` | a question to the person at the bench |
 | `get_daemon_status` | the daemon, its profile, clients, runs and problems |
 
@@ -114,3 +123,43 @@ measurements land in the folder's `data/`.
 
 `thzdaq --simulate agent-setup` points the agents at the simulator's daemon: a bench to
 try things on without instruments.
+
+## A measurement of the bench's own
+
+A script whose top declares its form; the window, `thzdaq run custom.<name>` and
+`start_measurement` give it the devices and values chosen. Each declaration is assigned
+to a name (the slot or parameter of that name), all of them before `connect()`:
+
+```python
+"""P-V on both loads
+
+IF power against bias on the hot and the cold load.
+"""
+from thzdaq import connect, device, plot, value
+
+bias = device("SIS bias", kind="sis_bias")      # a slot: a SIS bias
+detector = device("Detector", "PowerDetector")  # a slot: any power detector
+load = device("Load", "LoadSwitch")
+voltage = value("Bias voltage", "0:7:351", unit="mV")  # a sweep, typed in mV
+settle = value("Settle", 10, unit="ms")                 # a number, given in s
+pv = plot("P-V", table="pv", x="voltage", y="power", group_by="load")
+
+lab = connect()
+with lab.measurement("pv", devices=[bias, detector, load], exclusive=[bias]) as m:
+    m.restore(bias, "voltage_set")        # the daemon sets it back however it ends
+    m.on_exit(load, "to_cold")
+    for state in ("hot", "cold"):
+        getattr(load, f"to_{state}")()
+        for v in m.sweep(voltage):        # stops at a cancel
+            bias.voltage_set = v
+            m.sleep(settle)
+            m.record("pv", load=state, voltage=bias.read().voltage, power=detector.power)
+            m.progress()
+```
+
+- `device(title, *capabilities, kind=...)`: the device chosen for the slot.
+- `value(title, default, unit=..., minimum=..., maximum=..., choices=...)`: a number in
+  SI (typed in `unit`), a sweep for `m.sweep`, true/false, a choice, a text or a list.
+- `plot(title, table, x, y, group_by=..., kind="map", z=...)`: a plot known before the start.
+- The first line of the docstring is its title. Records: one table per kind of point,
+  every loop variable a column.
