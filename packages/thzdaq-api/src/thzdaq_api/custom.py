@@ -27,12 +27,13 @@ x.py), a script takes the defaults, parsed by the daemon.
 """
 
 import ast
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import msgspec
 
-from thzdaq_api.measurements import PlotInfo
-from thzdaq_api.operation import Operation
+from thzdaq_api.measurements import PlotInfo, ProcedureInfo
+from thzdaq_api.operation import Operation, Rights
 
 GROUP = "custom"  # custom.<name>: the group of the bench's own measurements
 LIBRARY = "measurements"  # the folder of the program that holds them
@@ -117,6 +118,86 @@ class Inputs(msgspec.Struct, frozen=True):
     values: Dict[str, Given] = {}
 
 
+class CustomInfo(msgspec.Struct, frozen=True):
+    """A script of the library: its procedure custom.<name>, and why it
+    cannot run (not described: its error with the traceback) when it cannot."""
+
+    name: str  # its file's without .py
+    procedure: str
+    title: str
+    path: str
+    sha256: str
+    error: str = ""
+
+
+class CustomLibrary(msgspec.Struct, frozen=True):
+    """The bench's library: its folder and the scripts in it."""
+
+    folder: str
+    measurements: Tuple[CustomInfo, ...]
+
+
+class CustomText(msgspec.Struct, frozen=True):
+    info: CustomInfo
+    text: str
+
+
+# Problems a check finds, by what finds them
+SYNTAX, NAMES, DECLARED, BENCH = "syntax", "names", "declared", "bench"
+
+
+class Problem(msgspec.Struct, frozen=True):
+    """What is wrong with a script: where (its line; None for the whole
+    script) and what. kind: syntax, names (an undefined or unused name),
+    declared (its declarations), bench (a device, quantity or limit of this
+    bench)."""
+
+    line: Optional[int]
+    text: str
+    kind: str
+
+
+class CustomCheck(msgspec.Struct, frozen=True):
+    """A script checked: its form when it is described, and its problems."""
+
+    procedure: Optional[ProcedureInfo]
+    problems: Tuple[Problem, ...] = ()
+
+
+class ListCustom(Operation[CustomLibrary]):
+    """The bench's own measurements: the scripts of its library (measurements/
+    of the program's folder), each with its procedure custom.<name> and why it
+    cannot run, if it cannot."""
+
+
+class ReadCustom(Operation[CustomText]):
+    """The text of a script of the library, by its name (script pv_hot_cold
+    for custom.pv_hot_cold)."""
+
+    script: str
+
+
+class CheckCustom(Operation[CustomCheck]):
+    """Check a script of the library (by its name), or a text of it not
+    saved yet (text): its syntax, undefined names, its declarations (the form
+    it describes) and what it names of this bench: devices, their quantities
+    and actions, sweeps beyond the limits of what they set."""
+
+    script: str
+    text: Optional[str] = None
+
+
+class WriteCustom(Operation[CustomCheck]):
+    """Write a script of the library (a new one, or over the one of that
+    name: letters, digits and _) and check it as check_custom does. A person
+    sees the change first when an agent writes it. Run it with
+    start_measurement custom.<script>."""
+
+    rights = Rights.LIBRARY
+    script: str
+    text: str
+
+
 class ParseValue(Operation[Given]):
     """A declared value's default as people type it (in its unit; a sweep
     "start:stop:points"), parsed as a run of the measurement takes it: SI,
@@ -127,6 +208,18 @@ class ParseValue(Operation[Given]):
 
 class DeclarationError(ValueError):
     """Declarations a script cannot be described by: told with the line."""
+
+    def __init__(self, text: str, line: Optional[int] = None):
+        super().__init__(f"line {line}: {text}" if line else text)
+        self.line = line
+
+
+# A name of the library: the file name of a script, custom.<name>
+NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+
+
+def valid_name(name: str) -> bool:
+    return NAME.fullmatch(name) is not None
 
 
 def _called(node: ast.AST, names: Dict[str, str]) -> Optional[str]:
@@ -192,8 +285,9 @@ def declared_names(text: str) -> Tuple[Tuple[str, str], ...]:
                 continue
             if connected is not None:
                 raise DeclarationError(
-                    f"line {node.lineno}: {made}(...) after connect() on line"
-                    f" {connected}: declare before connect()"
+                    f"{made}(...) after connect() on line {connected}:"
+                    " declare before connect()",
+                    node.lineno,
                 )
             name = next(
                 (t.id for t, v in targets if v is node and isinstance(t, ast.Name)),
@@ -201,8 +295,9 @@ def declared_names(text: str) -> Tuple[Tuple[str, str], ...]:
             )
             if name is None:
                 raise DeclarationError(
-                    f"line {node.lineno}: assign {made}(...) to a name at the"
-                    f" top of the file: x = {made}(...)"
+                    f"assign {made}(...) to a name at the top of the file:"
+                    f" x = {made}(...)",
+                    node.lineno,
                 )
             found.append((made, name))
     return tuple(found)

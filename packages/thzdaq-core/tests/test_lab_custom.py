@@ -3,12 +3,20 @@ procedures custom.<name> and run as their scripts' processes (contract:
 LocalLab and RemoteLab). The scripts here use no bench; those that measure
 run on a daemon of their own (thzdaq-daemon's test_custom.py)."""
 
+import copy
 import json
 from pathlib import Path
 
 import pytest
-from lab_helpers import bodies, wait_for
-from thzdaq_api.custom import ParseValue, ValueDeclared
+from lab_helpers import Window, bodies, calling, wait_for
+from thzdaq_api.custom import (
+    CheckCustom,
+    ListCustom,
+    ParseValue,
+    ReadCustom,
+    ValueDeclared,
+    WriteCustom,
+)
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ProceduresChanged, ScriptOutput
 from thzdaq_api.measurement_file import read_measurement
@@ -19,7 +27,9 @@ from thzdaq_api.measurements import (
     StartMeasurement,
     WaitMeasurement,
 )
+from thzdaq_api.origins import GUI
 from thzdaq_api.scripts import ListScripts
+from thzdaq_api.station import GetStation, UpdateStation
 
 PV = '''"""P-V hot/cold
 
@@ -216,3 +226,85 @@ def test_an_unknown_or_broken_one_does_not_start(lab):
         with pytest.raises(LabError) as caught:
             lab.call(StartMeasurement(procedure=name))
         assert caught.value.code == ErrorCode.NOT_FOUND, name
+
+
+DRAFT = """from thzdaq import connect, device, value
+import os
+
+bias = device("SIS bias", kind="sis_bias")
+voltage = value("Bias voltage", "0:9:11", unit="mV")
+lab = connect()
+pm = lab["power_meter_9"]
+with lab.measurement("x", devices=[bias]) as m:
+    for v in m.sweep(voltage):
+        bias.voltage_set = v
+        m.record("t", v=bias.voltge, p=undefined)
+"""
+
+
+def test_the_library_is_listed_read_and_written(lab):
+    saved(lab, "pv", PV)
+    listed = lab.call(ListCustom())
+    assert listed.folder == str(library(lab))
+    (pv,) = listed.measurements
+    assert (pv.name, pv.procedure, pv.title, pv.error) == (
+        "pv", "custom.pv", "P-V hot/cold", "",
+    )  # fmt: skip
+    assert lab.call(ReadCustom(script="pv")).text == PV
+    checked = lab.call(WriteCustom(script="told", text=TOLD))
+    assert (library(lab) / "told.py").read_text(encoding="utf-8") == TOLD
+    assert checked.procedure.name == "custom.told" and not checked.problems
+    assert summary(lab, "told").title == "Told"
+    for operation, code in (
+        (WriteCustom(script="2bad", text=""), ErrorCode.INVALID_ARGUMENTS),
+        (ReadCustom(script="nothing"), ErrorCode.NOT_FOUND),
+    ):
+        with pytest.raises(LabError) as caught:
+            lab.call(operation)
+        assert caught.value.code == code
+
+
+def test_a_check_tells_what_is_wrong_and_where(lab):
+    profile = copy.deepcopy(lab.call(GetStation()).profile)
+    profile["safety"] = {
+        "limits": {"sis_bias_1": {"voltage_set": {"min": -5e-3, "max": 5e-3}}}
+    }
+    lab.call(UpdateStation(profile=profile))
+    checked = lab.call(CheckCustom(script="draft", text=DRAFT))
+    found = {(p.line, p.kind): p.text for p in checked.problems}
+    assert "'os' imported but unused" in found[2, "names"]
+    assert "no device 'power_meter_9'" in found[7, "bench"]
+    assert "goes beyond -0.005..0.005 V" in found[9, "bench"]
+    assert "has no quantity or action 'voltge'" in found[11, "bench"]
+    assert "undefined name 'undefined'" in found[11, "names"]
+    assert checked.procedure.name == "custom.draft"
+    assert not (library(lab) / "draft.py").exists()  # a check writes nothing
+    broken = lab.call(CheckCustom(script="draft", text="x = (\n"))
+    assert [p.kind for p in broken.problems] == ["syntax"] and not broken.procedure
+    late = lab.call(
+        CheckCustom(
+            script="draft",
+            text=DRAFT.replace("pm = lab", "t = value('T', 1)\npm = lab"),
+        )
+    )
+    assert any("after connect()" in p.text and p.line == 7 for p in late.problems)
+
+
+def test_an_agents_write_is_shown_to_a_person_first(lab_as, lab):
+    saved(lab, "told", TOLD)
+    window = Window(lab_as(GUI))
+    try:
+        changed = TOLD.replace('"Settle", 10', '"Settle", 20')
+        thread, done = calling(
+            lab_as("mcp:claude"), WriteCustom(script="told", text=changed)
+        )
+        approval = window.asked()
+        assert approval.title == "Change measurement told"
+        assert '-settle = value("Settle", 10, unit="ms")' in approval.text
+        assert '+settle = value("Settle", 20, unit="ms")' in approval.text
+        window.answer(allowed=False, text="keep 10 ms")
+        thread.join(5)
+        assert done["error"].code == ErrorCode.DENIED
+        assert (library(lab) / "told.py").read_text(encoding="utf-8") == TOLD
+    finally:
+        window.stop()

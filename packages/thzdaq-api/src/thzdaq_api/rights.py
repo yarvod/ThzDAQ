@@ -38,6 +38,7 @@ AGENTS: Mapping[Rights, Decision] = {
     Rights.ANSWER: Decision.DENY,
     Rights.RAW_QUERY: Decision.ASK,
     Rights.RAW_WRITE: Decision.DENY,
+    Rights.LIBRARY: Decision.ASK,
 }
 
 # What nobody changes: an agent could raise its own limits or rights, stand
@@ -61,6 +62,7 @@ PERSON_SCRIPTS: Mapping[Rights, Decision] = {
     Rights.ANSWER: Decision.DENY,
     Rights.RAW_QUERY: Decision.ALLOW,
     Rights.RAW_WRITE: Decision.ASK,
+    Rights.LIBRARY: Decision.ALLOW,
 }
 
 # What a call of each rights does, for the person who chooses
@@ -74,4 +76,5 @@ MEANS: Mapping[Rights, str] = {
     Rights.ANSWER: "answer for a person what waits for one",
     Rights.RAW_QUERY: "ask an instrument a raw command (with ?)",
     Rights.RAW_WRITE: "send an instrument a raw command that no limit checks",
+    Rights.LIBRARY: "write the bench's own measurements (scripts of measurements/)",
 }

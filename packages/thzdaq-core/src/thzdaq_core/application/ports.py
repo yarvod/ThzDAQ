@@ -133,9 +133,18 @@ class Library(Protocol):
     """The bench's own measurements: the scripts of a folder (measurements/
     of the program's)."""
 
+    folder: Path
+
     def files(self) -> Tuple[LibraryFile, ...]:
         """The scripts there now, by name."""
 
+    def file(self, name: str, text: str) -> LibraryFile:
+        """A script of that name with this text, saved or not."""
+
+    def write(self, name: str, text: str) -> LibraryFile:
+        """The script saved: a new one, or over the one of that name."""
+
     def describe(self, file: LibraryFile) -> Declarations:
-        """What the script declares at its top, as its process tells when it
-        runs described; DescribeFailed when it cannot be."""
+        """What the script's text declares at its top, as its process tells
+        when it runs described (next to the scripts, as they run);
+        DescribeFailed when it cannot be."""

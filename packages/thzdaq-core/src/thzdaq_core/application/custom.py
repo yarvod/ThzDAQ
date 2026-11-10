@@ -21,6 +21,9 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Sequence, Tuple, Type
 
 from thzdaq_api.custom import (
+    CustomInfo,
+    CustomLibrary,
+    CustomText,
     DeclarationError,
     Declarations,
     Inputs,
@@ -28,8 +31,9 @@ from thzdaq_api.custom import (
     file_name,
     procedure_name,
     title_of,
+    valid_name,
 )
-from thzdaq_api.errors import LabError
+from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ProceduresChanged
 from thzdaq_api.leases import READ
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, FAILED
@@ -67,6 +71,14 @@ class Described:
         return ProcedureSummary(
             procedure_name(self.file.name), title, about, error=self.error
         )
+
+
+def info(found: Described) -> CustomInfo:
+    file = found.file
+    summary = found.summary()
+    return CustomInfo(
+        file.name, summary.name, summary.title, file.path, file.sha256, found.error
+    )
 
 
 def described(file: LibraryFile, library: Library) -> Described:
@@ -147,6 +159,46 @@ class CustomMeasurements:
         if found is None:
             raise ProcedureError(f"Unknown procedure {procedure!r}")
         return found
+
+    def listed(self) -> CustomLibrary:
+        """The library's folder and its scripts, as the catalog knows them."""
+        found = self.refresh()
+        return CustomLibrary(
+            str(self.library.folder),
+            tuple(info(item) for _, item in sorted(found.items())),
+        )
+
+    def text(self, name: str) -> CustomText:
+        """LabError NOT_FOUND for a name the library has no script of."""
+        found = self.refresh().get(name)
+        if found is None:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No script {name!r} in the library",
+                "list_custom lists them",
+            )
+        return CustomText(info(found), found.file.text)
+
+    def write(self, name: str, text: str) -> Described:
+        """The script saved and described; LabError for a name no file
+        takes."""
+        if not valid_name(name):
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"{name!r} is no name of a measurement",
+                "letters, digits and _, from a letter: pv_hot_cold",
+            )
+        self.library.write(name, text)
+        return self.refresh()[name]
+
+    def of_text(self, name: str, text: str) -> Described:
+        """A text described as the script name, saved or not (a check)."""
+        file = self.library.file(name, text)
+        key = (file.name, file.sha256)
+        with self._lock:
+            if key not in self._cache:
+                self._cache[key] = described(file, self.library)
+            return self._cache[key]
 
     def get(self, procedure: str) -> Type[CustomProcedure]:
         """ProcedureError for an unknown one or one whose script is not

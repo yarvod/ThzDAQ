@@ -542,6 +542,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyflakes"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/43/f4566b992ab97abd18426aeba516a83c7a833230614a2c3f4d3e9d8ff0f0/pyflakes-4.1.0.tar.gz", hash = "sha256:592beb57058eb82eb190fb7514f2081c555c51000b029ff71286a681e6cf2f83", size = 67243, upload-time = "2026-10-28T20:10:02.469Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/52/98c9a0e4718abe887121279457bc7140115df22d714b7183880eb61e359f/pyflakes-4.1.0-py2.py3-none-any.whl", hash = "sha256:b2e05e6bac8e49b67be2a6ffa63422c60f7193fc72e8180255907b41ec997dc1", size = 66258, upload-time = "2026-10-28T20:10:01.109Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1008,6 +1017,7 @@ version = "0.0.6b2"
 source = { editable = "packages/thzdaq-core" }
 dependencies = [
     { name = "numpy" },
+    { name = "pyflakes" },
     { name = "pyyaml" },
     { name = "thzdaq-analysis" },
     { name = "thzdaq-api" },
@@ -1022,6 +1032,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=1.26,<2" },
+    { name = "pyflakes", specifier = ">=3.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "thzdaq-analysis", editable = "packages/thzdaq-analysis" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },

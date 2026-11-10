@@ -9,6 +9,7 @@ from thzdaq_api.origins import answers
 
 from thzdaq_core.application.approvals import Approvals
 from thzdaq_core.application.bench import Bench
+from thzdaq_core.application.check import Checks
 from thzdaq_core.application.connections import IdleConnections
 from thzdaq_core.application.custom import CustomMeasurements, CustomRuns
 from thzdaq_core.application.daemon import DaemonService
@@ -87,6 +88,7 @@ def assemble(
         lambda: control.process().simulate, procedures.get,
     )  # fmt: skip
     custom_runs = CustomRuns(customs, processes, script_sessions, script_python)
+    checks = Checks(customs, bench, access)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events, workspaces)
     policy = Policy(lambda: control.settings().agents, processes.started_by)
@@ -138,6 +140,10 @@ def assemble(
             sessions.EndSession(script_sessions, processes),
             sessions.ParseSweep(),
             custom.ParseValue(),
+            custom.ListCustom(customs),
+            custom.ReadCustom(customs),
+            custom.CheckCustom(checks),
+            custom.WriteCustom(customs, checks),
             scripts.StartScript(processes, policy),
             scripts.ListScripts(processes),
             scripts.ReadScriptLog(processes),

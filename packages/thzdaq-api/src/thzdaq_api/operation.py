@@ -28,6 +28,7 @@ class Rights(str, Enum):
     ANSWER = "answer"  # answers for a person what waits for one
     RAW_QUERY = "raw_query"  # asks an instrument a raw command (with ?)
     RAW_WRITE = "raw_write"  # sends an instrument a raw command nothing checks
+    LIBRARY = "library"  # writes the bench's own measurements (measurements/)
 
 
 class Operation(
