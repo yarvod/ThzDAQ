@@ -93,6 +93,13 @@ def fill_slots(
 
 
 GroupKey = Tuple[Any, ...]
+LABEL_UNIT = ", "  # "Voltage, V": the unit of an axis after its title
+
+
+def unit_of(label: str) -> str:
+    """ "Voltage, V" -> "V"; "" for a label without a unit."""
+    title, separator, unit = label.rpartition(LABEL_UNIT)
+    return unit if separator else ""
 
 
 class PlotInfo(msgspec.Struct, frozen=True):
@@ -121,6 +128,10 @@ class PlotInfo(msgspec.Struct, frozen=True):
     analysis: Optional[str] = None  # an analysis a viewer may offer: iv
     # Only records with these values: (("plot", "P-t"),) in a monitor table
     where: Tuple[Tuple[str, Any], ...] = ()
+    # The graph of a window it is drawn into (its title), with the curves of
+    # other measurements; None, or a graph there is not or of other units:
+    # a graph of its own
+    into: Optional[str] = None
 
     def accepts(self, record: Mapping[str, Any]) -> bool:
         return all(record.get(key) == value for key, value in self.where)
@@ -130,6 +141,10 @@ class PlotInfo(msgspec.Struct, frozen=True):
 
     def label(self, group: GroupKey) -> str:
         return " ".join(f"{value}" for value in group if value is not None)
+
+    def units(self) -> Tuple[str, str]:
+        """The units of its axes, by their labels ("Voltage, V" -> V)."""
+        return unit_of(self.x_label), unit_of(self.y_label)
 
     def point(self, record: Mapping[str, Any]) -> Optional[Tuple[float, ...]]:
         """Display coordinates of a record, None when a value is missing."""

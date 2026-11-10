@@ -197,7 +197,7 @@ def test_a_run_gives_its_script_the_values_chosen(lab):
     }
     assert measured.metadata["script"]["text"] == TOLD
     (script,) = lab.call(ListScripts())
-    assert script.by == "test" and script.name == "told"
+    assert (script.by, script.name, script.measurement) == ("test", "told", run.id)
 
 
 def test_a_run_whose_script_fails_fails_with_its_traceback(lab):

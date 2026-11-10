@@ -354,7 +354,9 @@ class CustomRuns:
                 self.sessions.made(run, ctx.measurement.id)
 
             try:
-                return self.processes.start(start, origin, by_agent, inputs, starting)
+                return self.processes.start(
+                    start, origin, by_agent, inputs, starting, ctx.measurement.id
+                )
             except LabError as e:
                 self.sessions.ended(run.origin, None, str(e), "")
                 raise

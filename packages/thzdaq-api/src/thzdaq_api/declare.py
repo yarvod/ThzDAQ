@@ -129,14 +129,17 @@ def plot(
     group_by: Union[str, Iterable[str]] = (),
     kind: str = "line",
     z: Optional[str] = None,
+    into: Optional[str] = None,
 ) -> PlotInfo:
     """A plot of a table the measurement fills, known before it starts;
-    curves by the values of group_by."""
+    curves by the values of group_by. into: a graph of the window (its
+    title) it is drawn into, when there is one of the same units; the dock
+    of the measurement may choose another."""
     name = STATE.name(PLOT, title, len(STATE.plots))
     grouped = (group_by,) if isinstance(group_by, str) else tuple(group_by)
     declared = PlotInfo(
         key=name, title=title, table=table, x=x, y=y, group_by=grouped,
-        kind=kind, z=z,
+        kind=kind, z=z, into=into,
     )  # fmt: skip
     STATE.plots.append(declared)
     STATE.declared()

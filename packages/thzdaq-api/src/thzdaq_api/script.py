@@ -271,13 +271,16 @@ class Session:
         kind: str = "line",
         z: Optional[str] = None,
         show: Where = False,
+        into: Optional[str] = None,
     ) -> PlotInfo:
         """A live plot of a table where the measurement is followed, kept in
         its file for Data to draw again; curves by the values of group_by.
-        show: the measurement on screen at once (see show)."""
+        into: a graph of the window (its title) it is drawn into, when there
+        is one of the same units; show: the measurement on screen at once
+        (see show)."""
         plot = PlotInfo(
             key="", title=title, table=table, x=x, y=y,
-            group_by=tuple(group_by), kind=kind, z=z,
+            group_by=tuple(group_by), kind=kind, z=z, into=into,
         )  # fmt: skip
         drawn = self.lab.call(PlotSession(id=self.id, plot=plot))
         if show:

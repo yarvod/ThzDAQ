@@ -80,6 +80,8 @@ class ScriptInfo(msgspec.Struct, frozen=True):
     exit_code: Optional[int] = None
     allow: Tuple[Grant, ...] = ()
     share: Tuple[str, ...] = ()
+    # The measurement it was started for: a run of the bench's own (custom.*)
+    measurement: Optional[int] = None
 
 
 class ScriptLog(msgspec.Struct, frozen=True):

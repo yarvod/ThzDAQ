@@ -166,11 +166,12 @@ class ScriptProcesses:
         by_agent: bool,
         inputs: Optional[Inputs] = None,
         starting: Callable[[str], None] = lambda origin: None,
+        measurement: Optional[int] = None,
     ) -> ScriptInfo:
         """by_agent: an agent (or its script) starts it: it runs as the
         agent's, allowed nothing in advance. inputs: what a run of the bench's
-        own measurement gives its script; starting(origin): told what the
-        script will call itself, before it starts."""
+        own measurement (number measurement) gives its script; starting(origin):
+        told what the script will call itself, before it starts."""
         if by_agent:
             args = msgspec.structs.replace(args, allow=(), share=())
         folder = self.workspaces.folder(args.workspace)
@@ -209,6 +210,7 @@ class ScriptProcesses:
                 origin=script(path.stem, number, by_agent),
                 by=origin, pid=launched.pid, status=RUNNING, started=wall_time(),
                 allow=tuple(args.allow), share=tuple(args.share),
+                measurement=measurement,
             )  # fmt: skip
             found = self._scripts[number] = _Script(info, launched)
             self._forget_old()
