@@ -880,15 +880,22 @@ def channels_of(devices: Sequence[DeviceInfo], info: DeviceInfo) -> List[DeviceI
 
 
 def has_content(session, info: DeviceInfo) -> bool:
-    """Whether the dock of a device would show anything."""
+    """Whether the dock of a device would show anything: its controls, or
+    the raw commands of an instrument no other dock shows them for (one
+    without a driver of its own)."""
     if info.kind in SCANS:
         return True
     described = session.description(info.ref)
     if described.quantities or described.actions or described.settings:
         return True
+    devices = session.devices()
+    if info.raw and info.kind == INSTRUMENT:
+        others = [d for d in devices if d.instrument == info.ref and d.ref != info.ref]
+        if not others:
+            return True
     return any(
         session.description(channel.ref).quantities
-        for channel in channels_of(session.devices(), info)
+        for channel in channels_of(devices, info)
     )
 
 

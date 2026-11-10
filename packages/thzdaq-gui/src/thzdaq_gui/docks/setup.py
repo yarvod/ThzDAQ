@@ -7,6 +7,7 @@ through the lab, which checks and saves it at once; device docks follow.
 
 import html
 import textwrap
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Sequence
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -29,8 +31,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.errors import LabError
+from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.station import (
+    GENERIC,
     ConnectInstrument,
     ConnectionKindInfo,
     DriverInfo,
@@ -174,12 +177,36 @@ class ConnectionEditor(QWidget):
         }
 
 
+@dataclass(frozen=True)
+class Offer:
+    """What Add instrument offers: the drivers of instrument models, or the
+    generic ones that only reach an instrument without a driver (raw
+    commands). Real drivers only: simulation is a checkbox (or --simulate).
+    A generic instrument is named by the person: its type says nothing."""
+
+    title: str
+    generic: bool
+
+    def offers(self, driver: DriverInfo) -> bool:
+        return not driver.simulated and (driver.type == GENERIC) == self.generic
+
+
+MODELS = Offer("With a driver…", generic=False)
+GENERIC_RAW = Offer("Generic (raw)…", generic=True)
+OFFERS = (MODELS, GENERIC_RAW)
+
+
 class InstrumentDialog(QDialog):
     """Add or edit an instrument: driver, name, connection. Save puts it into
     the profile; the dialog stays open while the lab refuses it."""
 
     def __init__(
-        self, session, save: Save, instrument_id: Optional[str] = None, parent=None
+        self,
+        session,
+        save: Save,
+        instrument_id: Optional[str] = None,
+        parent=None,
+        offer: Offer = MODELS,
     ):
         super().__init__(parent)
         self.session = session
@@ -195,9 +222,8 @@ class InstrumentDialog(QDialog):
         self.drivers = session.drivers()
         form = QFormLayout()
         self.driver = QComboBox()
-        # Real drivers only: simulation is the checkbox below (or --simulate)
         for info in sorted(self.drivers.values(), key=lambda i: i.title):
-            if not info.simulated:
+            if offer.offers(info):
                 self.driver.addItem(info.title, info.key)
         driver = spec.get(fmt.DRIVER)
         if driver is not None and self.driver.findData(driver) < 0:
@@ -206,8 +232,13 @@ class InstrumentDialog(QDialog):
             self.driver.addItem(known.title if known else driver, driver)
         self.title = QLineEdit()
         self.title.setPlaceholderText("shown in menus and docks")
-        self.ident = QLabel()
-        self.ident.setProperty("role", "muted")
+        self.named = offer.generic and not editing
+        if self.named:
+            self.ident = QLineEdit()
+            self.ident.setPlaceholderText("letters, digits and _: gauge_1")
+        else:
+            self.ident = QLabel()
+            self.ident.setProperty("role", "muted")
         self.simulate = QCheckBox("Always simulate this instrument")
         self.connection = ConnectionEditor(session.connection_kinds())
         self.recommended = QPushButton("Recommended connection")
@@ -246,15 +277,24 @@ class InstrumentDialog(QDialog):
         return self.drivers.get(self.driver_key())
 
     def accept_values(self) -> None:
-        saved_or_told(
-            self, "Instrument", lambda: self.save(self.new_id(), self.instrument())
-        )
+        saved_or_told(self, "Instrument", self._save)
+
+    def _save(self) -> None:
+        new = self.new_id()
+        if self.instrument_id is None and new in fmt.instruments(self.profile):
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"{new} is taken",
+                "name the instrument otherwise",
+            )
+        self.save(new, self.instrument())
 
     def driver_changed(self) -> None:
         if self.instrument_id is not None:
             return
         info = self.driver_info()
-        self.ident.setText(fmt.next_id(self.profile, info.type))
+        if not (self.named and self.ident.text()):  # a name typed stays
+            self.ident.setText(fmt.next_id(self.profile, info.type))
         self.title.setPlaceholderText(info.title)
         self.fill_recommended()
 
@@ -276,7 +316,7 @@ class InstrumentDialog(QDialog):
         return entry
 
     def new_id(self) -> str:
-        return self.instrument_id or self.ident.text()
+        return self.instrument_id or self.ident.text().strip()
 
 
 class DeviceDialog(QDialog):
@@ -588,7 +628,12 @@ class SetupWidget(QWidget):
         layout.addWidget(self.search)
         self.btnAdd = QPushButton(theme.icon("plus", "#111111"), "Add instrument")
         self.btnAdd.setProperty("accent", True)
-        self.btnAdd.clicked.connect(self.add_instrument)
+        adding = QMenu(self.btnAdd)
+        for offer in OFFERS:
+            adding.addAction(
+                offer.title, lambda offer=offer: self.add_instrument(offer)
+            )
+        self.btnAdd.setMenu(adding)
         layout.addWidget(self.btnAdd)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -667,8 +712,10 @@ class SetupWidget(QWidget):
     def edit_safety(self) -> None:
         SafetyDialog(self.session, self).exec()
 
-    def add_instrument(self) -> None:
-        InstrumentDialog(self.session, self.save_instrument, parent=self).exec()
+    def add_instrument(self, offer: Offer = MODELS) -> None:
+        InstrumentDialog(
+            self.session, self.save_instrument, parent=self, offer=offer
+        ).exec()
 
     def edit_instrument(self, instrument_id: str) -> None:
         InstrumentDialog(self.session, self.save_instrument, instrument_id, self).exec()

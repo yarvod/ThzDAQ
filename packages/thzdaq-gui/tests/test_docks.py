@@ -290,6 +290,47 @@ class TestWindow:
         assert "host" in warnings[0]
         wait(lambda: "device:power_meter_2" in window.docks)
 
+    def test_a_generic_instrument_is_added_by_its_name_and_gets_a_console(
+        self, window, profile, monkeypatch, wait
+    ):
+        from thzdaq_gui.docks.setup import GENERIC_RAW, OFFERS
+
+        setup = window.setupWidget
+        menu = [action.text() for action in setup.btnAdd.menu().actions()]
+        assert menu == [offer.title for offer in OFFERS]
+        warnings = []
+        monkeypatch.setattr(
+            QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
+        )
+
+        def fill(dialog_self):
+            keys = [
+                dialog_self.driver.itemData(i)
+                for i in range(dialog_self.driver.count())
+            ]
+            assert keys == ["generic.scpi"]  # no drivers of models here
+            assert dialog_self.ident.text() == "generic_1"
+            dialog_self.ident.setText("power_meter_1")
+            dialog_self.accept_values()  # taken
+            assert "power_meter_1 is taken" in warnings[-1]
+            dialog_self.ident.setText("gauge_1")
+            dialog_self.title.setText("Vacuum gauge")
+            kind = dialog_self.connection.kind
+            kind.setCurrentIndex(kind.findData("socket"))
+            dialog_self.connection.host.setText("169.254.0.50")
+            dialog_self.connection.port.setValue(5025)
+            dialog_self.accept_values()
+            return dialog_self.result()
+
+        monkeypatch.setattr(InstrumentDialog, "exec", fill)
+        setup.add_instrument(GENERIC_RAW)
+        spec = load_station(profile).instruments["gauge_1"]
+        assert (spec.driver, spec.title, spec.connection.port) == (
+            "generic.scpi", "Vacuum gauge", 5025,
+        )  # fmt: skip
+        wait(lambda: "device:gauge_1" in window.docks)  # its raw console
+        assert "device:sis_block_1" not in window.docks  # its devices have it
+
     def test_connection_editor_shows_fields_of_the_kind(self, app, session):
         dialog = InstrumentDialog(session, lambda *a: None, "signal_generator_1")
         editor = dialog.connection
