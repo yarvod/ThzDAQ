@@ -5,7 +5,7 @@ taken over by the script. One runs as it is too (python x.py, here thzdaq
 script start): its defaults are parsed by the daemon."""
 
 import pytest
-from lab_helpers import wait_for
+from lab_helpers import Window, wait_for
 from test_process import start
 from thzdaq_api import examples
 from thzdaq_api.custom import LIBRARY
@@ -18,6 +18,8 @@ from thzdaq_api.measurements import (
     StartMeasurement,
     WaitMeasurement,
 )
+from thzdaq_api.origins import GUI
+from thzdaq_api.remote import RemoteLab
 from thzdaq_api.scripts import ListScripts, ReadScriptLog, StartScript
 
 # The form's values that make each short
@@ -27,6 +29,7 @@ SHORT = {
     "monitor": {"interval": "0.05", "duration": "0.5"},
     "iv_analysis": {"voltage": "0:7:141"},
     "map": {"voltage": "0:7:5", "current": "0:10:3", "settle": "1"},
+    "raw_instrument": {"level": "0:5:6", "settle": "1"},
 }
 # The devices of the form, as a window or the command line fills the slots
 BENCH = {
@@ -39,6 +42,7 @@ DEVICES = {
     "monitor": ("detector", "bias"),
     "iv_analysis": ("bias",),
     "map": ("bias", "coil", "detector"),
+    "raw_instrument": (),
 }
 # The table each measures (in its own measurement), at least how many
 # records, what it prints at the end
@@ -48,7 +52,10 @@ MEASURES = {
     "monitor": ("samples", 3, "readings in"),
     "iv_analysis": (None, 0, "Vgap = "),  # its records are the I-V run's
     "map": ("map", 15, "completed"),
+    "raw_instrument": ("levels", 6, "SimGenericScpi"),
 }
+# What a person in the window allows each to do, in order
+ASKED = {"raw_instrument": ["source_1 · add to the profile", "source_1 · raw write"]}
 
 
 def ended(lab, id, timeout=60):
@@ -88,13 +95,18 @@ def test_an_example_runs_as_the_benchs_own_measurement(home, tmp_path, name):
     examples.create(name, home / LIBRARY)
     workspace = tmp_path / "experiment"
     workspace.mkdir()
+    window = Window(RemoteLab(lab.host, GUI, GUI))
     run = lab.call(
         StartMeasurement(
             procedure=f"custom.{name}", typed=SHORT[name], workspace=str(workspace),
             devices={slot: BENCH[slot] for slot in DEVICES[name]},
         )  # fmt: skip
     )
+    asked = ASKED.get(name, [])
+    assert window.allow(len(asked)) == asked
     done = ended(lab, run.id)
+    assert not window.waiting()
+    window.stop()
     log = log_of(lab, name)
     assert done.status == "completed", (done.error, log)
     table, rows, told = MEASURES[name]

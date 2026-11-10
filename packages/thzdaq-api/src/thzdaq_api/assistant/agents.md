@@ -161,5 +161,15 @@ with lab.measurement("pv", devices=[bias, detector, load], exclusive=[bias]) as 
 - `value(title, default, unit=..., minimum=..., maximum=..., choices=...)`: a number in
   SI (typed in `unit`), a sweep for `m.sweep`, true/false, a choice, a text or a list.
 - `plot(title, table, x, y, group_by=..., kind="map", z=...)`: a plot known before the start.
+- `instrument(id, driver="generic.scpi", connection="tcp://host:port", name=reading(...),
+  other=setting(...))`: an instrument without a driver of its own, spoken to in raw
+  commands. `reading(query, unit, parse, scale)` makes a value of an answer (`parse`: a
+  regular expression, a dict of answers, a function; `scale` to SI), `setting(query,
+  "CMD {:.6f}", unit, minimum, maximum)` writes one within its limits; `name.raw(cmd)`
+  sends any command. Its first run puts the instrument into the profile once a person
+  allows it, and a person allows its raw writes (then within the measurement they go on).
+  Your scripts are refused both: write the script, then ask the person to run it once
+  or to add the instrument in Setup → Add instrument → Generic (raw). Once it is in the
+  profile as declared, your script may read it (raw queries are asked like a set).
 - The first line of the docstring is its title. Records: one table per kind of point,
   every loop variable a column.

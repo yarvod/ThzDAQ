@@ -9,7 +9,7 @@ from thzdaq_api import examples
 from thzdaq_api.custom import declared_names
 from thzdaq_api.errors import ErrorCode, LabError
 
-NAMES = ["hot_cold", "iv_analysis", "map", "monitor", "sweep"]
+NAMES = ["hot_cold", "iv_analysis", "map", "monitor", "raw_instrument", "sweep"]
 
 
 def test_every_example_has_a_title_says_what_it_does_and_declares_its_form():
@@ -19,9 +19,10 @@ def test_every_example_has_a_title_says_what_it_does_and_declares_its_form():
         ast.parse(example.text)
         assert example.title and "\n" not in example.title
         assert len(example.about) > 40, example.name
-        assert "from thzdaq import connect, device" in example.text
-        declared = [kind for kind, _ in declared_names(example.text)]
-        assert "device" in declared and "value" in declared, example.name
+        assert "from thzdaq import connect, " in example.text
+        declared = {kind for kind, _ in declared_names(example.text)}
+        assert "value" in declared, example.name
+        assert declared & {"device", "instrument"}, example.name  # what it uses
 
 
 def test_a_script_is_made_from_an_example_never_over_a_file(tmp_path):
