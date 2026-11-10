@@ -308,3 +308,34 @@ def test_an_agents_write_is_shown_to_a_person_first(lab_as, lab):
         assert (library(lab) / "told.py").read_text(encoding="utf-8") == TOLD
     finally:
         window.stop()
+
+
+GAUGE = '''"""Degas"""
+from thzdaq import connect, instrument, reading, setting, value
+
+gauge = instrument(
+    "gauge_1", driver="generic.scpi", connection="tcp://169.254.0.50:5025",
+    pressure=reading("PR1?", unit="Pa", parse=r"P=([0-9.Ee+-]+)", scale=100),
+    level=setting("VOLT?", "VOLT {:.6f}", unit="V", minimum=0, maximum=5),
+)
+power = value("Heater", 2.5, unit="V")
+lab = connect()
+raise SystemExit("never here when described")
+'''
+
+
+def test_an_instrument_is_declared_without_touching_the_profile(lab, lab_as):
+    window = Window(lab_as(GUI))
+    try:
+        before = lab.call(GetStation()).profile
+        saved(lab, "degas", GAUGE)
+        found = summary(lab, "degas")
+        assert not found.error, found.error
+        info = lab.call(DescribeProcedure(procedure="custom.degas"))
+        assert [p.name for p in info.parameters] == ["power"] and not info.slots
+        checked = lab.call(CheckCustom(script="degas"))
+        (told,) = [p for p in checked.problems if p.kind == "bench"]
+        assert told.line == 4 and "gauge_1 is not in the profile" in told.text
+        assert lab.call(GetStation()).profile == before and not window.waiting()
+    finally:
+        window.stop()

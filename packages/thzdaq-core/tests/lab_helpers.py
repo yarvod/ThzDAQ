@@ -45,6 +45,16 @@ class Window:
     def answer(self, **answer):
         self.lab.call(AnswerApproval(id=self.asked().id, **answer))
 
+    def allow(self, count):
+        """Allow what waits, one at a time, until count were: their titles."""
+        titles = []
+        while len(titles) < count:
+            approval = self.asked()
+            titles.append(approval.title)
+            self.answer(allowed=True)
+            wait_for(lambda: approval.id not in [a.id for a in self.waiting()])
+        return titles
+
 
 def calling(lab, operation):
     """The call in a thread: it waits for a person."""

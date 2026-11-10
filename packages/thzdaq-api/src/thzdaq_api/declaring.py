@@ -22,6 +22,7 @@ from thzdaq_api.custom import (
     Declarations,
     Given,
     Inputs,
+    InstrumentDeclared,
     SlotDeclared,
     ValueDeclared,
     declared_names,
@@ -57,6 +58,7 @@ class Declaring:
         self.slots: List[SlotDeclared] = []
         self.values: List[ValueDeclared] = []
         self.plots: List[PlotInfo] = []
+        self.instruments: List[InstrumentDeclared] = []
         self.given: Dict[str, Given] = {}  # the values, as given or parsed
         self.bench: Any = None  # the bench the declarations connected to
         self._names: Optional[Tuple[Tuple[str, str], ...]] = None
@@ -96,12 +98,17 @@ class Declaring:
     def declared(self) -> None:
         """After each declaration: a described script ends with its last one,
         before anything else it does."""
-        made = len(self.slots) + len(self.values) + len(self.plots)
+        made = sum(map(len, (self.slots, self.values, self.plots, self.instruments)))
         if self.describing and self._named and made >= len(self._names):
             self.described()
 
     def declarations(self) -> Declarations:
-        return Declarations(tuple(self.slots), tuple(self.values), tuple(self.plots))
+        return Declarations(
+            tuple(self.slots),
+            tuple(self.values),
+            tuple(self.plots),
+            tuple(self.instruments),
+        )
 
     def write(self) -> None:
         """The declarations into the file the daemon reads."""

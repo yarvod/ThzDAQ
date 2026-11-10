@@ -1,10 +1,14 @@
 """Declarations at the top of a script, which make it a measurement of its own
 with a form (thzdaq_api.custom): device(...) a slot, value(...) a parameter,
-plot(...) a plot it fills.
+plot(...) a plot it fills, instrument(...) an instrument it brings into the
+profile (thzdaq_api.raw: its raw commands named by reading and setting).
 
     bias = device("SIS bias", kind="sis_bias")
     voltage = value("Bias voltage", "0:7:351", unit="mV")
     pv = plot("P-V", table="pv", x="voltage", y="power", group_by="load")
+    gauge = instrument("gauge_1", driver="generic.scpi",
+                       connection="tcp://169.254.0.50:5025",
+                       pressure=reading("PR1?", unit="Pa", scale=100))
 
 Run by the daemon (Start in a window, thzdaq run custom.x), device() is the
 device chosen for the slot and value() the value given, in SI. Run as it is
@@ -15,18 +19,20 @@ are only noted, and the script ends with the last one.
 """
 
 import sys
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Mapping, Optional, Union
 
 from thzdaq_api.custom import (
     BOOL,
     DEVICE,
     FLOAT,
     FLOAT_LIST,
+    INSTRUMENT,
     INT,
     PLOT,
     SWEEP,
     VALUE,
     Given,
+    InstrumentDeclared,
     ParseValue,
     SlotDeclared,
     ValueDeclared,
@@ -36,7 +42,10 @@ from thzdaq_api.declaring import STATE
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Bench, Device, connect
 from thzdaq_api.measurements import PlotInfo, SlotInfo
+from thzdaq_api.origins import agent
+from thzdaq_api.raw import RawInstrument, Reading, named_values
 from thzdaq_api.sessions import Swept
+from thzdaq_api.station import DeclareInstrument
 
 
 def _bench() -> Bench:
@@ -144,3 +153,41 @@ def plot(
     STATE.plots.append(declared)
     STATE.declared()
     return declared
+
+
+def instrument(
+    id: str,
+    driver: str,
+    connection: Union[str, Mapping[str, Any]],
+    **quantities: Reading,
+) -> RawInstrument:
+    """An instrument of the profile by its id there, its driver
+    (generic.scpi: one without a driver of its own, raw commands only) and
+    how it is reached (tcp://169.254.0.50:5025, prologix://host/19,
+    serial://COM3, visa://<resource>; or the fields as the profile holds
+    them). Not in the profile yet, or there with another driver or
+    connection, it is put there once a person allows it, in the window or
+    in this terminal; an agent's script is refused. quantities: names of its
+    raw commands, reading(...) and setting(...)."""
+    named = named_values(quantities)
+    name = STATE.name(INSTRUMENT, id, len(STATE.instruments))
+    given = connection if isinstance(connection, str) else dict(connection)
+    STATE.instruments.append(InstrumentDeclared(name, id, driver, given))
+    STATE.declared()
+    if STATE.describing:
+        return None
+    bench = _bench()
+    declare = DeclareInstrument(instrument=id, driver=driver, connection=given)
+    try:
+        bench.approve(lambda: bench.lab.call(declare))
+    except LabError as e:
+        if e.code != ErrorCode.DENIED or not agent(bench.origin):
+            raise
+        raise LabError(
+            ErrorCode.DENIED,
+            f"{id} ({driver}) is not in the profile as declared, and an"
+            " agent's script does not change the profile",
+            "a person adds it: runs this script once, or Setup → Add"
+            " instrument → Generic (raw) in the ThzDAQ window",
+        ) from None
+    return RawInstrument(bench, id, named)

@@ -12,10 +12,11 @@
 """
 
 from thzdaq_api.data import Measured
-from thzdaq_api.declare import device, plot, value
+from thzdaq_api.declare import device, instrument, plot, value
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Bench, Device, Readout, Run, connect
 from thzdaq_api.measurement_file import Column, read_measurement
+from thzdaq_api.raw import RawInstrument, reading, setting
 from thzdaq_api.script import Cancelled, Session
 
 __all__ = [
@@ -26,12 +27,16 @@ __all__ = [
     "ErrorCode",
     "LabError",
     "Measured",
+    "RawInstrument",
     "Readout",
     "Run",
     "Session",
     "connect",
     "device",
+    "instrument",
     "plot",
     "read_measurement",
+    "reading",
+    "setting",
     "value",
 ]

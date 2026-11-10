@@ -4,6 +4,8 @@ describes), and what it names of this bench, read from its text:
 
 - devices named lab["ref"] the bench has not;
 - a slot (device(...)) no device of the bench suits;
+- an instrument (instrument(...)) the profile has not, or has with another
+  driver: its first run asks a person to put it there;
 - a quantity or action after a device's dot it has not (bias.voltge);
 - a sweep (for v in m.sweep(...): bias.voltage_set = v) beyond the limits of
   the quantity it sets, by the default of a declared value or a typed text.
@@ -152,6 +154,24 @@ class TextOfBench:
                     )
                 )
         self.values = {value.name: value for value in declarations.values}
+        drivers = {d.ref: d.driver for d in self.view.devices if d.ref == d.instrument}
+        for declared in declarations.instruments:
+            found = drivers.get(declared.instrument)
+            if found == declared.driver:
+                continue
+            told = (
+                "is not in the profile"
+                if found is None
+                else f"is in the profile with {found}"
+            )
+            self.problems.append(
+                Problem(
+                    self._line_of(declared.name),
+                    f"{declared.instrument} {told}: the first run asks a person"
+                    f" to put it there with {declared.driver}",
+                    BENCH,
+                )
+            )
 
     def _line_of(self, name: str) -> Optional[int]:
         for node in self.tree.body:

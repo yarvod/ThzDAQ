@@ -28,7 +28,7 @@ x.py), a script takes the defaults, parsed by the daemon.
 
 import ast
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import msgspec
 
@@ -43,8 +43,8 @@ INPUTS_ENV = "THZDAQ_INPUTS"  # the devices and values a run was given (JSON)
 MODULE = "thzdaq"  # what a script imports declarations from
 
 # Declarations by the function that makes them
-DEVICE, VALUE, PLOT = "device", "value", "plot"
-DECLARATIONS = (DEVICE, VALUE, PLOT)
+DEVICE, VALUE, PLOT, INSTRUMENT = "device", "value", "plot", "instrument"
+DECLARATIONS = (DEVICE, VALUE, PLOT, INSTRUMENT)
 CONNECT = "connect"  # declarations come before it
 
 # Kinds of values, by their default (and choices)
@@ -93,12 +93,24 @@ class ValueDeclared(msgspec.Struct, frozen=True):
     help: str = ""
 
 
+class InstrumentDeclared(msgspec.Struct, frozen=True):
+    """instrument(id, driver=..., connection=...): an instrument of the
+    profile, put there by the script's first run once a person allows it.
+    connection as the script gives it: a line, or the fields of the profile."""
+
+    name: str
+    instrument: str
+    driver: str
+    connection: Union[str, Dict[str, Any]]
+
+
 class Declarations(msgspec.Struct, frozen=True):
     """What a script declares at its top, in order."""
 
     slots: Tuple[SlotDeclared, ...] = ()
     values: Tuple[ValueDeclared, ...] = ()
     plots: Tuple[PlotInfo, ...] = ()
+    instruments: Tuple[InstrumentDeclared, ...] = ()
 
 
 class Given(msgspec.Struct, frozen=True):
