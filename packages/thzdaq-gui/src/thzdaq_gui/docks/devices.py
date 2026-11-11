@@ -121,7 +121,10 @@ class QuantityPanel(QWidget):
     from the last values set (setpoints, in the registry); nothing is written
     to the device until Set or Enter. A configuration that differs in the
     device is marked after the first read. Monitor asks the lab to poll the
-    device; readings come as they are told.
+    device; readings come as they are told. A device that measures nothing
+    but its setpoints (a generator, a grid, a YIG filter) shows what each
+    holds next to its field, as a measured value is shown; a read that fails
+    says why under the values.
     """
 
     def __init__(
@@ -151,6 +154,7 @@ class QuantityPanel(QWidget):
         self.displays: Dict[str, PrefixBox] = {}
         self.toggles: Dict[str, QPushButton] = {}
         self.notes: Dict[str, QLabel] = {}
+        self.held = [] if config else read_back(self.quantities)
         self.device_values: Dict[str, object] = {}
         self.read_once = False
         self.pending = False
@@ -195,6 +199,12 @@ class QuantityPanel(QWidget):
                     cell.addWidget(value, 1)
                     cell.addWidget(display)
                     grid.addLayout(cell, row, 1)
+            if quantity in self.held:
+                value = QLabel("--")
+                value.setProperty("role", "value")
+                value.setToolTip("What the device holds now")
+                self.values[quantity.key] = value
+                grid.addWidget(value, row, 3)
             if config and quantity.readable:
                 note = QLabel()
                 note.setStyleSheet(f"color: {theme.ACCENT}")
@@ -204,6 +214,11 @@ class QuantityPanel(QWidget):
                 self.notes[quantity.key] = note
         grid.setColumnStretch(4, 1)
         layout.addLayout(grid)
+        self.problem = QLabel()  # why the last read failed, until one succeeds
+        self.problem.setWordWrap(True)
+        self.problem.setStyleSheet(f"color: {theme.BAD}")
+        layout.addWidget(self.problem)
+        self.problem.hide()
         self.prefill()
         controls = QHBoxLayout()
         self.btnRead = QPushButton(theme.icon("refresh"), "Read")
@@ -297,6 +312,8 @@ class QuantityPanel(QWidget):
             return False
         if not quantity.settable or quantity.kind == "bool" or self.config:
             return True
+        if quantity in self.held:
+            return True
         return self.plot.isChecked() and quantity in self.plotted
 
     def polled(self, quantity: QuantityInfo) -> bool:
@@ -353,6 +370,7 @@ class QuantityPanel(QWidget):
     def show_values(self, values) -> None:
         """A reading of the device: what it holds of this panel's values."""
         self.pending = False
+        self.problem.hide()
         now = time.monotonic() - self.started
         first = not self.read_once
         self.read_once = True
@@ -441,6 +459,8 @@ class QuantityPanel(QWidget):
         self.pending = False
         self.monitor.setChecked(False)
         self.forget()
+        self.problem.setText(message)
+        self.problem.show()
         self.tell(message)
 
     def tell(self, message: str) -> None:
@@ -483,6 +503,15 @@ class QuantityPanel(QWidget):
 
     def stop(self) -> None:
         self.monitor.setChecked(False)
+
+
+def read_back(quantities: Sequence[QuantityInfo]) -> List[QuantityInfo]:
+    """Setpoints whose reading a dock shows next to their field: those of a
+    device that measures nothing else (a generator, a grid, a YIG filter); a
+    device that measures (a supply, a SIS bias) shows what it measures."""
+    if any(q.readable and not q.settable for q in quantities):
+        return []
+    return [q for q in quantities if q.readable and q.settable]
 
 
 def _same(a, b) -> bool:

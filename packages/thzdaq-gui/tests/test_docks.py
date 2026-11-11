@@ -602,6 +602,62 @@ class TestDeviceDocks:
         panel.monitor.setChecked(False)
         wait(lambda: polls() == [])
 
+    def test_generator_monitor_shows_what_it_holds(self, window, wait, bench):
+        """Frequency, power and output were fields only: Monitor showed nothing."""
+        panel = window.docks["device:signal_generator_2"].widget().panels[0]
+        generator = bench.station.instrument("signal_generator_2")
+        held = {
+            key: panel.values[key] for key in ("frequency", "power_level", "output")
+        }
+        assert all(label.property("role") == "value" for label in held.values())
+        panel.interval.setValue(0.1)
+        panel.monitor.setChecked(True)
+        generator.set_frequency(223e9)  # on the front panel, or by a script
+        generator.set_power(-10.0)
+        generator.set_output(True)
+        wait(lambda: (held["frequency"].text(), held["power_level"].text(),
+                      held["output"].text()) == ("223 GHz", "-10 dBm", "ON"))  # fmt: skip
+        panel.monitor.setChecked(False)
+
+    def test_grid_dock_shows_its_angle_and_sets_its_zero(self, window, wait, bench):
+        from thzdaq_gui.docks.devices import ActionsGroup
+
+        widget = window.docks["device:grid_1"].widget()
+        panel = widget.panels[0]
+        grid = bench.station.instrument("grid_1")
+        panel.fields["angle"].set_value(30.0, pending=True)
+        panel.apply(panel.by_key["angle"])
+        wait(lambda: panel.values["angle"].text() == "30 deg")
+        group = widget.findChildren(ActionsGroup)[0]
+        group.call("zero")
+        wait(lambda: panel.values["angle"].text() == "0 deg")
+        assert grid.position == 30.0  # nothing moved
+        grid.restore_state({"angle": 0.0, "moving_to": 45.0})  # left moving
+        panel.read()
+        wait(lambda: not panel.problem.isHidden())
+        assert "set its zero" in panel.problem.text()
+        assert panel.values["angle"].text() == "--"
+        group.call("zero")
+        wait(lambda: panel.problem.isHidden() and
+             panel.values["angle"].text() == "0 deg")  # fmt: skip
+
+    def test_yig_monitor_shows_its_frequency(self, window, wait, bench):
+        widget = window.docks["device:yig_filter_1"].widget()
+        panel = next(p for p in widget.panels if "frequency" in p.by_key)
+        channel = bench.station.instrument("yig_filter_1").channel(
+            panel.ref.split(":")[-1]
+        )
+        channel.tune(6e9)
+        panel.interval.setValue(0.1)
+        panel.monitor.setChecked(True)
+        wait(lambda: panel.values["frequency"].text().startswith("5.99")
+             or panel.values["frequency"].text().startswith("6"))  # fmt: skip
+        panel.monitor.setChecked(False)
+
+    def test_a_supply_shows_what_it_measures_not_its_setpoints(self, window):
+        panel = window.docks["device:power_supply_1"].widget().panels[1]
+        assert "voltage" in panel.values and "voltage_set" not in panel.values
+
     def test_raw_commands_from_a_device_dock(self, window, wait, monkeypatch):
         from thzdaq_gui.docks.raw import RawConsole
 
