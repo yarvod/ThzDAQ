@@ -88,6 +88,11 @@ class Options:
     def settings_path(self) -> Path:
         return self.home / ("daemon-sim.json" if self.simulate else "daemon.json")
 
+    @property
+    def state_path(self) -> Path:
+        """What it keeps of its instruments (a grid's angle): its own file."""
+        return self.home / ("state-sim.json" if self.simulate else "state.json")
+
     def arguments(self, station: Optional[str]) -> List[str]:
         """How to start a daemon like this one again."""
         found = ["--home", str(self.home), "--port", "0"]
@@ -144,8 +149,9 @@ class Daemon:
             f"{' on simulators' if options.simulate else ''})"
         )
         self.composed = compose(
-            station, options.home, data, options.simulate, self, options.lively
-        )
+            station, options.home, data, options.simulate, self,
+            options.state_path, options.lively,
+        )  # fmt: skip
         station = self.composed.bench.path  # a name given is a file of home
         if station:
             self.saved.station = station

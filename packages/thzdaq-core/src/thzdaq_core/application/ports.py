@@ -3,8 +3,8 @@
 Adapters implement them (json_store.MeasurementStore: MeasurementRepository,
 its RunningFile: MeasurementWriter,
 yaml_profiles.YamlProfiles: ProfileRepository, processes.Processes: Launcher,
-library.FolderLibrary: Library;
-the daemon's process: DaemonControl); the composition root (a CLI, the GUI
+library.FolderLibrary: Library, instrument_states.JsonInstrumentStates:
+InstrumentStates; the daemon's process: DaemonControl); the composition root (a CLI, the GUI
 session, the daemon) passes them in.
 """
 
@@ -148,3 +148,16 @@ class Library(Protocol):
         """What the script's text declares at its top, as its process tells
         when it runs described (next to the scripts, as they run);
         DescribeFailed when it cannot be."""
+
+
+class InstrumentStates(Protocol):
+    """What the program keeps of instruments between its starts (a grid's
+    angle: application.kept), a record per instrument id. Moves come from
+    several threads (a run, a dock): a record is kept whole or not at all."""
+
+    def get(self, instrument_id: str) -> Optional[Mapping[str, Any]]:
+        """The record kept last; None when there is none."""
+
+    def put(self, instrument_id: str, record: Mapping[str, Any]) -> None:
+        """Keep the record (JSON values) at once; a failure to keep it is
+        logged, never raised: it must not stop what moves the instrument."""

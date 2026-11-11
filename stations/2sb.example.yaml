@@ -64,3 +64,8 @@ instruments:
     driver: rs.fsek30
     title: R&S FSEK 30
     connection: {kind: prologix, host: 169.254.156.103, gpib: 20, read_delay: 0.01}
+  grid_1:
+    driver: arduino.grid
+    title: Wire grid
+    # No position readback: the program counts the angle and keeps it (state.json)
+    connection: {kind: http, host: 169.254.0.52, port: 80, timeout: 30.0}

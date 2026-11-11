@@ -328,6 +328,10 @@ class DeviceAccess:
         users = self._users((ref,), share, within) if action.changes else []
         result = self.bench.run(ref, lambda device: action.call(device, **bound))
         if action.changes:
+            # What it held may have changed with it (a grid's zero): known
+            # again once read, and its guard reads where a change starts from
+            self.known.forget((ref,))
+            self.bench.run(ref, lambda device: device.forget())
             self.events.publish(ActionDone(ref, key, bound, origin))
             self._note(users, origin, ref, action=key, arguments=bound)
         return result

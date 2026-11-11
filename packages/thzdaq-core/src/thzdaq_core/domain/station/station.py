@@ -59,6 +59,8 @@ Capabilities = Union[Type, Tuple[Type, ...]]
 Requirements = Mapping[str, Capabilities]
 # (slot, quantity key, values) a run sets the device of a slot to
 Planned = Tuple[str, str, Sequence[float]]
+# Hears an instrument opened: its id, its driver in the profile, the instrument
+Opened = Callable[[str, str, Instrument], None]
 
 NUMBERS = ("float", "int")  # kinds of quantities a guard checks and ramps
 
@@ -121,7 +123,10 @@ class Station:
         pool: Optional[TransportPool] = None,
         simulate: bool = False,
         lively: bool = False,
+        on_open: Optional[Opened] = None,
     ):
+        """on_open hears every instrument as it opens, before it is used (what
+        the program keeps of it is given back: application.kept)."""
         self.config = config.validate()
         self.pause = pause  # how ramps outside measurements wait between steps
         self.registry = registry or default_registry()
@@ -130,6 +135,7 @@ class Station:
         # Simulators drift and get noisy, as a bench does (the app); tests keep
         # exact values
         self.lively = lively
+        self.on_open = on_open
         self._instruments: Dict[str, Instrument] = {}
         self._devices: Dict[str, GuardedPort] = {}
         self._lock = threading.RLock()
@@ -188,6 +194,8 @@ class Station:
                 # A simulated detector sees the simulated load of this bench:
                 # hot/cold give a receiver's Y, not the drift of two sweeps
                 instrument.load_position = self._simulated_load
+            if self.on_open is not None:
+                self.on_open(instrument_id, spec.driver, instrument)
             self._instruments[instrument_id] = instrument
             self._protect(instrument_id)
             return instrument
