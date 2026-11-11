@@ -223,6 +223,8 @@ def parameter(p: ParameterInfo) -> str:
         text += f"; one of {', '.join(str(c) for c in p.choices)}"
     if p.max_points:
         text += f"; at most {p.max_points} points"
+    if p.shown_if:
+        text += f"; used only when {p.used_when()}"
     if p.help:
         text += f". {p.help}"
     return text

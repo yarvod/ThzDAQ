@@ -5,7 +5,13 @@ import pytest
 from thzdaq_api import host
 from thzdaq_api.daemon import GetDaemonStatus
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.measurement_file import COMPLETED, INTERRUPTED, RUNNING
+from thzdaq_api.measurement_file import (
+    COMPLETED,
+    INTERRUPTED,
+    RUNNING,
+    read_measurement,
+    write_measurement,
+)
 from thzdaq_api.measurements import (
     GetRunSnapshot,
     PlotInfo,
@@ -13,7 +19,7 @@ from thzdaq_api.measurements import (
     WaitMeasurement,
 )
 from thzdaq_api.origins import CLI, PLOTS
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.sessions import EndSession, PlotSession, RecordSession, StartSession
 from thzdaq_api.windows import OwnPlot
 
@@ -114,7 +120,9 @@ def test_the_window_gets_points_by_events_until_the_run_ends(cli, follow, wait):
 def test_an_ended_run_is_drawn_whole_without_listening(cli, follow, wait):
     run = cli.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     assert cli.call(WaitMeasurement(id=run.id, timeout=10)).status == COMPLETED
@@ -169,7 +177,7 @@ def test_an_unknown_measurement_opens_no_window(lab_as, follow):
 
 
 def test_a_file_is_drawn_once_with_the_plots_it_was_made_with(
-    cli, lab_as, windows, monkeypatch
+    cli, lab_as, windows, monkeypatch, tmp_path
 ):
     from thzdaq_gui.viewer import open_window
 
@@ -177,7 +185,9 @@ def test_a_file_is_drawn_once_with_the_plots_it_was_made_with(
     path = cli.call(EndSession(id=run.id)).path
     iv = cli.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     iv_path = cli.call(WaitMeasurement(id=iv.id, timeout=10)).path
@@ -194,8 +204,15 @@ def test_a_file_is_drawn_once_with_the_plots_it_was_made_with(
     window = open_window(path)  # its own plots are in the file
     windows.append(window)
     assert points(window.hub.graphs[plot.title]) == 2
+    window = open_window(iv_path)  # so are those of its procedure
+    windows.append(window)
+    assert points(window.hub.graphs["I-V"]) == 6
+    # A file written before files kept their plots takes them from the daemon
+    older = read_measurement(iv_path)
+    older.plots = None
+    older_path = write_measurement(older, tmp_path / "older.json")
     with pytest.raises(LabError):
-        open_window(iv_path)  # the plots of a procedure come from the daemon
+        open_window(older_path)
     window = open_window(iv_path, own=OwnPlot.asked("iv", "voltage", "current"))
     windows.append(window)
     assert points(window.hub.graphs["Current – Voltage"]) == 6

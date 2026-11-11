@@ -9,13 +9,18 @@ from typing import Iterable, Mapping, Optional, Tuple
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME, PV_CURVE
+from thzdaq_api.procedures import (
+    CURRENT_VS_VOLTAGE,
+    MONITOR_VALUES_VS_TIME,
+    POWER_VS_VOLTAGE,
+    current_name,
+)
 
 from thzdaq_gui.dock_names import MEASURE, MEASUREMENT, dock_name, key_of
 from thzdaq_gui.runbar import MeasurementHost, RunBar
 from thzdaq_gui.settings import CHOSEN_MEASUREMENT, LITE_LAYOUT, PRO_LAYOUT
 
-DEFAULT_MEASUREMENT = IV_CURVE
+DEFAULT_MEASUREMENT = CURRENT_VS_VOLTAGE
 
 
 class Mode:
@@ -53,7 +58,7 @@ class Pro(Mode):
     perspectives = True
     measure_column = tuple(
         dock_name(MEASURE, procedure)
-        for procedure in (IV_CURVE, PV_CURVE, MONITOR_TIME)
+        for procedure in (CURRENT_VS_VOLTAGE, POWER_VS_VOLTAGE, MONITOR_VALUES_VS_TIME)
     )
 
 
@@ -86,7 +91,9 @@ class Lite(Mode):
         for name, dock in self.docks.items():
             if key_of(name, MEASURE) and not dock.isClosed():
                 dock.toggleView(False)
-        chosen = self.settings.value(CHOSEN_MEASUREMENT) or DEFAULT_MEASUREMENT
+        chosen = current_name(
+            self.settings.value(CHOSEN_MEASUREMENT) or DEFAULT_MEASUREMENT
+        )
         if dock_name(MEASURE, chosen) not in self.docks:
             chosen = DEFAULT_MEASUREMENT
         self.choose(chosen)

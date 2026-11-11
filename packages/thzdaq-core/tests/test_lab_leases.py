@@ -7,7 +7,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import LeasesChanged
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, ListLeases
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement, WaitMeasurement
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE, MONITOR_VALUES_VS_TIME
 from thzdaq_api.measurement_file import read_measurement
 from thzdaq_core.domain.leases import conflicts
 
@@ -41,7 +41,7 @@ def finish(lab, run_id):
 
 def iv(share=False):
     return StartMeasurement(
-        procedure=IV_CURVE,
+        procedure=CURRENT_VS_VOLTAGE,
         parameters=SLOW_IV,
         devices={"bias": "sis_bias_1"},
         share=share,
@@ -78,7 +78,7 @@ def test_a_swept_device_needs_share_and_both_note_it(lab):
 def test_reading_conflicts_with_nothing_and_notes_what_others_change(lab):
     monitor = lab.call(
         StartMeasurement(
-            procedure=MONITOR_TIME,
+            procedure=MONITOR_VALUES_VS_TIME,
             parameters={"watch": ["power_meter_1"], "interval": 0.05},
         )
     )
@@ -101,7 +101,7 @@ def test_a_dry_run_checks_like_a_start_and_starts_nothing(lab, tmp_path):
 
     planned = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE,
+            procedure=CURRENT_VS_VOLTAGE,
             parameters=SLOW_IV,
             devices={"bias": "sis_bias_1"},
             dry_run=True,
@@ -115,7 +115,7 @@ def test_a_dry_run_checks_like_a_start_and_starts_nothing(lab, tmp_path):
     with pytest.raises(LabError) as caught:
         lab.call(
             StartMeasurement(
-                procedure=IV_CURVE,
+                procedure=CURRENT_VS_VOLTAGE,
                 parameters=SLOW_IV,
                 devices={"bias": "power_meter_1"},
                 dry_run=True,
@@ -128,7 +128,7 @@ def test_a_dry_run_checks_like_a_start_and_starts_nothing(lab, tmp_path):
     with pytest.raises(LabError) as caught:
         lab.call(
             StartMeasurement(
-                procedure=IV_CURVE,
+                procedure=CURRENT_VS_VOLTAGE,
                 parameters=SLOW_IV,
                 devices={"bias": "sis_bias_1"},
                 dry_run=True,
@@ -137,7 +137,7 @@ def test_a_dry_run_checks_like_a_start_and_starts_nothing(lab, tmp_path):
     assert caught.value.code == ErrorCode.CONFLICT
     shared = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE,
+            procedure=CURRENT_VS_VOLTAGE,
             parameters=SLOW_IV,
             devices={"bias": "sis_bias_1"},
             dry_run=True,

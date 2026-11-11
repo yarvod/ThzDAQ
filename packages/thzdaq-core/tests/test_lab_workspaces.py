@@ -8,12 +8,12 @@ import pytest
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurement_file import PROFILE, read_measurement
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.station import GetStation, LoadStation, UpdateStation
 from thzdaq_api.workspace import STATIONS, create
 
 QUICK_IV = dict(
-    procedure=IV_CURVE,
+    procedure=CURRENT_VS_VOLTAGE,
     parameters={
         "voltage": {"start": 0.0, "stop": 1e-3, "points": 3},
         "settle_time": 0.0,

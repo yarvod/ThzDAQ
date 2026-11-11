@@ -108,7 +108,7 @@ def test_a_session_is_a_measurement_the_script_fills(lab, tmp_path):
         "sha256": "ab12",
         "text": "print('scan')",
     }
-    assert saved.metadata["plots"][0]["y"] == "power"
+    assert saved.plots[-1]["y"] == "power"
     assert not lab.call(ListLeases())
 
 

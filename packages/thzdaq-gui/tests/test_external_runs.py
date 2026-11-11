@@ -11,7 +11,7 @@ from thzdaq_api.measurements import (
     StartMeasurement,
     WaitMeasurement,
 )
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE, MONITOR_VALUES_VS_TIME
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def cli(session):
 def monitor(lab):
     return lab.call(
         StartMeasurement(
-            procedure=MONITOR_TIME,
+            procedure=MONITOR_VALUES_VS_TIME,
             parameters={"watch": ["power_meter_1/power"], "interval": 0.02},
         )
     )
@@ -39,7 +39,7 @@ def test_cli_measurement_reaches_data_graphs_and_processes(window, session, cli,
     )
     run = cli.call(
         StartMeasurement(
-            procedure=IV_CURVE,
+            procedure=CURRENT_VS_VOLTAGE,
             parameters={
                 "voltage": {"start": 0, "stop": 0.002, "points": 6},
                 "settle_time": 0.05,
@@ -201,7 +201,7 @@ def test_local_start_events_before_the_reply_do_not_create_another_model(
         return result
 
     monkeypatch.setattr(session.lab, "call", delayed)
-    box = window.docks[f"measure:{IV_CURVE}"].widget().box
+    box = window.docks[f"measure:{CURRENT_VS_VOLTAGE}"].widget().box
     box.form.set_values(
         {
             "voltage": {"start": 0, "stop": 0.001, "points": 3},

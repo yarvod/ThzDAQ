@@ -14,7 +14,7 @@ from typing import Callable, Dict
 import PySide6QtAds as QtAds
 from thzdaq_api.custom import file_name
 from thzdaq_api.measurements import ProcedureSummary
-from thzdaq_api.procedures import MONITOR_TIME
+from thzdaq_api.procedures import MONITOR_VALUES_VS_TIME
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.dock_names import MEASURE, dock_name, key_of
@@ -25,7 +25,7 @@ from thzdaq_gui.docks.measure import MeasureWidget, MonitorWidget
 from thzdaq_gui.graphs import GraphHub
 
 # Docks with their own widget class by procedure name
-SPECIAL = {MONITOR_TIME: MonitorWidget}
+SPECIAL = {MONITOR_VALUES_VS_TIME: MonitorWidget}
 SECTION = "Measures"
 
 

@@ -18,7 +18,7 @@ EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 
 def run_iv(thzdaq, *more):
     return thzdaq(
-        "--json", "run", "sis.iv_curve", "--device", "bias=sis_bias_1",
+        "--json", "run", "sis.current_vs_voltage", "--device", "bias=sis_bias_1",
         "--set", "voltage=0:1:3", *FAST, *more,
     )  # fmt: skip
 
@@ -146,7 +146,7 @@ def test_a_real_daemon_started_for_a_workspace_loads_its_profile(tmp_path):
 
     try:
         done = thzdaq(
-            "run", "sis.iv_curve", "--device", "bias=sis_bias_1",
+            "run", "sis.current_vs_voltage", "--device", "bias=sis_bias_1",
             "--set", "voltage=0:1:3", *FAST, "--workspace", "experiment",
         )  # fmt: skip
         assert done.returncode == 0, done.stderr

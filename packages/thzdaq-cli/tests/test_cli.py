@@ -54,7 +54,9 @@ def test_a_raw_query_answers_and_a_raw_write_is_asked(thzdaq, lab):
     assert code == 0 and out.startswith("sent; read again: ") and "sis_bias_1" in out
     sweep = lab.call(
         StartMeasurement(
-            procedure="sis.iv_curve", parameters=SLOW_IV, devices={"bias": "sis_bias_1"}
+            procedure="sis.current_vs_voltage",
+            parameters=SLOW_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     code, _, err = thzdaq("raw", "sis_block_1", "*IDN?")  # a query: no conflict
@@ -68,14 +70,44 @@ def test_a_raw_query_answers_and_a_raw_write_is_asked(thzdaq, lab):
 
 def test_procedures_are_described_as_they_are_typed(thzdaq):
     code, out, _ = thzdaq("procedures")
-    assert code == 0 and "sis.iv_curve" in out
-    code, out, _ = thzdaq("describe", "sis.iv_curve", "--set", "voltage=0:2:11")
+    assert code == 0 and "sis.current_vs_voltage" in out
+    code, out, _ = thzdaq(
+        "describe", "sis.current_vs_voltage", "--set", "voltage=0:2:11"
+    )
     assert code == 0 and "11 steps" in out and "0:7:351" in out and "mV" in out
+
+
+def test_a_procedure_answers_to_the_name_it_had_before(thzdaq):
+    code, out, err = thzdaq("describe", "sis.iv_curve")
+    assert code == 0, err
+    assert out.startswith("SIS I-V curve (sis.current_vs_voltage)")
+    code, out, err = thzdaq(
+        "run", "if.hot_cold", "--set", "frequency=4:4:1", "--dry-run",
+        "--device", "load=chopper_1", "--device", "if_filter=yig_filter_1:yig_1",
+    )  # fmt: skip
+    assert code == 0 and "SIS Tn-IF: planned" in out, err
+
+
+def test_parameters_say_when_they_are_used(thzdaq):
+    code, out, _ = thzdaq("describe", "sis.noise_temperature_vs_voltage")
+    assert code == 0 and "used when" in out
+    t_hot = next(line for line in out.splitlines() if line.startswith("t_hot"))
+    assert t_hot.endswith("hot_cold=true")
+
+
+def test_power_if_yig_runs_on_the_simulators(thzdaq, tmp_path):
+    code, out, err = thzdaq(
+        "run", "if.power_vs_frequency", "--set", "frequency=4:6:3",
+        "--set", "point_delay=0", "--device", "if_filter=yig_filter_1:yig_1",
+        "--workspace", str(tmp_path),
+    )  # fmt: skip
+    assert code == 0, err
+    assert "completed (3/3 steps)" in out
 
 
 def test_a_run_is_followed_to_its_file(thzdaq, tmp_path):
     code, out, err = thzdaq(
-        "run", "sis.iv_curve", "--device", "bias=sis_bias_2",
+        "run", "sis.current_vs_voltage", "--device", "bias=sis_bias_2",
         "--set", "voltage=0:2:5", *FAST, "--workspace", str(tmp_path),
     )  # fmt: skip
     assert code == 0, err
@@ -90,11 +122,14 @@ def test_a_run_is_followed_to_its_file(thzdaq, tmp_path):
 
 
 def test_a_slot_takes_the_one_device_that_suits_or_asks(thzdaq):
-    code, _, err = thzdaq("run", "sis.iv_curve", "--set", "voltage=0:2:5", *FAST)
+    code, _, err = thzdaq(
+        "run", "sis.current_vs_voltage", "--set", "voltage=0:2:5", *FAST
+    )
     assert code == 2 and "one of sis_bias_1, sis_bias_2" in err
     code, out, err = thzdaq(
-        "run", "if.hot_cold", "--set", "frequency=4:4:1", "--dry-run",
-        "--device", "load=chopper_1", "--device", "if_filter=yig_filter_1:yig_1",
+        "run", "if.noise_temperature_vs_frequency", "--set", "frequency=4:4:1",
+        "--dry-run", "--device", "load=chopper_1",
+        "--device", "if_filter=yig_filter_1:yig_1",
     )  # fmt: skip
     assert code == 0 and "planned" in out
     assert "detector: power_meter_1" in err  # the one that suits
@@ -103,13 +138,15 @@ def test_a_slot_takes_the_one_device_that_suits_or_asks(thzdaq):
 def test_a_conflict_is_asked_and_shared_with_yes(thzdaq, lab):
     other = lab.call(
         StartMeasurement(
-            procedure="sis.iv_curve", parameters=SLOW_IV, devices={"bias": "sis_bias_1"}
+            procedure="sis.current_vs_voltage",
+            parameters=SLOW_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     given = ["--device", "bias=sis_bias_1", "--set", "voltage=0:2:5", *FAST]
-    code, _, err = thzdaq("run", "sis.iv_curve", *given)
+    code, _, err = thzdaq("run", "sis.current_vs_voltage", *given)
     assert code == 1 and f"#{other.id}" in err and "--yes" in err
-    code, out, err = thzdaq("--yes", "run", "sis.iv_curve", *given)
+    code, out, err = thzdaq("--yes", "run", "sis.current_vs_voltage", *given)
     assert code == 0, err
     assert "completed" in out
     code, out, _ = thzdaq("cancel", str(other.id))
@@ -119,7 +156,7 @@ def test_a_conflict_is_asked_and_shared_with_yes(thzdaq, lab):
 
 def test_watch_tells_how_an_ended_run_went(thzdaq):
     code, *_ = thzdaq(
-        "run", "sis.iv_curve", "--device", "bias=sis_bias_1",
+        "run", "sis.current_vs_voltage", "--device", "bias=sis_bias_1",
         "--set", "voltage=0:1:3", *FAST,
     )  # fmt: skip
     code, out, _ = thzdaq("watch", "1")
@@ -135,7 +172,7 @@ def test_plot_opens_a_measurements_plots_in_a_window(thzdaq, tmp_path, monkeypat
     monkeypatch.setattr(host, "window_command", lambda: ["ThzDAQ"])
     monkeypatch.setattr(host, "start_apart", opened.append)
     code, out, err = thzdaq(
-        "run", "sis.iv_curve", "--device", "bias=sis_bias_1",
+        "run", "sis.current_vs_voltage", "--device", "bias=sis_bias_1",
         "--set", "voltage=0:1:3", *FAST,
     )  # fmt: skip
     path = out.strip().splitlines()[-1].removeprefix("file ")

@@ -1,10 +1,11 @@
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import TWO_SB_SRR, TWO_SB_TN
+from thzdaq_api.procedures import TWO_SB_SIDEBAND_RATIO, TWO_SB_NOISE_TEMPERATURE
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_core.domain.measurements.procedures.common import (
+    Group,
     IF_GHZ,
     TN_K,
     Y_DB,
@@ -20,6 +21,8 @@ from thzdaq_core.domain.parameters import (
     BoolParameter,
     ChoiceParameter,
     IntParameter,
+    shown_while,
+    When,
 )
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
@@ -51,7 +54,7 @@ NOISE_PLOTS = (
 
 
 class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
-    name = TWO_SB_SRR
+    name = TWO_SB_SIDEBAND_RATIO
     # The spectrum analyzer is set up (bandwidths, span): shared, not read
     slot_modes = {"if_filter": EXCLUSIVE, "test_tone": EXCLUSIVE, "detector": READ}
     title = "2SB sideband ratio"
@@ -69,17 +72,25 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
             x_label=IF_GHZ, y_label="P wanted - P image, dB", x_scale=GHZ, group_by=("tone",),
         ),
     ) + NOISE_PLOTS  # fmt: skip
+    shown_if = shown_while(
+        When("measure_y_factor", (True,)), "t_hot", "t_cold", "load_delay"
+    )
 
     sis1_voltage = SisBias(1, 2.6e-3)
     sis2_voltage = SisBias(2, 2.4e-3)
     frequency = IFSweep()
-    tones = ChoiceParameter("Test tone sidebands", SIDE_BAND_CHOICES, default="both")
+    tones = ChoiceParameter(
+        "Test tone sidebands", SIDE_BAND_CHOICES, default="both",
+        group=Group.TEST_TONE,
+    )  # fmt: skip
     chunk_size = IntParameter(
-        "Points per IF switch", default=10, minimum=1,
+        "Points per IF switch", default=10, minimum=1, group=Group.IF,
         help="IF points measured in one channel before switching to the other",
     )  # fmt: skip
     point_delay = PointDelay(0.05)
-    measure_y_factor = BoolParameter("Y-factor afterwards", default=True)
+    measure_y_factor = BoolParameter(
+        "Y-factor afterwards", default=True, group=Group.HOT_COLD
+    )
 
     def slots(self):
         slots = {
@@ -162,7 +173,7 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
 
 
 class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
-    name = TWO_SB_TN
+    name = TWO_SB_NOISE_TEMPERATURE
     slot_modes = {"if_filter": EXCLUSIVE, "detector": READ}
     title = "2SB noise temperature"
     description = "Hot/cold Y-factor and Tn of the upper and lower IF channels."
@@ -172,10 +183,13 @@ class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     sis1_voltage = SisBias(1, 2.5e-3)
     sis2_voltage = SisBias(2, 2.5e-3)
     frequency = IFSweep()
-    channels = ChoiceParameter("IF channels", SIDE_BAND_CHOICES, default="both")
-    tone_off = BoolParameter(
-        "Switch the test tone off", default=False, help="Uses the 'test_tone' device"
+    channels = ChoiceParameter(
+        "IF channels", SIDE_BAND_CHOICES, default="both", group=Group.IF
     )
+    tone_off = BoolParameter(
+        "Switch the test tone off", default=False, group=Group.TEST_TONE,
+        help="Uses the 'test_tone' device",
+    )  # fmt: skip
 
     def slots(self):
         slots = {**self.base_slots(), **self.lo_slots(), **self.hot_cold_slots()}

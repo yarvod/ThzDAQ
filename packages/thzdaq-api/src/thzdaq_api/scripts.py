@@ -21,6 +21,7 @@ from typing import Optional, Tuple
 import msgspec
 
 from thzdaq_api.operation import Operation, Rights
+from thzdaq_api.procedures import current_name
 
 SCRIPTS = "scripts"  # the folder of a workspace's data/ that holds their logs
 SCRIPT_ID_ENV = "THZDAQ_SCRIPT_ID"  # a script the daemon started: its number
@@ -51,15 +52,16 @@ class Grant(msgspec.Struct, frozen=True):
 
     @classmethod
     def parse(cls, text: str) -> "Grant":
-        """ "set:sis_bias_1" -> Grant("set", "sis_bias_1"); ValueError otherwise."""
+        """ "set:sis_bias_1" -> Grant("set", "sis_bias_1"); a procedure by
+        the name it has now; ValueError otherwise."""
         kind, separator, target = text.strip().partition(SEPARATOR)
         if not separator or kind not in KINDS or not target:
             raise ValueError(
                 f"{text!r}: allow {', '.join(f'{k}:…' for k in KINDS)}"
-                " (set:sis_bias_1, call:chopper_1, run:sis.iv_curve,"
+                " (set:sis_bias_1, call:chopper_1, run:sis.current_vs_voltage,"
                 " raw:signal_generator_1)"
             )
-        return cls(kind, target)
+        return cls(kind, current_name(target) if kind == RUN else target)
 
 
 class ScriptInfo(msgspec.Struct, frozen=True):

@@ -27,7 +27,7 @@ Content = Tuple[str, str]  # (MIME type, text)
 
 
 def address(*parts: str) -> str:
-    """thzdaq://procedures/sis.iv_curve"""
+    """thzdaq://procedures/sis.current_vs_voltage"""
     return f"{SCHEME}://" + "/".join(parts)
 
 

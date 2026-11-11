@@ -15,25 +15,57 @@ TWO_SB = "two_sb"
 MONITOR = "monitor"
 GRID = "grid"
 
-IV_CURVE = f"{SIS}.iv_curve"
-PV_CURVE = f"{SIS}.pv_curve"
-Y_FACTOR_VOLTAGE = f"{SIS}.y_factor_voltage"
-REFLECTION = f"{SIS}.reflection"
-SHOT_NOISE = f"{SIS}.shot_noise"
-CL_CURVE = f"{SIS}.cl_curve"
-DEMAGNETIZE = f"{SIS}.demagnetize"
-IF_HOT_COLD = f"{IF}.hot_cold"
+# "<group>.<what is measured>_vs_<what is changed>"
+CURRENT_VS_VOLTAGE = f"{SIS}.current_vs_voltage"
+POWER_VS_VOLTAGE = f"{SIS}.power_vs_voltage"
+NOISE_TEMPERATURE_VS_VOLTAGE = f"{SIS}.noise_temperature_vs_voltage"
+CURRENT_VS_COIL_CURRENT = f"{SIS}.current_vs_coil_current"
+DEMAGNETIZATION = f"{SIS}.demagnetization"
+REFLECTION_VS_FREQUENCY = f"{SIS}.reflection_vs_frequency"
+AMPLIFIER_NOISE_VS_VOLTAGE = f"{IF}.amplifier_noise_vs_voltage"
+NOISE_TEMPERATURE_VS_FREQUENCY = f"{IF}.noise_temperature_vs_frequency"
+POWER_VS_FREQUENCY = f"{IF}.power_vs_frequency"
 TWO_SB_IF_BALANCE = f"{TWO_SB}.if_balance"
-TWO_SB_PUMP_BALANCE = f"{TWO_SB}.pump_balance"
-TWO_SB_SRR = f"{TWO_SB}.srr"
-TWO_SB_TN = f"{TWO_SB}.tn"
-TWO_SB_OPTIMIZATION = f"{TWO_SB}.optimization"
-MONITOR_TIME = f"{MONITOR}.time"
-GRID_CURRENT_ANGLE = f"{GRID}.current_angle"
+TWO_SB_LO_RF_BALANCE = f"{TWO_SB}.lo_rf_balance"
+TWO_SB_SIDEBAND_RATIO = f"{TWO_SB}.sideband_ratio"
+TWO_SB_NOISE_TEMPERATURE = f"{TWO_SB}.noise_temperature"
+TWO_SB_BIAS_OPTIMIZATION = f"{TWO_SB}.bias_optimization"
+GRID_CURRENT_VS_ANGLE = f"{GRID}.current_vs_angle"
+MONITOR_VALUES_VS_TIME = f"{MONITOR}.values_vs_time"
+
+# Names procedures had before (old -> current): files measured then, saved
+# forms, commands and scripts that still use them
+RENAMED = {
+    f"{SIS}.iv_curve": CURRENT_VS_VOLTAGE,
+    f"{SIS}.pv_curve": POWER_VS_VOLTAGE,
+    f"{SIS}.y_factor_voltage": NOISE_TEMPERATURE_VS_VOLTAGE,
+    f"{SIS}.cl_curve": CURRENT_VS_COIL_CURRENT,
+    f"{SIS}.demagnetize": DEMAGNETIZATION,
+    f"{SIS}.reflection": REFLECTION_VS_FREQUENCY,
+    f"{SIS}.shot_noise": AMPLIFIER_NOISE_VS_VOLTAGE,
+    f"{IF}.hot_cold": NOISE_TEMPERATURE_VS_FREQUENCY,
+    f"{TWO_SB}.pump_balance": TWO_SB_LO_RF_BALANCE,
+    f"{TWO_SB}.srr": TWO_SB_SIDEBAND_RATIO,
+    f"{TWO_SB}.tn": TWO_SB_NOISE_TEMPERATURE,
+    f"{TWO_SB}.optimization": TWO_SB_BIAS_OPTIMIZATION,
+    f"{GRID}.current_angle": GRID_CURRENT_VS_ANGLE,
+    f"{MONITOR}.time": MONITOR_VALUES_VS_TIME,
+}
+
+
+def current_name(name: str) -> str:
+    """The name a procedure has now: sis.iv_curve -> sis.current_vs_voltage;
+    a current or unknown name stays as it is."""
+    return RENAMED.get(name, name)
+
+
+def former_names(name: str) -> List[str]:
+    """The names the procedure had before: sis.current_vs_voltage -> [sis.iv_curve]."""
+    return [old for old, new in RENAMED.items() if new == name]
 
 
 def group_of(name: str) -> str:
-    """sis.iv_curve -> sis"""
+    """sis.current_vs_voltage -> sis"""
     return name.split(".", 1)[0]
 
 

@@ -17,7 +17,7 @@ quantities and whose methods are their actions:
     pm.power                             # one quantity
     lab["chopper_1"].to_hot()            # an action
     lab.raw("signal_generator_1", "*IDN?")   # a raw command, as typed
-    run = lab.run("sis.iv_curve", bias=bias, voltage="0:7:351")
+    run = lab.run("sis.current_vs_voltage", bias=bias, voltage="0:7:351")
     run.show()                           # its plots in a window of their own
     run.wait()
     iv = run.table("iv")

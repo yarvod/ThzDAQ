@@ -12,7 +12,7 @@ from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import READ
 from thzdaq_api.procedures import (
     COIL_PLOT,
-    MONITOR_TIME,
+    MONITOR_VALUES_VS_TIME,
     OTHER_PLOT,
     UNIT_PLOTS,
     default_quantities,
@@ -44,7 +44,7 @@ def _time_plot(title, y_label, y_scale=1.0) -> PlotInfo:
 
 
 class Monitor(Procedure):
-    name = MONITOR_TIME
+    name = MONITOR_VALUES_VS_TIME
     title = "Monitor over time"
     description = (
         "Read the chosen values of devices (power, temperature, bias, pressure, "

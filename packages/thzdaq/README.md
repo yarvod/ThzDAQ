@@ -29,7 +29,7 @@ the same contract.
 ```bash
 thzdaq --simulate devices                 # instruments on simulators
 thzdaq procedures                         # what can be measured
-thzdaq run sis.iv_curve --set voltage=0:7:351
+thzdaq run sis.current_vs_voltage --set voltage=0:7:351
 ```
 
 ```python
@@ -39,7 +39,7 @@ lab = connect()                      # finds the daemon, or starts it
 bias = lab["sis_bias_1"]
 bias.voltage_set = "2.3mV"           # = thzdaq set sis_bias_1 voltage_set 2.3mV
 print(bias.read())                   # SI values that know their unit
-run = lab.run("sis.iv_curve", bias=bias, voltage="0:7:351")
+run = lab.run("sis.current_vs_voltage", bias=bias, voltage="0:7:351")
 run.wait()
 iv = run.table("iv")
 ```

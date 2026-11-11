@@ -3,7 +3,7 @@ import math
 
 from thzdaq_api.devices import S_DB
 from thzdaq_api.leases import EXCLUSIVE
-from thzdaq_api.procedures import REFLECTION
+from thzdaq_api.procedures import REFLECTION_VS_FREQUENCY
 from thzdaq_instruments.capabilities import NetworkAnalyzer, PowerLevel
 from thzdaq_instruments.quantities import POWER_LEVEL
 from thzdaq_instruments.units import GHZ, MV
@@ -21,6 +21,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     VOLTAGE_MV,
     BiasVoltage,
     FirstPointDelay,
+    Group,
     restore_bias_on_exit,
 )
 
@@ -28,7 +29,7 @@ S_PARAMETERS = ("S11", "S21", "S12", "S22")
 
 
 class SisReflection(Procedure):
-    name = REFLECTION
+    name = REFLECTION_VS_FREQUENCY
     slot_modes = {"bias": EXCLUSIVE}
     title = "SIS reflection (VNA)"
     description = "S-parameters of the SIS IF port over a bias sweep."
@@ -43,17 +44,23 @@ class SisReflection(Procedure):
     voltage = BiasVoltage((0.0, 7e-3, 71))
     frequency = SweepParameter(
         "VNA frequency", default=(2 * GHZ, 12 * GHZ, 301), unit="Hz",
-        display_unit="GHz", display_scale=GHZ,
+        display_unit="GHz", display_scale=GHZ, group=Group.VNA,
     )  # fmt: skip
     power = FloatParameter(
         "VNA power", default=-30.0, minimum=-100, maximum=10, unit="dBm",
-        applies=("vna", POWER_LEVEL.key),
+        applies=("vna", POWER_LEVEL.key), group=Group.VNA,
     )  # fmt: skip
-    s_parameters = MultiChoiceParameter("S-parameters", S_PARAMETERS, default=("S11",))
-    averages = IntParameter("VNA averages", default=1, minimum=1, maximum=1000)
-    samples = IntParameter("Traces per point", default=1, minimum=1, maximum=100)
+    s_parameters = MultiChoiceParameter(
+        "S-parameters", S_PARAMETERS, default=("S11",), group=Group.VNA
+    )
+    averages = IntParameter(
+        "VNA averages", default=1, minimum=1, maximum=1000, group=Group.VNA
+    )
+    samples = IntParameter(
+        "Traces per point", default=1, minimum=1, maximum=100, group=Group.VNA
+    )
     averaging_time = FloatParameter(
-        "Averaging wait", default=0.8, minimum=0, unit="s",
+        "Averaging wait", default=0.8, minimum=0, unit="s", group=Group.TIMING,
         help="Wait after changing bias or S-parameter for the VNA to average",
     )  # fmt: skip
     first_point_delay = FirstPointDelay(1.0)

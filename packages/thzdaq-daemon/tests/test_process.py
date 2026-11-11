@@ -35,7 +35,7 @@ from thzdaq_api.host import (
 )
 from thzdaq_api.measurement_file import INTERRUPTED, read_measurement
 from thzdaq_api.measurements import StartMeasurement
-from thzdaq_api.procedures import MONITOR_TIME
+from thzdaq_api.procedures import MONITOR_VALUES_VS_TIME
 
 FOREVER = {"watch": ["power_meter_1/power"], "interval": 0.05, "duration": 0.0}
 
@@ -121,7 +121,9 @@ def test_idle_it_ends_and_a_listener_keeps_it(home):
 
 def test_a_stop_waits_for_measurements_unless_it_cancels_them(home):
     lab = start(home)
-    run = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=FOREVER))
+    run = lab.call(
+        StartMeasurement(procedure=MONITOR_VALUES_VS_TIME, parameters=FOREVER)
+    )
     with pytest.raises(LabError) as caught:
         lab.call(StopDaemon())
     assert caught.value.code == ErrorCode.CONFLICT
@@ -153,7 +155,9 @@ def test_a_killed_daemon_leaves_every_record_it_told_in_the_file(home):
     lab = start(home)
     heard = []
     stop = lab.subscribe(heard.append)
-    run = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=FOREVER))
+    run = lab.call(
+        StartMeasurement(procedure=MONITOR_VALUES_VS_TIME, parameters=FOREVER)
+    )
     wait_for(lambda: len(bodies(heard, MeasurementRecords)) >= 10, timeout=15)
     stop()
     told = bodies(heard, MeasurementRecords)

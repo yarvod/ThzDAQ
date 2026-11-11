@@ -22,7 +22,6 @@ from thzdaq_api.measurement_file import (
     COMPLETED,
     FAILED,
     INTERRUPTED,
-    PLOTS,
     DeviceUse,
     Measurement,
 )
@@ -74,6 +73,10 @@ class StationLike(Protocol):
         ...
 
     def snapshot(self, refs: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+        ...
+
+    def quantities(self, ref: str) -> List[Any]:
+        """What a device reads or sets (a monitor's plots follow them)."""
         ...
 
 
@@ -165,11 +168,9 @@ class Context:
         self._emit("on_flush")
 
     def plot(self, plot: PlotInfo) -> None:
-        """Another plot of the run's records, drawn from now on and kept in
-        its metadata."""
-        self.measurement.metadata.setdefault(PLOTS, []).append(
-            msgspec.to_builtins(plot)
-        )
+        """Another plot of the run's records, drawn from now on and kept
+        with its plots."""
+        self.measurement.plots.append(msgspec.to_builtins(plot))
         self._emit("on_plot", plot)
 
     def note(self, key: str, entry: Dict[str, Any]) -> None:
@@ -340,6 +341,8 @@ class MeasurementRunner:
         found = self.station.require(
             refs, required, ramps, procedure.planned(), self._told
         )
+        # The file keeps the plots it is drawn with from its start
+        plots = procedure.active_plots(lambda slot: self.station.quantities(refs[slot]))
         measurement = Measurement(
             procedure=procedure.name,
             title=procedure.title,
@@ -349,6 +352,7 @@ class MeasurementRunner:
             station=self.station.snapshot(refs.values()),
             started=wall_time(),
             metadata=dict(metadata or {}),
+            plots=[msgspec.to_builtins(plot) for plot in plots],
         )
         if measurement_id is not None:
             measurement.id = measurement_id

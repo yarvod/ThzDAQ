@@ -7,6 +7,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_api.measurement_file import COMPLETED
 from thzdaq_api.measurement_file import read_measurement
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_core.domain.measurements.catalog import list_procedures
 from thzdaq_core.adapters.yaml_profiles import load_station
 from thzdaq_gui.settings import (
@@ -165,9 +166,9 @@ class TestWindow:
         for name, dock in window.docks.items():
             if name.startswith("measure:") and not dock.isClosed():
                 dock.toggleView(False)
-        window.show_dock("measure:if.hot_cold")
+        window.show_dock("measure:if.noise_temperature_vs_frequency")
         app.processEvents()
-        dock = window.docks["measure:if.hot_cold"]
+        dock = window.docks["measure:if.noise_temperature_vs_frequency"]
         # ADS hid the tab of a closed dock moved into a new area
         assert dock.tabWidget().isVisible()
         # Sized for the content, not for the empty body it had before opening
@@ -755,25 +756,47 @@ class TestDeviceDocks:
 
 class TestMeasureAndData:
     def test_saved_parameters_survive_a_dropped_one(self, window, session):
-        from thzdaq_api.procedures import TWO_SB_PUMP_BALANCE
+        from thzdaq_api.procedures import TWO_SB_LO_RF_BALANCE
         from thzdaq_gui.docks.measure import ProcedureBox
         from thzdaq_gui.settings import settings
 
-        saved = {"bias_delay": 0.7, "upper_when_on": False}  # no longer a parameter
-        key = procedure_key(TWO_SB_PUMP_BALANCE)
+        saved = {"bias_delay": 0.7, "silence_old": False}  # no longer a parameter
+        key = procedure_key(TWO_SB_LO_RF_BALANCE)
         settings().setValue(key, json.dumps({"parameters": saved, "devices": {}}))
         try:
-            box = ProcedureBox(session, window.hub, TWO_SB_PUMP_BALANCE)
+            box = ProcedureBox(session, window.hub, TWO_SB_LO_RF_BALANCE)
             assert box.form.values()["bias_delay"] == pytest.approx(0.7)
         finally:
             settings().remove(key)
 
-    def test_slots_follow_the_parameters(self, window):
-        box = window.docks["measure:sis.pv_curve"].widget().box
-        assert "load" not in box.devices.combos
-        box.form.editors["hot_cold"].widget.setChecked(True)
+    def test_saved_parameters_of_an_old_name_are_taken(self, window, session):
+        from thzdaq_gui.docks.measure import ProcedureBox
+        from thzdaq_gui.settings import settings
+
+        old = procedure_key("sis.iv_curve")  # kept before the procedure was renamed
+        current = procedure_key(CURRENT_VS_VOLTAGE)
+        kept = settings().value(current)
+        settings().remove(current)  # nothing kept under the name it has now
+        saved = {"parameters": {"settle_time": 0.25}, "devices": {}}
+        settings().setValue(old, json.dumps(saved))
+        try:
+            box = ProcedureBox(session, window.hub, CURRENT_VS_VOLTAGE)
+            assert box.form.values()["settle_time"] == pytest.approx(0.25)
+        finally:
+            settings().remove(old)
+            if kept:
+                settings().setValue(current, kept)
+
+    def test_slots_and_fields_follow_the_parameters(self, window):
+        box = window.docks["measure:sis.noise_temperature_vs_voltage"].widget().box
         assert box.devices.combos["load"].currentData()
         assert "Load" in box.devices_box.summary.text()
+        assert box.form.shown("t_hot") and not box.form.shown("angle")
+        box.form.editors["hot_cold"].widget.setChecked(False)
+        assert "load" not in box.devices.combos
+        assert not box.form.shown("t_hot") and not box.form.shown("load_delay")
+        box.form.editors["use_grid"].widget.setChecked(True)
+        assert "grid" in box.devices.combos and box.form.shown("angle")
 
     def test_invalid_parameters_are_named_before_a_start(self, window, monkeypatch):
         from thzdaq_gui.wording import INVALID_PARAMETERS
@@ -790,7 +813,7 @@ class TestMeasureAndData:
         assert not box.runner.running and not box.status().running
 
     def test_measurement_dock_flow(self, window, session, wait, tmp_path):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.form.set_values(FAST_IV)
         box.devices.combos["bias"].setCurrentIndex(
             box.devices.combos["bias"].findData("sis_bias_2")
@@ -825,7 +848,9 @@ class TestMeasureAndData:
         from thzdaq_core.adapters.json_store import MeasurementStore
 
         measurement = Measurement(
-            "sis.iv_curve", title="SIS I-V curve", started="2026-10-29T12:00:00.000"
+            "sis.current_vs_voltage",
+            title="SIS I-V curve",
+            started="2026-10-29T12:00:00.000",
         )
         for v in (1e-3, 2e-3):
             measurement.append("iv", {"voltage": v, "current": v / 20})
@@ -851,6 +876,30 @@ class TestMeasureAndData:
             .startswith('"Voltage, V"')
         )
 
+    def test_a_file_of_an_old_name_shows_and_draws_as_now(
+        self, window, session, tmp_path, monkeypatch
+    ):
+        from thzdaq_api.measurement_file import Measurement
+        from thzdaq_core.adapters.json_store import MeasurementStore
+
+        # Measured before the renaming; its file keeps no plots
+        old = Measurement(
+            "sis.cl_curve", title="SIS I-CL curve", started="2026-10-29T12:00:00.000"
+        )
+        for current in (1e-3, 2e-3):
+            old.append("cl", {"coil_current": current, "current": 1e-6})
+        path = MeasurementStore(tmp_path / "old").save(old)
+        monkeypatch.setattr(
+            "thzdaq_gui.folders.QFileDialog.getOpenFileNames",
+            lambda *a, **k: ([str(path)], ""),
+        )
+        window.dataWidget.open_files()
+        model = session.measurements
+        index = model.index(0, 1)
+        assert model.data(index) == "SIS Josephson suppression"
+        assert "SIS I-CL curve (sis.cl_curve)" in model.data(index, Qt.ToolTipRole)
+        assert len(window.hub.graph("I-CL").items) == 1
+
     def test_file_dialogs_start_where_the_last_file_went(
         self, window, session, tmp_path, monkeypatch
     ):
@@ -862,7 +911,7 @@ class TestMeasureAndData:
         from thzdaq_gui.settings import settings
 
         settings().remove("folders")
-        measurement = Measurement("sis.iv_curve", title="SIS I-V curve")
+        measurement = Measurement("sis.current_vs_voltage", title="SIS I-V curve")
         measurement.append("iv", {"voltage": 1e-3, "current": 5e-5})
         session.measurements.add(measurement)
         window.dataWidget.table.selectRow(0)
@@ -877,7 +926,7 @@ class TestMeasureAndData:
         # Nothing chosen yet: the data folder of the session, not the program's
         window.dataWidget.save_as()
         assert starts[0] == session.data_root.resolve()
-        assert (results / f"{measurement.id}_sis_iv_curve.json").exists()
+        assert (results / f"{measurement.id}_sis_current_vs_voltage.json").exists()
         # Then where the last file went, also after a restart
         window.dataWidget.export()
         assert starts[1] == results.resolve()
@@ -889,7 +938,7 @@ class TestMeasureAndData:
         assert later.folder(MEASUREMENTS) == tmp_path / "data"
 
     def test_monitor_dock_watches_ticked_values(self, window, session, wait):
-        box = window.docks["measure:monitor.time"].widget().box
+        box = window.docks["measure:monitor.values_vs_time"].widget().box
         tree = box.devices
         tree.set_device("power_meter_1", True)
         tree.set_device("sis_bias_1", True)
@@ -1028,7 +1077,7 @@ class TestPerspectives:
         window.dock_manager.addPerspective("Narrow")
         narrow = widths()
         window.docks["device:power_meter_1"].toggleView(True)
-        window.docks["measure:monitor.time"].toggleView(True)
+        window.docks["measure:monitor.values_vs_time"].toggleView(True)
         settle()
         window.dock_manager.addPerspective("Wide")
         wide = widths()
@@ -1092,7 +1141,7 @@ class TestExit:
     ):
         import json
 
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.form.set_values(FAST_IV)
         finished = []
         box.runner.finished.connect(finished.append)
@@ -1102,7 +1151,7 @@ class TestExit:
         assert window.close()
         (dump,) = (tmp_path / "data" / "dumps").glob("dump_*.json")
         data = json.loads(dump.read_text(encoding="utf-8"))
-        assert [m["procedure"] for m in data] == ["sis.iv_curve"]
+        assert [m["procedure"] for m in data] == ["sis.current_vs_voltage"]
         assert data[0]["tables"]["iv"]["data"]["voltage"][0] == 0.0
         assert window.settings.value(PRO_LAYOUT) is None  # layout not stored
 
@@ -1279,7 +1328,7 @@ def test_no_stray_windows_flash(app, session, tmp_path):
 
 class TestHangs:
     def test_watchdog_returns_the_dock_to_idle(self, window):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.on_running(True)  # the dock thinks it runs, the thread is gone
         assert not box.controls.btnStart.isEnabled()
         box.check_thread()  # the end signal may still be queued: wait one more look
@@ -1302,7 +1351,7 @@ class TestHangs:
         assert "Rigol 1" in window.statusBar().currentMessage()
 
     def test_abort_is_offered_only_while_starting_or_stopping(self, window):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.on_running(True)
         box.update_status(state="Running")
         box.offer_abort()  # a timer of an earlier start or stop
@@ -1313,7 +1362,7 @@ class TestHangs:
         assert not box.stuck.isActive()
 
     def test_stop_without_answer_offers_abort(self, window, session, monkeypatch):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         aborted = []
         monkeypatch.setattr(box.runner, "abort", lambda: aborted.append(True))
         box.on_running(True)
@@ -1328,7 +1377,7 @@ class TestHangs:
         assert abort.isHidden()
 
     def test_start_while_running_warns(self, window, monkeypatch):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         warnings = []
         monkeypatch.setattr(
             QMessageBox, "warning", lambda *a, **k: warnings.append(a[2])
@@ -1395,7 +1444,7 @@ class TestHangs:
 
 class TestFolding:
     def test_controls_stay_below_the_scrolling_setup(self, window):
-        box = window.docks["measure:two_sb.tn"].widget().box
+        box = window.docks["measure:two_sb.noise_temperature"].widget().box
         setup = box.scroll.widget()
         assert (
             box.devices_box.parent() is setup and box.parameters_box.parent() is setup
@@ -1404,7 +1453,7 @@ class TestFolding:
         assert box.footer.isAncestorOf(box.controls)
 
     def test_folded_devices_say_which_are_chosen(self, window, session):
-        box = window.docks["measure:sis.pv_curve"].widget().box
+        box = window.docks["measure:sis.power_vs_voltage"].widget().box
         box.devices_box.set_expanded(False)
         summary = box.devices_box.summary
         assert summary.isVisibleTo(box) and "SIS1" in summary.text()
@@ -1415,7 +1464,7 @@ class TestFolding:
         box.devices_box.set_expanded(True)
 
     def test_a_missing_device_unfolds_the_devices(self, window, monkeypatch):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.devices_box.set_expanded(False)
         monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
         box.devices.combos["bias"].setCurrentIndex(-1)
@@ -1514,7 +1563,7 @@ class TestRunGraphs:
         assert measurement.width() == width  # the columns keep their widths
 
     def test_pv_without_loads_opens_two_graphs_at_start(self, window, monkeypatch):
-        box = window.docks["measure:sis.pv_curve"].widget().box
+        box = window.docks["measure:sis.power_vs_voltage"].widget().box
         shown = []
         window.hub.run_requested.connect(
             lambda widgets: shown.append([w.title for w in widgets])
@@ -1527,7 +1576,7 @@ class TestRunGraphs:
 class TestProcesses:
     def test_a_measurement_runs_in_processes_until_stopped(self, window, wait):
         processes = window.session.processes
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.form.set_values(
             {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
         )
@@ -1535,7 +1584,7 @@ class TestProcesses:
         wait(lambda: processes.items and processes.items[0].progress)
         (process,) = processes.items
         assert process.title == "SIS I-V curve"
-        assert process.dock == "measure:sis.iv_curve"
+        assert process.dock == "measure:sis.current_vs_voltage"
         assert process.progress[1] == 2000 and not process.can_abort
         assert window.docks["processes"].windowTitle() == "Processes (1)"
         assert window.processesWidget.tree.topLevelItemCount() == 1
@@ -1639,7 +1688,7 @@ class TestLite:
         measurement = lite.docks["measurement"]
         assert not measurement.isClosed() and measurement.tabWidget().isVisible()
         assert measurement.windowTitle() == "SIS I-V curve"
-        assert lite.runBar.chosen_name() == "sis.iv_curve"
+        assert lite.runBar.chosen_name() == "sis.current_vs_voltage"
         assert all(
             dock.isClosed()
             for n, dock in lite.docks.items()
@@ -1668,7 +1717,7 @@ class TestLite:
     def test_the_bar_runs_the_chosen_measurement(self, lite, wait):
         processes = lite.session.processes
         bar = lite.runBar
-        bar.chosen.emit("sis.iv_curve")
+        bar.chosen.emit("sis.current_vs_voltage")
         iv = bar.controls.run
         iv.form.set_values(
             {**FAST_IV, "voltage": sweep(0, 5e-3, 2000), "settle_time": 0.005}
@@ -1683,13 +1732,13 @@ class TestLite:
             and "Running" in bar.controls.progress.format()
         )
         # Another measurement chosen: the first goes on
-        bar.chosen.emit("sis.pv_curve")
+        bar.chosen.emit("sis.power_vs_voltage")
         assert bar.controls.run is not iv and bar.controls.btnStart.isEnabled()
-        assert lite.docks["measurement"].windowTitle() == "SIS P-V curve"
+        assert lite.docks["measurement"].windowTitle() == "SIS P-V measurement"
         assert iv.status().running and [p.title for p in processes.items] == [
             "SIS I-V curve"
         ]
-        bar.chosen.emit("sis.iv_curve")
+        bar.chosen.emit("sis.current_vs_voltage")
         assert bar.controls.run is iv and bar.controls.btnStop.isEnabled()
         bar.controls.btnStop.click()
         wait(lambda: not iv.status().running)
@@ -1699,12 +1748,14 @@ class TestLite:
         )
 
     def test_menus_and_find_choose_a_measurement(self, lite):
-        assert lite.dock_state("measure:sis.pv_curve") == "closed"
-        lite.show_dock("measure:sis.pv_curve")
-        assert lite.runBar.chosen_name() == "sis.pv_curve"
-        assert lite.docks["measure:sis.pv_curve"].isClosed()  # no Pro dock in Lite
-        assert lite.dock_state("measure:sis.pv_curve") == "front"
-        assert lite.dock_state("measure:sis.iv_curve") == "closed"
+        assert lite.dock_state("measure:sis.power_vs_voltage") == "closed"
+        lite.show_dock("measure:sis.power_vs_voltage")
+        assert lite.runBar.chosen_name() == "sis.power_vs_voltage"
+        assert lite.docks[
+            "measure:sis.power_vs_voltage"
+        ].isClosed()  # no Pro dock in Lite
+        assert lite.dock_state("measure:sis.power_vs_voltage") == "front"
+        assert lite.dock_state("measure:sis.current_vs_voltage") == "closed"
 
     def test_modes_keep_their_layouts_and_running_measurements(
         self, lite, session, wait, app
@@ -1724,7 +1775,7 @@ class TestLite:
         assert lite.docks["measurement"].isClosed()
         assert lite.docks["device:power_supply_1"].isClosed()  # Pro's default
         # The running box is back in its Pro dock with its own controls
-        pro_dock = lite.docks["measure:sis.iv_curve"]
+        pro_dock = lite.docks["measure:sis.current_vs_voltage"]
         assert not pro_dock.isClosed() and pro_dock.widget().isAncestorOf(box)
         assert box.controls.isVisibleTo(pro_dock) and box.status().running
         lite.set_mode("lite")
@@ -1850,7 +1901,9 @@ def sweep_bias(session, ref="sis_bias_1"):
 
     return session.call(
         StartMeasurement(
-            procedure="sis.iv_curve", parameters=SLOW_IV, devices={"bias": ref}
+            procedure="sis.current_vs_voltage",
+            parameters=SLOW_IV,
+            devices={"bias": ref},
         )
     )
 
@@ -1869,7 +1922,7 @@ class TestConflicts:
         from thzdaq_api.measurement_file import CONFLICTS
 
         other = sweep_bias(session)
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.form.set_values(FAST_IV)
         box.devices.combos["bias"].setCurrentIndex(
             box.devices.combos["bias"].findData("sis_bias_1")
@@ -1896,7 +1949,7 @@ class TestConflicts:
         ended(session, other)
 
     def test_check_says_whether_it_would_start(self, window, session, monkeypatch):
-        box = window.docks["measure:sis.iv_curve"].widget().box
+        box = window.docks["measure:sis.current_vs_voltage"].widget().box
         box.form.set_values(FAST_IV)
         told = []
         monkeypatch.setattr(

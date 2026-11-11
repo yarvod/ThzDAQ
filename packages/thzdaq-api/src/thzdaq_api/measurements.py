@@ -1,5 +1,6 @@
 """Procedures and the measurements running in the daemon."""
 
+import json
 import re
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
@@ -8,6 +9,7 @@ import msgspec
 from thzdaq_api.devices import DeviceInfo, Prefix, Value
 from thzdaq_api.measurement_file import PLOTS, Measurement
 from thzdaq_api.operation import Operation, Rights
+from thzdaq_api.procedures import current_name
 
 DATA = "data"  # the folder of a workspace that holds its measurements
 PLANNED = "planned"  # a run as a dry run of start_measurement says it would go
@@ -21,9 +23,28 @@ def split_list(text: str) -> List[str]:
     return [item for item in LIST_SEPARATORS.split(str(text).strip()) if item]
 
 
+class Condition(msgspec.Struct, frozen=True):
+    """Holds while the parameter named has one of the values (as JSON)."""
+
+    parameter: str
+    values: Tuple[Any, ...]
+
+    def holds(self, values: Mapping[str, Any]) -> bool:
+        return values.get(self.parameter) in self.values
+
+    def __str__(self) -> str:
+        """hot_cold=true; detector=spectrum|power_meter"""
+        shown = "|".join(
+            json.dumps(v) if isinstance(v, bool) else f"{v}" for v in self.values
+        )
+        return f"{self.parameter}={shown}"
+
+
 class ParameterInfo(msgspec.Struct, frozen=True):
     """A parameter of a procedure; values in SI units, shown in display units
-    (value / display_scale)."""
+    (value / display_scale). A form shows it under its group, and only while
+    all of shown_if hold (hot and cold load with hot/cold on): otherwise the
+    run does not use it."""
 
     name: str
     label: str
@@ -38,6 +59,16 @@ class ParameterInfo(msgspec.Struct, frozen=True):
     maximum: Optional[float] = None
     choices: Tuple[Any, ...] = ()
     max_points: Optional[int] = None  # of a sweep
+    group: str = ""  # the title of the part of a form it is in
+    shown_if: Tuple[Condition, ...] = ()
+
+    def shown(self, values: Mapping[str, Any]) -> bool:
+        """Used with the parameters' values (as JSON) given."""
+        return all(condition.holds(values) for condition in self.shown_if)
+
+    def used_when(self) -> str:
+        """Its conditions as text: "hot_cold=true"; empty when it is always used."""
+        return ", ".join(f"{condition}" for condition in self.shown_if)
 
     def typed(self, value: Any) -> str:
         """A value as people type it (typed): in the display unit, a sweep
@@ -187,12 +218,21 @@ class ProcedureSummary(msgspec.Struct, frozen=True):
     error: str = ""
 
 
+def kept_plots(measurement: Measurement) -> Tuple[PlotInfo, ...]:
+    """The plots a measurement keeps with it (none in files written before)."""
+    return tuple(msgspec.convert(plot, PlotInfo) for plot in measurement.plots or ())
+
+
 def saved_plots(
     measurement: Measurement, procedures: Iterable[ProcedureSummary]
 ) -> Tuple[PlotInfo, ...]:
-    """The plots a saved measurement is drawn with: those of its procedure
-    (list_procedures), then those it added while it ran (a script's m.plot)."""
-    own = next((p.plots for p in procedures if p.name == measurement.procedure), ())
+    """The plots a saved measurement is drawn with: those its file keeps; of
+    a file written before, those of its procedure (list_procedures, by its
+    name now), then those it added while it ran (a script's m.plot)."""
+    if measurement.plots is not None:
+        return kept_plots(measurement)
+    name = current_name(measurement.procedure)
+    own = next((p.plots for p in procedures if p.name == name), ())
     added = measurement.metadata.get(PLOTS, ())
     return tuple(own) + tuple(msgspec.convert(plot, PlotInfo) for plot in added)
 

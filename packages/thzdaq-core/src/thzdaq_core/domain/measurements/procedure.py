@@ -15,7 +15,7 @@ from typing import (
 from thzdaq_api.leases import SHARED
 from thzdaq_api.measurement_file import Column
 from thzdaq_core.domain.errors import ProcedureError
-from thzdaq_core.domain.parameters import Parameter
+from thzdaq_core.domain.parameters import Parameter, When
 from thzdaq_api.measurements import PlotInfo
 
 Capabilities = Union[Type, Tuple[Type, ...]]
@@ -29,7 +29,7 @@ class Procedure:
     the CLI, a notebook or a test with simulators.
     """
 
-    name: ClassVar[str] = ""  # registry key, e.g. "sis.iv_curve"
+    name: ClassVar[str] = ""  # registry key, e.g. "sis.current_vs_voltage"
     title: ClassVar[str] = ""
     description: ClassVar[str] = ""
     # Device slots and the capabilities each needs, e.g. {"bias": VoltageSource}
@@ -43,12 +43,14 @@ class Procedure:
         "coil": "sis_coil",
         # A switch slot takes a supply channel, not any device with an output
         "if_selector": "channel",
-        "yig_power": "channel",
     }
     # How a slot uses its device while the run lasts (thzdaq_api.leases): read,
     # exclusive (it sweeps the device) or, unlisted, shared
     slot_modes: ClassVar[Mapping[str, str]] = {}
     plots: ClassVar[Tuple[PlotInfo, ...]] = ()
+    # Parameters used only while another has some value (shown_while): a form
+    # shows them then; those of mixins and subclasses add up
+    shown_if: ClassVar[Mapping[str, When]] = {}
     # Record tables: titles, and columns whose title/unit differ from KNOWN_COLUMNS
     table_titles: ClassVar[Mapping[str, str]] = {}
     columns: ClassVar[Mapping[str, Column]] = {}
@@ -65,6 +67,16 @@ class Procedure:
             raise ProcedureError(
                 f"{cls.__name__}: parameter names {clashes} clash with Procedure attributes"
             )
+        parameters = cls.parameters()
+        for name, conditions in cls.conditions().items():
+            for condition in conditions:
+                if {name, condition.parameter} - set(parameters):
+                    raise ProcedureError(
+                        f"{cls.__name__}: shown_if names {name!r} or "
+                        f"{condition.parameter!r}, not its parameters"
+                    )
+                for value in condition.values:
+                    parameters[condition.parameter].validate(value)
 
     def __init__(self, **values: Any):
         self._values: Dict[str, Any] = {}
@@ -86,6 +98,24 @@ class Procedure:
                 if isinstance(value, Parameter):
                     found[key] = value
         return found
+
+    @classmethod
+    def conditions(cls) -> Dict[str, Tuple[When, ...]]:
+        """What each parameter is used under (shown_if of the class and of
+        those it is made of): all of them hold."""
+        found: Dict[str, Tuple[When, ...]] = {}
+        for klass in reversed(cls.__mro__):
+            for name, condition in vars(klass).get("shown_if", {}).items():
+                if condition not in found.get(name, ()):
+                    found[name] = found.get(name, ()) + (condition,)
+        return found
+
+    def used(self, name: str) -> bool:
+        """Whether a run uses the parameter, as the others stand (shown_if)."""
+        return all(
+            getattr(self, condition.parameter) in condition.values
+            for condition in self.conditions().get(name, ())
+        )
 
     @classmethod
     def from_json(
@@ -146,7 +176,7 @@ class Procedure:
         return [
             (*parameter.applies, parameter.bounds(getattr(self, key)))
             for key, parameter in self.parameters().items()
-            if parameter.applies is not None
+            if parameter.applies is not None and self.used(key)
         ]
 
     def validate(self) -> None:

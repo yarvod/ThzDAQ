@@ -22,7 +22,7 @@ from thzdaq_api.measurement_file import (
 )
 from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.origins import GUI, script
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE, MONITOR_VALUES_VS_TIME
 from thzdaq_api.scripts import Grant, StartScript
 from thzdaq_api.sessions import EndSession, StartSession
 
@@ -179,7 +179,9 @@ def test_a_yes_in_a_session_lets_it_write_raw_commands_until_it_ends(lab_as, win
 def test_a_write_to_a_swept_instrument_conflicts_and_is_noted(lab):
     sweep = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=SLOW_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=SLOW_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     assert lab.call(raw("*IDN?")).answer == IDENTITY  # a query disturbs nothing
@@ -193,7 +195,7 @@ def test_a_write_to_a_swept_instrument_conflicts_and_is_noted(lab):
 def test_a_write_is_noted_by_the_measurements_reading_the_instrument(lab):
     monitor = lab.call(
         StartMeasurement(
-            procedure=MONITOR_TIME,
+            procedure=MONITOR_VALUES_VS_TIME,
             parameters={"watch": ["power_meter_1"], "interval": 0.05},
         )
     )

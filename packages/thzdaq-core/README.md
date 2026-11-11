@@ -51,16 +51,16 @@ from thzdaq_core.domain.station.station import Station
 
 with Station(load_station("stations/2sb.example.yaml"), simulate=True) as station:
     runner = MeasurementRunner(station, MeasurementStore("data"))
-    procedure = get_procedure("sis.iv_curve")(voltage=(0, 7e-3, 351))
+    procedure = get_procedure("sis.current_vs_voltage")(voltage=(0, 7e-3, 351))
     measurement = runner.run(procedure, devices={"bias": "sis_bias_1"})
     print(measurement.status, len(measurement.records("iv")))
 ```
 
 ```bash
 uv run thzdaq procedures
-uv run thzdaq describe sis.iv_curve
-uv run thzdaq --simulate run sis.iv_curve --device bias=sis_bias_1 --set voltage=0:7:351
-uv run thzdaq show data/2026-10-29/000001_sis_iv_curve.json
+uv run thzdaq describe sis.current_vs_voltage
+uv run thzdaq --simulate run sis.current_vs_voltage --device bias=sis_bias_1 --set voltage=0:7:351
+uv run thzdaq show data/2026-10-29/000001_sis_current_vs_voltage.json
 ```
 
 Procedures are listed explicitly in `domain/measurements/procedures/__init__.py`

@@ -81,11 +81,14 @@ profile; connections only by their kind) and `thzdaq://guide/<topic>` (this guid
 ## Example: an I-V curve
 
 1. `list_devices` → the SIS biases, e.g. `sis_bias_1`.
-2. `describe_procedure(procedure="sis.iv_curve")` → `voltage`: a sweep in mV, default
-   `0:7:351`; the slot `bias` takes `sis_bias_1` or `sis_bias_2`.
-3. `start_measurement(procedure="sis.iv_curve", devices={"bias": "sis_bias_1"},
+2. `describe_procedure(procedure="sis.current_vs_voltage")` → `voltage`: a sweep in mV,
+   default `0:7:351`; the slot `bias` takes `sis_bias_1` or `sis_bias_2`. A parameter
+   "used only when hot_cold=true" matters only with that value; names are
+   `<group>.<what is measured>_vs_<what is changed>`, and a name a procedure had before
+   (`sis.iv_curve`) still finds it.
+3. `start_measurement(procedure="sis.current_vs_voltage", devices={"bias": "sis_bias_1"},
    typed={"voltage": "0:7:351"})` → the person allows it in the window →
-   `#12 SIS I-V curve (sis.iv_curve): running, 0/351 steps`.
+   `#12 SIS I-V curve (sis.current_vs_voltage): running, 0/351 steps`.
 4. `wait_measurement(id=12, timeout=60)` until `completed` → the summary: table `iv`, 351
    records, `voltage` and `current` with their ranges, the file.
 5. Read the file to find the gap, Rn and the rest.
@@ -95,9 +98,9 @@ profile; connections only by their kind) and `thzdaq://guide/<topic>` (this guid
 The same operations from your shell, with `--json` for answers to parse:
 `thzdaq devices`, `thzdaq device sis_bias_1`, `thzdaq read sis_bias_1`,
 `thzdaq set sis_bias_1 voltage_set 2.3mV`, `thzdaq procedures`,
-`thzdaq describe sis.iv_curve`, `thzdaq raw sis_block_1 "*IDN?"`,
-`thzdaq run sis.iv_curve --device bias=sis_bias_1 --set voltage=0:7:351` (follows the run
-to its end; `--detach` only starts it), `thzdaq status`, `thzdaq cancel 12`,
+`thzdaq describe sis.current_vs_voltage`, `thzdaq raw sis_block_1 "*IDN?"`,
+`thzdaq run sis.current_vs_voltage --device bias=sis_bias_1 --set voltage=0:7:351`
+(follows the run to its end; `--detach` only starts it), `thzdaq status`, `thzdaq cancel 12`,
 `thzdaq show <file>`. In an agent's shell the command is the agent's (`cli:agent`): `--yes`
 does not answer for the person, and what changes the bench waits for them as with MCP.
 
