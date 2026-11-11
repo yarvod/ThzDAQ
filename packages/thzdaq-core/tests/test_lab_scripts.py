@@ -20,7 +20,7 @@ from thzdaq_api.measurement_file import ALLOWED, read_measurement
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
 from thzdaq_api.operation import Rights
 from thzdaq_api.origins import AGENT_CLI, GUI, script
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.rights import Decision
 from thzdaq_api.scripts import (
     Grant,
@@ -40,7 +40,7 @@ LIMITS = {
 }
 SLOW = "import time\ntime.sleep(60)\n"
 IV = dict(
-    procedure=IV_CURVE,
+    procedure=CURRENT_VS_VOLTAGE,
     parameters={
         "voltage": {"start": 0, "stop": 0.001, "points": 3},
         "settle_time": 0,
@@ -238,14 +238,17 @@ def test_what_a_script_was_allowed_goes_without_a_person(
     warned(lab)
     started = run(
         lab, tmp_path, "slow.py", SLOW,
-        allow=(Grant("set", "sis_bias_1"), Grant("run", IV_CURVE)),
+        allow=(Grant("set", "sis_bias_1"), Grant("run", CURRENT_VS_VOLTAGE)),
     )  # fmt: skip
     itself = lab_as(started.origin, "script")
     # Beyond the warn range: what was allowed goes, the rest waits for a person
     itself.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="4.5mV"))
     run_ = itself.call(StartMeasurement(**IV))
     noted = read_measurement(lab.call(WaitMeasurement(id=run_.id, timeout=10)).path)
-    assert noted.metadata[ALLOWED][0]["allow"] == ["set:sis_bias_1", f"run:{IV_CURVE}"]
+    assert noted.metadata[ALLOWED][0]["allow"] == [
+        "set:sis_bias_1",
+        f"run:{CURRENT_VS_VOLTAGE}",
+    ]
     refused = [
         SetQuantity(ref="sis_bias_2", key="voltage_set", value="4.5mV"),
         SetQuantity(ref="sis_bias_1", key="active", value=False),  # dangerous

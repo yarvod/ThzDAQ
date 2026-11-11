@@ -3,10 +3,22 @@ procedure or of a device kind's settings) and device slots (SlotInfo).
 
 Editors show display units (GHz, mV); values() returns SI values as JSON
 carries them (a sweep is {start, stop, points}). The daemon checks them: a form
-only turns what is typed into numbers.
+only turns what is typed into numbers. Parameters are shown under a line with
+the title of their group, and only while their conditions hold (shown_if: the
+hot and cold load while hot/cold is on).
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -15,6 +27,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,6 +39,8 @@ from PySide6.QtWidgets import (
 from thzdaq_api.devices import DeviceInfo
 from thzdaq_api.errors import LabError
 from thzdaq_api.measurements import ParameterInfo, SlotInfo, split_list
+
+from thzdaq_gui import theme
 
 LIMIT = 1e15
 
@@ -256,6 +271,38 @@ def make_editor(parameter: ParameterInfo) -> Editor:
     return Editor(line, line.text, lambda v: line.setText(str(v)))
 
 
+def grouped(
+    parameters: Iterable[ParameterInfo],
+) -> List[Tuple[str, List[ParameterInfo]]]:
+    """Parameters by their group: those without one first, then the groups in
+    the order they first come, each in the order given but for those that
+    decide whether others are shown (hot/cold on), which lead their group."""
+    parameters = list(parameters)
+    deciding = {c.parameter for p in parameters for c in p.shown_if}
+    groups: Dict[str, List[ParameterInfo]] = {}
+    for parameter in sorted(parameters, key=lambda p: p.name not in deciding):
+        groups.setdefault(parameter.group, []).append(parameter)
+    order = list(dict.fromkeys(p.group for p in parameters))
+    return sorted(
+        groups.items(), key=lambda item: (item[0] != "", order.index(item[0]))
+    )
+
+
+def group_header(title: str) -> QWidget:
+    """The title of a group of parameters on a line across the form."""
+    header = QWidget()
+    row = QHBoxLayout(header)
+    row.setContentsMargins(0, 6, 0, 0)
+    label = QLabel(title)
+    label.setStyleSheet(f"color: {theme.MUTED}; font-weight: bold;")
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setStyleSheet(f"color: {theme.BORDER};")
+    row.addWidget(label)
+    row.addWidget(line, 1)
+    return header
+
+
 class ParameterForm(QWidget):
     """Editors for a set of parameters (a procedure's or a device kind's settings)."""
 
@@ -268,23 +315,62 @@ class ParameterForm(QWidget):
         self.layout_.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.parameters: Dict[str, ParameterInfo] = {}
         self.editors: Dict[str, Editor] = {}
+        self.headers: Dict[
+            str, Tuple[QWidget, List[str]]
+        ] = {}  # group: its line, names
+        self.changed.connect(self.show_used)
 
     def set_parameters(self, parameters: Iterable[ParameterInfo]) -> None:
         while self.layout_.rowCount():
             self.layout_.removeRow(0)
         self.editors.clear()
+        self.headers.clear()
         self.parameters = {parameter.name: parameter for parameter in parameters}
+        for group, members in grouped(self.parameters.values()):
+            if group:
+                header = group_header(group)
+                self.layout_.addRow(header)
+                self.headers[group] = (header, [p.name for p in members])
+            for parameter in members:
+                self._add(parameter)
+        self.show_used()
+
+    def _add(self, parameter: ParameterInfo) -> None:
+        editor = make_editor(parameter)
+        if parameter.default is not None and not parameter.required:
+            editor.set(parameter.default)
+        if parameter.help:
+            editor.widget.setToolTip(parameter.help)
+        label = QLabel(parameter.label)
+        label.setToolTip(parameter.name)
+        self.layout_.addRow(label, editor.widget)
+        self.editors[parameter.name] = editor
+        self._watch(editor.widget)
+
+    def shown(self, name: str) -> bool:
+        """Whether the parameter's row is shown: its conditions hold."""
+        return self.layout_.isRowVisible(self.editors[name].widget)
+
+    def show_used(self) -> None:
+        """Rows of the parameters whose conditions hold, and the lines of
+        groups with any of them."""
+        deciding = {
+            condition.parameter
+            for parameter in self.parameters.values()
+            for condition in parameter.shown_if
+        }
+        values = {}
+        for name in deciding & set(self.editors):
+            try:
+                values[name] = self.editors[name].get()
+            except ValueError:
+                continue  # typed text that is not numbers: what it decides is hidden
         for name, parameter in self.parameters.items():
-            editor = make_editor(parameter)
-            if parameter.default is not None and not parameter.required:
-                editor.set(parameter.default)
-            if parameter.help:
-                editor.widget.setToolTip(parameter.help)
-            label = QLabel(parameter.label)
-            label.setToolTip(name)
-            self.layout_.addRow(label, editor.widget)
-            self.editors[name] = editor
-            self._watch(editor.widget)
+            self.layout_.setRowVisible(
+                self.editors[name].widget, parameter.shown(values)
+            )
+        for header, names in self.headers.values():
+            self.layout_.setRowVisible(header, any(map(self.shown, names)))
 
     def _watch(self, widget: QWidget) -> None:
         for child in [widget, *widget.findChildren(QWidget)]:
@@ -315,6 +401,7 @@ class ParameterForm(QWidget):
                     self.editors[name].set(value)
                 except (TypeError, ValueError, AttributeError, KeyError):
                     pass  # a value saved by an older version: the editor keeps its own
+        self.show_used()
 
 
 def saved_or_told(dialog: QDialog, title: str, save: Callable[[], None]) -> None:

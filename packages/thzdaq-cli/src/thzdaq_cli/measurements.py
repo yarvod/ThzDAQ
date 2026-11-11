@@ -117,8 +117,9 @@ def procedure_text(info: ProcedureInfo) -> str:
     lines = [f"{info.title} ({info.name}): {steps}", info.description, ""]
     lines.append(
         show.table(
-            ("parameter", "label", "default", "unit"),
-            [(p.name, p.label, p.typed(p.default), p.display_unit) for p in info.parameters],
+            ("parameter", "label", "default", "unit", "used when"),
+            [(p.name, p.label, p.typed(p.default), p.display_unit, p.used_when())
+             for p in info.parameters],
         )
     )  # fmt: skip
     slots = show.table(

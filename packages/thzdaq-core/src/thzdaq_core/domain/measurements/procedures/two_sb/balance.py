@@ -2,7 +2,7 @@ from itertools import product
 
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import TWO_SB_IF_BALANCE, TWO_SB_PUMP_BALANCE
+from thzdaq_api.procedures import TWO_SB_IF_BALANCE, TWO_SB_LO_RF_BALANCE
 from thzdaq_instruments.capabilities import (
     PowerDetector,
     PowerLevel,
@@ -22,6 +22,7 @@ from thzdaq_core.domain.parameters import (
 )
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedures.common import (
+    Group,
     CURRENT_UA,
     FREQUENCY_GHZ,
     IF_GHZ,
@@ -66,6 +67,7 @@ class IfBalance(IfSwitchProcedure):
         display_unit="mV",
         display_scale=MV,
         applies=("sis1", VOLTAGE_SET.key),
+        group=Group.BIAS,
     )
     sis2_voltages = FloatListParameter(
         "SIS2 voltages",
@@ -74,6 +76,7 @@ class IfBalance(IfSwitchProcedure):
         display_unit="mV",
         display_scale=MV,
         applies=("sis2", VOLTAGE_SET.key),
+        group=Group.BIAS,
     )
     frequency = IFSweep()
     point_delay = PointDelay(0.05)
@@ -123,7 +126,7 @@ class IfBalance(IfSwitchProcedure):
 
 
 class PumpBalance(TwoSbProcedure):
-    name = TWO_SB_PUMP_BALANCE
+    name = TWO_SB_LO_RF_BALANCE
     slot_modes = {"sis1": EXCLUSIVE, "sis2": EXCLUSIVE, "detector": READ}
     title = "2SB LO/RF balance"
     description = (
@@ -144,22 +147,26 @@ class PumpBalance(TwoSbProcedure):
     )  # fmt: skip
 
     source = ChoiceParameter(
-        "Swept source", ("lo", "test_tone"), default="lo",
+        "Swept source", ("lo", "test_tone"), default="lo", group=Group.SOURCE,
         help="lo: LO balance, test_tone: RF balance",
     )  # fmt: skip
     frequency = SweepParameter(
         "Frequency at the mixer", default=(220 * GHZ, 265 * GHZ, 46), unit="Hz",
-        display_unit="GHz", display_scale=GHZ,
+        display_unit="GHz", display_scale=GHZ, group=Group.SOURCE,
     )  # fmt: skip
-    source_power = FloatParameter("Source power", default=4.0, maximum=25, unit="dBm")
+    source_power = FloatParameter(
+        "Source power", default=4.0, maximum=25, unit="dBm", group=Group.SOURCE
+    )
     silence_other = BoolParameter(
-        "Silence the other source", default=True,
+        "Silence the other source", default=True, group=Group.SOURCE,
         help="Output off and -80 dBm on the source that is not swept",
     )  # fmt: skip
     sis1_voltage = SisBiasSweep(1, (2.4e-3, 2.6e-3, 3))
     sis2_voltage = SisBiasSweep(2, (2.4e-3, 2.6e-3, 3))
-    bias_delay = FloatParameter("Bias delay", default=0.1, minimum=0, unit="s")
-    measure_power = BoolParameter("Read IF power", default=False)
+    bias_delay = FloatParameter(
+        "Bias delay", default=0.1, minimum=0, unit="s", group=Group.TIMING
+    )
+    measure_power = BoolParameter("Read IF power", default=False, group=Group.DETECTOR)
     precise_bias = PreciseBias(False)
 
     @property

@@ -21,13 +21,13 @@ STARTED = "2026-11-05T10:00:00.000"
 
 def running(tmp_path, rows=0):
     """A running monitor whose file holds rows records and its description."""
-    measurement = Measurement("monitor.time", "Monitor", 7, started=STARTED)
+    measurement = Measurement("monitor.values_vs_time", "Monitor", 7, started=STARTED)
     table = measurement.table("watch", "Watched")
     table.columns.append(Column("power", "Power", "dBm", "power_meter_1/power"))
     table.data["power"] = []
     for i in range(rows):
         measurement.append("watch", {"power": -float(i)})
-    path = tmp_path / "2026-11-05" / "000007_monitor_time.json"
+    path = tmp_path / "2026-11-05" / "000007_monitor_values_vs_time.json"
     return measurement, path
 
 
@@ -37,8 +37,8 @@ def append(path, *lines):
 
 
 def test_the_records_file_lies_next_to_the_measurement(tmp_path):
-    path = tmp_path / "2026-11-05" / "000007_monitor_time.json"
-    assert records_path(path) == path.with_name("000007_monitor_time.jsonl")
+    path = tmp_path / "2026-11-05" / "000007_monitor_values_vs_time.json"
+    assert records_path(path) == path.with_name("000007_monitor_values_vs_time.jsonl")
 
 
 def test_a_running_file_gets_its_records_from_the_records_file(tmp_path):

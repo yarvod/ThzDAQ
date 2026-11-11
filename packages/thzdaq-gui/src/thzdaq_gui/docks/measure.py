@@ -46,7 +46,12 @@ from thzdaq_gui.run_controls import (
     RunControls,
     RunStatus,
 )
-from thzdaq_gui.settings import procedure_key, sections_path, settings
+from thzdaq_gui.settings import (
+    procedure_key,
+    saved_procedure,
+    sections_path,
+    settings,
+)
 from thzdaq_gui.wording import INVALID_PARAMETERS
 
 # A start or a stop that takes this long is treated as a hung device
@@ -276,7 +281,7 @@ class ProcedureBox(QWidget):
     # Persistence of the last values
     def restore(self) -> None:
         self.saved_devices: Dict[str, str] = {}
-        raw = settings().value(self.settings_key)
+        raw = saved_procedure(self.procedure)
         if not raw:
             return
         try:

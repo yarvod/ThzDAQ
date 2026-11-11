@@ -1,6 +1,9 @@
-"""The procedures on offer, by name: the built-in ones, listed explicitly."""
+"""The procedures on offer, by name: the built-in ones, listed explicitly. A name
+they had before (thzdaq_api.procedures.RENAMED) finds them too."""
 
 from typing import Dict, Iterable, List, Type
+
+from thzdaq_api.procedures import current_name
 
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -23,7 +26,7 @@ PROCEDURES = by_name(BUILTIN)
 
 def get_procedure(name: str) -> Type[Procedure]:
     try:
-        return PROCEDURES[name]
+        return PROCEDURES[current_name(name)]
     except KeyError:
         raise ProcedureError(
             f"Unknown procedure {name!r}, available: {sorted(PROCEDURES)}"

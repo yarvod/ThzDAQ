@@ -8,15 +8,22 @@ store did ({"voltage": [...], "current": [...]}), and describes every column
 
     {
       "format": "thzdaq-measurement", "version": 1,
-      "id": 42, "procedure": "sis.iv_curve", "title": "I-V curve",
+      "id": 42, "procedure": "sis.current_vs_voltage", "title": "I-V curve",
       "status": "completed", "started": "...", "finished": "...",
       "comment": "", "parameters": {...},
       "devices": {"bias": {"ref": "sis_bias_1", "title": "SIS b1d4", ...}},
       "tables": {"iv": {"title": "I-V", "columns": [{"key": "voltage",
                  "title": "Voltage", "unit": "V"}, ...],
                  "data": {"voltage": [...], "current": [...]}}},
-      "results": {...}, "station": {...}, "metadata": {...}
+      "results": {...}, "station": {...}, "metadata": {...},
+      "plots": [{"key": "iv", "title": "I-V", "table": "iv", ...}]
     }
+
+plots are those it is drawn with (PlotInfo as JSON): those of its procedure
+for the run and those it added while it ran, so the file draws itself however
+the procedure changes later. Files written before have none (null): their
+plots are those of their procedure, found by its name (RENAMED: an older one),
+and those of metadata "plots".
 
 While it runs, the file holds its description without records (the data of
 every table empty) and the records are appended next to it, one line each,
@@ -55,7 +62,8 @@ INTERACTIONS = "interactions"
 ALLOWED = "allowed"
 # Metadata: the copy of the bench profile in its workspace (workspace.ProfileCopy)
 PROFILE = "profile"
-# Metadata: plots a run added while it ran (a script's m.plot), as PlotInfo
+# Metadata of files written before plots were kept whole: the plots a run
+# added while it ran (a script's m.plot), as PlotInfo
 PLOTS = "plots"
 # Metadata: the script a session ran, as sessions.ScriptSource (path, sha256, text)
 SCRIPT = "script"
@@ -245,6 +253,8 @@ class Measurement:
     results: Dict[str, Any] = field(default_factory=dict)
     station: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Its plots as PlotInfo JSON; None in files written before they were kept
+    plots: Optional[List[Dict[str, Any]]] = None
 
     def table(self, name: str, title: str = "") -> Table:
         if name not in self.tables:
@@ -308,6 +318,7 @@ class Measurement:
             "results": self.results,
             "station": self.station,
             "metadata": self.metadata,
+            "plots": self.plots,
         }
 
     @classmethod
@@ -334,6 +345,7 @@ class Measurement:
             results=dict(data.get("results") or {}),
             station=dict(data.get("station") or {}),
             metadata=dict(data.get("metadata") or {}),
+            plots=data.get("plots"),
         )
 
 
@@ -363,8 +375,8 @@ def write_measurement(measurement: Measurement, path: PathLike) -> Path:
 
 
 def records_path(path: PathLike) -> Path:
-    """Where a running measurement appends its records: 000042_monitor_time.jsonl
-    next to 000042_monitor_time.json."""
+    """Where a running measurement appends its records: 000042_monitor_values_vs_time.jsonl
+    next to 000042_monitor_values_vs_time.json."""
     return Path(path).with_suffix(RECORDS_SUFFIX)
 
 
@@ -420,7 +432,7 @@ def export_csv(measurement: Measurement, table: str, path: PathLike) -> Path:
 
 
 def file_id(path: Path) -> Optional[int]:
-    """000042_sis_iv_curve.json -> 42; None for files named otherwise."""
+    """000042_sis_current_vs_voltage.json -> 42; None for files named otherwise."""
     head = path.name.split("_", 1)[0]
     return int(head) if head.isdigit() else None
 

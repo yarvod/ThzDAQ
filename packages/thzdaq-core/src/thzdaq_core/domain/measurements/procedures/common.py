@@ -1,5 +1,6 @@
-"""What procedures share: parameters (one definition, a default per procedure), axis
-labels of plots, bias handling, state restore, hot/cold checks."""
+"""What procedures share: parameters (one definition, a default per procedure), the
+groups a form shows them in, axis labels of plots, bias handling, state restore,
+hot/cold checks."""
 
 import math
 from typing import Iterable, List, Optional, Tuple
@@ -24,11 +25,31 @@ TN_K = "Tn, K"
 Range = Tuple[float, float, int]
 
 
+class Group:
+    """Titles of the parts of a form parameters are shown in."""
+
+    BIAS = "Bias"
+    LO = "LO"
+    IF = "IF"
+    TEST_TONE = "RF test tone"
+    SOURCE = "Source"
+    DETECTOR = "Detector"
+    VNA = "VNA"
+    HOT_COLD = "Hot/cold"
+    GRID = "Grid"
+    TIMING = "Timing"
+
+
 # Parameters several procedures have; the default stays each procedure's own
 class SettleTime(FloatParameter):
     def __init__(self, default: float, maximum: Optional[float] = None):
         super().__init__(
-            "Settle time", default=default, minimum=0, maximum=maximum, unit="s"
+            "Settle time",
+            default=default,
+            minimum=0,
+            maximum=maximum,
+            unit="s",
+            group=Group.TIMING,
         )
 
 
@@ -41,12 +62,15 @@ class FirstPointDelay(FloatParameter):
             maximum=maximum,
             unit="s",
             help="The bias source needs longer to reach the first point",
+            group=Group.TIMING,
         )
 
 
 class PointDelay(FloatParameter):
     def __init__(self, default: float):
-        super().__init__("Point delay", default=default, minimum=0, unit="s")
+        super().__init__(
+            "Point delay", default=default, minimum=0, unit="s", group=Group.TIMING
+        )
 
 
 class BiasVoltage(SweepParameter):
@@ -58,13 +82,19 @@ class BiasVoltage(SweepParameter):
             display_unit="mV",
             display_scale=MV,
             applies=("bias", VOLTAGE_SET.key),
+            group=Group.BIAS,
         )
 
 
 class IFSweep(SweepParameter):
     def __init__(self, default: Range = (4 * GHZ, 12 * GHZ, 201)):
         super().__init__(
-            "IF", default=default, unit="Hz", display_unit="GHz", display_scale=GHZ
+            "IF",
+            default=default,
+            unit="Hz",
+            display_unit="GHz",
+            display_scale=GHZ,
+            group=Group.IF,
         )
 
 
@@ -77,22 +107,33 @@ class IFFrequency(FloatParameter):
             unit="Hz",
             display_unit="GHz",
             display_scale=GHZ,
+            group=Group.IF,
         )
 
 
 class HotLoad(FloatParameter):
     def __init__(self):
-        super().__init__("Hot load", default=300.0, minimum=0, unit="K")
+        super().__init__(
+            "Hot load", default=300.0, minimum=0, unit="K", group=Group.HOT_COLD
+        )
 
 
 class ColdLoad(FloatParameter):
     def __init__(self):
-        super().__init__("Cold load", default=77.0, minimum=0, unit="K")
+        super().__init__(
+            "Cold load", default=77.0, minimum=0, unit="K", group=Group.HOT_COLD
+        )
 
 
 class LoadDelay(FloatParameter):
     def __init__(self, default: float):
-        super().__init__("Load switch delay", default=default, minimum=0, unit="s")
+        super().__init__(
+            "Load switch delay",
+            default=default,
+            minimum=0,
+            unit="s",
+            group=Group.HOT_COLD,
+        )
 
 
 class GridAngle(SweepParameter):
@@ -103,6 +144,7 @@ class GridAngle(SweepParameter):
             unit="deg",
             max_points=max_points,
             applies=("grid", ANGLE.key),
+            group=Group.GRID,
         )
 
 
@@ -114,6 +156,7 @@ class GridSpeed(FloatParameter):
             minimum=1e-3,
             unit="deg/s",
             help="Wait |Δangle| / speed after each rotation",
+            group=Group.GRID,
         )
 
 

@@ -1,5 +1,5 @@
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import TWO_SB_OPTIMIZATION
+from thzdaq_api.procedures import TWO_SB_BIAS_OPTIMIZATION
 from thzdaq_instruments.units import GHZ, MV
 
 from thzdaq_analysis.noise import noise_temperature
@@ -11,7 +11,11 @@ from thzdaq_analysis.two_sb import (
 from thzdaq_api.measurement_file import KNOWN_COLUMNS
 from thzdaq_core.domain.parameters import FloatParameter
 from thzdaq_api.measurements import PlotInfo
-from thzdaq_core.domain.measurements.procedures.common import IFFrequency, set_bias
+from thzdaq_core.domain.measurements.procedures.common import (
+    Group,
+    IFFrequency,
+    set_bias,
+)
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SOURCE,
     HotColdMixin,
@@ -32,7 +36,7 @@ def _map(column: str) -> PlotInfo:
 
 
 class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
-    name = TWO_SB_OPTIMIZATION
+    name = TWO_SB_BIAS_OPTIMIZATION
     slot_modes = {"sis1": EXCLUSIVE, "sis2": EXCLUSIVE, "detector": READ}
     title = "2SB SRR/Tn bias optimization"
     description = (
@@ -49,7 +53,9 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
     if_frequency = IFFrequency(5 * GHZ)
     sis1_voltage = SisBiasSweep(1, (2.1e-3, 2.6e-3, 6))
     sis2_voltage = SisBiasSweep(2, (2.1e-3, 2.6e-3, 6))
-    tone_delay = FloatParameter("Test tone delay", default=0.5, minimum=0, unit="s")
+    tone_delay = FloatParameter(
+        "Test tone delay", default=0.5, minimum=0, unit="s", group=Group.TEST_TONE
+    )
 
     def slots(self):
         return {

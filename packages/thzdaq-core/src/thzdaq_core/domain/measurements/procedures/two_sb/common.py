@@ -6,11 +6,11 @@ Device slots:
                  set on the generator itself, so frequencies are at the mixer
     test_tone    RF test tone at the mixer frequency (FrequencySource + Switchable)
     if_selector  a supply channel switching the IF of the upper or lower sideband to
-                 the detector (Switchable); which output state is "upper" is a parameter
+                 the detector (Switchable); which sideband its output on routes is a
+                 parameter
     detector     PowerDetector after the IF filter
-    if_filter    TunableFilter (YIG) in front of the detector
+    if_filter    TunableFilter (YIG) in front of the detector, powered by its own module
     load         LoadSwitch (chopper) for hot/cold
-    yig_power    optional Switchable powering the YIG filter
     spectrum     SpectrumAnalyzer, alternative detector for the test tone
 """
 
@@ -34,12 +34,15 @@ from thzdaq_core.domain.parameters import (
     ChoiceParameter,
     FloatParameter,
     IntParameter,
+    shown_while,
     SweepParameter,
+    When,
 )
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
     ColdLoad,
+    Group,
     HotLoad,
     load_problems,
     LoadDelay,
@@ -63,6 +66,7 @@ class SisBiasSweep(SweepParameter):
             display_unit="mV",
             display_scale=MV,
             applies=(f"sis{number}", VOLTAGE_SET.key),
+            group=Group.BIAS,
         )
 
 
@@ -77,6 +81,7 @@ class SisBias(FloatParameter):
             display_unit="mV",
             display_scale=MV,
             applies=(f"sis{number}", VOLTAGE_SET.key),
+            group=Group.BIAS,
         )
 
 
@@ -93,6 +98,7 @@ class LOFrequency(FloatParameter):
             unit="Hz",
             display_unit="GHz",
             display_scale=GHZ,
+            group=Group.LO,
         )
 
 
@@ -102,6 +108,7 @@ class PreciseBias(BoolParameter):
             "Precise bias",
             default=default,
             help="Correct the bias by readback (slow: ~1 s per iteration)",
+            group=Group.BIAS,
         )
 
 
@@ -109,25 +116,15 @@ class TwoSbProcedure(Procedure):
     """Bias both mixers, set the LO, measure IF channels; restore on exit."""
 
     precise_bias = PreciseBias(True)
-    control_yig_power = BoolParameter(
-        "Control YIG power",
-        default=False,
-        help="Switch on the 'yig_power' device first",
-    )
 
     def base_slots(self) -> Dict[str, object]:
-        slots = {"sis1": BIAS, "sis2": BIAS}
-        if self.control_yig_power:
-            slots["yig_power"] = Switchable
-        return slots
+        return {"sis1": BIAS, "sis2": BIAS}
 
     # Helpers for run()
     def start(self, ctx) -> None:
-        """Call first in run(): remember the bias to restore, power the YIG."""
+        """Call first in run(): remember the bias to restore."""
         restore_bias_on_exit(ctx, ctx["sis1"])
         restore_bias_on_exit(ctx, ctx["sis2"])
-        if self.control_yig_power:
-            ctx["yig_power"].set_output(True)
 
     def bias(self, ctx, voltage1: float, voltage2: float) -> None:
         set_bias(ctx["sis1"], voltage1, self.precise_bias)
@@ -152,26 +149,30 @@ class TwoSbProcedure(Procedure):
 class IfSwitchProcedure(TwoSbProcedure):
     """2SB measurement reading both IF channels through the IF switch."""
 
-    switch_delay = FloatParameter("IF switch delay", default=1.0, minimum=0, unit="s")
-    upper_when_on = BoolParameter(
-        "IF switch on: upper",
-        default=True,
-        help="On: the IF switch channel routes the upper sideband when its output "
-        "is on; off: when it is off",
+    switch_delay = FloatParameter(
+        "IF switch delay", default=1.0, minimum=0, unit="s", group=Group.IF
+    )
+    switch_on = ChoiceParameter(
+        "IF switch on",
+        SIDE_BANDS,
+        default="upper",
+        help="The sideband the IF switch channel routes while its output is on",
+        group=Group.IF,
     )
 
     def select_channel(self, ctx, side_band: str, delay: float) -> None:
-        if side_band not in ("upper", "lower"):
+        if side_band not in SIDE_BANDS:
             raise ValueError(f"Unknown sideband {side_band!r}")
-        ctx["if_selector"].set_output((side_band == "upper") == self.upper_when_on)
+        ctx["if_selector"].set_output(side_band == self.switch_on)
         ctx.sleep(delay)
 
 
 class LoMixin:
-    """Optional LO setting: frequency at the mixer, output on."""
+    """Optional LO setting: frequency at the mixer, output on. The frequency
+    stays shown without it: the test tone is placed by it."""
 
+    set_lo = BoolParameter("Set LO", default=True, group=Group.LO)
     lo_frequency = LOFrequency(223 * GHZ)
-    set_lo = BoolParameter("Set LO", default=True)
 
     def lo_slots(self):
         return {"lo": SOURCE} if self.set_lo else {}
@@ -242,12 +243,25 @@ class HotColdMixin:
             warn_without_contrast(ctx, temperatures, f"{side_band} channel")
 
 
+SPECTRUM = "spectrum"
+
+
 class SpectrumMixin:
     """Test tone peak on the spectrum analyzer instead of YIG + power meter."""
 
-    detector = ChoiceParameter(
-        "Detector", ("power_meter", "spectrum"), default="power_meter"
+    shown_if = shown_while(
+        When("detector", (SPECTRUM,)),
+        "resolution_bandwidth",
+        "video_bandwidth",
+        "span",
+        "averages",
+        "retune_delay",
     )
+
+    detector = ChoiceParameter(
+        "Detector", ("power_meter", SPECTRUM), default="power_meter",
+        group=Group.DETECTOR,
+    )  # fmt: skip
     resolution_bandwidth = FloatParameter(
         "RBW",
         default=200 * KHZ,
@@ -255,6 +269,7 @@ class SpectrumMixin:
         unit="Hz",
         display_unit="kHz",
         display_scale=KHZ,
+        group=Group.DETECTOR,
     )
     video_bandwidth = FloatParameter(
         "VBW",
@@ -263,6 +278,7 @@ class SpectrumMixin:
         unit="Hz",
         display_unit="kHz",
         display_scale=KHZ,
+        group=Group.DETECTOR,
     )
     span = FloatParameter(
         "Span",
@@ -271,22 +287,25 @@ class SpectrumMixin:
         unit="Hz",
         display_unit="kHz",
         display_scale=KHZ,
+        group=Group.DETECTOR,
     )
-    averages = IntParameter("Peak averages", default=5, minimum=1, maximum=100)
+    averages = IntParameter(
+        "Peak averages", default=5, minimum=1, maximum=100, group=Group.DETECTOR
+    )
     retune_delay = FloatParameter(
-        "Retune delay", default=0.1, minimum=0, unit="s",
+        "Retune delay", default=0.1, minimum=0, unit="s", group=Group.DETECTOR,
         help="Wait after moving the analyzer; doubled x20 on the first point of a chunk",
     )  # fmt: skip
 
     def detector_slots(self):
-        if self.detector == "spectrum":
-            return {"spectrum": SpectrumAnalyzer}
+        if self.detector == SPECTRUM:
+            return {SPECTRUM: SpectrumAnalyzer}
         return {"detector": PowerDetector, "if_filter": TunableFilter}
 
     def prepare_detector(self, ctx) -> None:
-        if self.detector != "spectrum":
+        if self.detector != SPECTRUM:
             return
-        spectrum = ctx["spectrum"]
+        spectrum = ctx[SPECTRUM]
         if hasattr(spectrum, "set_continuous_sweep"):
             spectrum.set_continuous_sweep(False)
         spectrum.set_video_bandwidth(self.video_bandwidth)
@@ -296,11 +315,11 @@ class SpectrumMixin:
     def read_tone(
         self, ctx, if_frequency: float, first: bool, point_delay: float
     ) -> float:
-        if self.detector != "spectrum":
+        if self.detector != SPECTRUM:
             ctx["if_filter"].tune(if_frequency)
             ctx.sleep(point_delay)
             return ctx["detector"].read_power()
-        spectrum = ctx["spectrum"]
+        spectrum = ctx[SPECTRUM]
         spectrum.set_center_frequency(if_frequency)
         ctx.sleep(self.retune_delay * (20 if first else 1))
         trigger = getattr(spectrum, "trigger", None)

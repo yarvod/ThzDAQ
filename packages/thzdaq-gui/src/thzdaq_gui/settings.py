@@ -20,6 +20,7 @@ from typing import Optional
 from PySide6.QtCore import QSettings
 from thzdaq_api.host import frozen, program_dir
 from thzdaq_api.measurements import DATA
+from thzdaq_api.procedures import former_names
 
 ORGANIZATION = "ThzDAQ"
 _file: Optional[str] = None
@@ -67,6 +68,17 @@ EDITOR = "workspaces/editor"  # the program a workspace opens in without VS Code
 def procedure_key(procedure: str) -> str:
     """Last parameters and devices of a procedure's dock."""
     return f"procedures/{procedure}"
+
+
+def saved_procedure(procedure: str) -> Optional[str]:
+    """The last parameters and devices of a procedure's dock as kept: under
+    its name, else under a name it had before (RENAMED); None: none kept."""
+    kept = settings()
+    for name in (procedure, *former_names(procedure)):
+        value = kept.value(procedure_key(name))
+        if value:
+            return value
+    return None
 
 
 def graph_choice_key(procedure: str, plot: str) -> str:

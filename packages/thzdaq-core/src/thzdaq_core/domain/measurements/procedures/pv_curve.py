@@ -1,6 +1,6 @@
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import PV_CURVE, Y_FACTOR_VOLTAGE
+from thzdaq_api.procedures import NOISE_TEMPERATURE_VS_VOLTAGE, POWER_VS_VOLTAGE
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
 from thzdaq_instruments.units import MV, UA
 
@@ -8,6 +8,8 @@ from thzdaq_analysis.noise import match_hot_cold, noise_temperature
 from thzdaq_core.domain.parameters import (
     BoolParameter,
     IntParameter,
+    shown_while,
+    When,
 )
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
@@ -22,6 +24,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     FirstPointDelay,
     GridAngle,
     GridSpeed,
+    Group,
     HotLoad,
     load_problems,
     LoadDelay,
@@ -32,26 +35,74 @@ from thzdaq_core.domain.measurements.procedures.common import (
 )
 
 
-class PVCurve(Procedure):
-    name = PV_CURVE
-    slot_modes = {"bias": EXCLUSIVE, "detector": READ}
-    title = "SIS P-V curve"
-    description = (
-        "Sweep the bias and read the IF power; optionally with hot and cold "
-        "loads (Y-factor and Tn versus voltage) and at several grid angles."
-    )
-    requires = {"bias": BIAS, "detector": PowerDetector}
-    plots = (
+def pv_plots(group_by=()):
+    return (
         PlotInfo(
             "pv", "P-V", "pv", "voltage", "power",
-            x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV,
-            group_by=("angle", "load"),
+            x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV, group_by=group_by,
         ),
         PlotInfo(
             "iv", "I-V", "pv", "voltage", "current",
             x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
-            group_by=("angle", "load"), analysis="iv",
+            group_by=group_by, analysis="iv",
         ),
+    )  # fmt: skip
+
+
+class PVCurve(Procedure):
+    name = POWER_VS_VOLTAGE
+    slot_modes = {"bias": EXCLUSIVE, "detector": READ}
+    title = "SIS P-V measurement"
+    description = "Sweep the bias and read the IF power at every point."
+    requires = {"bias": BIAS, "detector": PowerDetector}
+    plots = pv_plots()
+
+    voltage = BiasVoltage((0.0, 7e-3, 351))
+    settle_time = SettleTime(0.01)
+    first_point_delay = FirstPointDelay(0.5)
+
+    def estimate_steps(self) -> int:
+        return self.voltage.points
+
+    def run(self, ctx) -> None:
+        bias, detector = ctx["bias"], ctx["detector"]
+        restore_bias_on_exit(ctx, bias)
+        self._sweep(ctx, bias, detector)
+
+    def _sweep(self, ctx, bias, detector, **labels):
+        """One bias sweep; labels (angle, load) go into every record."""
+        points = []
+        for index, voltage_set in enumerate(self.voltage.values()):
+            ctx.check_cancel()
+            bias.set_voltage(voltage_set)
+            ctx.sleep(self.first_point_delay if index == 0 else self.settle_time)
+            reading = bias.measure()
+            power = detector.read_power()
+            ctx.record(
+                "pv",
+                **labels,
+                voltage_set=voltage_set,
+                voltage=reading.voltage,
+                current=reading.current,
+                power=power,
+            )
+            points.append((reading.voltage, power))
+            ctx.progress()
+        return points
+
+
+HOT_COLD_ON = When("hot_cold", (True,))
+GRID_ON = When("use_grid", (True,))
+
+
+class TnVoltage(PVCurve):
+    name = NOISE_TEMPERATURE_VS_VOLTAGE
+    title = "SIS Tn-V"
+    description = (
+        "P-V with the hot and the cold load: Y-factor and noise temperature "
+        "versus bias; optionally at several grid angles."
+    )
+    plots = pv_plots(("angle", "load")) + (
         PlotInfo(
             "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
             x_label=VOLTAGE_MV, y_label=Y_DB, x_scale=MV, group_by=("angle",),
@@ -61,19 +112,20 @@ class PVCurve(Procedure):
             x_label=VOLTAGE_MV, y_label=TN_K, x_scale=MV, group_by=("angle",),
         ),
     )  # fmt: skip
+    shown_if = {
+        **shown_while(HOT_COLD_ON, "load_delay", "t_hot", "t_cold", "match_window"),
+        **shown_while(GRID_ON, "angle", "grid_speed"),
+    }
 
-    voltage = BiasVoltage((0.0, 7e-3, 351))
-    settle_time = SettleTime(0.01)
-    first_point_delay = FirstPointDelay(0.5)
-    hot_cold = BoolParameter("Hot/cold loads", default=False)
+    hot_cold = BoolParameter("Hot/cold loads", default=True, group=Group.HOT_COLD)
     load_delay = LoadDelay(2.0)
     t_hot = HotLoad()
     t_cold = ColdLoad()
     match_window = IntParameter(
-        "Hot/cold match window", default=10, minimum=1,
+        "Hot/cold match window", default=10, minimum=1, group=Group.HOT_COLD,
         help="Cold points around the same index searched for the nearest voltage",
     )  # fmt: skip
-    use_grid = BoolParameter("Rotate grid", default=False)
+    use_grid = BoolParameter("Rotate grid", default=False, group=Group.GRID)
     angle = GridAngle((0.0, 90.0, 10), max_points=1000)
     grid_speed = GridSpeed()
 
@@ -120,7 +172,9 @@ class PVCurve(Procedure):
                 if state is not None:
                     getattr(load, f"to_{state}")()
                     ctx.sleep(self.load_delay)
-                sweeps[state] = self._sweep(ctx, bias, detector, angle, state)
+                sweeps[state] = self._sweep(
+                    ctx, bias, detector, angle=angle, load=state
+                )
             if load is not None:
                 temperatures = []
                 for voltage, hot, cold in match_hot_cold(
@@ -137,33 +191,3 @@ class PVCurve(Procedure):
                     )
                 where = f"angle {angle:g} deg" if grid is not None else "hot/cold"
                 warn_without_contrast(ctx, temperatures, where)
-
-    def _sweep(self, ctx, bias, detector, angle, load):
-        points = []
-        for index, voltage_set in enumerate(self.voltage.values()):
-            ctx.check_cancel()
-            bias.set_voltage(voltage_set)
-            ctx.sleep(self.first_point_delay if index == 0 else self.settle_time)
-            reading = bias.measure()
-            power = detector.read_power()
-            ctx.record(
-                "pv",
-                angle=angle,
-                load=load,
-                voltage_set=voltage_set,
-                voltage=reading.voltage,
-                current=reading.current,
-                power=power,
-            )
-            points.append((reading.voltage, power))
-            ctx.progress()
-        return points
-
-
-class YFactorVoltage(PVCurve):
-    name = Y_FACTOR_VOLTAGE
-    title = "SIS Y-factor (V)"
-    description = (
-        "P-V with hot and cold loads: Y-factor and noise temperature versus bias."
-    )
-    hot_cold = BoolParameter("Hot/cold loads", default=True)

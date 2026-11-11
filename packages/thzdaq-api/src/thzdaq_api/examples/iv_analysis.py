@@ -1,6 +1,6 @@
 """I-V curve and analysis: a built-in procedure, then your numbers.
 
-Runs the SIS I-V curve as its dock would (sis.iv_curve), waits for it and
+Runs the SIS I-V curve as its dock would (sis.current_vs_voltage), waits for it and
 works on its table here: the normal resistance from a line fitted above the
 gap, the gap voltage where the current rises fastest. Put your analysis in
 their place; the measurement keeps its data either way.
@@ -15,7 +15,7 @@ voltage = value("Bias voltage", "0:7:351", unit="mV")
 above_gap = value("Fit above", 4, unit="mV", help="Rn is fitted above this bias")
 
 lab = connect()
-run = lab.run("sis.iv_curve", bias=bias, voltage=voltage)
+run = lab.run("sis.current_vs_voltage", bias=bias, voltage=voltage)
 print(f"#{run.id} {run.info.title} started")
 ended = run.wait(progress=False)
 if ended.status != "completed":

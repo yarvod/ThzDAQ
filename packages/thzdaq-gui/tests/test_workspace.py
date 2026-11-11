@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtWidgets import QDialog, QMessageBox
 from thzdaq_api import host
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.workspace import create, read
 
 from thzdaq_gui import external_editor, workspace_menu
@@ -15,7 +15,7 @@ from thzdaq_gui.settings import DEFAULT_WORKSPACE, EDITOR, app_dir, settings
 from thzdaq_gui.workspace import Workspace, default_workspace
 
 QUICK_IV = dict(
-    procedure=IV_CURVE,
+    procedure=CURRENT_VS_VOLTAGE,
     parameters={
         "voltage": {"start": 0, "stop": 0.001, "points": 3},
         "settle_time": 0,

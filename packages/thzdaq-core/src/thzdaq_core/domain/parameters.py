@@ -4,7 +4,9 @@ Values live in SI inside procedures. Each parameter also knows its display unit
 and scale, so forms, CLI and saved metadata talk in GHz / mV while the code
 stays in Hz / V. A parameter that a run sets a device to says where it goes
 (``applies``: slot, quantity key), so the values are checked against the limits
-of that device before the run starts.
+of that device before the run starts. A parameter belongs to a group (a part
+of a form) and may be used only while another has some value (When): a form
+shows it then, and a run reads it only then.
 """
 
 from dataclasses import dataclass
@@ -37,6 +39,21 @@ class Sweep:
         return 0.0 if self.points < 2 else (self.stop - self.start) / (self.points - 1)
 
 
+@dataclass(frozen=True)
+class When:
+    """Holds while the parameter named has one of the values: hot and cold
+    load are used while hot/cold is on."""
+
+    parameter: str
+    values: Tuple[Any, ...]
+
+
+def shown_while(condition: When, *names: str) -> Dict[str, When]:
+    """The parameters named, used only while condition holds: a procedure's
+    shown_if."""
+    return {name: condition for name in names}
+
+
 class Parameter:
     kind = "value"
 
@@ -50,8 +67,10 @@ class Parameter:
         display_scale: float = 1.0,
         help: str = "",
         applies: Optional[Tuple[str, str]] = None,
+        group: str = "",
     ):
         self.label = label
+        self.group = group  # the part of a form it is in, by its title
         self.unit = unit  # SI unit of the value
         self.display_unit = display_unit if display_unit is not None else unit
         self.display_scale = display_scale  # SI value / display_scale = shown value
@@ -110,6 +129,7 @@ class Parameter:
             "default": default,
             "required": self.default is MISSING,
             "help": self.help,
+            "group": self.group,
         }
 
 

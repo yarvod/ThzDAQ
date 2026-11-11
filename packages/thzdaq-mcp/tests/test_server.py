@@ -17,7 +17,7 @@ from thzdaq_api.events import ApprovalRequested
 from thzdaq_api.measurements import ListRuns
 from thzdaq_api.operation import Rights
 from thzdaq_api.origins import GUI
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.station import GetStation, UpdateStation
 
 pytestmark = pytest.mark.anyio
@@ -36,7 +36,7 @@ def text(result) -> str:
 
 def iv(points: int, settle: str = "0") -> dict:
     return {
-        "procedure": IV_CURVE,
+        "procedure": CURRENT_VS_VOLTAGE,
         "devices": {"bias": "sis_bias_1"},
         "typed": {**FAST, "voltage": f"0:2:{points}", "settle_time": settle},
     }
@@ -216,8 +216,11 @@ async def test_resources_tell_procedures_profile_and_guides(connect):
     async with connect() as client:
         listed = {str(r.uri) for r in (await client.list_resources()).resources}
         station = await client.read_resource("thzdaq://station")
-        procedure = await client.read_resource(f"thzdaq://procedures/{IV_CURVE}")
+        procedure = await client.read_resource(
+            f"thzdaq://procedures/{CURRENT_VS_VOLTAGE}"
+        )
         guide = await client.read_resource("thzdaq://guide/agents")
+        tn = await client.read_resource("thzdaq://procedures/sis.y_factor_voltage")
     assert {
         "thzdaq://procedures",
         "thzdaq://station",
@@ -227,6 +230,10 @@ async def test_resources_tell_procedures_profile_and_guides(connect):
     assert '"kind": "socket"' in profile and "169.254" not in profile  # no addresses
     assert "bias: sis_bias_1, sis_bias_2" in procedure.contents[0].text
     assert guide.contents[0].text == guides.guide(guides.AGENTS)
+    # An old name finds the procedure; a field says when it is used
+    text = tn.contents[0].text
+    assert text.startswith("SIS Tn-V (sis.noise_temperature_vs_voltage)")
+    assert "t_hot: Hot load" in text and "used only when hot_cold=true" in text
 
 
 SCAN = '''"""Scan

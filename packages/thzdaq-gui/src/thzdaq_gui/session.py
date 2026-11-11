@@ -21,6 +21,7 @@ from thzdaq_api.measurements import (
     RunInfo,
 )
 from thzdaq_api.operation import Operation
+from thzdaq_api.procedures import current_name
 from thzdaq_api.station import (
     ConnectionKindInfo,
     DriverInfo,
@@ -156,7 +157,9 @@ class Session(QObject):
         return self._procedures
 
     def procedure(self, name: str) -> Optional[ProcedureSummary]:
-        """None for one the bench runs no more (a script taken away)."""
+        """By its name now or one it had before (RENAMED); None for one the
+        bench runs no more (a script taken away)."""
+        name = current_name(name)
         return next((p for p in self.procedures() if p.name == name), None)
 
     def _procedures_heard(self, body) -> None:

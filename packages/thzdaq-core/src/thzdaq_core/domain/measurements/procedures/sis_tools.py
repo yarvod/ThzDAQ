@@ -1,5 +1,5 @@
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE
+from thzdaq_api.procedures import CURRENT_VS_COIL_CURRENT, DEMAGNETIZATION
 from thzdaq_instruments.capabilities import CurrentSource, VoltageCurrentMeter
 from thzdaq_instruments.quantities import CURRENT_SET
 from thzdaq_instruments.units import MA, UA
@@ -15,9 +15,9 @@ from thzdaq_core.domain.sis.demagnetization import demagnetization_currents
 
 
 class Demagnetize(Procedure):
-    name = DEMAGNETIZE
+    name = DEMAGNETIZATION
     slot_modes = {"coil": EXCLUSIVE}
-    title = "SIS magnet demagnetization"
+    title = "SIS demagnetization"
     description = (
         "Sweep the coil current over the full range, then swing it around the "
         "centre with a shrinking amplitude and leave it at the centre."
@@ -77,9 +77,9 @@ class Demagnetize(Procedure):
 
 
 class CLCurve(Procedure):
-    name = CL_CURVE
+    name = CURRENT_VS_COIL_CURRENT
     slot_modes = {"coil": EXCLUSIVE, "bias": READ}
-    title = "SIS I-CL curve"
+    title = "SIS Josephson suppression"
     description = (
         "Sweep the magnet coil current and read the bias current: finds the "
         "coil current that suppresses the Josephson current."

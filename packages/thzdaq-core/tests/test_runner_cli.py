@@ -78,6 +78,10 @@ class CoupledStation:
     def device_use(self, ref):
         return DeviceUse(ref)
 
+    def quantities(self, ref):
+
+        return []
+
     def snapshot(self, refs=None):
         return {"station": {"name": "coupled"}}
 
@@ -203,8 +207,10 @@ class TestRunner:
 
     def test_registry(self):
         names = [cls.name for cls in list_procedures()]
-        assert {"sis.iv_curve", "if.hot_cold"} <= set(names)
-        assert get_procedure("sis.iv_curve") is IVCurve
+        assert {"sis.current_vs_voltage", "if.noise_temperature_vs_frequency"} <= set(
+            names
+        )
+        assert get_procedure("sis.current_vs_voltage") is IVCurve
         with pytest.raises(ProcedureError):
             get_procedure("nope")
 

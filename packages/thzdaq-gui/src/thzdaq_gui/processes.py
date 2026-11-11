@@ -33,7 +33,7 @@ class Process(QObject):
         super().__init__(parent)
         self.title = title
         self.icon = icon  # mdi6 icon name
-        self.dock = dock  # the dock that shows it, e.g. "measure:sis.pv_curve"
+        self.dock = dock  # the dock that shows it, e.g. "measure:sis.power_vs_voltage"
         self.reveal = reveal  # after the dock is shown: unfold the scan
         self.status = ""
         self.progress: Optional[Tuple[int, int]] = None  # done, total; None: busy

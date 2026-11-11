@@ -109,7 +109,7 @@ class MeasurementsModel(QAbstractTableModel):
         column = index.column()
         elsewhere = not self.here(index.row())
         if role in (Qt.DisplayRole, Qt.EditRole):
-            title = item.title or item.procedure
+            title = self.title(item)
             return (
                 item.id,
                 f"{title} · from {Path(row.workspace).name}" if elsewhere else title,
@@ -119,8 +119,12 @@ class MeasurementsModel(QAbstractTableModel):
                 item.status,
                 row.run.done if row.run is not None else item.size,
             )[column]
-        if role == Qt.ToolTipRole and column == 1 and elsewhere:
-            return f"Measured in {row.workspace}"
+        if role == Qt.ToolTipRole and column == 1:
+            told = [f"Measured in {row.workspace}"] if elsewhere else []
+            if self.title(item) != (item.title or item.procedure):
+                told.append(f"Measured as {item.title} ({item.procedure})")
+            if told:
+                return "\n".join(told)
         conflicts = item.metadata.get(CONFLICTS) or ()
         if role == Qt.ForegroundRole and column == 5:
             from PySide6.QtGui import QColor
@@ -133,6 +137,12 @@ class MeasurementsModel(QAbstractTableModel):
                 return conflicts_text(conflicts)
             return item.metadata.get("path") or item.error or None
         return None
+
+    def title(self, item: Measurement) -> str:
+        """The title its procedure has now; the one it was measured with
+        when the bench has the procedure no more."""
+        about = self.session.procedure(item.procedure)
+        return about.title if about is not None else item.title or item.procedure
 
     def setData(self, index, value, role=Qt.EditRole) -> bool:
         if role != Qt.EditRole or index.column() != 2:

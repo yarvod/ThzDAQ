@@ -1,6 +1,6 @@
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import SHOT_NOISE
+from thzdaq_api.procedures import AMPLIFIER_NOISE_VS_VOLTAGE
 from thzdaq_instruments.capabilities import PowerDetector, TunableFilter
 from thzdaq_instruments.readings import linspace
 from thzdaq_instruments.quantities import VOLTAGE_SET
@@ -18,6 +18,7 @@ from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
     IF_GHZ,
+    Group,
     IFSweep,
     restore_bias_on_exit,
     SettleTime,
@@ -25,9 +26,9 @@ from thzdaq_core.domain.measurements.procedures.common import (
 
 
 class ShotNoise(Procedure):
-    name = SHOT_NOISE
+    name = AMPLIFIER_NOISE_VS_VOLTAGE
     slot_modes = {"bias": EXCLUSIVE, "if_filter": EXCLUSIVE, "detector": READ}
-    title = "IF amplifier noise (SIS shot noise)"
+    title = "IF health check (SIS shot noise)"
     description = (
         "At two bias points above the gap: fit the dynamic resistance, sweep "
         "the IF power and compute the IF amplifier noise temperature."
@@ -51,6 +52,7 @@ class ShotNoise(Procedure):
         display_unit="mV",
         display_scale=MV,
         applies=("bias", VOLTAGE_SET.key),
+        group=Group.BIAS,
     )
     voltage2 = FloatParameter(
         "Bias 2",
@@ -59,18 +61,21 @@ class ShotNoise(Procedure):
         display_unit="mV",
         display_scale=MV,
         applies=("bias", VOLTAGE_SET.key),
+        group=Group.BIAS,
     )
     resistance_span = FloatParameter(
-        "Rd fit span", default=0.05, minimum=0.001, maximum=0.5,
+        "Rd fit span", default=0.05, minimum=0.001, maximum=0.5, group=Group.BIAS,
         help="Relative half-width of the bias sweep around each point",
     )  # fmt: skip
     resistance_points = IntParameter(
-        "Rd fit points", default=100, minimum=3, maximum=10000
+        "Rd fit points", default=100, minimum=3, maximum=10000, group=Group.BIAS
     )
     frequency = IFSweep((3 * GHZ, 13 * GHZ, 300))
     t_sis = FloatParameter("SIS temperature", default=4.0, minimum=0.1, unit="K")
     settle_time = SettleTime(0.05)
-    point_delay = FloatParameter("IF point delay", default=0.01, minimum=0, unit="s")
+    point_delay = FloatParameter(
+        "IF point delay", default=0.01, minimum=0, unit="s", group=Group.TIMING
+    )
 
     def check(self):
         if self.voltage1 == self.voltage2:

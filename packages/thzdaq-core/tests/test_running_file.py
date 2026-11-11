@@ -30,6 +30,10 @@ class Bench:
     def require(self, devices, requirements, pause, planned=(), told=None):
         return {}
 
+    def quantities(self, ref):
+
+        return []
+
     def snapshot(self, refs=None):
         return {}
 
@@ -133,7 +137,7 @@ def test_what_else_changes_goes_into_the_file_on_an_update(tmp_path, described):
     run(tmp_path, Watching(look), update_interval=0.0)
     found = seen["read"]
     assert found.comment == "LO at 230 GHz"
-    assert found.metadata["plots"][0]["key"] == "p"
+    assert found.plots[-1]["key"] == "p"
     assert len(found.records("watch")) == Watching.rows + 1
     assert len(described) == 3
 

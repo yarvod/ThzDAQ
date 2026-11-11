@@ -5,6 +5,7 @@ from typing import Any, Mapping, Tuple
 from thzdaq_api import measurements as api
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.operation import Rights
+from thzdaq_api.procedures import current_name
 from thzdaq_api.scripts import RUN
 
 from thzdaq_core.application.approvals import Ask
@@ -113,7 +114,7 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
 
     def granted(self, args, origin):
         """Allowed to its script in advance."""
-        return self.scripts.allows(origin, RUN, args.procedure)
+        return self.scripts.allows(origin, RUN, current_name(args.procedure))
 
     def approval(self, args, origin):
         """The run it would be, checked as a dry run: one that could not start

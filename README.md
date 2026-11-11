@@ -62,8 +62,8 @@ uv run thzdaq-station check stations/lab.yaml --simulate
 ## Измерения без интерфейса
 ```bash
 uv run thzdaq list
-uv run thzdaq describe sis.iv_curve
-uv run thzdaq run sis.iv_curve --station stations/lab.yaml --device bias=sis_bias_1 --set voltage=0:7:351
+uv run thzdaq describe sis.current_vs_voltage
+uv run thzdaq run sis.current_vs_voltage --station stations/lab.yaml --device bias=sis_bias_1 --set voltage=0:7:351
 ```
 
 ## Тесты

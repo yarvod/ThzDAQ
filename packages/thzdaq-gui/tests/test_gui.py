@@ -3,7 +3,7 @@ import threading
 
 import numpy as np
 import pytest
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, Measurement
 from thzdaq_api.measurements import SlotInfo
 from thzdaq_core.application.describe import procedure_info
@@ -15,6 +15,7 @@ from thzdaq_core.domain.measurements.procedures import (
     PVCurve,
     SidebandRatio,
     SisReflection,
+    TnVoltage,
     TwoSbOptimization,
 )
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
@@ -61,6 +62,61 @@ class TestForms:
         assert "spectrum" in procedure.slots()
         points = form.editors["frequency"].widget.layout().itemAt(2).widget()
         assert points.maximum() == SidebandRatio.frequency.max_points
+
+    def test_fields_show_only_while_their_condition_holds(self, app):
+        form = form_of(SidebandRatio)
+        assert form.shown("frequency") and not form.shown("span")
+        detector = form.editors["detector"].widget
+        detector.setCurrentIndex(detector.findData("spectrum"))  # as a person picks
+        assert all(form.shown(n) for n in ("span", "resolution_bandwidth", "averages"))
+        form.set_values({"detector": "power_meter", "measure_y_factor": False})
+        assert not form.shown("span") and not form.shown("t_hot")
+
+    def test_a_group_with_every_field_hidden_hides_its_line(self, app):
+        from thzdaq_api.measurements import Condition, ParameterInfo
+
+        when_on = (Condition("on", (True,)),)
+        form = ParameterForm()
+        form.set_parameters(
+            [
+                ParameterInfo("on", "On", "bool", default=False),
+                ParameterInfo(
+                    "x", "X", "float", default=1.0, group="G", shown_if=when_on
+                ),
+            ]
+        )
+        header, names = form.headers["G"]
+        assert names == ["x"] and not form.layout_.isRowVisible(header)
+        form.editors["on"].widget.setChecked(True)
+        assert form.layout_.isRowVisible(header) and form.shown("x")
+
+    def test_parameters_are_grouped_under_lines(self, app):
+        form = form_of(TnVoltage)
+        order = [
+            form.layout_.itemAt(row, form.layout_.ItemRole.LabelRole).widget().toolTip()
+            for row in range(form.layout_.rowCount())
+            if form.layout_.itemAt(row, form.layout_.ItemRole.LabelRole) is not None
+        ]
+        assert order[0] == "voltage"
+        assert order.index("hot_cold") < order.index("t_hot")
+        assert order.index("use_grid") < order.index("angle")
+        assert list(form.headers) == ["Bias", "Timing", "Hot/cold", "Grid"]
+        assert not form.shown("angle")
+        form.editors["use_grid"].widget.setChecked(True)
+        assert form.shown("angle") and form.shown("grid_speed")
+
+    def test_lo_switch_above_its_frequency_and_if_switch_a_choice(self, app):
+        form = form_of(SidebandRatio)
+        rows = {
+            name: form.layout_.getWidgetPosition(editor.widget)[0]
+            for name, editor in form.editors.items()
+        }
+        assert rows["set_lo"] < rows["lo_frequency"]
+        # What decides whether others are shown leads its group
+        assert rows["measure_y_factor"] < rows["t_hot"]
+        switch = form.editors["switch_on"].widget
+        assert [switch.itemData(i) for i in range(switch.count())] == ["upper", "lower"]
+        assert "control_yig_power" not in form.editors
 
     def test_arrows_change_the_digit_at_the_cursor(self, app):
         from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
@@ -118,10 +174,10 @@ class TestForms:
             form.values()
 
     def test_changes_are_signalled(self, app):
-        form = form_of(PVCurve)
+        form = form_of(TnVoltage)
         changed = []
         form.changed.connect(lambda: changed.append(1))
-        form.editors["hot_cold"].widget.setChecked(True)
+        form.editors["hot_cold"].widget.setChecked(False)
         assert changed
 
     def test_device_slots_offer_only_suitable_devices(self, session):
@@ -198,7 +254,9 @@ class TestWorkers:
         records, finished = [], []
         runner.record.connect(lambda table, record: records.append(table))
         runner.finished.connect(finished.append)
-        runner.start(IV_CURVE, IVCurve(**FAST_IV).to_json(), {"bias": "sis_bias_1"})
+        runner.start(
+            CURRENT_VS_VOLTAGE, IVCurve(**FAST_IV).to_json(), {"bias": "sis_bias_1"}
+        )
         wait(lambda: finished)
         measurement = finished[0]
         assert measurement.status == COMPLETED and records == ["iv"] * 6
@@ -211,7 +269,9 @@ class TestWorkers:
         runner = session.run_model()
         failures = []
         runner.failed.connect(failures.append)
-        runner.start(IV_CURVE, IVCurve(**FAST_IV).to_json(), {"bias": "nowhere"})
+        runner.start(
+            CURRENT_VS_VOLTAGE, IVCurve(**FAST_IV).to_json(), {"bias": "nowhere"}
+        )
         wait(lambda: failures)
         assert "nowhere" in failures[0] and not runner.running
 
@@ -222,7 +282,7 @@ class TestWorkers:
         slow = IVCurve(
             voltage=Sweep(0, 5e-3, 1000), settle_time=0.05, first_point_delay=0
         )
-        runner.start(IV_CURVE, slow.to_json(), {"bias": "sis_bias_1"})
+        runner.start(CURRENT_VS_VOLTAGE, slow.to_json(), {"bias": "sis_bias_1"})
         wait(lambda: runner.run is not None)
         runner.cancel()
         wait(lambda: finished)
@@ -230,7 +290,9 @@ class TestWorkers:
 
 
 def iv_measurement(number=1) -> Measurement:
-    measurement = Measurement("sis.iv_curve", title="SIS I-V curve", id=number)
+    measurement = Measurement(
+        "sis.current_vs_voltage", title="SIS I-V curve", id=number
+    )
     for v in (1e-3, 2e-3, 3e-3):
         measurement.append("iv", {"voltage": v, "current": v / 20})
     return measurement
@@ -253,7 +315,7 @@ class TestGraphs:
         assert hub.graph("I-V").analysis is not None
 
     def test_live_records_make_one_curve_per_run_and_group(self, hub):
-        run = Measurement("if.hot_cold", title="IF noise", id=7)
+        run = Measurement("if.noise_temperature_vs_frequency", title="IF noise", id=7)
         for load, power in (("cold", -32.0), ("hot", -30.0)):
             for f in (4e9, 5e9):
                 record = {"frequency": f, "load": load, "power": power}
@@ -278,7 +340,7 @@ class TestGraphs:
         GUI thread painting: zoom and pan waited for the measurement."""
         from thzdaq_gui.graphs import CURVE_PEN_WIDTH
 
-        run = Measurement("sis.pv_curve", title="SIS P-V curve", id=3)
+        run = Measurement("sis.power_vs_voltage", title="SIS P-V measurement", id=3)
         graph = hub.graph("P-V")
         record = {"voltage": 1e-3, "current": 1e-5, "power": -30.0}
         hub.feed(run, PVCurve.plots, "pv", record)
@@ -293,7 +355,7 @@ class TestGraphs:
         assert item.opts["pen"].width() == CURVE_PEN_WIDTH == 1
 
     def test_map_graph_grid(self, hub):
-        run = Measurement("two_sb.optimization")
+        run = Measurement("two_sb.bias_optimization")
         for v1, v2, tn in (
             (2.1e-3, 2.1e-3, 40.0),
             (2.1e-3, 2.2e-3, 50.0),
@@ -325,15 +387,15 @@ class TestGraphs:
     def test_plotting_a_measurement_again_keeps_one_curve_per_group(self, hub):
         """Live curves plotted again from Data got the sweep appended a second
         time: a line from the end back to the start under every curve."""
-        run = Measurement("sis.pv_curve", title="SIS P-V curve", id=12)
+        run = Measurement("sis.noise_temperature_vs_voltage", title="SIS Tn-V", id=12)
         for angle in (2.0, 5.75):
             for v in (1.7e-3, 2.2e-3, 2.78e-3):
                 record = {"angle": angle, "load": "hot", "voltage": v,
                           "current": v / 20, "power": -30.0}  # fmt: skip
                 run.append("pv", record)
-                hub.feed(run, PVCurve.plots, "pv", record)
-        hub.show_measurement(run, PVCurve.plots)  # Plot in Data
-        hub.show_measurement(run, PVCurve.plots)  # and once more
+                hub.feed(run, TnVoltage.plots, "pv", record)
+        hub.show_measurement(run, TnVoltage.plots)  # Plot in Data
+        hub.show_measurement(run, TnVoltage.plots)  # and once more
         graph = hub.graph("P-V")
         assert len(graph.items) == 2
         for key, item in graph.items.items():

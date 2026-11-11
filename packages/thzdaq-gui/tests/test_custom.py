@@ -57,8 +57,8 @@ def test_a_script_of_the_library_is_a_measurement_of_the_window(window, wait, li
     assert (entry.title, entry.section, entry.group) == ("Told", "Measures", "Custom")
     assert window.runBar.combo.findData("custom.told") >= 0
     # Beside the built-in ones: the catalog told is all of it
-    assert window.runBar.combo.findData("sis.iv_curve") >= 0
-    assert "measure:sis.iv_curve" in window.docks
+    assert window.runBar.combo.findData("sis.current_vs_voltage") >= 0
+    assert "measure:sis.current_vs_voltage" in window.docks
     window.show_dock(name)
     content = window.docks[name].widget().content()
     assert content.titleLabel.text() == "Told"
@@ -70,8 +70,8 @@ def test_a_script_of_the_library_is_a_measurement_of_the_window(window, wait, li
     wait(lambda: name not in window.docks, timeout=10)
     assert window.runBar.combo.findData("custom.told") < 0
     # Gone with its script: the default is chosen
-    assert window.runBar.chosen_name() == "sis.iv_curve"
-    assert window.runBar.controls.run is window.measures.run("sis.iv_curve")
+    assert window.runBar.chosen_name() == "sis.current_vs_voltage"
+    assert window.runBar.controls.run is window.measures.run("sis.current_vs_voltage")
 
 
 def test_a_measurement_runs_from_its_dock_and_shows_what_it_prints(

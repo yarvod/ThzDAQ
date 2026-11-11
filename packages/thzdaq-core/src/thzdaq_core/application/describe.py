@@ -131,8 +131,25 @@ def action_result(result: Any) -> Any:
     return result
 
 
-def parameter_info(parameter: Parameter) -> measurements.ParameterInfo:
-    return measurements.ParameterInfo(**parameter.describe())
+def parameter_info(
+    parameter: Parameter, procedure: Optional[Type[Procedure]] = None
+) -> measurements.ParameterInfo:
+    """As the contract describes it; of a procedure, with what it is shown under."""
+    conditions = procedure.conditions().get(parameter.name, ()) if procedure else ()
+    parameters = procedure.parameters() if procedure else {}
+    return measurements.ParameterInfo(
+        **parameter.describe(),
+        shown_if=tuple(
+            measurements.Condition(
+                condition.parameter,
+                tuple(
+                    parameters[condition.parameter].to_json(value)
+                    for value in condition.values
+                ),
+            )
+            for condition in conditions
+        ),
+    )
 
 
 def procedure_summary(cls: Type[Procedure]) -> measurements.ProcedureSummary:
@@ -164,7 +181,9 @@ def procedure_info(
         name=procedure.name,
         title=procedure.title,
         description=procedure.description,
-        parameters=tuple(parameter_info(p) for p in procedure.parameters().values()),
+        parameters=tuple(
+            parameter_info(p, type(procedure)) for p in procedure.parameters().values()
+        ),
         slots=slots,
         plots=tuple(procedure.active_plots(quantities)),
         steps=procedure.estimate_steps(),

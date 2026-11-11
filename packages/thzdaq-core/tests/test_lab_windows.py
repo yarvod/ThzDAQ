@@ -17,7 +17,7 @@ from thzdaq_api.measurement_file import (
 )
 from thzdaq_api.measurements import ListProcedures, saved_plots
 from thzdaq_api.origins import GUI, PLOTS
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.windows import OwnPlot, open_plots, which
 
 WINDOW = "ThzDAQ"  # the window program, as the tests start it
@@ -39,7 +39,7 @@ def showing(lab, tmp_path):
 
 def quick_iv(showing):
     return showing.run(
-        IV_CURVE, bias=showing["sis_bias_1"], voltage="0:1:3",
+        CURRENT_VS_VOLTAGE, bias=showing["sis_bias_1"], voltage="0:1:3",
         settle_time=0.0, first_point_delay=0.0,
     )  # fmt: skip
 
@@ -93,6 +93,8 @@ def test_a_saved_measurement_draws_its_procedures_plots_and_its_own(showing, lab
     path = quick_iv(showing).wait(progress=False).path
     plots = saved_plots(read_measurement(path), procedures)
     assert [p.table for p in plots] == ["iv"]
+    # The file keeps them: it is drawn so without the catalog
+    assert saved_plots(read_measurement(path), ()) == plots
     with showing.measurement("pv") as m:
         drawn = m.plot("scan", x="voltage", y="power")
         m.record("scan", voltage=1e-3, power=-30.0)

@@ -152,14 +152,14 @@ class TestDataStore:
     def test_store_roundtrip(self, tmp_path):
         store = MeasurementStore(tmp_path)
         measurement = Measurement(
-            "sis.iv_curve", title="I-V", parameters={"a": 1}, started=STARTED
+            "sis.current_vs_voltage", title="I-V", parameters={"a": 1}, started=STARTED
         )
         measurement.append("iv", {"voltage": 1e-3, "current": 2e-6})
         measurement.results["rn"] = 20.0
         measurement.finish("completed", STARTED)
         path = store.save(measurement)
         assert path.parent.name == measurement.started[:10]
-        assert "sis_iv_curve" in path.name and path.suffix == ".json"
+        assert "sis_current_vs_voltage" in path.name and path.suffix == ".json"
         loaded = read_measurement(path)
         assert loaded.to_dict() == measurement.to_dict()
         assert [m.id for m in store] == [measurement.id]
@@ -171,9 +171,11 @@ class TestDataStore:
 
     def test_ids_are_numbers_that_keep_growing(self, tmp_path):
         store = MeasurementStore(tmp_path)
-        first = Measurement("sis.iv_curve", id=store.next_id(), started=STARTED)
+        first = Measurement(
+            "sis.current_vs_voltage", id=store.next_id(), started=STARTED
+        )
         assert first.id == 1
-        assert store.save(first).name == "000001_sis_iv_curve.json"
+        assert store.save(first).name == "000001_sis_current_vs_voltage.json"
         assert store.next_id() == 2
         # Another program run on the same folder continues after the largest
         old = Measurement("demo", id="20261023-022400-ab12", started=STARTED)  # text id
@@ -201,6 +203,10 @@ class TestDataStore:
 
             def require(self, devices, requirements, pause, planned=(), told=None):
                 return {}
+
+            def quantities(self, ref):
+
+                return []
 
             def snapshot(self, refs=None):
                 return {}

@@ -15,7 +15,7 @@ from thzdaq_api.leases import READ, ListLeases
 from thzdaq_api.measurement_file import Column, read_measurement
 from thzdaq_api.measurements import CancelMeasurement
 from thzdaq_api.origins import ANSWERING_CLI, CLI, GUI, script
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.script import AnsweredHere, Cancelled
 from thzdaq_api.sessions import EndSession, ScriptSource, StartSession
 
@@ -57,7 +57,7 @@ def test_devices_are_objects_of_their_quantities_and_actions(bench):
 
 def test_a_procedure_runs_and_its_table_is_read(bench):
     run = bench.run(
-        IV_CURVE,
+        CURRENT_VS_VOLTAGE,
         bias=bench["sis_bias_1"],
         voltage="0:2:11",
         settle_time=0.0,
@@ -75,7 +75,7 @@ def test_a_procedure_runs_and_its_table_is_read(bench):
 
 def test_a_slot_two_devices_suit_is_asked_for(bench):
     with pytest.raises(LabError) as caught:
-        bench.start(IV_CURVE, voltage="0:2:11")
+        bench.start(CURRENT_VS_VOLTAGE, voltage="0:2:11")
     assert "sis_bias_1" in caught.value.message and "sis_bias_2" in caught.value.message
 
 
@@ -104,7 +104,7 @@ def test_a_scripts_measurement_records_what_values_know(bench, lab):
     assert columns["y"] == Column("y", "Y-factor", "dB")
     assert saved.column("scan", "voltage_set") == pytest.approx([2e-3, 2.5e-3, 3e-3])
     assert saved.metadata["script"]["path"] == "scripts/scan.py"
-    assert saved.metadata["plots"][0]["table"] == "scan"
+    assert saved.plots[-1]["table"] == "scan"
 
 
 def test_a_device_the_script_did_not_name_joins_its_measurement(bench, lab):

@@ -48,7 +48,12 @@ from thzdaq_api.devices import (
 )
 from thzdaq_api.errors import LabError
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED
-from thzdaq_api.procedures import CL_CURVE, DEMAGNETIZE, IV_CURVE, default_quantities
+from thzdaq_api.procedures import (
+    CURRENT_VS_COIL_CURRENT,
+    DEMAGNETIZATION,
+    CURRENT_VS_VOLTAGE,
+    default_quantities,
+)
 from thzdaq_api.station import GetSisCalibration, SetSisCalibration
 
 from thzdaq_gui import profile as fmt
@@ -92,10 +97,10 @@ USES = {READ: "reads", SHARED: "sets", EXCLUSIVE: "sweeps"}
 
 # Quick measurements of a device kind, run on the device: (title, procedure, slot)
 SCANS = {
-    "sis_bias": (("I-V scan", IV_CURVE, "bias"),),
+    "sis_bias": (("I-V scan", CURRENT_VS_VOLTAGE, "bias"),),
     "sis_coil": (
-        ("I-CL scan", CL_CURVE, "coil"),
-        ("Demagnetization", DEMAGNETIZE, "coil"),
+        ("I-CL scan", CURRENT_VS_COIL_CURRENT, "coil"),
+        ("Demagnetization", DEMAGNETIZATION, "coil"),
     ),
 }
 

@@ -10,7 +10,7 @@ from thzdaq_api.devices import ListDevices, RawCommand
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import StationChanged
 from thzdaq_api.measurements import CancelMeasurement, StartMeasurement, WaitMeasurement
-from thzdaq_api.procedures import MONITOR_TIME
+from thzdaq_api.procedures import MONITOR_VALUES_VS_TIME
 from thzdaq_api.origins import GUI, script
 from thzdaq_api.station import (
     ADDED,
@@ -78,7 +78,7 @@ def test_another_profile_replaces_the_station_unless_measurements_run(lab, tmp_p
     assert back.name == "2sb" and "sis_bias_1" in titles(lab)
     monitor = lab.call(
         StartMeasurement(
-            procedure=MONITOR_TIME,
+            procedure=MONITOR_VALUES_VS_TIME,
             parameters={"watch": ["power_meter_1/power"], "interval": 0.05},
         )
     )

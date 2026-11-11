@@ -312,8 +312,8 @@ instruments:
 ### 4.6 Procedure — измерение без Qt
 ```python
 class IFNoise(Procedure):  # добавляется в список BUILTIN (procedures/__init__.py)
-    name = "if.hot_cold"
-    title = "IF noise (hot/cold)"
+    name = "if.noise_temperature_vs_frequency"
+    title = "SIS Tn-IF"
     requires = {"detector": PowerDetector, "if_filter": TunableFilter, "load": LoadSwitch}
     plots = (PlotSpec("power", "P-IF", table="power", x="frequency", y="power",
                       x_scale=GHZ, group_by=("load",)), ...)
@@ -336,10 +336,22 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   какое устройство стенда играет слот, выбирает пользователь (комбобоксы в доке измерения,
   `--device bias=sis_bias_1` в CLI). `slot_kinds` подсказывает вид: слот `bias` предлагает
   SIS-смещения, а не каждый канал блока питания. `slots()` может зависеть от параметров:
-  P-V с `hot_cold=True` требует ещё `load`.
+  Tn-V с `hot_cold=True` требует ещё `load`.
 - Параметры декларативны: значения в СИ, у каждого — единица показа и масштаб, поэтому форма
   и CLI работают в ГГц/мВ, а код — в Гц/В. Типы: `Float`, `Int`, `Bool`, `Choice`,
-  `MultiChoice`, `FloatList`, `StringList`, `Sweep(start, stop, points)`.
+  `MultiChoice`, `FloatList`, `StringList`, `Sweep(start, stop, points)`. У параметра есть
+  группа (`group`, названия — `Group` в `procedures/common.py`): форма показывает параметры
+  по группам под разделителем с названием. Правило «показывать, если» — `shown_if` процедуры
+  (`shown_while(When("hot_cold", (True,)), "t_hot", ...)`; правила миксинов и подклассов
+  складываются, `conditions()`): параметр используется, только пока все его условия
+  выполнены (`used(name)`); неиспользуемый не проверяется по пределам прибора (`planned()`).
+  В контракте это `ParameterInfo.group` и `shown_if` (`Condition`); форма GUI прячет такие
+  поля, CLI и MCP пишут «used when».
+- Ключ процедуры — `<группа>.<что меряем>_vs_<что меняем>` (`thzdaq_api.procedures`).
+  Прежние ключи — одна таблица `RENAMED` (старый → новый) там же; `current_name()` понимают
+  каталог (запуск и описание из CLI, MCP, `lab.run`), разрешения скриптов `run:`, графики
+  файлов (`saved_plots`), Data (текущее название, старое в подсказке) и запомненные значения
+  форм GUI (`saved_procedure`).
 - `ctx["slot"]` — устройство; `ctx.record(table, **values)` — строка таблицы измерения и
   событие для графиков; `ctx.sleep()` просыпается сразу при отмене; `ctx.on_exit(callback)` —
   восстановление состояния (LIFO) при успехе, отмене и ошибке. Процедура не знает про доки
@@ -348,21 +360,22 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
 
   | Имя | Что делает | Слоты |
   |---|---|---|
-  | `sis.iv_curve` | I-V | bias |
-  | `sis.cl_curve` | ток SIS от тока катушки (I-CL) | coil, bias |
-  | `sis.demagnetize` | размагничивание | coil |
-  | `sis.pv_curve` | P-V, опционально hot/cold (Y, Tn от V) и углы сетки | bias, detector (+load, +grid) |
-  | `sis.y_factor_voltage` | P-V с hot/cold по умолчанию | bias, detector, load |
-  | `sis.reflection` | S-параметры VNA по развёртке смещения | bias, vna |
-  | `sis.shot_noise` | Rd в двух точках, P-IF, шум ПЧ-усилителя | bias, detector, if_filter |
-  | `grid.current_angle` | ток SIS от угла сетки | grid, bias |
-  | `if.hot_cold` | P-IF hot/cold, Y и Tn | detector, if_filter, load |
-  | `monitor.time` | выбранные величины устройств во времени (P, T, V, I, давление, ...) | любые |
+  | `sis.current_vs_voltage` | I-V | bias |
+  | `sis.current_vs_coil_current` | ток SIS от тока катушки (I-CL) | coil, bias |
+  | `sis.demagnetization` | размагничивание | coil |
+  | `sis.power_vs_voltage` | P-V: мощность ПЧ вместе с I-V | bias, detector |
+  | `sis.noise_temperature_vs_voltage` | Tn-V: P-V с hot/cold (Y, Tn от V), опционально углы сетки | bias, detector, load (+grid) |
+  | `sis.reflection_vs_frequency` | S-параметры VNA по развёртке смещения | bias, vna |
+  | `if.amplifier_noise_vs_voltage` | IF health check: Rd в двух точках, P-IF, шум ПЧ-усилителя | bias, detector, if_filter |
+  | `grid.current_vs_angle` | ток SIS от угла сетки | grid, bias |
+  | `if.noise_temperature_vs_frequency` | Tn-IF: P-IF hot/cold, Y и Tn | detector, if_filter, load |
+  | `if.power_vs_frequency` | Power-IF YIG: P-IF без нагрузок | detector, if_filter |
+  | `monitor.values_vs_time` | выбранные величины устройств во времени (P, T, V, I, давление, ...) | любые |
   | `two_sb.if_balance` | P-IF обоих каналов для пар смещений | sis1, sis2, if_selector, detector, if_filter |
-  | `two_sb.pump_balance` | токи накачки от частоты LO или RF | sis1, sis2, lo/test_tone (+detector) |
-  | `two_sb.srr` | test tone в каждой полосе → SRR по ПЧ; опц. Y/Tn | + test_tone, detector или spectrum, load |
-  | `two_sb.tn` | Y и Tn верхнего и нижнего каналов | sis1, sis2, if_selector, detector, if_filter, load |
-  | `two_sb.optimization` | карты SRR и Tn по сетке SIS1×SIS2 | все слоты 2SB |
+  | `two_sb.lo_rf_balance` | токи накачки от частоты LO или RF | sis1, sis2, lo/test_tone (+detector) |
+  | `two_sb.sideband_ratio` | test tone в каждой полосе → SRR по ПЧ; опц. Y/Tn | + test_tone, detector или spectrum, load |
+  | `two_sb.noise_temperature` | Y и Tn верхнего и нижнего каналов | sis1, sis2, if_selector, detector, if_filter, load |
+  | `two_sb.bias_optimization` | карты SRR и Tn по сетке SIS1×SIS2 | все слоты 2SB |
 
 ### 4.7 Runner
 - `MeasurementRunner(station, store, observers)` (`application/runner.py`, чистый Python;
@@ -371,6 +384,10 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   устройства слотов (`devices={"bias": "sis_bias_1"}`), создаёт `Measurement` со снимком стенда
   и описанием использованных устройств, вызывает `run(ctx)`, выполняет cleanup и ставит статус
   `completed | cancelled | failed`. Нет устройства — ошибка до создания файла.
+- Графики прогона (`active_plots` по параметрам и приборам) раннер кладёт в `plots` измерения
+  до открытия файла, `ctx.plot` дописывает туда же: файл рисует себя сам, как бы ни менялась
+  процедура. Файлы, записанные раньше (`plots` нет), берут графики процедуры по ключу (через
+  `RENAMED`) и добавленные из метаданных `plots`.
 - Файл идущего измерения — порт `MeasurementWriter` (`store.open(measurement)`): каждая
   запись дописывается сразу, остальное (комментарий, метаданные, графики) — не чаще раза в
   `update_interval` (5 с) и только если изменилось; в конце — целый файл.
@@ -385,7 +402,7 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   `Table` хранит данные по колонкам словарём, как старый стор (`{"voltage": [...], ...}`), и
   описание колонок `Column(key, title, unit)` — графики и экспорт знают, что и в каких единицах.
   Названия и единицы обычных ключей — `KNOWN_COLUMNS`, процедура может уточнить `columns`.
-- `MeasurementStore(root)`: `<root>/<дата>/<id>_<процедура>.json` (`000042_sis_iv_curve.json`)
+- `MeasurementStore(root)`: `<root>/<дата>/<id>_<процедура>.json` (`000042_sis_current_vs_voltage.json`)
   — один JSON на измерение. Id — число: `next_id()` берёт наибольший номер в именах файлов
   папки данных плюс один, поэтому номера растут между запусками программы; у файлов старых
   версий остаются текстовые id. Без хранилища раннер нумерует измерения в процессе.
@@ -428,14 +445,15 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   связывает сигналы и хранит одну раскладку (`window/docks`; раскладка другой версии — Lite
   и Pro — не восстанавливается, строится раскладка по умолчанию). Доки по именам и правила,
   где открывается закрытый док, — `DockSpace` (`docking.py`, отображение имя → док); имена
-  доков (`measure:sis.iv_curve`, `graph:I-V`, `device:sis_bias_1`) составляются и
+  доков (`measure:sis.current_vs_voltage`, `graph:I-V`, `device:sis_bias_1`) составляются и
   разбираются только в `dock_names.py`, потому что их хранят сохранённые раскладки. Доки
   графиков следуют за `GraphHub` (`graph_docks.py`), доки устройств — за станцией
   (`device_docks.py`), доки измерений — за каталогом (`measure_docks.py`), обновления —
   `Updates` (`update_dialog.py`), предупреждение о молчащем приборе — `HangWatch`
   (`workers.py`).
 - **Панель сверху** (`runbar.py`, `RunBar`): список измерений с иконками по группам (SIS,
-  IF, 2SB, Monitor, Grid, свои — последними), кнопка настроек, комментарий (занимает
+  IF, 2SB, Monitor, Grid, свои — последними; иконка измерения — буква M в квадрате, у Monitor
+  своя, `procedure_groups.py`), кнопка настроек, комментарий (занимает
   свободную ширину тулбара), Start/Check/Stop, Abort (когда его предлагает измерение),
   прогресс с состоянием («Running 42 %», «completed #12»). Выбор запоминается
   (`ui/measurement`). У каждого измерения свой док, форма живёт в нём всегда; панель и док —
@@ -625,7 +643,7 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
   горячая нагрузка добавляет мощность, как приёмнику с шумовой температурой 60 K
   (`sim/power_meter.py`, `load_power`, Y ≈ 4,2 dB). Без этого «Y» был разностью дрейфа двух
   развёрток, снятых в разное время: случайного знака, и Tn при Y ≤ 0 dB не было вовсе.
-- Процедуры с горячей и холодной нагрузкой (P-V/Y-factor по углу, IF noise, каналы 2SB)
+- Процедуры с горячей и холодной нагрузкой (Tn-V по углу, Tn-IF, каналы 2SB)
   пишут в лог, если Tn не определена (Y ≤ 0 dB): «hot is not above cold at any point …
   did the load switch?» или число таких точек (`warn_without_contrast`). Такие точки не
   рисуются, и без строки в логе кривая просто пропадала.

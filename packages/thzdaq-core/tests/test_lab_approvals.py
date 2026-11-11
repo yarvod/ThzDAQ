@@ -9,12 +9,12 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import ApprovalAnswered
 from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.origins import AGENT_CLI, ANSWERING_CLI, CLI, GUI
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
 from thzdaq_api.station import GetStation, UpdateStation
 
 AGENT = "mcp:claude"
 IV = dict(
-    procedure=IV_CURVE,
+    procedure=CURRENT_VS_VOLTAGE,
     parameters={
         "voltage": {"start": 0, "stop": 0.001, "points": 3},
         "settle_time": 0,

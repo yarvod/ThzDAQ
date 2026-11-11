@@ -34,6 +34,7 @@ from thzdaq_api.events import (
 )
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, LeaseInfo
 from thzdaq_api.measurements import (
+    kept_plots,
     PLANNED,
     MeasurementSummary,
     PlotInfo,
@@ -169,9 +170,7 @@ class _Run(RunObserver):
         self.measurement = measurement
         for lease in self.accepted:
             self.note(CONFLICTS, conflict(lease, self.origin))
-        station = self.runner.station
-        refs = {slot: use.ref for slot, use in measurement.devices.items()}
-        plots = self.procedure.active_plots(lambda slot: station.quantities(refs[slot]))
+        plots = kept_plots(measurement)
         self.started = self.info()
         with self._snapshot_lock:
             self._visible = self.started

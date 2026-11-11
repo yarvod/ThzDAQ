@@ -11,13 +11,13 @@ from typing import Callable, Dict, Iterable, List, Optional
 from PySide6.QtCore import QSettings, QSignalBlocker, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSizePolicy, QToolButton, QWidget
 from thzdaq_api.measurements import ProcedureSummary
-from thzdaq_api.procedures import IV_CURVE
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE, current_name
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.run_controls import Run, RunControls
 from thzdaq_gui.settings import CHOSEN_MEASUREMENT
 
-DEFAULT_MEASUREMENT = IV_CURVE
+DEFAULT_MEASUREMENT = CURRENT_VS_VOLTAGE
 COMMENT_WIDTH = 320  # at least: the comment takes the free width of the bar
 
 
@@ -44,7 +44,7 @@ class RunBar(QWidget):
         self.combo.setToolTip("Measurement to run")
         self.combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.set_procedures(procedures)
-        if not self.select(settings.value(CHOSEN_MEASUREMENT) or ""):
+        if not self.select(current_name(settings.value(CHOSEN_MEASUREMENT) or "")):
             self.select(DEFAULT_MEASUREMENT)
         self.combo.activated.connect(
             lambda index: self.choose(self.combo.itemData(index))

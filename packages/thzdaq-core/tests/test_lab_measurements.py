@@ -21,7 +21,11 @@ from thzdaq_api.measurements import (
     SummarizeMeasurement,
     WaitMeasurement,
 )
-from thzdaq_api.procedures import IV_CURVE, MONITOR_TIME, PV_CURVE
+from thzdaq_api.procedures import (
+    CURRENT_VS_VOLTAGE,
+    MONITOR_VALUES_VS_TIME,
+    NOISE_TEMPERATURE_VS_VOLTAGE,
+)
 
 FAST_IV = {
     "voltage": {"start": 0.0, "stop": 2e-3, "points": 11},
@@ -38,8 +42,10 @@ def ended(lab, run_id):
 
 
 def test_procedures_are_listed_and_described(lab):
-    assert {IV_CURVE, MONITOR_TIME} <= {p.name for p in lab.call(ListProcedures())}
-    info = lab.call(DescribeProcedure(procedure=IV_CURVE))
+    assert {CURRENT_VS_VOLTAGE, MONITOR_VALUES_VS_TIME} <= {
+        p.name for p in lab.call(ListProcedures())
+    }
+    info = lab.call(DescribeProcedure(procedure=CURRENT_VS_VOLTAGE))
     voltage = next(p for p in info.parameters if p.name == "voltage")
     assert (voltage.kind, voltage.unit, voltage.display_unit) == ("sweep", "V", "mV")
     assert voltage.default == {"start": 0.0, "stop": 7e-3, "points": 351}
@@ -49,10 +55,12 @@ def test_procedures_are_listed_and_described(lab):
 
 
 def test_slots_follow_the_parameters(lab):
-    plain = lab.call(DescribeProcedure(procedure=PV_CURVE))
-    hot_cold = lab.call(
-        DescribeProcedure(procedure=PV_CURVE, parameters={"hot_cold": True})
+    plain = lab.call(
+        DescribeProcedure(
+            procedure=NOISE_TEMPERATURE_VS_VOLTAGE, parameters={"hot_cold": False}
+        )
     )
+    hot_cold = lab.call(DescribeProcedure(procedure=NOISE_TEMPERATURE_VS_VOLTAGE))
     assert "load" not in {s.name for s in plain.slots}
     assert "load" in {s.name for s in hot_cold.slots}
     # The Y-factor is drawn only when there is a hot and a cold load
@@ -60,13 +68,13 @@ def test_slots_follow_the_parameters(lab):
 
 
 def test_a_run_is_described_with_its_steps_and_plot_window(lab):
-    iv = lab.call(DescribeProcedure(procedure=IV_CURVE, parameters=FAST_IV))
+    iv = lab.call(DescribeProcedure(procedure=CURRENT_VS_VOLTAGE, parameters=FAST_IV))
     assert iv.steps == 11 and iv.plot_window is None
     voltage = next(p for p in iv.parameters if p.name == "voltage")
     assert voltage.max_points and voltage.max_points > 11
     monitor = lab.call(
         DescribeProcedure(
-            procedure=MONITOR_TIME,
+            procedure=MONITOR_VALUES_VS_TIME,
             parameters={**MONITOR, "watch": ["power_meter_1", "sis_bias_1/voltage"]},
             devices={"power_meter_1": "power_meter_1", "sis_bias_1": "sis_bias_1"},
         )
@@ -81,7 +89,7 @@ def test_every_invalid_parameter_is_named(lab):
     with pytest.raises(LabError) as error:
         lab.call(
             DescribeProcedure(
-                procedure=IV_CURVE,
+                procedure=CURRENT_VS_VOLTAGE,
                 parameters={**FAST_IV, "settle_time": -1, "first_point_delay": "x"},
             )
         )
@@ -94,7 +102,7 @@ def test_a_measurement_runs_and_is_heard(lab):
     lab.subscribe(heard.append)
     run = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE,
+            procedure=CURRENT_VS_VOLTAGE,
             parameters=FAST_IV,
             devices={"bias": "sis_bias_1"},
             comment="contract",
@@ -118,10 +126,14 @@ def test_a_measurement_runs_and_is_heard(lab):
 
 
 def test_measurements_run_side_by_side_and_stop(lab):
-    monitor = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR))
+    monitor = lab.call(
+        StartMeasurement(procedure=MONITOR_VALUES_VS_TIME, parameters=MONITOR)
+    )
     iv = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     assert monitor.id != iv.id
@@ -134,7 +146,9 @@ def test_measurements_run_side_by_side_and_stop(lab):
 def test_run_snapshot_and_later_events_contain_each_row_once(lab):
     from thzdaq_api.measurement_file import read_measurement
 
-    run = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR))
+    run = lab.call(
+        StartMeasurement(procedure=MONITOR_VALUES_VS_TIME, parameters=MONITOR)
+    )
     initial = []
     stop_initial = lab.subscribe(initial.append)
     wait_for(lambda: len(bodies(initial, MeasurementProgress)) >= 3)
@@ -166,7 +180,9 @@ def test_run_snapshot_and_later_events_contain_each_row_once(lab):
 def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
     run = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     assert ended(lab, run.id).status == "completed"
@@ -188,13 +204,15 @@ def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
         (StartMeasurement(procedure="sis.nothing"), ErrorCode.NOT_FOUND),
         (
             StartMeasurement(
-                procedure=IV_CURVE,
+                procedure=CURRENT_VS_VOLTAGE,
                 parameters={"voltage": {"start": 0, "stop": 1, "points": 0}},
             ),
             ErrorCode.INVALID_ARGUMENTS,
         ),
         (
-            StartMeasurement(procedure=IV_CURVE, devices={"bias": "sis_bias_9"}),
+            StartMeasurement(
+                procedure=CURRENT_VS_VOLTAGE, devices={"bias": "sis_bias_9"}
+            ),
             ErrorCode.INVALID_ARGUMENTS,
         ),
         (WaitMeasurement(id=999), ErrorCode.NOT_FOUND),
@@ -219,7 +237,9 @@ def test_what_a_sweep_sets_is_told_a_few_times_a_second(lab):
     }
     run = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=sweep, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=sweep,
+            devices={"bias": "sis_bias_1"},
         )
     )
     ended(lab, run.id)
@@ -241,7 +261,7 @@ def test_a_measurement_goes_to_the_workspace_its_client_names(lab, tmp_path):
     def run(workspace=None):
         started = lab.call(
             StartMeasurement(
-                procedure=IV_CURVE,
+                procedure=CURRENT_VS_VOLTAGE,
                 parameters=FAST_IV,
                 devices={"bias": "sis_bias_1"},
                 workspace=workspace and str(workspace),
@@ -266,14 +286,18 @@ def test_a_comment_goes_into_the_file_of_a_measurement(lab, tmp_path):
 
     done = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE, parameters=FAST_IV, devices={"bias": "sis_bias_1"}
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
         )
     )
     done = ended(lab, done.id)
     lab.call(SetComment(path=done.path, comment="after the warm-up"))
     assert read_measurement(done.path).comment == "after the warm-up"
     # A running one keeps it and saves it with its data
-    running = lab.call(StartMeasurement(procedure=MONITOR_TIME, parameters=MONITOR))
+    running = lab.call(
+        StartMeasurement(procedure=MONITOR_VALUES_VS_TIME, parameters=MONITOR)
+    )
     lab.call(SetComment(path=running.path, comment="overnight"))
     lab.call(CancelMeasurement(id=running.id))
     assert read_measurement(ended(lab, running.id).path).comment == "overnight"
@@ -284,15 +308,17 @@ def test_a_comment_goes_into_the_file_of_a_measurement(lab, tmp_path):
 
 def test_parameters_are_typed_as_people_type_them(lab):
     typed = {"voltage": "0:2:11", "settle_time": "0", "first_point_delay": "0"}
-    info = lab.call(DescribeProcedure(procedure=IV_CURVE, typed=typed))
+    info = lab.call(DescribeProcedure(procedure=CURRENT_VS_VOLTAGE, typed=typed))
     assert info.steps == 11
     with pytest.raises(LabError) as error:
-        lab.call(DescribeProcedure(procedure=IV_CURVE, typed={"voltage": "0:2"}))
+        lab.call(
+            DescribeProcedure(procedure=CURRENT_VS_VOLTAGE, typed={"voltage": "0:2"})
+        )
     assert error.value.code == ErrorCode.INVALID_ARGUMENTS
     assert "start:stop:points" in str(error.value)
     planned = lab.call(
         StartMeasurement(
-            procedure=IV_CURVE,
+            procedure=CURRENT_VS_VOLTAGE,
             typed=typed,
             devices={"bias": "sis_bias_1"},
             dry_run=True,

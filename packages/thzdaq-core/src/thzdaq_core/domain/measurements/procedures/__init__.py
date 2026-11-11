@@ -2,10 +2,10 @@
 procedure is added here, explicitly."""
 
 from thzdaq_core.domain.measurements.procedures.grid import GridCurrentAngle
-from thzdaq_core.domain.measurements.procedures.if_noise import IFNoise
+from thzdaq_core.domain.measurements.procedures.if_noise import IFNoise, PowerIF
 from thzdaq_core.domain.measurements.procedures.iv_curve import IVCurve
 from thzdaq_core.domain.measurements.procedures.monitor import Monitor
-from thzdaq_core.domain.measurements.procedures.pv_curve import PVCurve, YFactorVoltage
+from thzdaq_core.domain.measurements.procedures.pv_curve import PVCurve, TnVoltage
 from thzdaq_core.domain.measurements.procedures.reflection import SisReflection
 from thzdaq_core.domain.measurements.procedures.shot_noise import ShotNoise
 from thzdaq_core.domain.measurements.procedures.sis_tools import CLCurve, Demagnetize
@@ -26,11 +26,12 @@ BUILTIN = (
     IfBalance,
     Monitor,
     PVCurve,
+    PowerIF,
     PumpBalance,
     ShotNoise,
     SidebandRatio,
     SisReflection,
     TwoSbNoise,
+    TnVoltage,
     TwoSbOptimization,
-    YFactorVoltage,
 )
