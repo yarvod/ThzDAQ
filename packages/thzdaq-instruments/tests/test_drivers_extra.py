@@ -20,6 +20,7 @@ from thzdaq_instruments.drivers import (
     SumitomoF70,
     SumitomoF70Rest,
 )
+from thzdaq_instruments.angle import AngleUnknown
 from thzdaq_instruments.drivers.lakeshore import HeaterSetup, OutputMode
 from thzdaq_instruments.drivers.pfeiffer import (  # disabled driver, tests skipped
     PfeifferGauge,
@@ -281,7 +282,77 @@ class TestArduinoGrid:
         grid = ArduinoGrid(transport=transport)
         assert grid.test()
         grid.rotate_to(90)
-        assert link.written[-1] == "90"
+        assert link.written[-1] == "90.0"
+
+    def test_zero_moves_nothing(self):
+        client = FakeJsonClient()
+        grid = ArduinoGrid(client=client, angle=10)
+        grid.rotate_to(40)
+        grid.zero()
+        assert grid.get_angle() == 0
+        grid.rotate_to(15)
+        posts = [data for method, path, data in client.requests if path == "/rotate"]
+        assert posts == [{"angle": 30}, {"angle": 15}]
+
+    def test_serial_zero_keeps_the_firmware_count(self):
+        transport, link = fake_transport({})
+        grid = ArduinoGrid(transport=transport)
+        grid.rotate_to(30)
+        grid.zero()
+        grid.rotate_to(10)
+        assert link.written[-1] == "40.0"
+        assert grid.kept_state() == {"angle": 10.0, "origin": 30.0}
+
+    def test_a_move_is_told_before_and_after(self):
+        told = []
+        grid = ArduinoGrid(client=FakeJsonClient(), angle=5)
+        grid.watch_state(told.append)
+        grid.rotate_to(45)
+        assert told == [
+            {"angle": 5.0, "origin": 0.0, "moving_to": 45.0},
+            {"angle": 45.0, "origin": 0.0},
+        ]
+
+    def test_a_move_that_did_not_end_leaves_the_angle_unknown(self):
+        grid = ArduinoGrid(client=FakeJsonClient())
+        grid.restore_state({"angle": 20.0, "moving_to": 60.0})
+        with pytest.raises(AngleUnknown, match="set its zero"):
+            grid.get_angle()
+        with pytest.raises(AngleUnknown):
+            grid.rotate_to(10)
+        assert grid.kept_state()["angle"] is None
+        grid.zero()
+        assert grid.get_angle() == 0
+
+    def test_a_broken_link_leaves_the_angle_unknown(self):
+        class Broken(FakeJsonClient):
+            def post(self, path, data=None):
+                raise InstrumentConnectionError("link lost")
+
+        told = []
+        grid = ArduinoGrid(client=Broken(), angle=5)
+        grid.watch_state(told.append)
+        with pytest.raises(InstrumentConnectionError):
+            grid.rotate_to(45)
+        assert told[-1]["angle"] is None
+        with pytest.raises(AngleUnknown):
+            grid.get_angle()
+
+    def test_a_refused_move_stays(self):
+        class Refusing(FakeJsonClient):
+            def post(self, path, data=None):
+                return {"error": "too far"}
+
+        grid = ArduinoGrid(client=Refusing(), angle=5)
+        with pytest.raises(InstrumentResponseError, match="too far"):
+            grid.rotate_to(400)
+        assert grid.get_angle() == 5
+        assert grid.kept_state() == {"angle": 5.0, "origin": 0.0}
+
+    def test_restored_where_it_stood(self):
+        grid = ArduinoGrid(client=FakeJsonClient())
+        grid.restore_state({"angle": 33.0, "origin": 0.0})
+        assert grid.get_angle() == 33.0
 
 
 class FakeVisaError(Exception):

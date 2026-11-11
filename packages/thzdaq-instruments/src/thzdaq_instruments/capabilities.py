@@ -94,6 +94,9 @@ class TunableFilter(Protocol):
     def tune(self, frequency: float) -> float:
         """Tune to a frequency, Hz. Returns the frequency actually set."""
 
+    def get_frequency(self) -> Optional[float]:
+        """Hz, the one tuned last (no readback); None before the first tune."""
+
 
 @runtime_checkable
 class LoadSwitch(Protocol):

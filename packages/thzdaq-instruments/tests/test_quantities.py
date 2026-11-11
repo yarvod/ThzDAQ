@@ -58,10 +58,10 @@ class TestQuantities:
 
     def test_write_only_and_read_only(self):
         yig = SimYigFilter().channel("yig_1")
-        frequency = quantities_of(yig)[0]
-        assert frequency.settable and not frequency.readable
+        tuned = Quantity("x", "X", setters=("tune",))
+        assert tuned.settable and not tuned.readable
         with pytest.raises(AttributeError):
-            frequency.read(yig)
+            tuned.read(yig)
         with pytest.raises(AttributeError):
             Quantity("x", "X", get=lambda t: 1).write(yig, 2)
 

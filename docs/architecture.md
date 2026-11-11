@@ -202,7 +202,7 @@ class VoltageCurrentMeter(Protocol): measure() -> ChannelReading         # фа�
 class FrequencySource(Protocol):    set_frequency(Hz), get_frequency() -> Hz
 class PowerLevel(Protocol):         set_power(dBm), get_power() -> dBm
 class PowerDetector(Protocol):      read_power() -> dBm                  # ошибка — исключение
-class TunableFilter(Protocol):      tune(Hz) -> Hz                       # реально выставленная
+class TunableFilter(Protocol):      tune(Hz) -> Hz, get_frequency()      # реально выставленная; без обратного чтения — последняя
 class LoadSwitch(Protocol):         to_hot(), to_cold()
 class Thermometer(Protocol):        read_temperature() -> K
 class SpectrumAnalyzer(Protocol):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
@@ -234,6 +234,20 @@ SIS-смещение — это `VoltageSource + VoltageCurrentMeter`, кана�
   (`settings` прибора), остальные величины — **уставки**, последние значения в реестре.
 - Приставки СИ — одна таблица `units.SI_PREFIXES` (p … G, 10⁻¹²…10⁹), `prefixes_for(unit)`:
   для dBm, dB, deg приставок нет, для K — только K и mK.
+
+**Сохраняемое состояние** (`thzdaq_instruments.state`, `KeptState`) — то, что о приборе знает
+только программа: сетка (`ArduinoGrid`, её симулятор) не читает своё положение и считает угол
+по своим движениям (`thzdaq_instruments.angle.CountedAngle`). Прибор сообщает каждое изменение
+тому, кто следит (перед движением «двигается к X», после — «стоит на X»), и принимает его назад
+при открытии; где оно хранится, ему всё равно. Движение, которое не закончилось (демон
+остановили, связь оборвалась), оставляет угол неизвестным: чтение и движение отказывают с
+просьбой обнулить, действие `zero` («Set zero») делает текущее положение 0° без движения.
+Отказ самой сетки (её ответ с ошибкой) оставляет её где была. В ядре станция зовёт `on_open`
+при открытии прибора; `application/kept.py` (`KeptStates`) отдаёт прибору запись порта
+`InstrumentStates` и пишет туда его изменения; запись другого драйвера (профиль сменился) не
+применяется. Адаптер — `adapters/instrument_states.py`: JSON-файл демона (`state.json`, у
+симулятора `state-sim.json`, рядом с `daemon.json`), записи по id прибора, файл целиком
+атомарно под замком; ошибка записи — в лог, движение не останавливает.
 
 ### 4.5 Станция — профиль стенда
 Профиль (`stations/*.yaml`, версия 2) — приборы и устройства на них. Id называет тип прибора
@@ -625,6 +639,9 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
   Реестр лежит вне папки программы, поэтому обновление его не трогает, а новая версия
   читает ту же область. `--settings FILE` хранит настройки в INI-файле (переносная установка,
   тесты). Где лежат настройки и данные, показывает Help → About.
+- **Состояние приборов** (угол сетки) — `state.json` демона рядом с `daemon.json`, у
+  симулятора `state-sim.json` (раздел 4.4): не в реестре (его видит только GUI) и не в
+  профиле (засорил бы `.history/`).
 - **Файлы** — рядом с программой, а не в рабочей папке (у собранной программы она зависит от
   ярлыка или апдейтера): `data/` — измерения и `data/dumps/`, `stations/` — профили.
   Апдейтер заменяет только файлы из релиза: `data/` и всё, что не входит в сборку, остаётся,

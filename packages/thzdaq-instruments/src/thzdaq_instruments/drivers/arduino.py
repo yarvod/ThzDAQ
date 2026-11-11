@@ -1,17 +1,23 @@
-from typing import Optional
+from typing import Any, Mapping, Optional
 
+from thzdaq_instruments.angle import CountedAngle
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.transport.base import HTTP, SERIAL, ConnectionSpec, Transport
 from thzdaq_instruments.transport.http import JsonClient, JsonHttpClient
+from thzdaq_instruments.state import State
 from thzdaq_instruments.transport.pool import TransportPool, default_pool
 
+ORIGIN = "origin"  # the serial firmware's own angle at the program's 0°
 
-class ArduinoGrid(Instrument):
-    """Wire grid polarizer on an Arduino stepper: Rotator.
+
+class ArduinoGrid(CountedAngle, Instrument):
+    """Wire grid polarizer on an Arduino stepper: Rotator, KeptState.
 
     The HTTP firmware rotates by a relative angle, the serial one goes to an
-    absolute angle; the driver keeps the current angle (no position readback).
+    absolute angle of its own count; the driver counts the current angle (no
+    position readback, thzdaq_instruments.angle). Its zero is the program's:
+    over serial the driver keeps the firmware's angle at it (origin).
     """
 
     driver_key = "arduino.grid"
@@ -37,6 +43,7 @@ class ArduinoGrid(Instrument):
             else:
                 self.transport = (pool or default_pool).acquire(connection)
         self._angle = angle
+        self._origin = 0.0
 
     @staticmethod
     def connection(host: str = "169.254.0.52") -> ConnectionSpec:
@@ -59,22 +66,32 @@ class ArduinoGrid(Instrument):
             return True
         return self.transport.query("test") == "OK"
 
-    def get_angle(self) -> float:
-        return self._angle
+    @property
+    def unknown(self) -> str:
+        if self.client is not None:
+            return super().unknown
+        return "angle unknown, a move did not end: rotate it to an angle"
 
     def set_angle_reference(self, angle: float) -> None:
-        """Tell the driver where the grid is without moving it."""
-        self._angle = angle
+        if self.client is None:
+            # The firmware's angle where it stands stays: the origin moves
+            self._origin += self.get_angle() - angle
+        super().set_angle_reference(angle)
 
-    def rotate_to(self, angle: float) -> float:
-        if self.client is not None:
-            response = self.client.post("/rotate", {"angle": angle - self._angle})
-            if response.get("error"):
-                raise InstrumentResponseError(f"{self.name}: {response['error']}")
-        else:
-            self.transport.write(f"{angle}")
-        self._angle = angle
-        return angle
+    def _move(self, angle: float) -> None:
+        if self.client is None:
+            self.transport.write(f"{angle + self._origin}")
+            return
+        response = self.client.post("/rotate", {"angle": angle - self.get_angle()})
+        if response.get("error"):
+            raise InstrumentResponseError(f"{self.name}: {response['error']}")
+
+    def kept_state(self) -> State:
+        return {**super().kept_state(), ORIGIN: self._origin}
+
+    def restore_state(self, state: Mapping[str, Any]) -> None:
+        super().restore_state(state)
+        self._origin = float(state.get(ORIGIN, 0.0))
 
     def close(self) -> None:
         if self.client is not None:

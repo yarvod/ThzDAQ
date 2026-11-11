@@ -285,6 +285,7 @@ class StationService:
             pool=old.pool,
             simulate=old.simulate,
             lively=old.lively,
+            on_open=old.on_open,
         )
         self.bench.replace(station, path)
         self._changed()

@@ -4,6 +4,7 @@ Factories create a fresh instrument or channel. Real drivers join these lists
 with a FakeLink-backed transport, so drivers and simulators pass the same checks.
 """
 
+import json
 import math
 
 from emulators import (
@@ -61,6 +62,7 @@ from thzdaq_instruments.drivers import (
     SumitomoF70Rest,
 )
 from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
+from thzdaq_instruments.state import KeptState
 from thzdaq_instruments.sim import (
     SimChopper,
     SimCompressor,
@@ -223,6 +225,7 @@ def check_tunable_filter(device):
     actual = device.tune(6e9)
     assert isinstance(actual, float)
     assert abs(actual - 6e9) < 5e6
+    assert device.get_frequency() == actual
 
 
 def check_load_switch(device):
@@ -265,6 +268,19 @@ def check_vacuum_gauge(device):
 def check_rotator(device):
     assert device.rotate_to(30.0) == 30.0
     assert device.get_angle() == 30.0
+
+
+def check_kept_state(device):
+    """Every change is told, as JSON; what was told comes back as it was."""
+    told = []
+    device.watch_state(told.append)
+    device.rotate_to(15.0)
+    assert told and told[-1] == device.kept_state()
+    assert json.loads(json.dumps(told[-1])) == told[-1]
+    kept = device.kept_state()
+    device.rotate_to(40.0)
+    device.restore_state(kept)
+    assert device.kept_state() == kept
 
 
 def check_compressor(device):
@@ -416,6 +432,7 @@ CONTRACTS = {
         {"sim gauge": SimVacuumGauge},
     ),
     Rotator: (check_rotator, {"sim rotator": SimRotator, "grid": grid}),
+    KeptState: (check_kept_state, {"sim rotator": SimRotator, "grid": grid}),
     Compressor: (
         check_compressor,
         {"sim compressor": SimCompressor, "f70": f70, "f70 rest": f70_rest},

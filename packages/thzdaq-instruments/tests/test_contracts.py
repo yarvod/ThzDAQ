@@ -1,6 +1,7 @@
 import pytest
 from contracts import CONTRACTS, contract_cases
 from thzdaq_instruments.capabilities import ALL_CAPABILITIES
+from thzdaq_instruments.state import KeptState
 
 CASES = list(contract_cases())
 
@@ -17,4 +18,4 @@ def test_implementation_satisfies_contract(capability, check, factory, kwargs):
 
 
 def test_every_capability_has_a_contract():
-    assert set(CONTRACTS) == set(ALL_CAPABILITIES)
+    assert set(CONTRACTS) == {*ALL_CAPABILITIES, KeptState}

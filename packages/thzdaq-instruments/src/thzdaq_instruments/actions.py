@@ -6,7 +6,8 @@ hot or the cold load, an analyzer reads a trace) and drivers add their own
 action takes arguments with units and may return a result (a trace). One that
 can harm the bench carries a warning, shown before it runs.
 
-A rotator has no action: its angle is a settable quantity.
+A rotator's angle is a settable quantity; one that counts its angle (no
+readback) also sets its zero where it stands.
 """
 
 from dataclasses import dataclass
@@ -127,6 +128,12 @@ START_ROTATION = Action(
 )  # fmt: skip
 STOP_ROTATION = Action("stop", "Stop", lambda t: t.stop(), help="Stop the rotation")
 CHOPPER_ACTIONS = (START_ROTATION, STOP_ROTATION)
+
+# A rotator that counts its angle (thzdaq_instruments.angle): a program zero
+ZERO_ANGLE = Action(
+    "zero", "Set zero", lambda t: t.zero(),
+    help="Where it stands becomes 0°; nothing moves",
+)  # fmt: skip
 
 
 def actions_for(
