@@ -18,6 +18,9 @@ class YigChannel(Channel):
         super().__init__(instrument, key)
         self.frequency: Optional[float] = None
 
+    def get_frequency(self) -> Optional[float]:
+        return self.frequency
+
     def tune(self, frequency: float) -> float:
         return self.set_code(self.instrument.frequency_to_code(frequency))
 

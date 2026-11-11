@@ -195,7 +195,10 @@ CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
         Quantity("power", "Power", "dBm", get=lambda t: t.read_power()),
     ),
     caps.TunableFilter: (
-        Quantity("frequency", "Frequency", "Hz", setters=("tune",)),
+        Quantity(
+            "frequency", "Frequency", "Hz",
+            get=lambda t: t.get_frequency(), setters=("tune",),
+        ),
     ),
     caps.Thermometer: (
         Quantity("temperature", "Temperature", "K", get=lambda t: t.read_temperature()),

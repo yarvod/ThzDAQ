@@ -13,6 +13,9 @@ class SimYigChannel(Channel):
         super().__init__(instrument, key)
         self.frequency = instrument.start_frequency
 
+    def get_frequency(self) -> Optional[float]:
+        return self.frequency
+
     def tune(self, frequency: float) -> float:
         code = round(
             (frequency - self.instrument.start_frequency) / self.instrument.step
