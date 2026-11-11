@@ -81,8 +81,8 @@ def assemble(
     runs = Runs(bench, workspaces, events, Leases(), known, profiles)
     access = DeviceAccess(bench, known, events, runs.leases, runs.note)
     script_sessions = Sessions(runs, access)
-    customs = CustomMeasurements(library, events)
-    procedures = Procedures(customs)
+    customs = CustomMeasurements(library)
+    procedures = Procedures(customs, events)
     processes = ScriptProcesses(
         bench, workspaces, runs, events, script_sessions, launcher,
         lambda: control.process().simulate, procedures.get,

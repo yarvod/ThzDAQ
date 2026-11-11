@@ -5,7 +5,8 @@ The library (the Library port: measurements/ of the program's folder) is
 looked at when the catalog is asked and every POLL_S: a script new or changed
 since it was described is described again (its text checked, then its
 process run described up to its last declaration; cached by its hash); one
-that cannot be stays in the catalog with its error. Any change is told to clients (procedures_changed).
+that cannot be stays in the catalog with its error. Any change is told to
+those listening (the catalog, application.procedures, tells clients).
 
 A run of one (start_measurement custom.<name>) is a session made before its
 script starts (CustomRun): the daemon starts the script's process as the
@@ -18,7 +19,7 @@ session's does, and its process is ended STOP_S later if it goes on.
 
 import threading
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Sequence, Tuple, Type
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 from thzdaq_api.custom import (
     CustomInfo,
@@ -34,7 +35,6 @@ from thzdaq_api.custom import (
     valid_name,
 )
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.events import ProceduresChanged
 from thzdaq_api.leases import READ
 from thzdaq_api.measurement_file import CANCELLED, COMPLETED, FAILED
 from thzdaq_api.measurements import ProcedureSummary
@@ -42,7 +42,6 @@ from thzdaq_api.scripts import ScriptInfo, StartScript
 from thzdaq_api.sessions import ScriptSource, StartSession
 
 from thzdaq_core.application.describe import procedure_summary
-from thzdaq_core.application.events import EventBus
 from thzdaq_core.application.ports import DescribeFailed, Library, LibraryFile
 from thzdaq_core.application.processes import ScriptProcesses
 from thzdaq_core.application.runner import Cancelled, Context, Failed
@@ -100,10 +99,11 @@ def described(file: LibraryFile, library: Library) -> Described:
 class CustomMeasurements:
     """The library as procedures, described anew when a script changes."""
 
-    def __init__(self, library: Library, events: EventBus, poll: float = POLL_S):
+    def __init__(self, library: Library, poll: float = POLL_S):
         self.library = library
-        self.events = events
         self.poll = poll
+        # Told the summaries of the library after it changed
+        self.changed: List[Callable[[Tuple[ProcedureSummary, ...]], None]] = []
         self._cache: Dict[Tuple[str, str], Described] = {}  # by name and hash
         self._now: Dict[str, Described] = {}  # by name
         self._lock = threading.Lock()  # one look at a time
@@ -142,7 +142,8 @@ class CustomMeasurements:
             changed = now != self._now
             self._now = now
         if changed:
-            self.events.publish(ProceduresChanged(self.summaries(now)))
+            for tell in self.changed:
+                tell(self.summaries(now))
         return now
 
     def summaries(
