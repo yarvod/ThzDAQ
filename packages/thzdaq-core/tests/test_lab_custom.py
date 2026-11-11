@@ -137,8 +137,11 @@ def test_clients_hear_the_library_change(lab):
             return changes and changes[-1].procedures
 
         wait_for(lambda: any(p.name == "custom.pv" for p in told() or ()), 10)
+        # All of them now, the built-in ones too: clients replace their list
+        assert told() == lab.call(ListProcedures())
         path.unlink()
         wait_for(lambda: not any(p.name == "custom.pv" for p in told()), 10)
+        assert told() == lab.call(ListProcedures())
     finally:
         stop()
 

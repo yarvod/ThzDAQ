@@ -1,5 +1,5 @@
 """The bench's own measurements in the window: their docks in Measures (group
-Custom), the Lite list and Ctrl+K, made from a blank or an example, run from
+Custom), the list on top and Ctrl+K, made from a blank or an example, run from
 their dock with what their script prints, and their scripts in the dock of a
 file: saved, checked, completed, changed outside, kept by a measurement."""
 
@@ -56,13 +56,22 @@ def test_a_script_of_the_library_is_a_measurement_of_the_window(window, wait, li
     entry = window.docks.entries[name]
     assert (entry.title, entry.section, entry.group) == ("Told", "Measures", "Custom")
     assert window.runBar.combo.findData("custom.told") >= 0
+    # Beside the built-in ones: the catalog told is all of it
+    assert window.runBar.combo.findData("sis.iv_curve") >= 0
+    assert "measure:sis.iv_curve" in window.docks
     window.show_dock(name)
     content = window.docks[name].widget().content()
     assert content.titleLabel.text() == "Told"
     assert [p.name for p in content.box.info.parameters] == ["settle"]
+    # Chosen on top: the bar drives the run of its dock
+    window.runBar.choose("custom.told")
+    assert window.runBar.controls.run is content.box
     (library / "told.py").unlink()
     wait(lambda: name not in window.docks, timeout=10)
     assert window.runBar.combo.findData("custom.told") < 0
+    # Gone with its script: the default is chosen
+    assert window.runBar.chosen_name() == "sis.iv_curve"
+    assert window.runBar.controls.run is window.measures.run("sis.iv_curve")
 
 
 def test_a_measurement_runs_from_its_dock_and_shows_what_it_prints(

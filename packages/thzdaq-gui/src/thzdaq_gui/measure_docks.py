@@ -4,14 +4,13 @@ its own (custom.<name>).
 They follow the catalog (the window syncs them when it changes): a
 measurement of the bench's own comes and goes with its script, and a dock is
 retitled when its script is described anew (its content reloads its form
-itself). The content of a dock is built when it
-first opens (DockBody): the monitor and the bench's own measurements have
-widgets of their own.
+itself). The content of a dock is built when it first opens or its run is
+asked for (DockBody, the bar on top): the monitor and the bench's own
+measurements have widgets of their own.
 """
 
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
-import PySide6QtAds as QtAds
 from thzdaq_api.custom import file_name
 from thzdaq_api.measurements import ProcedureSummary
 from thzdaq_api.procedures import MONITOR_TIME
@@ -23,6 +22,7 @@ from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.docks.custom import CustomMeasureWidget, OpenCode
 from thzdaq_gui.docks.measure import MeasureWidget, MonitorWidget
 from thzdaq_gui.graphs import GraphHub
+from thzdaq_gui.run_controls import Run
 
 # Docks with their own widget class by procedure name
 SPECIAL = {MONITOR_TIME: MonitorWidget}
@@ -74,11 +74,16 @@ class MeasureDocks:
 
     def add(self, name: str, procedure: ProcedureSummary, title: str) -> None:
         group = procedure_groups.group(procedure.name)
-        dock = self.docks.add(
+        self.docks.add(
             name, title, DockBody(self.factory(procedure.name)), SECTION,
-            theme.icon(group.icon), QtAds.RightDockWidgetArea,
-            group=group.title, hint=procedure.name,
+            theme.icon(group.icon), group=group.title, hint=procedure.name,
         )  # fmt: skip
         self.titles[name] = title
-        if not self.docks.building:
-            dock.toggleView(False)  # added later: opens when asked for
+
+    def run(self, procedure: str) -> Optional[Run]:
+        """What the dock of a procedure runs (its box), built if its dock
+        has not opened yet; None: no such dock."""
+        name = dock_name(MEASURE, procedure)
+        if name not in self.docks:
+            return None
+        return self.docks[name].widget().content().box

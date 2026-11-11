@@ -60,7 +60,8 @@ class ProcedureBox(QWidget):
     compact (a scan inside a device dock): one column, the dock scrolls it.
     Otherwise the devices and parameters (under the header) scroll and the
     controls are pinned below them. How the run goes is a RunStatus; the
-    controls in the footer, and the bar on top in Lite, show it.
+    controls in the footer, and the bar on top for the chosen measurement,
+    show it.
     """
 
     status_changed = Signal(str)  # its line: "Running 42 %", "completed #12"
@@ -116,7 +117,6 @@ class ProcedureBox(QWidget):
         self.footer = QFrame()
         self.footer.setObjectName("procedureFooter")
         footer = QVBoxLayout(self.footer)
-        # Hidden in Lite: the bar on top shows the chosen run
         self.controls = RunControls()
         self.controls.bind(self)
         footer.addWidget(self.controls)
@@ -517,10 +517,6 @@ class MeasureWidget(QWidget):
 
     def make_box(self, session, hub, procedure, header):
         return ProcedureBox(session, hub, procedure, header=header)
-
-    def show_controls(self, on: bool) -> None:
-        """Off in Lite: the bar on top runs the chosen measurement."""
-        self.box.controls.setVisible(on)
 
 
 # The monitor's parameter of what it watches: "<ref>" or "<ref>/<quantity key>"

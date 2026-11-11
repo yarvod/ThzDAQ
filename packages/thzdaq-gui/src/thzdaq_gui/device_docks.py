@@ -8,7 +8,6 @@ its reads and settings survive the rest.
 import logging
 from typing import Dict, List
 
-import PySide6QtAds as QtAds
 from PySide6.QtWidgets import QLabel, QWidget
 from thzdaq_api.devices import CHANNEL, DeviceInfo
 from thzdaq_api.errors import LabError
@@ -72,17 +71,15 @@ class DeviceDocks:
             icon = theme.device_icon(info.kind, info.instrument)
             group, hint = self.group(info)
             if dock is None:
-                dock = self.docks.add(
+                self.docks.add(
                     name,
                     info.title,
                     DockBody(factory),
                     "Devices",
                     icon,
-                    QtAds.LeftDockWidgetArea,
                     group=group,
                     hint=hint,
                 )
-                dock.toggleView(False)
             else:
                 dock.widget().replace(factory)
                 self.docks.retitle(name, info.title)

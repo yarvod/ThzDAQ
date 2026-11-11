@@ -198,7 +198,7 @@ class IVAnalysisBar(QWidget):
         self.result: Optional[IVAnalysis] = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        # Two narrow rows: the I-V dock must fit any perspective's width
+        # Two narrow rows: the I-V dock must fit a narrow column
         row = QHBoxLayout()
         self.curve = QComboBox()
         self.curve.setMinimumContentsLength(8)
