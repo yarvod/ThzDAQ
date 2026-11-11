@@ -2,8 +2,8 @@
 
 A run (ProcedureBox) keeps how it goes in a RunStatus and tells every change;
 RunControls show it and call the run back. Every measurement dock has its own
-controls; in Lite the bar on top shows the chosen run with another one, in a
-row. Both read the run, never each other.
+controls; the bar on top shows the chosen measurement's run with another
+one, in a row. Both read the run, never each other.
 """
 
 from dataclasses import dataclass

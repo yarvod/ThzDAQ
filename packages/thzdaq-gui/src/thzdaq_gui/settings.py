@@ -1,6 +1,6 @@
 """Where the application keeps its state, and where its files live.
 
-Settings (window layout, perspectives, last station profile, last parameters
+Settings (window layout, last station profile, last parameters
 of every measurement, I-V analysis) are in the registry on Windows
 (HKEY_CURRENT_USER\\Software\\ThzDAQ\\<scope>; a plist on macOS, an INI file
 on Linux), outside the program folder, so updates never touch them:
@@ -53,12 +53,8 @@ def location() -> str:
 # Every key of the settings, in one place; keys made of parts are functions
 STATION_PATH = "station/path"  # the last station profile
 WINDOW_GEOMETRY = "window/geometry"
-MODE = "ui/mode"  # Lite or Pro
-CHOSEN_MEASUREMENT = "ui/measurement"  # the one the Lite run bar shows
-PRO_LAYOUT = "window/docks"  # also the layout saved before the modes
-LITE_LAYOUT = "window/docks_lite"
-PERSPECTIVES = "Perspectives"  # the array ADS writes and reads
-PERSPECTIVE = "perspective"  # the one in use
+CHOSEN_MEASUREMENT = "ui/measurement"  # the one the run bar on top shows
+LAYOUT = "window/docks"  # the docks as ADS saves them
 CUSTOM_GRAPHS = "graphs/custom"
 NAVIGATOR_EXPANDED = "navigator/expanded"
 IV_ANALYSIS = "iv_analysis"

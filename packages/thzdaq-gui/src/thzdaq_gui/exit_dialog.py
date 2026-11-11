@@ -62,9 +62,7 @@ class ExitDialog(QDialog):
             warning.setWordWrap(True)
             warning.setStyleSheet(f"color: {theme.ACCENT}")
             layout.addWidget(warning)
-        self.storeState = QCheckBox(
-            "Store the window layout and the current perspective"
-        )
+        self.storeState = QCheckBox("Store the window layout")
         self.storeState.setChecked(True)
         self.dumpData = QCheckBox(
             f"Dump all measurements of this session into one file ({measurements})"

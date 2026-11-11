@@ -1,10 +1,10 @@
 """Content of a heavy dock (a device, a measurement, a graph), held only while open.
 
-Opening a perspective, ADS moves every dock, closed ones too, into new areas,
+Restoring a layout, ADS moves every dock, closed ones too, into new areas,
 and Qt restyles the whole widget tree of each moved dock (the application
 style sheet): with every device and measurement dock built that took most of
 a second. A DockBody detaches its content while the dock is closed, so a
-switch costs only the open docks. The content is built on the first open (a
+layout costs only the open docks. The content is built on the first open (a
 graph also for its first data) and keeps working while detached (monitors,
 running measurements).
 """
@@ -55,12 +55,6 @@ class DockBody(QWidget):
             content.hide()  # first: a visible widget without a parent is a window
             self.layout().removeWidget(content)
             content.setParent(None)
-
-    def lend(self) -> QWidget:
-        """The content, out of this dock to be shown elsewhere (Lite); it
-        comes back on the next set_open(True)."""
-        self.set_open(False)
-        return self.content()
 
     def replace(self, factory: Factory) -> None:
         """New content (an edited device), shown in place of the old one."""

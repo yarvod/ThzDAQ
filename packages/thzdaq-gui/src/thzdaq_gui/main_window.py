@@ -1,14 +1,15 @@
-"""Main window: Qt Advanced Docking System docks and perspectives, as in the old app.
+"""Main window: Qt Advanced Docking System docks, as in the old app.
 
-Every part of the application is a dock the user places anywhere: Setup,
-Data and Log (base), one dock per instrument and configured device, one per
-measurement and one per graph. The window builds them, its menus and its
-toolbar, and keeps the layout of each mode; the parts live apart:
+Every part of the application is a dock: Setup and Data, Processes, Log and
+Daemon pinned to the side bars (base), one dock per instrument and
+configured device, one per measurement and one per graph, placed where the
+user wants. The window builds them, its menus and its toolbar with the bar
+of the chosen measurement on top, and keeps one layout; the parts live apart:
 
 - docking.py: the docks by name and where they open (DockSpace);
-- graph_docks.py, device_docks.py: docks that follow the graphs and the station;
-- perspectives.py: saved layouts of Pro;
-- modes.py: what differs in Lite and Pro;
+- graph_docks.py, device_docks.py, measure_docks.py, code_docks.py: docks
+  that follow the graphs, the station, the catalog and the scripts opened;
+- runbar.py: the measurement chosen, started and stopped on top;
 - workspace_menu.py: the workspace in the File menu;
 - update_dialog.py (Updates), workers.py (HangWatch).
 """
@@ -19,16 +20,14 @@ from typing import Callable, Dict, Optional
 
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QMetaObject, QSettings, QSignalBlocker, Qt, Slot
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
-    QSizePolicy,
     QToolBar,
     QToolButton,
-    QWidget,
     QWidgetAction,
 )
 from thzdaq_api import examples
@@ -44,12 +43,11 @@ from thzdaq_gui.dock_names import (
     GRAPH,
     LOG,
     MEASURE,
-    MEASUREMENT,
     PROCESSES,
     SETUP,
     dock_name,
 )
-from thzdaq_gui.docking import SECTIONS, DockSpace, configure_docking, one_repaint
+from thzdaq_gui.docking import SECTIONS, DockSpace, configure_docking
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.processes import ProcessesWidget
@@ -70,12 +68,10 @@ from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
-from thzdaq_gui.modes import Lite, Pro
 from thzdaq_gui.navigator import DockNavigator, QuickFind
-from thzdaq_gui.perspectives import Perspectives
 from thzdaq_gui.safe_state import SafeStateAction
-from thzdaq_gui.runbar import MeasurementHost, RunBar
-from thzdaq_gui.settings import MODE, STATION_PATH, WINDOW_GEOMETRY, location
+from thzdaq_gui.runbar import RunBar
+from thzdaq_gui.settings import LAYOUT, STATION_PATH, WINDOW_GEOMETRY, location
 from thzdaq_gui.settings import settings as app_settings
 from thzdaq_gui.update_dialog import Updates
 from thzdaq_gui.version import __version__
@@ -86,7 +82,9 @@ from thzdaq_gui.workspace_menu import WorkspaceMenu
 logger = logging.getLogger(__name__)
 
 DEVICE_HANG_S = 5.0
-STATE_VERSION = 3
+# 4: one layout, no modes; ADS refuses a layout of another version (the
+# default layout is made instead)
+STATE_VERSION = 4
 
 
 class MainWindow(QMainWindow):
@@ -96,7 +94,6 @@ class MainWindow(QMainWindow):
         settings_file: Optional[str] = None,
         restore_layout: bool = True,
         check_updates: bool = True,
-        mode: Optional[str] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -121,22 +118,19 @@ class MainWindow(QMainWindow):
         self.docks = DockSpace(self.dock_manager)
         # Docks are added open and then arranged: build contents only after that
         self.docks.building = True
-        self.perspectives = Perspectives(self.docks, self.settings, self)
         self.updates = Updates(self, session.busy)
-        # Lite runs the chosen measurement from the bar on top, its widget
-        # borrowed into the Measurement dock
-        self.runBar = RunBar(session.procedures())
-        self.runBar.parameters_requested.connect(lambda: self.show_dock(MEASUREMENT))
-        self.measurementHost = MeasurementHost()
-        lite = Lite(self.runBar, self.measurementHost, self.docks, self.settings)
-        self.modes = {m.key: m for m in (lite, Pro())}
-        self.mode = self.modes.get(mode or self.settings.value(MODE), lite)
         self.hub = GraphHub(session.procedures(), session.call, self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
         self.code = CodeDocks(session, self.docks, self, self.start_measurement)
         self.measures = MeasureDocks(
             session, self.hub, self.docks, self.code.open_custom
+        )
+        # The chosen measurement runs from the bar on top too; its dock
+        # shows its setup
+        self.runBar = RunBar(session.procedures(), self.measures.run, self.settings)
+        self.runBar.dock_requested.connect(
+            lambda procedure: self.show_dock(dock_name(MEASURE, procedure))
         )
 
         self.daemon = DaemonModel(session, self)
@@ -167,11 +161,6 @@ class MainWindow(QMainWindow):
 
         self.add_base_docks()
         self.measures.sync()
-        self.docks.add(
-            MEASUREMENT, "Measurement", self.measurementHost, "Measures",
-            theme.icon("play-circle-outline"), QtAds.RightDockWidgetArea,
-            listed=False,
-        )  # fmt: skip
         self.graphs.add_all()
         self.devices.sync()
         session.station_changed.connect(self.on_station_changed)
@@ -185,12 +174,11 @@ class MainWindow(QMainWindow):
             self.apply_default_layout()
         self.docks.hide_empty_splitters()  # the window is not shown yet
         self.docks.building = False
-        self.apply_mode()
-        self.enter_mode()
+        self.docks.sync_bodies()
+        self.runBar.show_chosen()
         self.show_daemon()  # the banner as the daemon is, not as a layout saved it
         # A default layout gets its widths once the window has a size
         self._fit_on_show = not restored
-        self.perspectives.refresh()
         self.runGraphs = RunGraphs(self.hub, parent=self)
         self.runGraphs.follow_all(session.run_events)
         if check_updates:
@@ -228,7 +216,6 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut(QKeySequence.Quit)
         quit_action.triggered.connect(self.close)
         file.addAction(quit_action)
-        self.menuBase = bar.addMenu("&Base")
         self.menuDevices = bar.addMenu("&Devices")
         self.menuMeasures = bar.addMenu("&Measures")
         new_measurement = QAction(theme.icon("plus"), "New measurement…", self)
@@ -254,7 +241,7 @@ class MainWindow(QMainWindow):
         self.navigators: Dict[str, DockNavigator] = {}
         for section, menu in zip(
             SECTIONS,
-            (self.menuBase, self.menuDevices, self.menuMeasures, self.menuGraphs),
+            (self.menuDevices, self.menuMeasures, self.menuGraphs),
         ):
             navigator = self.navigator((section,))
             action = QWidgetAction(menu)
@@ -274,9 +261,9 @@ class MainWindow(QMainWindow):
     def navigator(self, sections=None) -> DockNavigator:
         return DockNavigator(
             self.docks.listed,
-            self.dock_state,
+            self.docks.state,
             self.show_dock,
-            self.toggle_dock,
+            self.docks.toggle,
             sections,
             self.settings,
         )
@@ -299,40 +286,18 @@ class MainWindow(QMainWindow):
         toolbar.setObjectName("main_toolbar")
         toolbar.setMovable(False)
         self.toolbar = toolbar
-        self.runBarAction = toolbar.addWidget(self.runBar)
-        self.perspectives.add_to(toolbar)
+        toolbar.addWidget(self.runBar)
         toolbar.addSeparator()
         self.safeState = SafeStateAction(self.session, self)
         safe = QToolButton()
         safe.setDefaultAction(self.safeState)
         safe.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         toolbar.addWidget(safe)
-        # Ctrl+K (Cmd+K on macOS) finds any dock, from any window of the app
-        self.quickFind = QuickFind(self.navigator(), self)
-        find = QAction(theme.icon("magnify"), "Find…", self)
-        find.setToolTip("Find a device, measurement or graph (Ctrl+K)")
-        find.triggered.connect(self.quickFind.popup)
-        self.findShortcut = QShortcut(QKeySequence("Ctrl+K"), self)
-        self.findShortcut.setContext(Qt.ApplicationShortcut)
-        self.findShortcut.activated.connect(self.quickFind.popup)
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.toolbarSpacer = toolbar.addWidget(spacer)
-        self.modeActions: Dict[str, QAction] = {}
-        group = QActionGroup(self)
-        for mode in self.modes.values():
-            action = QAction(mode.title, self)
-            action.setCheckable(True)
-            action.setToolTip(mode.tip)
-            action.triggered.connect(lambda _=False, key=mode.key: self.set_mode(key))
-            group.addAction(action)
-            toolbar.addAction(action)
-            self.modeActions[mode.key] = action
         toolbar.addSeparator()
+        self.quickFind = QuickFind(self.navigator(), self)
         button = QToolButton()
-        button.setDefaultAction(find)
+        button.setDefaultAction(self.quickFind.action)
         button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        button.setText("Find…  Ctrl+K")
         toolbar.addWidget(button)
 
     # Docks
@@ -345,6 +310,7 @@ class MainWindow(QMainWindow):
         self.processesWidget = ProcessesWidget(self.session.processes)
         self.processesWidget.show_requested.connect(self.show_dock)
         self.daemonWidget = DaemonWidget(self.daemon)
+        # Pinned to their side bars: not in the menus, never closed
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
@@ -358,55 +324,48 @@ class MainWindow(QMainWindow):
             ),
             (DAEMON, "Daemon", self.daemonWidget, "server", QtAds.SideBarBottom),
         ):
-            dock = self.docks.add(
-                name, title, widget, "Base", theme.icon(icon_name), auto_hide=side
-            )
-            self.toolbar.insertAction(self.toolbarSpacer, dock.toggleViewAction())
+            self.docks.add(
+                name, title, widget, "", theme.icon(icon_name), auto_hide=side,
+                listed=False,
+            )  # fmt: skip
         self.processesWidget.count_changed.connect(self.show_process_count)
 
     def show_process_count(self, count: int) -> None:
-        """How many run, on the Processes tab and toolbar button."""
+        """How many run, on the Processes tab."""
         self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
     def on_procedures_changed(self) -> None:
-        """The bench's own measurements changed: the mode lets go of one that
-        goes, then the docks, the bar and the graphs follow."""
-        procedures = self.session.procedures()
-        self.mode.procedures_changed([p.name for p in procedures])
+        """The bench's own measurements changed: the docks, the bar and the
+        graphs follow."""
         self.measures.sync()
-        self.runBar.set_procedures(procedures)
+        self.runBar.set_procedures(self.session.procedures())
 
     def start_measurement(self, procedure: str) -> None:
         """Start a measurement as its dock does, with the values of its form
         (Run in the dock of its script)."""
-        name = dock_name(MEASURE, procedure)
-        if name not in self.docks:
+        run = self.measures.run(procedure)
+        if run is None:
             return
-        self.show_dock(name)
-        self.docks[name].widget().content().box.start()
-
-    # Docks as the mode shows them (menus, Ctrl+K, Processes)
-    def dock_state(self, name: str) -> str:
-        return self.docks.state(self.mode.dock_of(name))
+        self.show_dock(dock_name(MEASURE, procedure))
+        run.start()
 
     def show_dock(self, name: str) -> None:
-        self.docks.show(self.mode.reveal(name))
-
-    def toggle_dock(self, name: str) -> None:
-        if self.mode.dock_of(name) != name:  # shown in another dock: choose it
-            self.show_dock(name)
-        else:
-            self.docks.toggle(name)
+        """In front of the user, wherever it is (menus, Ctrl+K, Processes)."""
+        self.docks.show(name)
 
     def apply_default_layout(self) -> None:
-        """Devices on the left, graphs in the centre, measurements on the
-        right (Lite: the chosen one)."""
-        self.docks.close_kinds(GRAPH, MEASURE, DEVICE, MEASUREMENT)
+        """Devices on the left, graphs in the centre, the chosen measurement
+        on the right; the docks it leaves closed open floating when first
+        asked for."""
+        self.docks.close_kinds(GRAPH, MEASURE, DEVICE)
         self.docks.tab_group(QtAds.CenterDockWidgetArea, self.graphs.default_docks())
-        self.docks.tab_group(QtAds.RightDockWidgetArea, self.mode.measure_column)
+        chosen = self.runBar.chosen_name()
+        if chosen is not None:
+            self.docks.tab_group(
+                QtAds.RightDockWidgetArea, [dock_name(MEASURE, chosen)]
+            )
         self.docks.tab_group(QtAds.LeftDockWidgetArea, self.devices.default_docks())
-        if self.mode.perspectives:
-            self.perspectives.add_default()
+        self.docks.unplace_closed()
 
     def show_workspace(self) -> None:
         """The title names the workspace: windows in several are told apart."""
@@ -472,18 +431,6 @@ class MainWindow(QMainWindow):
         if path is not None and self.session.profile().path != path:
             self.load_profile(path)
 
-    # Modes
-    def apply_mode(self) -> None:
-        """The toolbar of the mode: the run bar or perspectives."""
-        self.runBarAction.setVisible(self.mode.run_bar)
-        self.perspectives.set_visible(self.mode.perspectives)
-        self.modeActions[self.mode.key].setChecked(True)
-
-    def enter_mode(self) -> None:
-        """After the layout of the mode is restored or made."""
-        self.mode.enter()
-        self.docks.sync_bodies()
-
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if self._fit_on_show:
@@ -500,54 +447,23 @@ class MainWindow(QMainWindow):
         the docks had their content."""
         self.docks.fit_columns()
 
-    def set_mode(self, key: str) -> None:
-        """Switch modes, each with its own layout; running measurements go on."""
-        mode = self.modes[key]
-        if mode is self.mode:
-            self.apply_mode()
-            return
-        self.save_layout()
-        self.mode.leave()
-        self.mode = mode
-        self.settings.setValue(MODE, mode.key)
-        self.apply_mode()
-        with one_repaint(self):
-            restored = self.load_layout()
-            if not restored:
-                self.apply_default_layout()
-            self.enter_mode()
-            if not restored:
-                self.fit_columns()
-        self.perspectives.refresh()
-
-    # State: geometry, the layout of each mode, perspectives
-    def save_layout(self) -> None:
-        self.settings.setValue(
-            self.mode.state_key, self.dock_manager.saveState(STATE_VERSION)
-        )
-
-    def load_layout(self) -> bool:
-        """The layout saved for the mode; False: none (or one ADS refused)."""
-        state = self.settings.value(self.mode.state_key)
-        return state is not None and bool(
+    # State: geometry and the layout
+    def restore_state(self) -> bool:
+        """The geometry and layout saved; False: no layout (or one ADS refused)."""
+        geometry = self.settings.value(WINDOW_GEOMETRY)
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        state = self.settings.value(LAYOUT)
+        restored = state is not None and bool(
             self.dock_manager.restoreState(state, STATE_VERSION)
         )
-
-    def restore_state(self) -> bool:
-        try:
-            self.perspectives.load()
-            geometry = self.settings.value(WINDOW_GEOMETRY)
-            if geometry is not None:
-                self.restoreGeometry(geometry)
-            return self.load_layout()
-        finally:
-            self.docks.sync_bodies()
+        if restored:
+            self.docks.restored()
+        return restored
 
     def save_state(self) -> None:
         self.settings.setValue(WINDOW_GEOMETRY, self.saveGeometry())
-        self.save_layout()
-        self.settings.setValue(MODE, self.mode.key)
-        self.perspectives.save()
+        self.settings.setValue(LAYOUT, self.dock_manager.saveState(STATE_VERSION))
 
     # Closing
     def show_daemon(self) -> None:

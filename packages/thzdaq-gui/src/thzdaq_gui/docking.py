@@ -1,19 +1,21 @@
 """The docks of the window by name: where they open and what state they are in.
 
 DockSpace holds every ADS dock of the window under its name (dock_names) and
-places it: a closed dock opens with its kind (graphs with graphs, devices
-with devices) or, the first of its kind, in its column: devices on the left,
-measurements on the right, graphs between them; a base dock on its side bar.
-DockBody contents exist only while their docks are open (sync_bodies).
+places it. A base dock is pinned to its side bar, without a close button. A
+device or measurement dock that has had no place on screen yet opens
+floating, for the person to dock it where they want; closed after that, it
+opens where it was (ADS keeps its place). Graphs and scripts' files open with
+their kind: a closed one joins the tab group of an open dock of its kind, the
+first between the device and measurement columns. DockBody contents exist
+only while their docks are open (sync_bodies).
 """
 
 from collections import Counter
-from contextlib import contextmanager
-from typing import Callable, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Set
 
 import PySide6QtAds as QtAds
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QSplitter, QStyle, QWidget
+from PySide6.QtCore import QRect, Qt
+from PySide6.QtWidgets import QSplitter, QStyle, QWidget
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import (
@@ -23,7 +25,6 @@ from thzdaq_gui.dock_names import (
     GRAPH,
     LOG,
     MEASURE,
-    MEASUREMENT,
     PROCESSES,
     SETUP,
     kind_of,
@@ -32,17 +33,12 @@ from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.graphs import close_views
 from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
 
-SECTIONS = ("Base", "Devices", "Measures", "Graphs")  # of the menus, in order
+SECTIONS = ("Devices", "Measures", "Graphs")  # of the menus, in order
 AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
 CENTRED = (GRAPH, CODE)  # the first of these kinds opens between the columns
+COLUMNS = (DEVICE, MEASURE)  # sized for their docks (fit_columns)
 FIT_SHARE = 0.4  # a column takes at most this part of the window
-# The side of the window where the first open dock of a kind makes its column;
-# graphs go between the columns (open_center)
-SIDES = {
-    DEVICE: QtAds.LeftDockWidgetArea,
-    MEASURE: QtAds.RightDockWidgetArea,
-    MEASUREMENT: QtAds.RightDockWidgetArea,
-}
+FLOAT_SHARE = 0.9  # a dock opened floating takes at most this part of the window
 
 
 def configure_docking() -> None:
@@ -128,17 +124,20 @@ def free(widget: Optional[QWidget]) -> None:
         close_views(widget)
 
 
-@contextmanager
-def one_repaint(window: QWidget) -> Iterator[None]:
-    """A wait cursor and one repaint for a new layout instead of every step
-    of the rebuild."""
-    QApplication.setOverrideCursor(Qt.WaitCursor)
-    window.setUpdatesEnabled(False)
-    try:
-        yield
-    finally:
-        window.setUpdatesEnabled(True)
-        QApplication.restoreOverrideCursor()
+def unplace(dock: QtAds.CDockWidget, manager: QtAds.CDockManager) -> None:
+    """Closed, with no place on screen: ADS opens a dock without a tab group
+    floating, as it does one a restored layout does not know. ADS adds a
+    dock only into a group (or floating, shown at once), so the dock leaves
+    the group it was added to and is flagged as one without a place. Out of
+    its group ADS leaves it without a parent: the manager is its parent, so
+    the dock goes with the window."""
+    if not dock.isClosed():
+        dock.toggleView(False)
+    area = dock.dockAreaWidget()
+    if area is not None:
+        area.removeDockWidget(dock)
+    dock.flagAsUnassigned()
+    dock.setParent(manager)
 
 
 class DockSpace(Mapping):
@@ -149,6 +148,7 @@ class DockSpace(Mapping):
         self._docks: Dict[str, QtAds.CDockWidget] = {}
         self.entries: Dict[str, DockEntry] = {}  # in the menus and Ctrl+K
         self.auto_hide_sides: Dict[str, int] = {}  # base docks: their side bar
+        self.floating_first: Set[str] = set()  # docks added without a place
         # Docks are added open and then arranged: contents are built after that
         self.building = False
 
@@ -175,8 +175,11 @@ class DockSpace(Mapping):
         listed: bool = True,
         closing: Optional[Callable[[], bool]] = None,
     ) -> QtAds.CDockWidget:
-        """closing(): whether a dock whose content may hold unsaved work
-        closes now; such a dock is removed when it closes."""
+        """area: the side its tab group starts on (graphs, files); auto_hide:
+        the side bar a base dock is pinned to; neither: the dock has no place
+        until it first opens, floating (devices, measurements). closing():
+        whether a dock whose content may hold unsaved work closes now; such a
+        dock is removed when it closes."""
         dock = QtAds.CDockWidget(name)
         dock.setWindowTitle(title)
         dock.setWidget(widget)
@@ -197,13 +200,21 @@ class DockSpace(Mapping):
             dock.viewToggled.connect(
                 lambda on, body=widget: self.building or body.set_open(on)
             )
-        if auto_hide is not None:
-            self.auto_hide_sides[name] = auto_hide
-            container = self.manager.addAutoHideDockWidget(auto_hide, dock)
-            container.setSize(AUTO_HIDE_SIZES.get(name, 420))
-        else:
-            self.manager.addDockWidgetTab(area or QtAds.CenterDockWidgetArea, dock)
         self._docks[name] = dock
+        if auto_hide is not None:
+            # Always there: no close button, no window of its own
+            dock.setFeature(QtAds.CDockWidget.DockWidgetClosable, False)
+            dock.setFeature(QtAds.CDockWidget.DockWidgetFloatable, False)
+            self.auto_hide_sides[name] = auto_hide
+            self.pin(name)
+        elif area is not None:
+            self.manager.addDockWidgetTab(area, dock)
+        else:
+            # A layout being built may place it (unplace_closed after it)
+            self.manager.addDockWidgetTab(QtAds.CenterDockWidgetArea, dock)
+            self.floating_first.add(name)
+            if not self.building:
+                unplace(dock, self.manager)
         if isinstance(widget, DockBody) and not self.building:
             widget.set_open(not dock.isClosed())
         return dock
@@ -214,6 +225,7 @@ class DockSpace(Mapping):
             return
         free(dock.widget())
         self.entries.pop(name, None)
+        self.floating_first.discard(name)
         self.manager.removeDockWidget(dock)
         dock.deleteLater()
 
@@ -237,7 +249,7 @@ class DockSpace(Mapping):
             self.entries[name].title = title
 
     def sync_bodies(self) -> None:
-        """Content only in open docks (after a layout or perspective is restored)."""
+        """Content only in open docks (after a layout is restored)."""
         for dock in self._docks.values():
             body = dock.widget()
             if isinstance(body, DockBody):
@@ -283,39 +295,30 @@ class DockSpace(Mapping):
             self.sync_bodies()
 
     def open(self, name: str, activate: bool = True) -> None:
-        """Show a dock where its kind is: a closed one joins the tab group of
-        an open dock of the same kind (graphs with graphs, devices with
-        devices), or opens on its side; activate brings it to the front."""
+        """Show a dock: a closed one where it was, floating if it has had no
+        place yet; a graph or a file joins the tab group of an open dock of
+        its kind instead of an empty place. activate brings it to the front."""
         dock = self._docks.get(name)
         if dock is None:
             return
         if dock.isClosed():
             own = dock.dockAreaWidget()
-            move = own is None or own.openDockWidgetsCount() == 0
-            side = self.auto_hide_sides.get(name)
-            if (
-                own is None
-                and dock.autoHideDockContainer() is None
-                and side is not None
-            ):
-                # Not in a layout saved before this dock existed: ADS would
-                # float it; back to its side bar
-                container = self.manager.addAutoHideDockWidget(side, dock)
-                container.setSize(AUTO_HIDE_SIZES.get(name, 420))
-                move = False
-            # Open before moving: ADS keeps the tab of a closed dock it moves
-            # into a new area hidden, and the content is built by now
-            dock.toggleView(True)
-            if move:
+            if own is None and name in self.floating_first:
+                self.open_floating(dock)
+            else:
                 kind = kind_of(name)
-                area = self.open_area_of(kind, dock)
-                if area is not None:
-                    self.manager.addDockWidgetTabToArea(dock, area)
-                elif kind in SIDES:
-                    self.manager.addDockWidget(SIDES[kind], dock)
-                    self.fit_columns()
-                elif kind in CENTRED:
-                    self.open_center(dock)
+                move = kind in CENTRED and (
+                    own is None or own.openDockWidgetsCount() == 0
+                )
+                # Open before moving: ADS keeps the tab of a closed dock it
+                # moves into a new area hidden, and the content is built by now
+                dock.toggleView(True)
+                if move:
+                    area = self.open_area_of(kind, dock)
+                    if area is not None:
+                        self.manager.addDockWidgetTabToArea(dock, area)
+                    else:
+                        self.open_center(dock)
             activate = True  # a dock just opened is the one to see
         if activate:
             dock.setAsCurrentTab()
@@ -324,13 +327,51 @@ class DockSpace(Mapping):
                 dock.autoHideDockContainer().collapseView(False)
         self.sync_bodies()
 
+    def open_floating(self, dock) -> None:
+        """A dock without a place in a window of its own over the middle of
+        ours. ADS sizes that window by the dock's size hint, so the content
+        comes first; it puts the window where the system puts new ones."""
+        body = dock.widget()
+        if isinstance(body, DockBody):
+            body.set_open(True)
+        dock.toggleView(True)
+        container = dock.floatingDockContainer()
+        if container is None:
+            return
+        window = self.manager.window().geometry()
+        frame = QRect(container.geometry())
+        frame.setSize(frame.size().boundedTo(window.size() * FLOAT_SHARE))
+        frame.moveCenter(window.center())
+        container.setGeometry(frame)
+
+    def pin(self, name: str) -> None:
+        """A base dock on its side bar."""
+        container = self.manager.addAutoHideDockWidget(
+            self.auto_hide_sides[name], self._docks[name]
+        )
+        container.setSize(AUTO_HIDE_SIZES.get(name, 420))
+
+    def restored(self) -> None:
+        """After a layout is restored. ADS leaves the docks the layout does
+        not know without a place, and without a parent: the manager is their
+        parent, so they go with the window. A base dock among them (newer
+        than the layout) is back on its side bar, folded: no menu opens it."""
+        for name, dock in self._docks.items():
+            if not dock.isClosed():
+                continue
+            if dock.dockAreaWidget() is None and dock.autoHideDockContainer() is None:
+                dock.setParent(self.manager)
+                if name in self.auto_hide_sides:
+                    self.pin(name)
+            if name in self.auto_hide_sides:
+                dock.toggleView(True)
+                dock.autoHideDockContainer().collapseView(True)
+
     def open_center(self, dock) -> None:
         """The first graph between the columns: left of the measurements,
         else right of the devices, else all of the window. ADS puts a dock
         added to the centre of a window that has docks below them."""
         right = self.open_area_of(MEASURE)
-        if right is None:
-            right = self.open_area_of(MEASUREMENT)
         left = self.open_area_of(DEVICE)
         if right is not None:
             self.manager.addDockWidget(QtAds.LeftDockWidgetArea, dock, right)
@@ -343,7 +384,7 @@ class DockSpace(Mapping):
     def fit_columns(self) -> None:
         """The device and measurement columns as wide as their docks want,
         the graphs the rest."""
-        for kind in (DEVICE, MEASURE, MEASUREMENT):
+        for kind in COLUMNS:
             area = self.open_area_of(kind)
             if area is not None:
                 self.fit(area, area.currentDockWidget())
@@ -408,7 +449,7 @@ class DockSpace(Mapping):
                 continue
             yield area
 
-    # Default layouts
+    # The default layout
     def close_kinds(self, *kinds: str) -> None:
         for name, dock in self._docks.items():
             if kind_of(name) in kinds:
@@ -428,3 +469,11 @@ class DockSpace(Mapping):
             else:
                 self.manager.addDockWidgetTabToArea(dock, group)
         return group
+
+    def unplace_closed(self) -> None:
+        """After the default layout: the docks it left closed have had no
+        place on screen; they open floating."""
+        for name in self.floating_first:
+            dock = self._docks[name]
+            if dock.isClosed():
+                unplace(dock, self.manager)

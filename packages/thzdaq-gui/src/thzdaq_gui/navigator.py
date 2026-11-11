@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QFrame,
     QHeaderView,
@@ -32,6 +32,7 @@ NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
 MAX_ROWS = 20
 FLASH_MS = 700
+FIND_KEY = QKeySequence("Ctrl+K")  # Cmd+K on macOS
 
 
 @dataclass
@@ -321,7 +322,9 @@ class DockNavigator(QWidget):
 
 
 class QuickFind(QFrame):
-    """Ctrl+K: a popup over the window with every dock to find."""
+    """Ctrl+K: a popup over the window with every dock to find, from
+    anywhere in the program (its floating docks too). action: Find… for a
+    button, with the key."""
 
     def __init__(self, navigator: DockNavigator, parent: QWidget):
         super().__init__(parent, Qt.Popup)
@@ -338,6 +341,13 @@ class QuickFind(QFrame):
         navigator.search.setPlaceholderText("Find a device, measurement or graph…")
         navigator.activated.connect(lambda _: self.hide())
         self.setFixedWidth(460)
+        key = FIND_KEY.toString(QKeySequence.NativeText)
+        self.action = QAction(theme.icon("magnify"), f"Find…  {key}", parent)
+        self.action.setToolTip(f"Find a device, measurement or graph ({key})")
+        self.action.setShortcut(FIND_KEY)
+        self.action.setShortcutContext(Qt.ApplicationShortcut)
+        self.action.triggered.connect(self.popup)
+        parent.addAction(self.action)
 
     def popup(self) -> None:
         self.navigator.prepare()
