@@ -31,7 +31,7 @@ from thzdaq_gui import theme
 from thzdaq_gui.settings import NAVIGATOR_EXPANDED
 
 FRONT, BEHIND, CLOSED = "front", "behind", "closed"
-SECTIONS = ("Devices", "Measures", "Graphs")  # of the finder, in order
+SECTIONS = ("Devices", "Measures", "Graphs", "Consoles")  # of the finder, in order
 NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
 MAX_ROWS = 20

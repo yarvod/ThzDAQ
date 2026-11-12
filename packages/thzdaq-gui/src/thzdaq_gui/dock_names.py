@@ -5,8 +5,8 @@ A dock of a graph or device is named by its kind and key (graph:I-V,
 device:sis_bias_1); the base docks by their kind alone. Saved layouts hold
 these names: they never change. A place inside a dock is named the same way:
 code:/path/to/pv.py is a file's tab in Editor (where Processes leads to a
-script run from it). A measurement is no dock: measure:sis.current_vs_voltage
-names it in the run bar.
+script run from it), console:2 a console's tab in Console. A measurement is no
+dock: measure:sis.current_vs_voltage names it in the run bar.
 """
 
 from typing import Optional
@@ -21,6 +21,7 @@ PROCESSES = "processes"
 DAEMON = "daemon"
 EDITOR = "editor"  # the tabs of scripts' files
 CODE = "code"  # a script's file: its tab in Editor
+CONSOLE = "console"  # the tabs of Python consoles; console:<number> is one of them
 
 
 def dock_name(kind: str, key: str) -> str:

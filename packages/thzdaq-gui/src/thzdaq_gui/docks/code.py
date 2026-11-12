@@ -5,16 +5,21 @@ agent) is taken at once when nothing here is unsaved, else a banner asks.
 
 Run of one of the bench's own measurements is Start of its dock, with the
 values of its form; another script runs in the daemon as thzdaq script start
-does. A text a measurement kept is saved into the library under a name.
+does. In console runs code in a console of the window, its names left there
+to look at: the selection (the line of the cursor without one, Alt+Shift+E),
+or the file as %run runs it, saved first. A text a measurement kept is saved
+into the library under a name.
 
 It shows a CodeModel and calls its methods; the window's CodeDocks makes,
 names and closes these tabs.
 """
 
+import textwrap
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -30,6 +35,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_api import console
 from thzdaq_api.custom import CustomCheck
 
 from thzdaq_gui import theme
@@ -41,6 +47,10 @@ from thzdaq_gui.script_output import OpenPlace, ScriptOutput
 UNSAVED = " ●"  # after the title of a tab whose text is not saved
 SAVE_TO_LIBRARY = "Save to library"
 PROBLEMS, OUTPUT = 0, 1  # tabs under the text
+RUN_SELECTION = QKeySequence(
+    "Alt+Shift+E"
+)  # as PyCharm runs a selection in its console
+PARAGRAPH = "\u2029"  # how Qt ends the lines of a selection
 NO_PROBLEMS = "No problems found"
 # Pieces of a measurement to insert where the cursor is
 PIECES = {
@@ -73,6 +83,7 @@ class CodeWidget(QWidget):
     title_changed = Signal(str)  # with the mark of unsaved changes
     library_requested = Signal(str)  # a text without a file: save it so
     start_requested = Signal(str)  # a measurement of the library: start it
+    console_requested = Signal(str)  # code to run in a console
 
     def __init__(
         self,
@@ -108,7 +119,7 @@ class CodeWidget(QWidget):
         split.setStretchFactor(0, 4)
         split.setStretchFactor(1, 1)
         layout.addWidget(split, 1)
-        self.starting = False  # a run waits for its save
+        self.then: Optional[Callable[[], None]] = None  # what waits for the save
         model.saved.connect(self._saved)
         model.failed.connect(self._not_saved)
         model.checked.connect(self.show_check)
@@ -119,15 +130,6 @@ class CodeWidget(QWidget):
         model.output_reset.connect(lambda _: self.below.setCurrentIndex(OUTPUT))
         self.show_title()
 
-    def _button(self, text: str, icon: str, tip: str, slot) -> QToolButton:
-        button = QToolButton()
-        button.setText(text)
-        button.setIcon(theme.icon(icon))
-        button.setToolTip(tip)
-        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        button.clicked.connect(slot)
-        return button
-
     def _toolbar(self) -> QWidget:
         bar = QWidget()
         row = QHBoxLayout(bar)
@@ -135,26 +137,29 @@ class CodeWidget(QWidget):
         model = self.model
         if model.path is None:
             row.addWidget(
-                self._button(
+                theme.tool_button(
                     SAVE_TO_LIBRARY, "content-save-outline",
                     "Save it as a measurement of the bench's own", self.to_library,
                 )
             )  # fmt: skip
         else:
             row.addWidget(
-                self._button("Save", "content-save-outline", "Save (Ctrl+S)", self.save)
+                theme.tool_button(
+                    "Save", "content-save-outline", "Save (Ctrl+S)", self.save
+                )
             )
         row.addWidget(
-            self._button(
+            theme.tool_button(
                 "Check", "check-all",
                 "Syntax, names, its form and what it names of the bench", self.check,
             )
         )  # fmt: skip
-        self.runButton = self._button(
+        self.runButton = theme.tool_button(
             "Run", "play", "Start it (its dock's values for a measurement)", self.run
         )
         self.runButton.setEnabled(model.path is not None)
         row.addWidget(self.runButton)
+        row.addWidget(self._console_button())
         insert = QToolButton()
         insert.setText("Insert")
         insert.setIcon(theme.icon("code-braces"))
@@ -168,12 +173,33 @@ class CodeWidget(QWidget):
         row.addStretch()
         if model.path is not None:
             row.addWidget(
-                self._button(
+                theme.tool_button(
                     "VS Code", "microsoft-visual-studio-code",
                     "Open it in VS Code (a debugger, step by step)", self.open_outside,
                 )
             )  # fmt: skip
         return bar
+
+    def _console_button(self) -> QToolButton:
+        button = QToolButton()
+        button.setText("In console")
+        button.setIcon(theme.icon("console"))
+        button.setToolTip("Run code of it in a console, its names left there")
+        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        button.setPopupMode(QToolButton.InstantPopup)
+        self.runSelection = QAction("Run selection in console", self)
+        self.runSelection.setShortcut(RUN_SELECTION)
+        self.runSelection.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+        self.runSelection.triggered.connect(self.run_selection)
+        self.addAction(self.runSelection)
+        self.runFile = QAction("Run file in console", self)
+        self.runFile.setEnabled(self.model.path is not None)
+        self.runFile.triggered.connect(self.run_file_in_console)
+        menu = QMenu(button)
+        menu.addAction(self.runSelection)
+        menu.addAction(self.runFile)
+        button.setMenu(menu)
+        return button
 
     def _banner(self) -> QFrame:
         self.banner = QFrame()
@@ -280,17 +306,39 @@ class CodeWidget(QWidget):
         """Saved first: the daemon runs the file, and the measurement keeps
         the text it ran; it starts once the save is done."""
         self.below.setCurrentIndex(OUTPUT)
+        self.saved_then(self._start)
+
+    def saved_then(self, then: Callable[[], None]) -> None:
+        """then, once the text is its file's (saved first when it is not)."""
         if self.unsaved():
-            self.starting = True
+            self.then = then
             self.save()
         else:
-            self._start()
+            then()
 
     def _saved(self) -> None:
         self.show_title()
-        if self.starting:
-            self.starting = False
-            self._start()
+        then, self.then = self.then, None
+        if then is not None:
+            then()
+
+    # In a console
+    def selected_code(self) -> str:
+        """The selection, or the line of the cursor; dedented, so a piece of a
+        block runs alone."""
+        cursor = self.editor.textCursor()
+        text = cursor.selectedText() if cursor.hasSelection() else cursor.block().text()
+        return textwrap.dedent(text.replace(PARAGRAPH, "\n"))
+
+    def run_selection(self) -> None:
+        code = self.selected_code()
+        if code.strip():
+            self.console_requested.emit(code)
+
+    def run_file_in_console(self) -> None:
+        self.saved_then(
+            lambda: self.console_requested.emit(console.run_file(self.model.path))
+        )
 
     def _start(self) -> None:
         if self.model.procedure is not None:
@@ -299,7 +347,7 @@ class CodeWidget(QWidget):
             self.run_file(self.model.path)
 
     def _not_saved(self, _message: str) -> None:
-        self.starting = False
+        self.then = None
 
     def tell(self, message: str) -> None:
         QMessageBox.warning(self, self.model.title, message)

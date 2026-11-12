@@ -5,6 +5,9 @@ first. Opening one unfolds Editor at the bottom and puts it in front. The
 tab of a library script, opened or made current, chooses its measurement in
 the bar.
 
+Code of a tab runs in a console (Run selection in console, Run file in
+console): the window's ConsoleDocks takes it.
+
 The bench's own measurements are made here: New measurement (a blank one)
 and From an example go into the library (write_custom) and open. The script
 a measurement kept opens as its text (titled by the measurement), to be saved
@@ -59,16 +62,19 @@ class CodeDocks:
         window: QWidget,
         start: Callable[[str], None],
         choose: Callable[[str], None],
+        console: Callable[[str], None],
     ):
         """start(procedure): one of the bench's own started as its dock
         starts it; choose(procedure): one of the bench's own whose script is
-        the current tab, for the bar. tabs is the content of the Editor dock
-        (the window adds it among the base docks)."""
+        the current tab, for the bar; console(code): code run in a console.
+        tabs is the content of the Editor dock (the window adds it among the
+        base docks)."""
         self.session = session
         self.docks = docks
         self.window = window
         self.start = start
         self.choose = choose
+        self.console = console
         self.texts = 0  # texts opened without a file, to tell them apart
         # by key: the path of its file, or #<n> <title> of a text
         self.widgets: Dict[str, CodeWidget] = {}
@@ -126,6 +132,7 @@ class CodeDocks:
         self.tabs.add(widget, widget.title(), str(model.path or ""), theme.icon(ICON))
         widget.title_changed.connect(lambda title: self.tabs.retitle(widget, title))
         widget.start_requested.connect(self.start)
+        widget.console_requested.connect(self.console)
         widget.library_requested.connect(
             lambda text: self.to_library(model.title, text)
         )
