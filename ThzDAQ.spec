@@ -47,8 +47,16 @@ commands, modules = collect_entry_point("thzdaq.cli")
 # IPython's kernel and what it imports only when asked. Without debugpy (it
 # reads its own sources from disk): the kernel runs without Jupyter's debugger
 kernel = ["thzdaq_api.kernel", *collect_submodules("ipykernel")]
-# What scripts and consoles import, which the command line itself does not
-scripts = ["thzdaq", "thzdaq_analysis"]
+# What scripts and consoles import, which the command line itself does not:
+# ours with all their modules, the standard library (script_modules.py)
+sys.path.insert(0, SPECPATH)
+import script_modules  # noqa: E402
+
+scripts = [
+    module
+    for name in (*script_modules.OURS, *script_modules.standard())
+    for module in collect_submodules(name, filter=lambda m: not script_modules.a_test(m))
+]
 cli = Analysis(
     ["cli_main.py"],
     datas=commands + collect_data_files("thzdaq_api") + collect_data_files("ipykernel"),
