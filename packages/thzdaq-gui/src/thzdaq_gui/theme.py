@@ -32,6 +32,14 @@ COLORS = (
 )  # fmt: skip
 
 RESOURCES = Path(__file__).parent / "resources"
+# Arrows of spin and combo boxes in TEXT, ACCENT (hover) and MUTED (disabled):
+# Fusion draws its own a few pixels wide once a style sheet styles the box
+ARROWS = (RESOURCES / "arrows").as_posix()
+
+# Fields as tall as buttons, 28 px: content + padding + border. A spin box
+# gets its height with no padding: Fusion frames its text 7 px past the content
+FIELD_HEIGHT = 20
+STEP_WIDTH = 18  # the up/down buttons of a spin box, the arrow of a combo box
 
 STYLE = f"""
 QWidget {{ font-size: 10pt; }}
@@ -59,12 +67,70 @@ QPushButton:checked {{ background: {ACCENT}; color: #111; border-color: {ACCENT}
 QPushButton:disabled {{ color: {MUTED}; border-color: #3a3a3a; }}
 QPushButton[accent="true"] {{ background: {ACCENT}; color: #111; border-color: {ACCENT}; }}
 QPushButton[accent="true"]:hover {{ background: #ffb33d; }}
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{
-    background: {BASE}; border: 1px solid {BORDER}; border-radius: 3px; padding: 2px 4px;
+QLineEdit, QAbstractSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{
+    background: {BASE}; border: 1px solid {BORDER}; border-radius: 3px; padding: 2px 6px;
     selection-background-color: {ACCENT}; selection-color: #111;
 }}
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
+QLineEdit, QComboBox {{
+    min-height: {FIELD_HEIGHT}px; padding-top: 3px; padding-bottom: 3px;
+}}
+QAbstractSpinBox {{
+    min-height: {FIELD_HEIGHT + 1}px; padding-top: 0; padding-bottom: 0; padding-right: 2px;
+}}
+QAbstractSpinBox QLineEdit {{
+    background: transparent; border: none; padding: 0; min-height: 0;
+}}
+QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus,
 QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {ACCENT}; }}
+QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {{
+    color: {MUTED}; border-color: #3a3a3a;
+}}
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+    subcontrol-origin: padding; width: {STEP_WIDTH}px;
+    background: {PANEL}; border-left: 1px solid {BORDER};
+}}
+QAbstractSpinBox::up-button {{
+    subcontrol-position: top right; border-top-right-radius: 2px;
+    border-bottom: 1px solid {BORDER};
+}}
+QAbstractSpinBox::down-button {{
+    subcontrol-position: bottom right; border-bottom-right-radius: 2px;
+}}
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{
+    background: #3d3d3d;
+}}
+QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {{
+    background: #4a3a1c;
+}}
+QAbstractSpinBox::up-arrow {{ image: url("{ARROWS}/up-normal.svg"); width: 10px; height: 6px; }}
+QAbstractSpinBox::up-arrow:hover, QAbstractSpinBox::up-arrow:pressed {{
+    image: url("{ARROWS}/up-hover.svg");
+}}
+QAbstractSpinBox::up-arrow:disabled, QAbstractSpinBox::up-arrow:off {{
+    image: url("{ARROWS}/up-disabled.svg");
+}}
+QAbstractSpinBox::down-arrow {{
+    image: url("{ARROWS}/down-normal.svg"); width: 10px; height: 6px;
+}}
+QAbstractSpinBox::down-arrow:hover, QAbstractSpinBox::down-arrow:pressed {{
+    image: url("{ARROWS}/down-hover.svg");
+}}
+QAbstractSpinBox::down-arrow:disabled, QAbstractSpinBox::down-arrow:off {{
+    image: url("{ARROWS}/down-disabled.svg");
+}}
+QComboBox::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: top right; width: {STEP_WIDTH}px;
+    border-left: 1px solid {BORDER}; border-top-right-radius: 2px;
+    border-bottom-right-radius: 2px; background: {PANEL};
+}}
+QComboBox::drop-down:hover {{ background: #3d3d3d; }}
+QComboBox::down-arrow {{ image: url("{ARROWS}/down-normal.svg"); width: 10px; height: 6px; }}
+QComboBox::down-arrow:hover, QComboBox::down-arrow:on {{
+    image: url("{ARROWS}/down-hover.svg");
+}}
+QComboBox::down-arrow:disabled {{ image: url("{ARROWS}/down-disabled.svg"); }}
+QAbstractItemView QLineEdit, QAbstractItemView QAbstractSpinBox,
+QAbstractItemView QComboBox {{ min-height: 0; padding-top: 0; padding-bottom: 0; }}
 QComboBox QAbstractItemView {{ background: {PANEL}; selection-background-color: {ACCENT}; }}
 QDoubleSpinBox[pending="true"], QComboBox[pending="true"] {{ border: 1px solid {ACCENT}; }}
 QProgressBar {{

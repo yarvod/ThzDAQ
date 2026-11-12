@@ -34,6 +34,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QSpinBox,
+    QStyle,
+    QStyleOptionSpinBox,
     QWidget,
 )
 from thzdaq_api.devices import DeviceInfo
@@ -68,10 +70,19 @@ class _Compact:
         return "-" + "0" * self.DIGITS + ("." + "0" * decimals if decimals else "")
 
     def _width(self, text: str) -> int:
-        metrics = self.fontMetrics()
-        extra = self.prefix() + self.suffix()
-        # frame, padding and the up/down buttons
-        return metrics.horizontalAdvance(text + extra) + 44
+        # As Qt sizes a spin box for its longest text (QAbstractSpinBox::sizeHint):
+        # the text, a space and the cursor, then the style adds frame and buttons
+        advance = self.fontMetrics().horizontalAdvance(
+            self.prefix() + text + self.suffix() + " "
+        )
+        contents = QSize(advance + 2, self.lineEdit().sizeHint().height())
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        return (
+            self.style()
+            .sizeFromContents(QStyle.CT_SpinBox, option, contents, self)
+            .width()
+        )
 
     def sizeHint(self) -> QSize:
         hint = super().sizeHint()
