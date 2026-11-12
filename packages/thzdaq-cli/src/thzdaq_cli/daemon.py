@@ -210,8 +210,8 @@ def clients(args, client: Client) -> int:
     client.out(
         found,
         lambda c: show.table(
-            ("kind", "origin", "pid", "since"),
-            [(i.kind, i.origin, i.pid, i.since) for i in c],
+            ("kind", "origin", "pid", "window", "since"),
+            [(i.kind, i.origin, i.pid, i.window, i.since) for i in c],
         )
         or "no client",
     )

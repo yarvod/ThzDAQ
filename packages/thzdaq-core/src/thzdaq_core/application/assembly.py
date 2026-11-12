@@ -27,6 +27,7 @@ from thzdaq_core.application.handlers import (
     sessions,
     state,
     station,
+    ui,
 )
 from thzdaq_core.application.policy import Policy
 from thzdaq_core.application.polling import Polling
@@ -42,6 +43,7 @@ from thzdaq_core.application.runs import Runs
 from thzdaq_core.application.scripts import Sessions
 from thzdaq_core.application.station import StationService
 from thzdaq_core.application.values import KnownValues
+from thzdaq_core.application.windows import Windows
 from thzdaq_core.application.workspaces import Workspaces
 from thzdaq_core.domain.leases import Leases
 
@@ -99,6 +101,7 @@ def assemble(
     waiting = Approvals(
         events, lambda: any(answers(c.kind, c.origin) for c in control.clients())
     )
+    windows = Windows(events, control.clients)
     dispatcher = Dispatcher(
         (
             devices.ListDevices(bench),
@@ -117,6 +120,12 @@ def assemble(
             approvals.AnswerApproval(waiting),
             approvals.AskUser(waiting),
             approvals.WaitAnswer(waiting),
+            ui.UiState(windows),
+            ui.UiOpen(windows),
+            ui.UiFillMeasurement(windows, procedures),
+            ui.UiHighlight(windows),
+            ui.WindowActive(windows),
+            ui.AnswerUi(windows),
             measurements.ListProcedures(procedures),
             measurements.DescribeProcedure(access, procedures),
             measurements.StartMeasurement(

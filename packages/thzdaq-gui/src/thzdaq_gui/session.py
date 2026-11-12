@@ -29,6 +29,7 @@ from thzdaq_api.measurements import (
 from thzdaq_api.operation import Operation
 from thzdaq_api.origins import ASSISTANT, ASSISTANT_CLIENT, GUI
 from thzdaq_api.procedures import current_name
+from thzdaq_api.ui import window_id
 from thzdaq_api.station import (
     ConnectionKindInfo,
     DriverInfo,
@@ -73,7 +74,8 @@ class Session(QObject):
     instrument. The profile belongs to the lab: Setup edits it (update_profile),
     the File menu loads another one, and the session follows what the lab
     tells: station_changed for another profile or another lab,
-    config_changed for an edited one.
+    config_changed for an edited one. window is the id the window listens
+    as: agents ask it by that id (thzdaq_api.ui).
     """
 
     station_changed = Signal()  # another profile, or another lab: build anew
@@ -85,6 +87,7 @@ class Session(QObject):
         super().__init__(parent)
         # Not "connect": that name of a QObject connects its signals
         self.lab_of = lab_of
+        self.window = window_id()
         # Its data/ gets the measurements this window starts
         self.workspace = Workspace(workspace, self)
         self.calls = DeviceWorker(self)
@@ -127,7 +130,7 @@ class Session(QObject):
     def open(self, simulate: bool) -> None:
         """Work with the lab of the instruments, or of their simulator;
         LabError when it cannot be reached."""
-        lab = self.lab_of(simulate)
+        lab = self.lab_of(simulate, GUI, GUI, self.window)
         self.bridge.stop()
         if self.lab is not None and simulate != self.simulate:
             self.run_events.detach()

@@ -8,10 +8,12 @@ runs turns its icon in the list, and on the list's button while it is the
 one chosen; choosing another leaves a running one running.
 
 The bar is where measurements are found (Ctrl+K, Processes): showing one
-chooses it and opens its parameters.
+chooses it and opens its parameters. It also owns the names agents point at
+in it (thzdaq_api.ui): a measurement, a field of its form
+(measure:<procedure>/<field>) and its controls (run:start).
 """
 
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QFont
@@ -24,13 +26,23 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_api import examples
+from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import ProcedureSummary
 from thzdaq_api.procedures import CURRENT_VS_VOLTAGE, current_name
+from thzdaq_api.ui import BEHIND, CLOSED, FRONT, ControlState, FormState
 
 from thzdaq_gui import procedure_groups, theme
-from thzdaq_gui.dock_names import MEASURE, dock_name, key_of
+from thzdaq_gui.dock_names import (
+    LIST,
+    MEASURE,
+    PARAMETERS,
+    RUN,
+    dock_name,
+    key_of,
+    measure_parts,
+)
 from thzdaq_gui.measure_forms import MeasureForms
-from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry
+from thzdaq_gui.navigator import DockEntry
 from thzdaq_gui.popup import DropDown
 from thzdaq_gui.run_controls import RunControls
 from thzdaq_gui.settings import CHOSEN_MEASUREMENT
@@ -40,6 +52,8 @@ DEFAULT_MEASUREMENT = CURRENT_VS_VOLTAGE
 # when it took the bar's free width; that width stays free now
 COMMENT_WIDTH = 350
 SECTION = "Measures"  # of the finder
+CHOOSE = "Measurement to run"
+SETTINGS = "Devices and parameters of the measurement"
 
 
 class RunBar(QWidget):
@@ -69,7 +83,7 @@ class RunBar(QWidget):
         layout.setSpacing(4)
         self.select = QToolButton()
         self.select.setProperty("select", True)
-        self.select.setToolTip("Measurement to run")
+        self.select.setToolTip(CHOOSE)
         self.select.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.select.setPopupMode(QToolButton.InstantPopup)
         self.list = QMenu(self.select)
@@ -79,12 +93,14 @@ class RunBar(QWidget):
         layout.addWidget(self.select)
         self.btnParameters = QToolButton()
         self.btnParameters.setIcon(theme.icon("cog-outline"))
-        self.btnParameters.setToolTip("Devices and parameters of the measurement")
+        self.btnParameters.setToolTip(SETTINGS)
         self.btnParameters.setCheckable(True)
         self.btnParameters.clicked.connect(self.toggle_parameters)
         layout.addWidget(self.btnParameters)
         self.parameters = DropDown(self.btnParameters)
         self.parameters.visibility_changed.connect(self.btnParameters.setChecked)
+        # Its own controls by their keys; the run's are RunControls'
+        self.named = {LIST: self.select, PARAMETERS: self.btnParameters}
         self.controls = RunControls(row=True)
         self.controls.comment.setFixedWidth(COMMENT_WIDTH)
         layout.addWidget(self.controls)
@@ -177,7 +193,7 @@ class RunBar(QWidget):
                 font.setBold(name == self.chosen)
                 self.items[name].setFont(font)
         self.select.setText(item.text())
-        self.select.setToolTip(f"Measurement to run: {item.text()}")
+        self.select.setToolTip(f"{CHOOSE}: {item.text()}")
         self.show_icon(self.chosen)
         self.select_spinner.run(self.chosen in self.measures.running())
         return self.chosen == procedure
@@ -220,9 +236,67 @@ class RunBar(QWidget):
         self.show_chosen()
         self.parameters.open()
 
-    # Measurements as the finder and Processes show them: measure:<procedure>
+    # What agents see and fill (thzdaq_api.ui)
+    def described(self) -> List[ControlState]:
+        """Its controls and those of the chosen run, as run:<control>."""
+        own = [
+            ControlState(dock_name(RUN, LIST), CHOOSE),
+            ControlState(dock_name(RUN, PARAMETERS), SETTINGS),
+        ]
+        return own + self.controls.described()
+
+    def form_state(self) -> Optional[FormState]:
+        """The measurement chosen and its form."""
+        form = self.measures.form(self.chosen) if self.chosen else None
+        if form is None:
+            return None
+        box = form.box
+        return FormState(
+            self.chosen, box.info.title or self.chosen, self.parameters.isVisible(),
+            tuple(box.fields()), box.folded(), self.chosen in self.measures.running(),
+        )  # fmt: skip
+
+    def fill(
+        self, procedure: str, parameters: Mapping[str, Any], devices: Mapping[str, str]
+    ) -> FormState:
+        """Choose a measurement and fill its form, shown open; LabError for
+        one the bench does not run or values its form does not take."""
+        if procedure not in self.items:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No measurement {procedure} in the bar",
+                "list_procedures names them",
+            )
+        self.choose(procedure)
+        self.show_parameters()
+        self.measures.form(procedure).box.fill(parameters, devices)
+        return self.form_state()
+
+    def reveal(self, name: str) -> QWidget:
+        """Shown: a measurement chosen with its form open, a field of the
+        form in its unfolded section, a control. LabError for a field the
+        form has not or does not use now, or a control not shown now."""
+        procedure, field = measure_parts(name)
+        if procedure is None:
+            key = key_of(name, RUN)
+            widget = self.named.get(key) or self.controls.control(key)
+            if widget is None:
+                raise LabError(ErrorCode.NOT_ALLOWED, f"{name} is not shown now")
+            return widget
+        self.choose(procedure)
+        self.show_parameters()
+        if field is None:
+            return self.parameters
+        return self.measures.form(procedure).box.field(field)
+
+    # Measurements as the finder and Processes show them: measure:<procedure>;
+    # besides, the fields of their forms and the controls of the bar
     def __contains__(self, name: str) -> bool:
-        return key_of(name, MEASURE) in self.items
+        procedure, _ = measure_parts(name)
+        if procedure is not None:
+            return procedure in self.items
+        key = key_of(name, RUN)
+        return key in self.named or key in self.controls
 
     def listed(self) -> List[DockEntry]:
         entries = []
@@ -241,15 +315,18 @@ class RunBar(QWidget):
         return entries
 
     def state(self, name: str) -> str:
-        """FRONT: its parameters are open; BEHIND: it is chosen."""
-        if key_of(name, MEASURE) != self.chosen:
+        """FRONT: its parameters are open; BEHIND: it is chosen. A control
+        is in FRONT."""
+        procedure, _ = measure_parts(name)
+        if procedure is None:
+            return FRONT
+        if procedure != self.chosen:
             return CLOSED
         return FRONT if self.parameters.isVisible() else BEHIND
 
     def show(self, name: str) -> None:
         """Chosen, with its parameters open."""
-        self.choose(key_of(name, MEASURE))
-        self.show_parameters()
+        self.reveal(name)
 
     def toggle(self, name: str) -> None:
         if self.state(name) == FRONT:

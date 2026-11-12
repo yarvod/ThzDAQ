@@ -33,6 +33,7 @@ from thzdaq_api.measurements import (
     RunInfo,
 )
 from thzdaq_api.station import ConnectionInfo
+from thzdaq_api.ui import FieldState, FormState, WindowState
 
 NOTHING = "none"
 
@@ -328,3 +329,48 @@ def status(found: DaemonStatus) -> str:
     if found.problems:
         parts.append("problems: " + "; ".join(found.problems))
     return "\n".join(parts)
+
+
+def window(found: WindowState) -> str:
+    """A window by the names ui_open and ui_highlight take."""
+    others = [w for w in found.windows if w != found.window]
+    parts = [
+        f"window {found.window}: {found.title}"
+        + (f" (other windows: {', '.join(others)})" if others else ""),
+        "docks (name: title, front/behind/closed):",
+        *(f"  {d.name}: {d.title}, {d.state}" for d in found.docks),
+        "bar on top: "
+        + ", ".join(
+            f"{c.name} {c.title}" + ("" if c.enabled else " (disabled)")
+            for c in found.controls
+        ),
+        form(found.measurement) if found.measurement else "measurement: none chosen",
+        "running: " + (", ".join(found.running) or NOTHING),
+    ]
+    return "\n".join(parts)
+
+
+def form(found: FormState) -> str:
+    """The measurement chosen in the bar on top and its fields."""
+    state = ["form open" if found.open else "form closed"]
+    state += [f"{section} folded" for section in found.folded]
+    state += ["running"] if found.running else []
+    parts = [f"measurement {found.procedure}: {found.title} ({', '.join(state)})"]
+    parts += [f"  {field(f)}" for f in found.fields] or ["  no fields"]
+    return "\n".join(parts)
+
+
+def field(found: FieldState) -> str:
+    value = f"{found.value} {found.unit}".strip() or "--"
+    text = f"{found.name} ({found.kind} {found.label}): {value}"
+    if found.choices:
+        text += f" [{', '.join(found.choices)}]"
+    return text if found.used else f"{text}; not used with these values"
+
+
+def opened(place: str) -> str:
+    return f"{place} is shown in the window"
+
+
+def highlighted(anchor: str) -> str:
+    return f"{anchor} is highlighted; it goes when the person acts there"

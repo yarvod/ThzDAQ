@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 from thzdaq_api.devices import DeviceInfo, QuantityInfo
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import DescribeProcedure, ProcedureInfo
+from thzdaq_api import ui
+from thzdaq_api.ui import FieldState
 from thzdaq_api.procedures import (
     KEY_SEPARATOR,
     default_quantities,
@@ -37,7 +39,7 @@ from thzdaq_api.procedures import (
 
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.collapsible import Collapsible
-from thzdaq_gui.dock_names import DEVICE, MEASURE, dock_name
+from thzdaq_gui.dock_names import DEVICE, MEASURE, dock_name, field_name
 from thzdaq_gui.docks.log import tell
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
 from thzdaq_gui.run_controls import (
@@ -59,6 +61,7 @@ from thzdaq_gui.wording import INVALID_PARAMETERS
 # A start or a stop that takes this long is treated as a hung device
 STUCK_AFTER_MS = 5000
 CHECK = "Check"
+DEVICES_SECTION, PARAMETERS_SECTION = "devices", "parameters"  # as agents read them
 
 
 class ProcedureBox(QWidget):
@@ -209,6 +212,101 @@ class ProcedureBox(QWidget):
     def chosen_devices(self) -> Dict[str, str]:
         """The choice of devices as it is remembered for the next start."""
         return self.devices.mapping()
+
+    # The form as agents see and fill it (thzdaq_api.ui)
+    def fields(self) -> List[FieldState]:
+        return self.device_fields() + self.parameter_fields()
+
+    def device_fields(self) -> List[FieldState]:
+        chosen = self.devices.mapping()
+        return [
+            FieldState(
+                field_name(self.procedure, slot.name),
+                slot.name,
+                ui.DEVICE,
+                slot.title,
+                chosen.get(slot.name, ""),
+                choices=self.devices.choices(slot.name),
+            )  # fmt: skip
+            for slot in self.devices.slots.values()
+        ]
+
+    def parameter_fields(self) -> List[FieldState]:
+        return [
+            FieldState(
+                field_name(self.procedure, p.name),
+                p.name,
+                ui.PARAMETER,
+                p.label,
+                self.form.typed(p.name),
+                p.display_unit,
+                tuple(f"{choice}" for choice in p.choices),
+                self.form.shown(p.name),
+            )  # fmt: skip
+            for p in self.form.parameters.values()
+        ]
+
+    def folded(self) -> Tuple[str, ...]:
+        """Its sections shown folded: devices, parameters."""
+        sections = (
+            (DEVICES_SECTION, self.devices_box),
+            (PARAMETERS_SECTION, self.parameters_box),
+        )
+        return tuple(
+            name for name, box in sections if not box.isHidden() and not box.expanded()
+        )
+
+    def field(self, key: str) -> QWidget:
+        """The editor of a slot or a parameter, its section unfolded; LabError
+        for a field it has not, or one the run does not use with these values."""
+        widget = self.devices.widget(key)
+        if widget is not None:
+            self.devices_box.set_expanded(True, remember=False)
+            return widget
+        widget = self.form.widget(key)
+        if widget is None:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"{self.info.title} has no field {key}",
+                "ui_state lists the fields of its form",
+            )
+        parameter = self.form.parameters[key]
+        if not self.form.shown(key):
+            raise LabError(
+                ErrorCode.NOT_ALLOWED,
+                f"{parameter.label} is not used with these values",
+                f"it is used when {parameter.used_when()}",
+            )
+        self.parameters_box.set_expanded(True, remember=False)
+        return widget
+
+    def fill(self, parameters: Mapping[str, Any], devices: Mapping[str, str]) -> None:
+        """Parameters as JSON carries them (the daemon checked them), then
+        devices by slot among those that suit it; LabError naming a device
+        that does not suit its slot (the parameters stay filled), or while
+        it runs (its fields are locked)."""
+        if self.runner.running:
+            raise LabError(
+                ErrorCode.CONFLICT,
+                f"{self.info.title} runs now: its form is locked",
+                "fill it once it ended",
+            )
+        self.form.set_values(parameters)
+        self.refresh_devices()
+        wrong = [
+            f"{slot}: {ref}" for slot, ref in devices.items()
+            if not self.devices.choose(slot, ref)
+        ]  # fmt: skip
+        if wrong:
+            suit = "; ".join(
+                f"{slot}: {', '.join(self.devices.choices(slot)) or 'none'}"
+                for slot in self.devices.slots
+            )
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"Not for this measurement: {', '.join(wrong)}",
+                f"devices that suit each slot: {suit or 'it takes none'}",
+            )
 
     # What the run tells, and for whoever shows this run elsewhere
     def note(self, text: str, level: int = logging.INFO) -> None:
@@ -559,6 +657,7 @@ class MeasureForm(QWidget):
 
 # The monitor's parameter of what it watches: "<ref>" or "<ref>/<quantity key>"
 WATCH = "watch"
+WATCHED = "Devices to watch"
 
 
 class WatchTree(QTreeWidget):
@@ -639,6 +738,14 @@ class WatchTree(QTreeWidget):
     def refs(self) -> List[str]:
         return list(dict.fromkeys(split_entry(entry)[0] for entry in self.entries()))
 
+    def listed(self) -> Tuple[str, ...]:
+        """Every device it offers, by ref."""
+        return tuple(item.data(0, Qt.UserRole) for item in self.device_items())
+
+    def widget(self, key: str) -> Optional[QWidget]:
+        """The tree is the editor of what is watched."""
+        return self if key == WATCH else None
+
     def mapping(self) -> Dict[str, str]:
         """A monitor's slots are the devices it watches."""
         return {ref: ref for ref in self.refs()}
@@ -659,24 +766,46 @@ class MonitorBox(ProcedureBox):
 
     def __init__(self, session, hub, procedure, header=None, parent=None):
         super().__init__(session, hub, procedure, header=header, parent=parent)
-        self.devices_box.setTitle("Devices to watch")
+        self.devices_box.setTitle(WATCHED)
         self.form.layout_.setRowVisible(self.form.editors[WATCH].widget, False)
 
     def make_devices(self) -> WatchTree:
         return WatchTree()
 
-    def refresh_devices(self, *_) -> None:
+    def watched(self) -> Iterable[Tuple[DeviceInfo, Sequence[QuantityInfo]]]:
+        """The devices to offer, with what each reads."""
         session = self.session
-        saved = [e for e in self.saved_devices.get(WATCH, "").split(",") if e]
-        self.devices.set_devices(
-            (
-                (info, session.description(info.ref).quantities)
-                for info in session.devices()
-            ),
-            self.devices.entries() or saved,
+        return (
+            (info, session.description(info.ref).quantities)
+            for info in session.devices()
         )
+
+    def refresh_devices(self, *_) -> None:
+        saved = [e for e in self.saved_devices.get(WATCH, "").split(",") if e]
+        self.devices.set_devices(self.watched(), self.devices.entries() or saved)
         self.devices_box.setVisible(True)
         self.show_devices_summary()
+
+    def device_fields(self) -> List[FieldState]:
+        """What is watched is one field: ref/key of each value, or the ref of
+        a device with its measured values."""
+        return [
+            FieldState(
+                field_name(self.procedure, WATCH), WATCH, ui.DEVICE, WATCHED,
+                ", ".join(self.devices.entries()), choices=self.devices.listed(),
+            )  # fmt: skip
+        ]
+
+    def parameter_fields(self) -> List[FieldState]:
+        return [f for f in super().parameter_fields() if f.key != WATCH]
+
+    def fill(self, parameters: Mapping[str, Any], devices: Mapping[str, str]) -> None:
+        """What to watch comes as its parameter or as devices (a device with
+        its measured values)."""
+        watch = [*parameters.get(WATCH, ()), *devices]
+        super().fill({k: v for k, v in parameters.items() if k != WATCH}, {})
+        if watch:
+            self.devices.set_devices(self.watched(), watch)
 
     def devices_problem(self) -> Optional[str]:
         return None if self.devices.entries() else "Tick the values to watch"

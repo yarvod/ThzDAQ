@@ -405,6 +405,18 @@ class ParameterForm(QWidget):
             raise ValueError("; ".join(problems))
         return values
 
+    def widget(self, name: str) -> Optional[QWidget]:
+        editor = self.editors.get(name)
+        return editor.widget if editor is not None else None
+
+    def typed(self, name: str) -> str:
+        """A parameter's value as people type it, in its display unit; the
+        problem, for text that is not numbers."""
+        try:
+            return self.parameters[name].typed(self.editors[name].get())
+        except ValueError as e:
+            return f"{e}"
+
     def set_values(self, values: Mapping[str, Any]) -> None:
         for name, value in values.items():
             if name in self.editors:
@@ -478,6 +490,23 @@ class DeviceSlotsForm(QWidget):
             for slot, combo in self.combos.items()
             if combo.currentData()
         }
+
+    def widget(self, slot: str) -> Optional[QWidget]:
+        return self.combos.get(slot)
+
+    def choices(self, slot: str) -> Tuple[str, ...]:
+        """The devices that suit a slot, by ref."""
+        combo = self.combos[slot]
+        return tuple(combo.itemData(i) for i in range(combo.count()))
+
+    def choose(self, slot: str, ref: str) -> bool:
+        """This device for the slot; False when it has no such slot or the
+        device does not suit it."""
+        combo = self.combos.get(slot)
+        index = combo.findData(ref) if combo is not None else -1
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        return index >= 0
 
     def unmapped(self) -> List[SlotInfo]:
         return [

@@ -173,7 +173,9 @@ def connect(bench, tmp_path):
         bench, workspaces, YamlProfiles(), LocalControl(True), Processes(),
         FolderLibrary(tmp_path / LIBRARY),
     )  # fmt: skip
-    yield lambda simulate, origin="gui", kind="gui": LocalLab(assembled, origin, kind)
+    yield lambda simulate, origin="gui", kind="gui", window="": LocalLab(
+        assembled, origin, kind, window
+    )
     assembled.close()
 
 

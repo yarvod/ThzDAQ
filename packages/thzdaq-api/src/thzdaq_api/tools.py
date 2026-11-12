@@ -7,7 +7,8 @@ get the same set.
 The set is chosen: an agent looks at the bench, sets and calls with a person's
 consent, asks an instrument a raw query with a person's consent, runs
 measurements and follows them, reads, checks and (with a person's consent)
-writes the bench's own measurements, asks the person. It does not edit the profile,
+writes the bench's own measurements, asks the person, and shows the person
+where things are in the window (opens, fills a form, highlights). It does not edit the profile,
 answer for a person, write raw commands or stop the daemon (those are a
 person's, and the daemon would refuse them anyway), nor take what it cannot
 use (polls, streams of records).
@@ -41,6 +42,7 @@ from thzdaq_api import (
     measurements,
     present,
     station,
+    ui,
     wire,
 )
 from thzdaq_api.events import Event, MeasurementProgress
@@ -203,8 +205,43 @@ class Wait(Tool):
             stop()
 
 
-def tools(workspace: Callable[[], Optional[Path]]) -> Tuple[Tool, ...]:
-    """The tools; a measurement goes to workspace() unless named."""
+class Shown(Tool):
+    """Asks a window of the person (thzdaq_api.ui). The assistant of a window
+    always asks its own (window() gives its id) and its model sees no window
+    to choose; an agent beside the window asks the one it names, else the
+    one the person was at last. text(args, result) tells what was done."""
+
+    def __init__(
+        self,
+        operation: Type[Operation],
+        text: Callable[[Operation, Any], str],
+        window: Callable[[], Optional[str]],
+    ):
+        super().__init__(operation)
+        self.text = text
+        self.window = window
+
+    def schema(self):
+        found = super().schema()
+        if self.window() is not None:
+            properties = dict(found["properties"])
+            properties.pop("window")
+            found = {**found, "properties": properties}
+        return found
+
+    def call(self, reach, args, progress):
+        own = self.window()
+        if own is not None:
+            args = msgspec.structs.replace(args, window=own)
+        return self.text(args, reach.call(args))
+
+
+def tools(
+    workspace: Callable[[], Optional[Path]],
+    window: Callable[[], Optional[str]] = lambda: None,
+) -> Tuple[Tool, ...]:
+    """The tools; a measurement goes to workspace() unless named, what is
+    shown in a window to window() when it gives one (the assistant's own)."""
     return (
         Plain(devices.ListDevices, present.devices),
         Plain(devices.DescribeDevice, present.description),
@@ -226,6 +263,10 @@ def tools(workspace: Callable[[], Optional[Path]]) -> Tuple[Tool, ...]:
         Plain(custom.WriteCustom, present.check),
         Plain(approvals.AskUser, present.answer),
         Plain(approvals.WaitAnswer, present.answer),
+        Shown(ui.UiState, lambda args, found: present.window(found), window),
+        Shown(ui.UiOpen, lambda args, _: present.opened(args.place), window),
+        Shown(ui.UiFillMeasurement, lambda args, found: present.form(found), window),
+        Shown(ui.UiHighlight, lambda args, _: present.highlighted(args.anchor), window),
         Plain(daemon.GetDaemonStatus, present.status),
     )
 

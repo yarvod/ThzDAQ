@@ -156,6 +156,17 @@ class ApprovalAnswered(msgspec.Struct, tag="approval_answered", frozen=True):
     answer: Answer
 
 
+class UiRequested(msgspec.Struct, tag="ui_requested", frozen=True):
+    """An agent asks one window (by its id) to do an operation of thzdaq_api.ui,
+    its arguments as JSON; the window answers it with answer_ui."""
+
+    id: int
+    window: str
+    operation: str
+    arguments: Dict[str, Any]
+    origin: str = ""
+
+
 class Resync(msgspec.Struct, tag="resync", frozen=True):
     """Events were lost: take a new snapshot."""
 
@@ -180,6 +191,7 @@ Body = Union[
     LeasesChanged,
     ApprovalRequested,
     ApprovalAnswered,
+    UiRequested,
     Resync,
 ]
 

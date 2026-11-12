@@ -243,6 +243,7 @@ class AssistantModel(QObject):
         self.busy_changed.emit(True)
         listener = _Turn(self, token)
         folder = self.session.workspace
+        window = self.session.window  # what it shows goes to its own window
 
         def run() -> None:
             try:
@@ -252,7 +253,8 @@ class AssistantModel(QObject):
                 self._ended.emit(token, Outcome.FAILED.value, str(e))
                 return
             outcome, why = conversation.say(
-                token, text, client, tools(lambda: folder.folder), reach,
+                token, text, client, tools(lambda: folder.folder, lambda: window),
+                reach,
                 system_prompt, listener,
             )  # fmt: skip
             self._ended.emit(token, outcome.value, why)

@@ -37,6 +37,7 @@ from thzdaq_api.transport import (
     SEQ,
     STATUS,
     TOKEN,
+    WINDOW,
     bearer,
     frame,
 )
@@ -202,6 +203,7 @@ class _Handler(BaseHTTPRequestHandler):
             pid=int(self.headers.get(PID, 0)),
             origin=self.headers.get(ORIGIN, "client"),
             since=wall_time(),
+            window=self.headers.get(WINDOW, ""),
         )
         key = self.server.clients.add(client)
         try:

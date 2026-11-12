@@ -8,7 +8,7 @@ a column. They read the run, never each other.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Dict, List, Optional, Protocol
 
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -21,7 +21,29 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from thzdaq_api.ui import ControlState
+
 from thzdaq_gui import theme
+from thzdaq_gui.dock_names import (
+    ABORT,
+    CHECK,
+    COMMENT,
+    GRAPHS,
+    RUN,
+    START,
+    STOP,
+    dock_name,
+)
+
+# The controls by their names (run:start), as people read them
+TITLES = {
+    GRAPHS: "Graphs",
+    COMMENT: "Comment",
+    START: "Start",
+    CHECK: "Check",
+    STOP: "Stop",
+    ABORT: "Abort",
+}
 
 IDLE = "Idle"
 CONNECTING = "Connecting to devices..."
@@ -84,33 +106,44 @@ class RunControls(QWidget):
         super().__init__(parent)
         self.run: Optional[Run] = None
         self.comment = QLineEdit()
-        self.comment.setPlaceholderText("Comment")
+        self.comment.setPlaceholderText(TITLES[COMMENT])
         self.comment.textEdited.connect(self.comment_edited)
-        self.btnStart = QPushButton(theme.icon("play", "#111111"), "Start")
+        self.btnStart = QPushButton(theme.icon("play", "#111111"), TITLES[START])
         self.btnStart.setProperty("accent", True)
         self.btnStart.clicked.connect(lambda: self.run and self.run.start())
-        self.btnCheck = QPushButton(theme.icon("clipboard-check-outline"), "Check")
+        self.btnCheck = QPushButton(
+            theme.icon("clipboard-check-outline"), TITLES[CHECK]
+        )
         self.btnCheck.setToolTip(
             "Would it start? Parameters, devices, their limits and who uses them, "
             "checked without starting"
         )
         self.btnCheck.clicked.connect(lambda: self.run and self.run.check())
-        self.btnStop = QPushButton(theme.icon("stop"), "Stop")
+        self.btnStop = QPushButton(theme.icon("stop"), TITLES[STOP])
         self.btnStop.setEnabled(False)
         self.btnStop.clicked.connect(lambda: self.run and self.run.stop())
-        self.btnAbort = QPushButton(theme.icon("lan-disconnect"), "Abort")
+        self.btnAbort = QPushButton(theme.icon("lan-disconnect"), TITLES[ABORT])
         self.btnAbort.setToolTip(
             "The measurement waits for a device that does not answer: break the "
             "connections of its devices (they reconnect on the next command)"
         )
         self.btnAbort.clicked.connect(lambda: self.run and self.run.abort())
         self.btnAbort.hide()
-        self.btnGraphs = QPushButton(theme.icon("chart-line"), "Graphs")
+        self.btnGraphs = QPushButton(theme.icon("chart-line"), TITLES[GRAPHS])
         self.btnGraphs.setToolTip("Show the graphs this measurement draws")
         self.btnGraphs.clicked.connect(lambda: self.run and self.run.show_graphs())
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
+        # By their names, for agents (thzdaq_api.ui)
+        self.named: Dict[str, QWidget] = {
+            GRAPHS: self.btnGraphs,
+            COMMENT: self.comment,
+            START: self.btnStart,
+            CHECK: self.btnCheck,
+            STOP: self.btnStop,
+            ABORT: self.btnAbort,
+        }
         buttons = (self.btnStart, self.btnCheck, self.btnStop, self.btnAbort)
         self.state: Optional[QLabel] = None
         if row:
@@ -152,6 +185,22 @@ class RunControls(QWidget):
         run.comment_changed.connect(self.show_comment)
         self.show_comment(run.comment)
         self.refresh()
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.named
+
+    def control(self, key: str) -> Optional[QWidget]:
+        """A control shown now, by its key (start); None for another."""
+        widget = self.named.get(key)
+        return widget if widget is not None and not widget.isHidden() else None
+
+    def described(self) -> List[ControlState]:
+        """The controls shown now, as run:<key>, and whether they take a click."""
+        return [
+            ControlState(dock_name(RUN, key), TITLES[key], widget.isEnabled())
+            for key, widget in self.named.items()
+            if not widget.isHidden()
+        ]
 
     def comment_edited(self, text: str) -> None:
         if self.run is not None:
