@@ -31,7 +31,6 @@ from thzdaq_gui.wording import STATION_PROFILE
 from thzdaq_gui.workspace import default_workspace
 
 DAEMON = "ThzDAQ daemon"
-ORIGIN = KIND = GUI  # who this program is to the daemon
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -90,7 +89,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     folder = Path(args.workspace) if args.workspace else default_workspace()
     station = start_profile(args.station, folder)
     session = Session(
-        lambda simulate: connect_or_start(simulate, station, ORIGIN, KIND), folder
+        lambda simulate, origin=GUI, kind=GUI: connect_or_start(
+            simulate, station, origin, kind
+        ),
+        folder,
     )
     # The lab comes first: its devices get docks the saved layout restores
     splash = QSplashScreen(theme.app_icon().pixmap(128, 128))

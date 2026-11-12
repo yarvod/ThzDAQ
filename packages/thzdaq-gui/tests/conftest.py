@@ -13,8 +13,9 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 EXAMPLE = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
 
-# tests import EXAMPLE from here
+# tests import EXAMPLE from here; lab_helpers from the tests of core
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parents[2] / "thzdaq-core" / "tests"))
 
 
 @pytest.fixture(scope="session")
@@ -68,6 +69,49 @@ def exit_answer(monkeypatch):
 
     monkeypatch.setattr("thzdaq_gui.exit_dialog.ExitDialog.exec", exec_)
     return answer
+
+
+@pytest.fixture(autouse=True)
+def keys():
+    """Keys of the assistant's providers go to a keyring in memory, never to
+    the system's."""
+    import keyring
+    from keyring.backend import KeyringBackend
+
+    class Memory(KeyringBackend):
+        priority = 1
+
+        def __init__(self):
+            super().__init__()
+            self.kept = {}
+
+        def get_password(self, service, username):
+            return self.kept.get((service, username))
+
+        def set_password(self, service, username, password):
+            self.kept[(service, username)] = password
+
+        def delete_password(self, service, username):
+            from keyring.errors import PasswordDeleteError
+
+            if self.kept.pop((service, username), None) is None:
+                raise PasswordDeleteError(username)
+
+    before = keyring.get_keyring()
+    memory = Memory()
+    keyring.set_keyring(memory)
+    yield memory
+    keyring.set_keyring(before)
+
+
+@pytest.fixture
+def model():
+    """A model's server on localhost answering what a test scripts."""
+    from model_server import ModelServer
+
+    server = ModelServer()
+    yield server
+    server.close()
 
 
 @pytest.fixture
@@ -129,7 +173,7 @@ def connect(bench, tmp_path):
         bench, workspaces, YamlProfiles(), LocalControl(True), Processes(),
         FolderLibrary(tmp_path / LIBRARY),
     )  # fmt: skip
-    yield lambda simulate: LocalLab(assembled, origin="gui", kind="gui")
+    yield lambda simulate, origin="gui", kind="gui": LocalLab(assembled, origin, kind)
     assembled.close()
 
 
