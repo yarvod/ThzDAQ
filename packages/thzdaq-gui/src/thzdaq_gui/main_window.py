@@ -78,6 +78,7 @@ from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.assistant import AssistantModel, ProvidersModel
+from thzdaq_gui.models.hints import HintsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.guide import WindowGuide
 from thzdaq_gui.navigator import DockNavigator, Places, QuickFind
@@ -134,10 +135,13 @@ class MainWindow(QMainWindow):
         self.hub = GraphHub(session.procedures(), session.call, self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
-        self.consoles = ConsoleDocks(session, self.docks, self.open_place)
+        # The model servers of the assistant: its chat and its hints in code
+        self.providers = ProvidersModel(self)
+        self.hints = HintsModel(session, self.providers, self)
+        self.consoles = ConsoleDocks(session, self.docks, self.open_place, self.hints)
         self.code = CodeDocks(
             session, self.docks, self, self.start_measurement,
-            self.choose_measurement, self.consoles.run,
+            self.choose_measurement, self.consoles.run, self.hints,
         )  # fmt: skip
         self.measures = MeasureForms(session, self.hub, self.code.open_custom, self)
         # The chosen measurement is set and run from the bar on top
@@ -156,7 +160,7 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
-        self.assistant = AssistantModel(session, ProvidersModel(self), self)
+        self.assistant = AssistantModel(session, self.providers, self)
         self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()
         self.build_toolbar()

@@ -20,6 +20,7 @@ from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.console import ConsoleWidget
 from thzdaq_gui.docks.tabbed import TabbedDock
 from thzdaq_gui.models.console import ConsoleModel
+from thzdaq_gui.models.hints import HintsModel
 from thzdaq_gui.navigator import DockEntry
 from thzdaq_gui.script_output import OpenPlace
 
@@ -32,12 +33,20 @@ STOP_S = 10.0  # how long the window waits for each kernel as it closes
 
 
 class ConsoleDocks:
-    def __init__(self, session, docks: DockSpace, open_place: OpenPlace):
-        """open_place(file, line): a place of a traceback opened. tabs is the
-        content of the Console dock (the window adds it among the base docks)."""
+    def __init__(
+        self,
+        session,
+        docks: DockSpace,
+        open_place: OpenPlace,
+        hints: HintsModel,
+    ):
+        """open_place(file, line): a place of a traceback opened; hints: the
+        assistant's code in the consoles' inputs. tabs is the content of the
+        Console dock (the window adds it among the base docks)."""
         self.session = session
         self.docks = docks
         self.open_place = open_place
+        self.hints = hints
         self.made = 0  # consoles opened, to number them
         self.consoles: Dict[str, ConsoleWidget] = {}  # by their number
         self.tabs = TabbedDock(
@@ -49,7 +58,7 @@ class ConsoleDocks:
         """Another console, as the current tab."""
         self.made += 1
         number = str(self.made)
-        widget = ConsoleWidget(ConsoleModel(self.session), self.open_place)
+        widget = ConsoleWidget(ConsoleModel(self.session), self.open_place, self.hints)
         self.consoles[number] = widget
         self.tabs.add(widget, f"Console {number}", "", theme.icon(ICON))
         self.front(widget)

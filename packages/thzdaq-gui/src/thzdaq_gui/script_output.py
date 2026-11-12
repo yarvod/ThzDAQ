@@ -22,7 +22,8 @@ from thzdaq_gui import theme
 PLACE = re.compile(r'^\s*File "(?P<file>.+)", line (?P<line>\d+)')
 # The same as IPython tells it: File ~/x/scan.py:12, in f(x) (File /x/scan.py:12 in f)
 IPYTHON_PLACE = re.compile(r"^\s*File (?P<file>[^\s\"].*?):(?P<line>\d+)(?:,| in |$)")
-FAILURE = re.compile(r"^(Traceback \(most recent call last\):|\w+(Error|Exception)\b)")
+TRACEBACK = "Traceback (most recent call last):"
+FAILURE = re.compile(rf"^({re.escape(TRACEBACK)}|\w+(Error|Exception)\b)")
 
 OpenPlace = Callable[[Path, int], None]
 
@@ -34,6 +35,13 @@ def traceback_place(line: str) -> Optional[Tuple[Path, int]]:
     if found is None:
         return None
     return Path(found["file"]).expanduser(), int(found["line"])
+
+
+def failure(output: str) -> Optional[str]:
+    """The last traceback of what a script printed, to its end; None when
+    it printed none."""
+    at = output.rfind(TRACEBACK)
+    return None if at < 0 else output[at:].strip()
 
 
 class Traceback(QSyntaxHighlighter):

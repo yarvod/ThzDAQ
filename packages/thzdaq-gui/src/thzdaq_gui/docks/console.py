@@ -9,11 +9,17 @@ and ↓ on the last browse the inputs of every console; Ctrl+R searches them
 nothing selected interrupts what runs (the Control key on macOS too, where ⌘C
 copies); Ctrl+Space or a dot asks the kernel for completions.
 
+The assistant's hints work in the input as in the editor of a file: the
+ghost while typing, Ctrl+I (Ask) for code asked in words; Fix mends the last
+block that raised, told its traceback and the blocks before it. What it
+writes comes into the input as a proposal; the person runs it.
+
 It shows a ConsoleModel and calls its methods; the window's ConsoleDocks
 makes, names and closes these tabs.
 """
 
 import sys
+from typing import Optional
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
@@ -27,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme
+from thzdaq_gui.assistant.hints import IN_CONSOLE
 from thzdaq_gui.console_output import ConsoleOutput
 from thzdaq_gui.editor import CodeEditor
 from thzdaq_gui.models.console import (
@@ -37,6 +44,7 @@ from thzdaq_gui.models.console import (
     ConsoleModel,
     complete_block,
 )
+from thzdaq_gui.models.hints import NO_SERVER, HintsModel, Request
 from thzdaq_gui.script_output import OpenPlace
 
 # The key that interrupts with C: Control, which Qt calls Meta on macOS
@@ -49,6 +57,9 @@ STATES = {
     ENDED: ("Ended", theme.BAD),
 }
 HINT = "Python · Enter runs a complete block, Shift+Enter a new line, ↑ earlier ones"
+ASK_TIP = "Code written into the input by the assistant, asked in words (Ctrl+I)"
+FIX_TIP = "The assistant mends the last block that raised, into the input"
+FIXING = "The assistant mends the block that raised…"
 
 
 class ConsoleInput(CodeEditor):
@@ -59,17 +70,17 @@ class ConsoleInput(CodeEditor):
     interrupt_requested = Signal()
     completions_requested = Signal(str, int)  # the code, the cursor in it
 
-    def __init__(self, parent=None):
-        super().__init__(None, parent)
+    def __init__(self, hints: HintsModel, parent=None):
+        super().__init__(None, hints, IN_CONSOLE, parent)
         self.setPlaceholderText(HINT)
 
     def request_completions(self, text: str, line: int, column: int) -> None:
         """Asked of the kernel: its answer comes to show_completions."""
         self.completions_requested.emit(text, self.textCursor().position())
 
-    def keyPressEvent(self, event) -> None:
+    def press(self, event) -> None:
         if self.completer.popup().isVisible():
-            super().keyPressEvent(event)
+            super().press(event)
             return
         key, modifiers = event.key(), event.modifiers()
         cursor = self.textCursor()
@@ -89,7 +100,7 @@ class ConsoleInput(CodeEditor):
         elif key == Qt.Key_Down and cursor.blockNumber() == self.blockCount() - 1:
             self.newer_requested.emit()
         else:
-            super().keyPressEvent(event)
+            super().press(event)
 
     def submit(self) -> None:
         code = self.toPlainText().rstrip()
@@ -104,15 +115,24 @@ class ConsoleInput(CodeEditor):
 
 
 class ConsoleWidget(QWidget):
-    def __init__(self, model: ConsoleModel, open_place: OpenPlace, parent=None):
-        """open_place(file, line): a place of a traceback opened (in Editor)."""
+    def __init__(
+        self,
+        model: ConsoleModel,
+        open_place: OpenPlace,
+        hints: HintsModel,
+        parent=None,
+    ):
+        """open_place(file, line): a place of a traceback opened (in Editor);
+        hints: the assistant's code."""
         super().__init__(parent)
         self.model = model
+        self.hints = hints
+        self.fixing: Optional[Request] = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._toolbar())
         self.output = ConsoleOutput(open_place)
-        self.input = ConsoleInput()
+        self.input = ConsoleInput(hints)
         below = QWidget()
         column = QVBoxLayout(below)
         column.setContentsMargins(0, 0, 0, 0)
@@ -145,7 +165,10 @@ class ConsoleWidget(QWidget):
         self.input.older_requested.connect(self.older)
         self.input.newer_requested.connect(self.newer)
         self.input.search_requested.connect(self.start_search)
+        model.failed_changed.connect(self.show_hints)
+        hints.availability_changed.connect(self.show_hints)
         self.show_state(model.state)
+        self.show_hints()
 
     def _toolbar(self) -> QWidget:
         bar = QWidget()
@@ -154,6 +177,12 @@ class ConsoleWidget(QWidget):
         self.stateLabel = QLabel()
         row.addWidget(self.stateLabel)
         row.addStretch()
+        self.askButton = theme.tool_button(
+            "Ask", "creation", ASK_TIP, lambda: self.input.ask()
+        )
+        row.addWidget(self.askButton)
+        self.fixButton = theme.tool_button("Fix", "auto-fix", FIX_TIP, self.fix)
+        row.addWidget(self.fixButton)
         self.interruptButton = theme.tool_button(
             "Interrupt", "stop", "Interrupt what runs (Ctrl+C)", self.model.interrupt
         )
@@ -198,6 +227,43 @@ class ConsoleWidget(QWidget):
     def run(self, code: str) -> None:
         """Code run here as if typed (from Editor)."""
         self.model.run(code)
+
+    # The assistant's code
+    def show_hints(self) -> None:
+        """Ask and Fix work with the assistant's server; Fix once a block
+        raised."""
+        on = self.hints.available()
+        self.askButton.setEnabled(on)
+        self.askButton.setToolTip(ASK_TIP if on else NO_SERVER)
+        failed = self.model.failed is not None
+        self.fixButton.setEnabled(on and failed and self.fixing is None)
+        self.fixButton.setToolTip(FIX_TIP if on else NO_SERVER)
+
+    def fix(self) -> None:
+        failed = self.model.failed
+        if failed is None or self.fixing is not None:
+            return
+        typed = self.input.code()
+        self.fixing = self.hints.fix(
+            IN_CONSOLE, failed.code, failed.error, failed.before, self
+        )
+        self.fixing.answered.connect(lambda text: self._fixed(typed, text))
+        self.fixing.failed.connect(self._fix_failed)
+        self.output.add_note(FIXING)
+        self.show_hints()
+
+    def _fixed(self, typed: str, text: str) -> None:
+        self.fixing = None
+        why = self.input.propose(typed, text)
+        if why is not None:
+            self.output.add_note(why)
+        self.input.setFocus()
+        self.show_hints()
+
+    def _fix_failed(self, why: str) -> None:
+        self.fixing = None
+        self.output.add_note(why)
+        self.show_hints()
 
     # Inputs of earlier
     def older(self) -> None:

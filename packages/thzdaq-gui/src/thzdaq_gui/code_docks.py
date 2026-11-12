@@ -29,6 +29,7 @@ from thzdaq_gui.docks.code import SAVE_TO_LIBRARY, CodeWidget
 from thzdaq_gui.docks.tabbed import TabbedDock
 from thzdaq_gui.folders import SCRIPTS
 from thzdaq_gui.models.code import CodeModel
+from thzdaq_gui.models.hints import HintsModel
 
 ICON = "language-python"
 OPEN_SCRIPT = "Open a script…"
@@ -63,10 +64,12 @@ class CodeDocks:
         start: Callable[[str], None],
         choose: Callable[[str], None],
         console: Callable[[str], None],
+        hints: HintsModel,
     ):
         """start(procedure): one of the bench's own started as its dock
         starts it; choose(procedure): one of the bench's own whose script is
-        the current tab, for the bar; console(code): code run in a console.
+        the current tab, for the bar; console(code): code run in a console;
+        hints: the assistant's code in the files' editors.
         tabs is the content of the Editor dock (the window adds it among the
         base docks)."""
         self.session = session
@@ -75,6 +78,7 @@ class CodeDocks:
         self.start = start
         self.choose = choose
         self.console = console
+        self.hints = hints
         self.texts = 0  # texts opened without a file, to tell them apart
         # by key: the path of its file, or #<n> <title> of a text
         self.widgets: Dict[str, CodeWidget] = {}
@@ -127,7 +131,7 @@ class CodeDocks:
             self.open(path)
 
     def add(self, key: str, model: CodeModel) -> CodeWidget:
-        widget = CodeWidget(model, self.run_file, self.open_place)
+        widget = CodeWidget(model, self.run_file, self.open_place, self.hints)
         self.widgets[key] = widget
         self.tabs.add(widget, widget.title(), str(model.path or ""), theme.icon(ICON))
         widget.title_changed.connect(lambda title: self.tabs.retitle(widget, title))

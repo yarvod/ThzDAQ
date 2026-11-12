@@ -33,6 +33,9 @@ ALLOWED = {
     "of an instrument quantity (instruments): each layer names its own things",
     "Coil current": "a column title of measurement files and the label of the "
     "I-CL sweep parameter",
+    "Traceback (most recent call last):": "Python's own words, not ours: the daemon "
+    "finds the error a script's process printed, the window the one its output "
+    "shows to mend; neither may import the other",
 }
 
 # Identifiers two packages that may not import each other both need

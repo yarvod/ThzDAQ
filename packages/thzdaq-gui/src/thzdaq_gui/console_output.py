@@ -13,12 +13,12 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QTextCharFormat, QTextCu
 from PySide6.QtWidgets import QTextBrowser
 
 from thzdaq_gui import theme
+from thzdaq_gui.models.console import plain
 from thzdaq_gui.script_output import OpenPlace, traceback_place
 
 PROMPT, MORE = ">>> ", "... "
 LINES_KEPT = 20_000  # lines of output kept; older ones go
 SGR = re.compile(r"\x1b\[([0-9;]*)m")  # a change of colour
-CONTROL = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")  # any such code, for plain text
 # The 16 colours of a terminal (normal, then bright), as the dark theme shows them
 PALETTE = (
     "#1f1f1f", theme.BAD, "#a5d6a7", "#ffe082", "#90caf9", "#ce93d8", "#80deea",
@@ -94,10 +94,6 @@ def spans(text: str) -> Iterator[Tuple[str, Style]]:
         at = found.end()
     if at < len(text):
         yield text[at:], style
-
-
-def plain(text: str) -> str:
-    return CONTROL.sub("", text)
 
 
 class ConsoleOutput(QTextBrowser):
