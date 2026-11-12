@@ -45,7 +45,9 @@ class DaemonService:
         control: DaemonControl,
         policy: Policy,
         scripts: ScriptProcesses,
+        stuck: float = STUCK_S,
     ):
+        """stuck: seconds after which a running job hangs."""
         self.bench = bench
         self.scripts = scripts
         self.runs = runs
@@ -54,11 +56,12 @@ class DaemonService:
         self.devices = devices
         self.control = control
         self.policy = policy
+        self.stuck = stuck
 
     def status(self) -> DaemonStatus:
         station = self.bench.station
         lanes = tuple(
-            LaneInfo(instrument, pending, label, busy, busy > STUCK_S)
+            LaneInfo(instrument, pending, label, busy, busy > self.stuck)
             for instrument, pending, label, busy in self.bench.lanes.status()
         )
         connections = tuple(connection_info(c) for c in station.connections())
