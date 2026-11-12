@@ -397,7 +397,15 @@ class Sessions:
         with self._lock:
             return origin in self._waiting
 
-    def start(self, args: StartSession, origin: str) -> RunInfo:
+    def start(
+        self,
+        args: StartSession,
+        origin: str,
+        noted: Optional[Mapping[str, Any]] = None,
+    ) -> RunInfo:
+        """noted: what a new session notes from its start (Runs.start); one
+        made for its script was noted with its run, its script allowed
+        nothing in advance (application.custom)."""
         with self._lock:
             waiting = self._waiting.pop(origin, None)
         if waiting is not None:
@@ -411,6 +419,7 @@ class Sessions:
             origin,
             workspace=args.workspace,
             shares=args.share,
+            noted=noted,
         )
         with self._lock:
             self._sessions[info.id] = session

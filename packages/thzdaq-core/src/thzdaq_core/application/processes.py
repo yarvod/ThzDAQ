@@ -32,7 +32,7 @@ import codecs
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 import msgspec
 from thzdaq_api.custom import INPUTS_ENV, Inputs
@@ -345,17 +345,16 @@ class ScriptProcesses:
         info = self._allowed(origin)
         return () if info is None else info.share
 
-    def note(self, run_id: int, origin: str) -> None:
-        """What a measurement's script was allowed, into the measurement."""
+    def noted(self, origin: str) -> Dict[str, Any]:
+        """What a measurement its script starts notes from its start: what the
+        script was allowed (nothing when it was allowed nothing)."""
         info = self._allowed(origin)
-        if info is not None and (info.allow or info.share):
-            self.runs.note(
-                run_id,
-                ALLOWED,
-                {
-                    "script": info.id,
-                    "by": info.by,
-                    "allow": [str(grant) for grant in info.allow],
-                    "share": list(info.share),
-                },
-            )
+        if info is None or not (info.allow or info.share):
+            return {}
+        allowed = {
+            "script": info.id,
+            "by": info.by,
+            "allow": [str(grant) for grant in info.allow],
+            "share": list(info.share),
+        }
+        return {ALLOWED: [allowed]}

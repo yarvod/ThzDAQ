@@ -2299,11 +2299,10 @@ GUI, а отказ доходит до агента текстом.
      `run-script` (`thzdaq_api/scripts.py`, `application/processes.py`,
      `thzdaq_cli/scripts.py`); скрипты в доке Daemon; сквозной тест на живом
      демоне-симуляторе (`thzdaq-daemon/tests/test_scripts.py`);
-   - [ ] (следующая версия) гонка: `ALLOWED` пишется в измерение после его старта
-     (`scripts.note` в обработчиках), и `_Run.note` теряет запись, пока у прогона нет
-     `measurement`, а короткий прогон может уже сохраниться. Передавать разрешения в сам
-     старт (`noted` у `_Run.execute`); тест
-     `test_what_a_script_was_allowed_goes_without_a_person` падает примерно 1 раз из 6.
+   - [x] гонка: `ALLOWED` писался в измерение после его старта, а короткий прогон мог уже
+     сохраниться. Теперь разрешения скрипта идут в сам старт (`ScriptProcesses.noted` →
+     `noted` у `Runs.start` и `Sessions.start`);
+     `test_what_a_script_was_allowed_is_in_a_run_that_ends_at_once`.
 3. ✅ **Рабочие папки целиком:**
    - [x] `thzdaq.toml`, поиск вверх (`thzdaq_api/workspace.py`), `thzdaq init`,
      `thzdaq gui`; CLI, MCP и `connect()` — в найденной папке, демон стартует с её

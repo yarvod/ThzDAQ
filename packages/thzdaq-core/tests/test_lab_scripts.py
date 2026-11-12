@@ -263,6 +263,37 @@ def test_what_a_script_was_allowed_goes_without_a_person(
     assert caught.value.code == ErrorCode.DENIED
 
 
+def test_what_a_script_was_allowed_is_in_a_run_that_ends_at_once(
+    lab, lab_as, tmp_path, quick_stop, monkeypatch
+):
+    """A short run may be saved before its start returns: what its script
+    was allowed is noted as it starts, not after."""
+    from thzdaq_core.application.runs import Runs
+
+    start = Runs.start
+
+    def ended_first(self, *args, **kwargs):
+        info = start(self, *args, **kwargs)
+        if info.id:  # not a dry run, which a check makes
+            self.wait(info.id, timeout=10)
+        return info
+
+    started = run(
+        lab, tmp_path, "slow.py", SLOW, allow=(Grant("run", CURRENT_VS_VOLTAGE),)
+    )
+    itself = lab_as(started.origin, "script")
+    monkeypatch.setattr(Runs, "start", ended_first)
+    run_ = itself.call(StartMeasurement(**IV))
+    noted = read_measurement(lab.call(WaitMeasurement(id=run_.id, timeout=0)).path)
+    assert noted.metadata[ALLOWED] == [
+        {
+            "script": started.id, "by": "test",
+            "allow": [f"run:{CURRENT_VS_VOLTAGE}"], "share": [],
+        }  # fmt: skip
+    ]
+    lab.call(StopScript(id=started.id))
+
+
 def test_a_script_shares_what_it_was_told_to(lab, lab_as, tmp_path, quick_stop):
     sweep = lab.call(StartSession(title="sweep", exclusive=("sis_bias_1",)))
     started = run(

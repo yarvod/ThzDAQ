@@ -94,7 +94,7 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
             procedure = self.custom.runnable(
                 procedure, origin, self.policy.agent(origin), args.workspace
             )
-        started = self.runs.start(
+        return self.runs.start(
             procedure,
             args.devices,
             args.comment,
@@ -103,10 +103,8 @@ class StartMeasurement(Handler[api.StartMeasurement, api.RunInfo]):
             args.workspace,
             args.dry_run,
             self.scripts.shared(origin),
+            self.scripts.noted(origin),
         )
-        if not args.dry_run:
-            self.scripts.note(started.id, origin)
-        return started
 
     def needs(self, args):
         """A dry run changes nothing."""
