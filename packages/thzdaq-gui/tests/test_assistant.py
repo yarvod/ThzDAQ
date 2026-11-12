@@ -7,7 +7,7 @@ import time
 
 import pytest
 from lab_helpers import Window
-from model_server import NO_TOOLS, calls, says
+from model_server import NO_TOOLS, ModelServer, calls, says
 from thzdaq_api import catalog, guides
 from thzdaq_api.devices import ReadDevice
 from thzdaq_api.events import ApprovalRequested
@@ -64,6 +64,20 @@ def window(connect):
 @pytest.fixture
 def client(model):
     return Client(Provider("local", model.url, "qwen"), "secret")
+
+
+@pytest.fixture
+def system_proxy(monkeypatch):
+    """The person's proxy, set for the system or the environment with no
+    exception for 127.0.0.1: it refuses all it is asked (503)."""
+    proxy = ModelServer()
+    proxy.status = 503
+    for name in ("no_proxy", "NO_PROXY", "all_proxy", "ALL_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+    for name in ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
+        monkeypatch.setenv(name, f"http://127.0.0.1:{proxy.httpd.server_address[1]}")
+    yield proxy
+    proxy.close()
 
 
 def talk(conversation, client, reach, text="hello", heard=None, prompt=None):
@@ -318,3 +332,21 @@ def test_wait_measurement_tells_its_progress(model, client, reach, window):
     assert "completed" in waited[0] and "table iv" in waited[0]
     assert any(t[0] == "progress" for t in heard.told)
     assert ApprovalRequested in {type(e.body) for e in window.heard}
+
+
+def test_a_server_on_this_machine_is_asked_past_the_persons_proxy(
+    model, client, system_proxy
+):
+    assert "qwen answers" in client.test()
+    assert len(model.asked) == 1 and system_proxy.asked == []
+    gone = Client(Provider("gone", "http://localhost:9/v1", "qwen"), None)
+    with pytest.raises(ProviderError, match="does not answer"):
+        gone.test()
+    assert system_proxy.asked == []
+
+
+def test_a_server_elsewhere_is_asked_through_the_persons_proxy(system_proxy):
+    cloud = Client(Provider("cloud", "http://models.example/v1", "qwen"), "secret")
+    with pytest.raises(ProviderError, match=r"refused \(503\)"):
+        cloud.test()
+    assert len(system_proxy.asked) == 1

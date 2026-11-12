@@ -7,9 +7,11 @@ read so too. test() checks that the server answers and takes tools: vLLM
 refuses them without --enable-auto-tool-choice and a tool call parser.
 """
 
+import ipaddress
 import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence
+from urllib.parse import urlsplit
 
 import requests
 
@@ -35,6 +37,16 @@ class Provider:
 
     def endpoint(self) -> str:
         return self.url.rstrip("/") + "/chat/completions"
+
+    def on_this_machine(self) -> bool:
+        """Whether the server runs on this computer (a loopback address or
+        localhost): it is asked directly, never through the person's proxy,
+        which is for servers elsewhere and has no way to this one's loopback."""
+        host = urlsplit(self.url).hostname or ""
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return host == "localhost" or host.endswith(".localhost")
 
 
 @dataclass(frozen=True)
@@ -137,13 +149,16 @@ class Client:
         if self.key:
             headers["Authorization"] = f"Bearer {self.key}"
         try:
-            response = requests.post(
-                self.provider.endpoint(),
-                json=body,
-                headers=headers,
-                stream=stream,
-                timeout=(CONNECT_S, READ_S),
-            )
+            with requests.Session() as session:
+                # A server elsewhere through the proxy the person set, if any
+                session.trust_env = not self.provider.on_this_machine()
+                response = session.post(
+                    self.provider.endpoint(),
+                    json=body,
+                    headers=headers,
+                    stream=stream,
+                    timeout=(CONNECT_S, READ_S),
+                )
         except requests.RequestException as e:
             raise ProviderError(f"{self.provider.url} does not answer: {e}") from None
         if response.status_code != 200:
