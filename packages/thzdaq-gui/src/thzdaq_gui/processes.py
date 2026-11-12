@@ -2,8 +2,9 @@
 
 A widget that starts something long registers a Process with the session and
 finishes it when it ends; the Processes dock lists them with Stop (and Abort
-where the widget offers it) and brings the widget's dock to the front. The
-widget stays the owner: a Process only calls back into it.
+where the widget offers it) and shows where it runs: the widget's dock, or a
+measurement in the run bar (its parameters open). The widget stays the
+owner: a Process only calls back into it.
 """
 
 import logging
@@ -33,7 +34,9 @@ class Process(QObject):
         super().__init__(parent)
         self.title = title
         self.icon = icon  # mdi6 icon name
-        self.dock = dock  # the dock that shows it, e.g. "measure:sis.power_vs_voltage"
+        # Where the window shows it: a dock ("device:sis_bias_1"), or a
+        # measurement chosen in the run bar ("measure:sis.power_vs_voltage")
+        self.dock = dock
         self.reveal = reveal  # after the dock is shown: unfold the scan
         self.status = ""
         self.progress: Optional[Tuple[int, int]] = None  # done, total; None: busy

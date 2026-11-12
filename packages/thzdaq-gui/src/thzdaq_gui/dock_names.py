@@ -1,14 +1,15 @@
-"""Names of docks, as ADS saves them in the layout.
+"""Names of docks, as ADS saves them in the layout, and of measurements
+where the window shows them (Ctrl+K, Processes).
 
-A dock of a measurement, graph, device or script's file is named by its kind
-and key (measure:sis.current_vs_voltage, graph:I-V, device:sis_bias_1,
-code:/path/to/pv.py); the base docks by their kind alone. Saved layouts hold
-these names: they never change.
+A dock of a graph, device or script's file is named by its kind and key
+(graph:I-V, device:sis_bias_1, code:/path/to/pv.py); the base docks by their
+kind alone. Saved layouts hold these names: they never change. A measurement
+is no dock: measure:sis.current_vs_voltage names it in the run bar.
 """
 
 from typing import Optional
 
-MEASURE = "measure"
+MEASURE = "measure"  # a measurement in the run bar
 GRAPH = "graph"
 DEVICE = "device"
 SETUP = "setup"

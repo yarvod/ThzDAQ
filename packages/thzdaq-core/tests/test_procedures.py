@@ -295,7 +295,7 @@ def test_all_registered_procedures_have_valid_defaults():
     for name in [
         "sis.current_vs_voltage", "sis.power_vs_voltage",
         "sis.noise_temperature_vs_voltage", "sis.reflection_vs_frequency",
-        "if.amplifier_noise_vs_voltage", "grid.current_vs_angle",
+        "if.amplifier_noise_vs_voltage", "sis.current_vs_grid_angle",
         "if.noise_temperature_vs_frequency", "if.power_vs_frequency",
         "two_sb.if_balance", "two_sb.lo_rf_balance", "two_sb.sideband_ratio",
         "two_sb.noise_temperature", "two_sb.bias_optimization",

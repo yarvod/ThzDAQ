@@ -1,14 +1,17 @@
-"""Finding docks: menus with a search field and a tree by type, and Ctrl+K.
+"""Finding docks and measurements: menus with a search field and a tree by
+type, and Ctrl+K.
 
 A row shows a dock: a click opens it, brings it to the front and flashes its
 frame, wherever it is (behind a tab, folded into a side bar, floating). The
 eye on the right only opens or closes it. Docks of one type (four SIS biases,
 five power supplies) share a branch; a type with one dock stays a plain row.
+A measurement is no dock: its row chooses it in the run bar and opens its
+parameters there. Places finds each row's owner (the docks, the run bar).
 """
 
 import json
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Protocol, Sequence
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence
@@ -28,6 +31,7 @@ from thzdaq_gui import theme
 from thzdaq_gui.settings import NAVIGATOR_EXPANDED
 
 FRONT, BEHIND, CLOSED = "front", "behind", "closed"
+SECTIONS = ("Devices", "Measures", "Graphs")  # of the finder, in order
 NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
 MAX_ROWS = 20
@@ -65,6 +69,53 @@ class DockEntry:
         if title.startswith(query):
             return 1
         return 2 if query in title else 3
+
+
+class Owner(Protocol):
+    """What shows some of the rows found: the docks, the run bar."""
+
+    def __contains__(self, name: str) -> bool:
+        ...
+
+    def listed(self) -> List[DockEntry]:
+        ...
+
+    def state(self, name: str) -> str:
+        ...
+
+    def show(self, name: str) -> None:
+        ...
+
+    def toggle(self, name: str) -> None:
+        ...
+
+
+class Places:
+    """Every row to find, each shown by its owner."""
+
+    def __init__(self, *owners: Owner):
+        self.owners = owners
+
+    def owner(self, name: Optional[str]) -> Optional[Owner]:
+        return next((o for o in self.owners if name and name in o), None)
+
+    def listed(self) -> List[DockEntry]:
+        entries = [entry for owner in self.owners for entry in owner.listed()]
+        return sorted(entries, key=lambda e: SECTIONS.index(e.section))
+
+    def state(self, name: Optional[str]) -> str:
+        owner = self.owner(name)
+        return owner.state(name) if owner is not None else CLOSED
+
+    def show(self, name: str) -> None:
+        owner = self.owner(name)
+        if owner is not None:
+            owner.show(name)
+
+    def toggle(self, name: str) -> None:
+        owner = self.owner(name)
+        if owner is not None:
+            owner.toggle(name)
 
 
 class DockNavigator(QWidget):
@@ -282,9 +333,10 @@ class DockNavigator(QWidget):
             if item is not None and item.data(0, GROUP_ROLE):
                 item.setExpanded(not item.isExpanded())
             return
+        # The menu or popup it is in closes first: what it shows may be a popup
+        self.activated.emit(name)
         self._show(name)
         self.update_states()
-        self.activated.emit(name)
 
     def remember(self, item: QTreeWidgetItem, expanded: bool) -> None:
         key = item.data(0, GROUP_ROLE)

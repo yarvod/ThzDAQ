@@ -13,7 +13,6 @@ SIS = "sis"
 IF = "if"
 TWO_SB = "two_sb"
 MONITOR = "monitor"
-GRID = "grid"
 
 # "<group>.<what is measured>_vs_<what is changed>"
 CURRENT_VS_VOLTAGE = f"{SIS}.current_vs_voltage"
@@ -22,6 +21,7 @@ NOISE_TEMPERATURE_VS_VOLTAGE = f"{SIS}.noise_temperature_vs_voltage"
 CURRENT_VS_COIL_CURRENT = f"{SIS}.current_vs_coil_current"
 DEMAGNETIZATION = f"{SIS}.demagnetization"
 REFLECTION_VS_FREQUENCY = f"{SIS}.reflection_vs_frequency"
+CURRENT_VS_GRID_ANGLE = f"{SIS}.current_vs_grid_angle"
 AMPLIFIER_NOISE_VS_VOLTAGE = f"{IF}.amplifier_noise_vs_voltage"
 NOISE_TEMPERATURE_VS_FREQUENCY = f"{IF}.noise_temperature_vs_frequency"
 POWER_VS_FREQUENCY = f"{IF}.power_vs_frequency"
@@ -30,7 +30,6 @@ TWO_SB_LO_RF_BALANCE = f"{TWO_SB}.lo_rf_balance"
 TWO_SB_SIDEBAND_RATIO = f"{TWO_SB}.sideband_ratio"
 TWO_SB_NOISE_TEMPERATURE = f"{TWO_SB}.noise_temperature"
 TWO_SB_BIAS_OPTIMIZATION = f"{TWO_SB}.bias_optimization"
-GRID_CURRENT_VS_ANGLE = f"{GRID}.current_vs_angle"
 MONITOR_VALUES_VS_TIME = f"{MONITOR}.values_vs_time"
 
 # Names procedures had before (old -> current): files measured then, saved
@@ -48,7 +47,8 @@ RENAMED = {
     f"{TWO_SB}.srr": TWO_SB_SIDEBAND_RATIO,
     f"{TWO_SB}.tn": TWO_SB_NOISE_TEMPERATURE,
     f"{TWO_SB}.optimization": TWO_SB_BIAS_OPTIMIZATION,
-    f"{GRID}.current_angle": GRID_CURRENT_VS_ANGLE,
+    "grid.current_angle": CURRENT_VS_GRID_ANGLE,
+    "grid.current_vs_angle": CURRENT_VS_GRID_ANGLE,
     f"{MONITOR}.time": MONITOR_VALUES_VS_TIME,
 }
 

@@ -2,12 +2,12 @@
 
 DockSpace holds every ADS dock of the window under its name (dock_names) and
 places it. A base dock is pinned to its side bar, without a close button. A
-device or measurement dock that has had no place on screen yet opens
-floating, for the person to dock it where they want; closed after that, it
-opens where it was (ADS keeps its place). Graphs and scripts' files open with
-their kind: a closed one joins the tab group of an open dock of its kind, the
-first between the device and measurement columns. DockBody contents exist
-only while their docks are open (sync_bodies).
+device dock that has had no place on screen yet opens floating, for the
+person to dock it where they want; closed after that, it opens where it was
+(ADS keeps its place). Graphs and scripts' files open with their kind: a
+closed one joins the tab group of an open dock of its kind, the first right
+of the device column. DockBody contents exist only while their docks are
+open (sync_bodies).
 """
 
 from collections import Counter
@@ -24,19 +24,17 @@ from thzdaq_gui.dock_names import (
     DEVICE,
     GRAPH,
     LOG,
-    MEASURE,
     PROCESSES,
     SETUP,
     kind_of,
 )
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.graphs import close_views
-from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
+from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, SECTIONS, DockEntry, Flash
 
-SECTIONS = ("Devices", "Measures", "Graphs")  # of the menus, in order
 AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
-CENTRED = (GRAPH, CODE)  # the first of these kinds opens between the columns
-COLUMNS = (DEVICE, MEASURE)  # sized for their docks (fit_columns)
+CENTRED = (GRAPH, CODE)  # the first of these kinds opens right of the devices
+COLUMNS = (DEVICE,)  # sized for their docks (fit_columns)
 FIT_SHARE = 0.4  # a column takes at most this part of the window
 FLOAT_SHARE = 0.9  # a dock opened floating takes at most this part of the window
 
@@ -177,7 +175,7 @@ class DockSpace(Mapping):
     ) -> QtAds.CDockWidget:
         """area: the side its tab group starts on (graphs, files); auto_hide:
         the side bar a base dock is pinned to; neither: the dock has no place
-        until it first opens, floating (devices, measurements). closing():
+        until it first opens, floating (devices). closing():
         whether a dock whose content may hold unsaved work closes now; such a
         dock is removed when it closes."""
         dock = QtAds.CDockWidget(name)
@@ -368,22 +366,17 @@ class DockSpace(Mapping):
                 dock.autoHideDockContainer().collapseView(True)
 
     def open_center(self, dock) -> None:
-        """The first graph between the columns: left of the measurements,
-        else right of the devices, else all of the window. ADS puts a dock
-        added to the centre of a window that has docks below them."""
-        right = self.open_area_of(MEASURE)
+        """The first graph right of the devices, else all of the window. ADS
+        puts a dock added to the centre of a window that has docks below them."""
         left = self.open_area_of(DEVICE)
-        if right is not None:
-            self.manager.addDockWidget(QtAds.LeftDockWidgetArea, dock, right)
-        elif left is not None:
+        if left is not None:
             self.manager.addDockWidget(QtAds.RightDockWidgetArea, dock, left)
         else:
             self.manager.addDockWidget(QtAds.CenterDockWidgetArea, dock)
         self.fit_columns()
 
     def fit_columns(self) -> None:
-        """The device and measurement columns as wide as their docks want,
-        the graphs the rest."""
+        """The device column as wide as its docks want, the graphs the rest."""
         for kind in COLUMNS:
             area = self.open_area_of(kind)
             if area is not None:

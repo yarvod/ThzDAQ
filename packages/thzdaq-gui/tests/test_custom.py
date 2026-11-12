@@ -1,7 +1,8 @@
-"""The bench's own measurements in the window: their docks in Measures (group
-Custom), the list on top and Ctrl+K, made from a blank or an example, run from
-their dock with what their script prints, and their scripts in the dock of a
-file: saved, checked, completed, changed outside, kept by a measurement."""
+"""The bench's own measurements in the window: in the list on top (group
+Custom) and Ctrl+K, made from a blank or an example, their forms in the
+drop-down of the bar, run with what their script prints in the Log tab, and
+their scripts in the dock of a file: saved, checked, completed, changed
+outside, kept by a measurement."""
 
 import msgspec
 import pytest
@@ -45,47 +46,59 @@ def code_dock(window, path):
 
 
 def appears(window, wait, procedure):
-    name = dock_name(MEASURE, procedure)
-    wait(lambda: name in window.docks, timeout=10)
-    return name
+    """In the list of the bar; its form."""
+    wait(lambda: procedure in window.runBar.items, timeout=10)
+    return window.measures.form(procedure)
 
 
 def test_a_script_of_the_library_is_a_measurement_of_the_window(window, wait, library):
     (library / "told.py").write_text(TOLD, encoding="utf-8")
-    name = appears(window, wait, "custom.told")
-    entry = window.docks.entries[name]
+    form = appears(window, wait, "custom.told")
+    bar = window.runBar
+    name = dock_name(MEASURE, "custom.told")
+    (entry,) = [e for e in window.places.listed() if e.name == name]
     assert (entry.title, entry.section, entry.group) == ("Told", "Measures", "Custom")
-    assert window.runBar.combo.findData("custom.told") >= 0
     # Beside the built-in ones: the catalog told is all of it
-    assert window.runBar.combo.findData("sis.current_vs_voltage") >= 0
-    assert "measure:sis.current_vs_voltage" in window.docks
-    window.show_dock(name)
-    content = window.docks[name].widget().content()
-    assert content.titleLabel.text() == "Told"
-    assert [p.name for p in content.box.info.parameters] == ["settle"]
-    # Chosen on top: the bar drives the run of its dock
-    window.runBar.choose("custom.told")
-    assert window.runBar.controls.run is content.box
+    assert "sis.current_vs_voltage" in bar.items
+    assert form.titleLabel.text() == "Told"
+    assert not form.btnCode.isHidden()
+    assert [p.name for p in form.box.info.parameters] == ["settle"]
+    # Found (Ctrl+K): chosen on top, its parameters open, the bar drives its run
+    window.places.show(name)
+    assert bar.chosen_name() == "custom.told"
+    assert bar.parameters.isVisible() and bar.parameters.shown is form
+    assert bar.controls.run is form.box
+    bar.parameters.hide()
     (library / "told.py").unlink()
-    wait(lambda: name not in window.docks, timeout=10)
-    assert window.runBar.combo.findData("custom.told") < 0
+    wait(lambda: "custom.told" not in bar.items, timeout=10)
+    assert "custom.told" not in window.measures.forms
     # Gone with its script: the default is chosen
-    assert window.runBar.chosen_name() == "sis.current_vs_voltage"
-    assert window.runBar.controls.run is window.measures.run("sis.current_vs_voltage")
+    assert bar.chosen_name() == "sis.current_vs_voltage"
+    assert bar.controls.run is window.measures.run("sis.current_vs_voltage")
 
 
-def test_a_measurement_runs_from_its_dock_and_shows_what_it_prints(
-    window, wait, library
-):
+def test_a_measurement_runs_from_the_bar_and_logs_what_it_prints(window, wait, library):
     (library / "told.py").write_text(TOLD, encoding="utf-8")
-    name = appears(window, wait, "custom.told")
-    window.show_dock(name)
-    content = window.docks[name].widget().content()
-    content.box.form.set_values({"settle": 0.02})
-    content.box.start()
-    wait(lambda: "settle 0.02" in content.output.toPlainText(), timeout=20)
-    wait(lambda: not content.box.runner.running, timeout=20)
-    assert "completed" in content.box.log.toPlainText()
+    form = appears(window, wait, "custom.told")
+    window.runBar.choose("custom.told")
+    form.box.form.set_values({"settle": 0.02})
+    window.runBar.controls.btnStart.click()
+    log = window.logWidget
+
+    def told(text):
+        return any(
+            r.measurement == "custom.told" and text in r.text for r in log.records
+        )
+
+    wait(lambda: told("settle 0.02"), timeout=20)
+    wait(lambda: not form.box.runner.running, timeout=20)
+    wait(lambda: told("completed"), timeout=5)
+    # Of this measurement alone, in the Log tab
+    log.show_measurement("custom.told")
+    assert log.filter.currentText() == "Told"
+    shown = log.text.toPlainText()
+    assert "settle 0.02" in shown and "Told" in shown
+    assert all("custom.told" == r.measurement for r in log.records if r.text in shown)
 
 
 def test_a_new_measurement_opens_in_the_dock_of_its_file(window, wait, named, library):
@@ -137,9 +150,7 @@ def test_the_dock_of_a_file_saves_checks_and_asks_before_it_closes(
         )
     )
     widget.save()
-    measure = appears(window, wait, "custom.told")
-    window.show_dock(measure)
-    content = window.docks[measure].widget().content()
+    content = appears(window, wait, "custom.told")
     wait(lambda: "n" in content.box.form.editors, timeout=10)
     # Unsaved: closing asks, Cancel keeps it
     widget.editor.insertPlainText("# more\n")
@@ -222,11 +233,9 @@ def test_a_plot_goes_into_a_graph_of_the_window_of_the_same_units(window):
     assert "not those of 'I-V'" in told[0] and "no graph 'No such graph'" in told[1]
 
 
-def test_the_dock_chooses_where_a_declared_plot_goes(window, wait, library):
+def test_the_form_chooses_where_a_declared_plot_goes(window, wait, library):
     (library / "pv.py").write_text(PV, encoding="utf-8")
-    name = appears(window, wait, "custom.pv")
-    window.show_dock(name)
-    content = window.docks[name].widget().content()
+    content = appears(window, wait, "custom.pv")
     combo = content.graphs.combos["custom.pv.pv"]
     assert combo.currentData() == "P-V"  # into= of the script first
     (declared,) = content.box.info.plots

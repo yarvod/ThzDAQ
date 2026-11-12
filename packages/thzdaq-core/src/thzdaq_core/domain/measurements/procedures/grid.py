@@ -1,5 +1,5 @@
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import GRID_CURRENT_VS_ANGLE
+from thzdaq_api.procedures import CURRENT_VS_GRID_ANGLE
 from thzdaq_instruments.capabilities import Rotator, VoltageCurrentMeter
 from thzdaq_instruments.units import UA
 
@@ -15,9 +15,9 @@ from thzdaq_core.domain.measurements.procedures.common import (
 
 
 class GridCurrentAngle(Procedure):
-    name = GRID_CURRENT_VS_ANGLE
+    name = CURRENT_VS_GRID_ANGLE
     slot_modes = {"grid": EXCLUSIVE, "bias": READ}
-    title = "SIS current versus grid angle"
+    title = "SIS I-angle (grid)"
     description = "Rotate the wire grid and read the pumped SIS current (I-A curve)."
     requires = {"grid": Rotator, "bias": VoltageCurrentMeter}
     plots = (

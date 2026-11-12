@@ -1,8 +1,8 @@
-"""The dock of one of the bench's own measurements (custom.<name>): as a
-built-in one's (devices, its form, Start/Stop, its graphs), with its script a
-click away (Code), where each plot it declares is drawn (Graphs: a graph of
-its own or one of the window's, into= of the script first) and what the
-script printed during the last run (Output).
+"""The form of one of the bench's own measurements (custom.<name>): as a
+built-in one's (devices, parameters), with its script a click away (Code)
+and where each plot it declares is drawn (Graphs: a graph of its own or one
+of the window's, into= of the script first). What the script prints during a
+run goes to the Log tab, line by line, marked with the measurement.
 
 Saving the script describes it anew: the form follows (after the run, when
 one goes on); a script that cannot be described shows why, and its Code.
@@ -25,8 +25,7 @@ from thzdaq_api.measurements import PlotInfo, ProcedureInfo, ProcedureSummary
 
 from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
-from thzdaq_gui.docks.measure import MeasureWidget, ProcedureBox
-from thzdaq_gui.script_output import ScriptOutput
+from thzdaq_gui.docks.measure import MeasureForm, ProcedureBox
 from thzdaq_gui.settings import graph_choice_key, settings
 
 # Opens the script of a measurement (its procedure) at a line (0: where it was)
@@ -100,31 +99,23 @@ class GraphChoice(QWidget):
         return plot.into if combo is None else combo.currentData()
 
 
-class CustomMeasureWidget(MeasureWidget):
+class CustomMeasureForm(MeasureForm):
     def __init__(self, session, hub, procedure: str, open_code: OpenCode, parent=None):
         self.open_code = open_code
         self.about: Optional[ProcedureSummary] = session.procedure(procedure)
         self.stale = False  # described anew while it ran: reload at its end
         self.script_id: Optional[int] = None  # the script of its last run
+        self.unfinished = ""  # printed after its last full line
         super().__init__(session, hub, procedure, parent)
         self.session = session
-        self.output = ScriptOutput(
-            lambda file, line: open_code(procedure, line),
-            "What its script prints when it runs",
-        )
-        self.output.setMaximumHeight(160)
-        self.output_box = Collapsible("Output", f"custom/{procedure}/output")
-        self.output_box.addWidget(self.output)
         self.graphs = GraphChoice(procedure, hub)
         self.graphs_box = Collapsible("Graphs", f"custom/{procedure}/graphs")
         self.graphs_box.addWidget(self.graphs)
         self.layout().addWidget(self.graphs_box)
-        self.layout().addWidget(self.output_box)
         self.box.into = self.graphs.into
         scripts = session.scripts
         scripts.runs_changed.connect(self._bind)
         scripts.printed.connect(self._printed)
-        scripts.output_reset.connect(self._reset)
         self.box.runner.started.connect(self._run_started)
         self.box.runner.running_changed.connect(self._running)
         session.procedures_changed.connect(self._described)
@@ -139,19 +130,20 @@ class CustomMeasureWidget(MeasureWidget):
         header = QWidget()
         column = QVBoxLayout(header)
         column.setContentsMargins(0, 0, 0, 0)
-        row = QHBoxLayout()
         self.titleLabel = QLabel()
         self.titleLabel.setProperty("role", "title")
-        row.addWidget(self.titleLabel, 1)
-        code = QPushButton(theme.icon("code-braces"), "Code")
-        code.setToolTip("Its script, in the editor")
-        code.clicked.connect(lambda: self.open_code(self.procedure_name, 0))
-        row.addWidget(code)
-        column.addLayout(row)
+        column.addWidget(self.titleLabel)
         self.aboutLabel = QLabel()
         self.aboutLabel.setWordWrap(True)
         self.aboutLabel.setProperty("role", "muted")
         column.addWidget(self.aboutLabel)
+        row = QHBoxLayout()
+        self.btnCode = QPushButton(theme.icon("code-braces"), "Code")
+        self.btnCode.setToolTip("Its script, in the editor")
+        self.btnCode.clicked.connect(lambda: self.open_code(self.procedure_name, 0))
+        row.addWidget(self.btnCode)
+        row.addStretch()
+        column.addLayout(row)
         self.errorLabel = QLabel()
         self.errorLabel.setWordWrap(True)
         self.errorLabel.setStyleSheet(f"color: {theme.BAD};")
@@ -178,7 +170,7 @@ class CustomMeasureWidget(MeasureWidget):
         summary, and the daemon keeps descriptions by the script's hash)."""
         about = self.session.procedure(self.procedure_name)
         if about is None:
-            return  # its dock goes
+            return  # its form goes
         self.about = about
         if self.box.runner.running:
             self.stale = True
@@ -192,13 +184,15 @@ class CustomMeasureWidget(MeasureWidget):
         self.show_graphs()
 
     def _running(self, running: bool) -> None:
-        if not running and self.stale:
-            self._reload()
+        if not running:
+            self._flush()
+            if self.stale:
+                self._reload()
 
-    # What its script prints
+    # What its script prints, to the log
     def _run_started(self, measurement) -> None:
         self.script_id = None
-        self.output.clear()
+        self.unfinished = ""
         self._bind()
 
     def _bind(self) -> None:
@@ -208,13 +202,19 @@ class CustomMeasureWidget(MeasureWidget):
         found = self.session.scripts.of_measurement(run.id)
         if found is not None:
             self.script_id = found.id
-            self.output.show_whole(self.session.scripts.output(found.id))
-            self.output_box.set_expanded(True)
+            self._lines(self.session.scripts.output(found.id))
 
     def _printed(self, id: int, text: str) -> None:
         if id == self.script_id:
-            self.output.add(text)
+            self._lines(text)
 
-    def _reset(self, id: int) -> None:
-        if id == self.script_id:
-            self.output.show_whole(self.session.scripts.output(id))
+    def _lines(self, text: str) -> None:
+        """Full lines to the log; the rest waits for its end."""
+        *lines, self.unfinished = (self.unfinished + text).split("\n")
+        for line in lines:
+            self.box.note(line)
+
+    def _flush(self) -> None:
+        if self.unfinished:
+            self.box.note(self.unfinished)
+            self.unfinished = ""
