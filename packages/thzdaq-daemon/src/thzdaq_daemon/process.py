@@ -82,6 +82,7 @@ class Options:
     simulate: bool = False
     port: int = 0
     idle_timeout: Optional[float] = None  # None: as daemon.json says
+    idle_check: float = HEARTBEAT_S  # how often it looks whether it is idle
     lively: bool = True
 
     @property
@@ -208,7 +209,7 @@ class Daemon:
     def _watch(self) -> None:
         """End after idle_timeout with no client and no measurement."""
         quiet_since: Optional[float] = None
-        while not self._stopping.wait(HEARTBEAT_S):
+        while not self._stopping.wait(self.options.idle_check):
             timeout = self.idle_timeout
             assembled = self.composed.assembled
             busy = (

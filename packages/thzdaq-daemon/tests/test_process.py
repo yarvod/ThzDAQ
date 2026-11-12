@@ -1,6 +1,7 @@
 """The daemon as a process: started by clients, one per machine, found again
 after a restart, ended by a stop, an idle timeout or a kill."""
 
+import contextlib
 import json
 import subprocess
 import sys
@@ -17,6 +18,7 @@ from thzdaq_api.daemon import (
     Health,
     HostInfo,
     RestartDaemon,
+    SetDaemonSettings,
     StopDaemon,
     StopMode,
 )
@@ -36,6 +38,7 @@ from thzdaq_api.host import (
 from thzdaq_api.measurement_file import INTERRUPTED, read_measurement
 from thzdaq_api.measurements import StartMeasurement
 from thzdaq_api.procedures import MONITOR_VALUES_VS_TIME
+from thzdaq_api.remote import RemoteLab
 
 FOREVER = {"watch": ["power_meter_1/power"], "interval": 0.05, "duration": 0.0}
 
@@ -110,13 +113,44 @@ def test_the_simulator_runs_next_to_the_real_daemon(home):
     assert real.call(ListDevices()) == ()  # started without a profile
 
 
-def test_idle_it_ends_and_a_listener_keeps_it(home):
-    lab = start(home, idle=0.5)
-    stop = lab.subscribe(lambda event: None)
-    time.sleep(3.0)  # longer than the idle timeout and a heartbeat
-    assert pid_alive(lab.host.pid)
-    stop()
-    gone(lab.host.pid, DaemonFiles.of(True))
+@contextlib.contextmanager
+def in_thread(home, idle):
+    """A daemon in a thread that looks every 10 ms whether it is idle, with files
+    of its own: no kill of the tests reaches this process."""
+    from thzdaq_daemon.process import Daemon, Options
+
+    files = DaemonFiles(home / "own", "thzdaq")
+    options = Options(
+        home, files, str(home / "bench.yaml"), simulate=True,
+        idle_timeout=idle, idle_check=0.01, lively=False,
+    )  # fmt: skip
+    daemon = Daemon(options)
+    running = threading.Thread(target=daemon.run, daemon=True)
+    running.start()
+    try:
+        yield daemon, running
+    finally:
+        daemon.stop(False)
+        running.join(timeout=10)
+        assert read_host(files) is None
+
+
+def test_idle_it_ends(home):
+    with in_thread(home, idle=0.05) as (_, running):
+        running.join(timeout=5)
+        assert not running.is_alive()
+
+
+def test_a_listener_keeps_it(home):
+    with in_thread(home, idle=0.0) as (daemon, running):
+        wait_for(lambda: read_host(daemon.options.files) is not None, timeout=5)
+        lab = RemoteLab(read_host(daemon.options.files), "test", "test")
+        lab.subscribe(lambda event: None)
+        wait_for(lambda: daemon.clients(), timeout=5)
+        lab.call(SetDaemonSettings(idle_timeout=0.05))  # idle from now on
+        time.sleep(0.5)  # ten idle timeouts, fifty looks
+        assert running.is_alive()
+        lab.close()
 
 
 def test_a_stop_waits_for_measurements_unless_it_cancels_them(home):
