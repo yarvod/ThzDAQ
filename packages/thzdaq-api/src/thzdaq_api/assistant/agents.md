@@ -60,6 +60,17 @@ do is seen in the window, and what you change waits for the person's consent.
     power --group load`); it changes nothing and needs nobody. In a script: `m.show()`
     within `lab.measurement`, `run.show()` of `lab.run`, `lab.plot(<number|file>)`.
 
+13. **Show the person where.** When the person does it in the window, or asks how,
+    point there instead of doing it: `ui_state` tells what the window shows (its docks,
+    the controls of the bar on top, the measurement chosen there and its form), by the
+    names `ui_open` and `ui_highlight` take. `ui_fill_measurement` chooses a measurement in
+    the bar on top and fills its form (values as `start_measurement` takes them); it
+    starts nothing: the person checks the form and presses Start, so it needs nobody's
+    consent. Then `ui_highlight(anchor="run:start", text="…")` shows them the button.
+    Highlight one place at a time with a few words; it goes when the person acts there.
+    These go to the window the person was at last, or to the `window` you name (one of
+    `windows` in `ui_state`); `no ThzDAQ window is open`: tell the user to open one.
+
 ## Tools of the MCP server `thzdaq`
 
 | Tool | What it does |
@@ -77,6 +88,9 @@ do is seen in the window, and what you change waits for the person's consent.
 | `check_custom(script, text)` | what is wrong with a script, by line; the form it declares |
 | `write_custom(script, text)` | save a script of the library; a person allows it |
 | `ask_user`, `wait_answer` | a question to the person at the bench |
+| `ui_state` | what the ThzDAQ window shows: docks, the bar on top, the chosen measurement's form |
+| `ui_open(place)`, `ui_highlight(anchor, text)` | show a dock or a measurement; point at a place with a short text |
+| `ui_fill_measurement` | fill a measurement's form in the window for the person to start |
 | `get_daemon_status` | the daemon, its profile, clients, runs and problems |
 
 Resources: `thzdaq://procedures`, `thzdaq://procedures/<name>`, `thzdaq://station` (the
