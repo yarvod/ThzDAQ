@@ -1,14 +1,14 @@
-"""The dock of a script's file: the text in the editor, above it Save, Check,
-Run, pieces to insert and VS Code, under it the problems a check found and
-what its last run printed. A file changed outside (VS Code, an agent) is
-taken at once when nothing here is unsaved, else a banner asks.
+"""The tab of a script's file in Editor: the text in the editor, above it
+Save, Check, Run, pieces to insert and VS Code, under it the problems a check
+found and what its last run printed. A file changed outside (VS Code, an
+agent) is taken at once when nothing here is unsaved, else a banner asks.
 
 Run of one of the bench's own measurements is Start of its dock, with the
 values of its form; another script runs in the daemon as thzdaq script start
 does. A text a measurement kept is saved into the library under a name.
 
 It shows a CodeModel and calls its methods; the window's CodeDocks makes,
-names and closes these docks.
+names and closes these tabs.
 """
 
 from pathlib import Path
@@ -38,7 +38,7 @@ from thzdaq_gui.external_editor import ExternalEditor
 from thzdaq_gui.models.code import CodeModel
 from thzdaq_gui.script_output import OpenPlace, ScriptOutput
 
-UNSAVED = " •"  # after the title of a dock whose text is not saved
+UNSAVED = " ●"  # after the title of a tab whose text is not saved
 SAVE_TO_LIBRARY = "Save to library"
 PROBLEMS, OUTPUT = 0, 1  # tabs under the text
 NO_PROBLEMS = "No problems found"

@@ -1,9 +1,10 @@
 """Where file dialogs start: the folder of the last file of each kind.
 
-Every kind of file (measurements, station profiles) remembers in the settings
+Every kind of file (measurements, station profiles, scripts) remembers in the settings
 (folders/<kind>) the folder of the file chosen last. Until one is chosen, or
 when it is gone (a removed USB stick), a dialog starts in the default of the
-kind: the data folder of the session for measurements, so a data folder
+kind: the data folder of the session for measurements, the workspace's scripts/
+for scripts, so a data folder
 chosen elsewhere moves where these dialogs start as well.
 """
 
@@ -17,6 +18,7 @@ from thzdaq_gui.settings import folder_key, settings
 
 MEASUREMENTS = "measurements"
 PROFILES = "profiles"
+SCRIPTS = "scripts"
 
 
 class Folders:

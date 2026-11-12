@@ -4,10 +4,11 @@ DockSpace holds every ADS dock of the window under its name (dock_names) and
 places it. A base dock is pinned to its side bar, without a close button. A
 device or measurement dock that has had no place on screen yet opens
 floating, for the person to dock it where they want; closed after that, it
-opens where it was (ADS keeps its place). Graphs and scripts' files open with
-their kind: a closed one joins the tab group of an open dock of its kind, the
-first between the device and measurement columns. DockBody contents exist
-only while their docks are open (sync_bodies).
+opens where it was (ADS keeps its place). Graphs open with their kind: a
+closed one joins the tab group of an open graph, the first between the
+device and measurement columns. A place inside a dock (a file's tab in
+Editor) is shown by its owner (show_inside). DockBody contents exist only
+while their docks are open (sync_bodies).
 """
 
 from collections import Counter
@@ -19,14 +20,15 @@ from PySide6.QtWidgets import QSplitter, QStyle, QWidget
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import (
-    CODE,
     DATA,
     DEVICE,
+    EDITOR,
     GRAPH,
     LOG,
     MEASURE,
     PROCESSES,
     SETUP,
+    key_of,
     kind_of,
 )
 from thzdaq_gui.docks.body import DockBody
@@ -34,8 +36,8 @@ from thzdaq_gui.graphs import close_views
 from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry, Flash
 
 SECTIONS = ("Devices", "Measures", "Graphs")  # of the menus, in order
-AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220}
-CENTRED = (GRAPH, CODE)  # the first of these kinds opens between the columns
+AUTO_HIDE_SIZES = {SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220, EDITOR: 480}
+CENTRED = (GRAPH,)  # the first of these kinds opens between the columns
 COLUMNS = (DEVICE, MEASURE)  # sized for their docks (fit_columns)
 FIT_SHARE = 0.4  # a column takes at most this part of the window
 FLOAT_SHARE = 0.9  # a dock opened floating takes at most this part of the window
@@ -149,6 +151,8 @@ class DockSpace(Mapping):
         self.entries: Dict[str, DockEntry] = {}  # in the menus and Ctrl+K
         self.auto_hide_sides: Dict[str, int] = {}  # base docks: their side bar
         self.floating_first: Set[str] = set()  # docks added without a place
+        # Places inside docks by kind (a file's tab in Editor): show(key)
+        self.inside: Dict[str, Callable[[str], None]] = {}
         # Docks are added open and then arranged: contents are built after that
         self.building = False
 
@@ -173,24 +177,16 @@ class DockSpace(Mapping):
         group: str = "",
         hint: str = "",
         listed: bool = True,
-        closing: Optional[Callable[[], bool]] = None,
     ) -> QtAds.CDockWidget:
-        """area: the side its tab group starts on (graphs, files); auto_hide:
-        the side bar a base dock is pinned to; neither: the dock has no place
-        until it first opens, floating (devices, measurements). closing():
-        whether a dock whose content may hold unsaved work closes now; such a
-        dock is removed when it closes."""
+        """area: the side its tab group starts on (graphs); auto_hide: the
+        side bar a base dock is pinned to; neither: the dock has no place
+        until it first opens, floating (devices, measurements)."""
         dock = QtAds.CDockWidget(name)
         dock.setWindowTitle(title)
         dock.setWidget(widget)
         if icon is not None:
             dock.setIcon(icon)
         dock.setFeature(QtAds.CDockWidget.DockWidgetDeleteOnClose, False)
-        if closing is not None:
-            # ADS closes a dock at once; CustomCloseHandling hands the close
-            # to closeRequested, so the content may ask first
-            dock.setFeature(QtAds.CDockWidget.CustomCloseHandling, True)
-            dock.closeRequested.connect(lambda: closing() and self.remove(name))
         dock.toggleViewAction().setText(title)
         if listed:
             self.entries[name] = DockEntry(
@@ -270,8 +266,17 @@ class DockSpace(Mapping):
             return FRONT if container is not None and container.isVisible() else BEHIND
         return FRONT if dock.isCurrentTab() else BEHIND
 
+    def show_inside(self, kind: str, show: Callable[[str], None]) -> None:
+        """Places of a kind inside a dock are shown by show(key)."""
+        self.inside[kind] = show
+
     def show(self, name: str) -> None:
-        """Wherever the dock is, bring it in front of the user and flash it."""
+        """Wherever the dock is, bring it in front of the user and flash it;
+        a place inside a dock is shown by its owner."""
+        kind = kind_of(name)
+        if kind in self.inside:
+            self.inside[kind](key_of(name, kind))
+            return
         dock = self._docks.get(name)
         if dock is None:
             return
@@ -296,8 +301,8 @@ class DockSpace(Mapping):
 
     def open(self, name: str, activate: bool = True) -> None:
         """Show a dock: a closed one where it was, floating if it has had no
-        place yet; a graph or a file joins the tab group of an open dock of
-        its kind instead of an empty place. activate brings it to the front."""
+        place yet; a graph joins the tab group of an open graph instead of
+        an empty place. activate brings it to the front."""
         dock = self._docks.get(name)
         if dock is None:
             return
