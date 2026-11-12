@@ -530,3 +530,14 @@ def test_watch_tells_a_scripts_start_output_and_end():
         "script 7 | swept\nscript 7 | Traceback",
         "script 7 scan: exited (exit code 1)",
     ]
+
+
+def test_a_module_is_run_as_python_m_runs_it(thzdaq, tmp_path, monkeypatch):
+    """How a build runs the kernel of a window's console (host.python_module)."""
+    import sys
+
+    monkeypatch.setattr(sys, "argv", list(sys.argv))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    (tmp_path / "told.py").write_text("import sys\nprint(__name__, sys.argv[1:])\n")
+    code, out, _ = thzdaq("run-script", "-m", "told", "--", "-f", "kernel.json")
+    assert code == 0 and out == "__main__ ['-f', 'kernel.json']\n"

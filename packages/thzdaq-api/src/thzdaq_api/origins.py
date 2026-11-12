@@ -5,7 +5,9 @@ person before they change the bench (thzdaq_core's Policy).
 A script has the rights of whoever started it: one a person started (in a
 window, their terminal) a person's, asked only what may harm the bench; one an
 agent started an agent's. A script run in a shell an agent drives names itself
-so (script:agent:<name>); the daemon knows who started the scripts it runs."""
+so (script:agent:<name>); the daemon knows who started the scripts it runs. A
+console of a window runs code a person types: its kernel calls as console,
+with the rights of a person's script."""
 
 import os
 from typing import Optional
@@ -21,6 +23,8 @@ AGENT_SCRIPT = f"{SCRIPT}agent:"  # script:agent:<its name>: an agent's script
 NUMBERED = "@"  # script:<its name>@<number>: one the daemon runs
 SCRIPT_CLIENT = "script"  # the kind of client a script listens as
 PLOTS = "plots"  # a plots window: it only shows, nobody answers in it
+CONSOLE = "console"  # the kernel of a console of a window: a person types its code
+CONSOLE_CLIENT = "console"  # the kind of client a console's kernel listens as
 
 # The kind of a CLI that asks a person in its terminal what waits (approvals watch)
 ANSWERING_CLI = "cli:answers"
@@ -28,6 +32,8 @@ ANSWERING = (GUI, ANSWERING_CLI)  # the kinds of client a person answers in
 
 # Set by the daemon in a script an agent started: it is the agent's
 AGENT_ENV = "THZDAQ_AGENT"
+# Set by a window in the kernel of its console: the kernel calls as console
+CONSOLE_ENV = "THZDAQ_CONSOLE"
 # Set in the shells agents run commands in (Claude Code, Codex): a command or
 # a script started there is the agent's, so no person answers in its terminal
 AGENT_SHELLS = (
@@ -52,9 +58,10 @@ def answers(kind: str, origin: str) -> bool:
 
 
 def scripted(origin: str) -> bool:
-    """A script, by its origin: a person's goes by its own rights
-    (thzdaq_api.rights.PERSON_SCRIPTS), an agent's by an agent's."""
-    return origin.startswith(SCRIPT)
+    """Code that drives the bench, by its origin: a script, or a console of a
+    window. A person's goes by its own rights (thzdaq_api.rights.PERSON_SCRIPTS):
+    what a dock confirms waits for a person; an agent's by an agent's."""
+    return origin.startswith(SCRIPT) or origin == CONSOLE
 
 
 def script(name: str, number: Optional[int] = None, by_agent: bool = False) -> str:

@@ -4,6 +4,7 @@ the same operations, answers and events as through LocalLab."""
 from test_lab_actions import *  # noqa: F401,F403
 from test_lab_analysis import *  # noqa: F401,F403
 from test_lab_approvals import *  # noqa: F401,F403
+from test_lab_console import *  # noqa: F401,F403
 from test_lab_daemon import *  # noqa: F401,F403
 from test_lab_devices import *  # noqa: F401,F403
 from test_lab_events import *  # noqa: F401,F403

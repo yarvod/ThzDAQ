@@ -42,6 +42,8 @@ SIMULATE = "--simulate"  # a program works with the simulator's daemon
 PROGRAM = "ThzDAQ"  # the built program: the window, and the daemon with SERVE
 CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
 RUN_SCRIPT = "run-script"  # thzdaq-cli run-script <file>: a build's Python runs it
+MODULE = "-m"  # thzdaq-cli run-script -m <module>: a module run as a program
+PASSED = "--"  # what follows is the script's (or module's) own arguments
 
 
 @dataclass(frozen=True)
@@ -101,15 +103,20 @@ def program_file() -> Path:
     return executable(program_dir(), PROGRAM)
 
 
-def install_file() -> Path:
-    """Where the build that started last notes itself, per user."""
+def user_dir() -> Path:
+    """The program's folder of the user: files it keeps between its runs."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
     elif sys.platform == "darwin":
         base = Path.home() / "Library/Application Support"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
-    return base / PROGRAM / "install.json"
+    return base / PROGRAM
+
+
+def install_file() -> Path:
+    """Where the build that started last notes itself, per user."""
+    return user_dir() / "install.json"
 
 
 def note_installation() -> None:
@@ -263,6 +270,20 @@ def script_python() -> Tuple[str, ...]:
     return (sys.executable,)
 
 
+def python_module(module: str, *arguments: str) -> List[str]:
+    """How a module runs as a program with the scripts' Python (python -m
+    module arguments): this interpreter from sources, a build's own."""
+    if frozen():
+        return built_module(executable(program_dir(), CLI_PROGRAM), module, *arguments)
+    return [sys.executable, "-m", module, *arguments]
+
+
+def built_module(cli: Path, module: str, *arguments: str) -> List[str]:
+    """How a build's thzdaq-cli runs a module as a program: run-script -m,
+    the arguments after --."""
+    return [str(cli), RUN_SCRIPT, MODULE, module, PASSED, *arguments]
+
+
 def apart() -> Dict[str, Any]:
     """Popen options that start a process apart from this one: without its
     console or terminal session, so it outlives them."""
@@ -273,6 +294,15 @@ def apart() -> Dict[str, Any]:
             | subprocess.CREATE_NO_WINDOW
         )
     return dict(start_new_session=True)
+
+
+def windowless() -> Dict[str, Any]:
+    """Popen options that start a console program without a window of its own
+    on Windows (a console's kernel, thzdaq-cli of a build, started by the
+    window)."""
+    if sys.platform == "win32":
+        return dict(creationflags=subprocess.CREATE_NO_WINDOW)
+    return {}
 
 
 def start_apart(command: Sequence[str]) -> subprocess.Popen:

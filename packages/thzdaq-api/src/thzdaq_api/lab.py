@@ -34,6 +34,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Mapping,
     Optional,
     Protocol,
@@ -64,7 +65,9 @@ from thzdaq_api.measurements import (
     CancelMeasurement,
     DescribeProcedure,
     GetRunSnapshot,
+    ListProcedures,
     ListRuns,
+    ProcedureSummary,
     RunInfo,
     StartMeasurement,
     WaitMeasurement,
@@ -74,6 +77,9 @@ from thzdaq_api.operation import Operation
 from thzdaq_api.origins import (
     ANSWERING_CLI,
     CLI,
+    CONSOLE,
+    CONSOLE_CLIENT,
+    CONSOLE_ENV,
     GUI,
     PLOTS,
     SCRIPT_CLIENT,
@@ -275,6 +281,10 @@ class Bench:
     def __getitem__(self, ref: str) -> Device:
         return Device(self, ref)
 
+    def _ipython_key_completions_(self) -> List[str]:
+        """What completes bench["…"] in IPython (a console): the devices' refs."""
+        return [device.ref for device in self.devices()]
+
     def devices(self) -> Tuple[DeviceInfo, ...]:
         return self.lab.call(ListDevices())
 
@@ -348,6 +358,10 @@ class Bench:
         return self.approve(lambda: self.lab.call(command)).answer
 
     # Procedures
+    def procedures(self) -> Tuple[ProcedureSummary, ...]:
+        """Every procedure the bench can run (thzdaq procedures)."""
+        return self.lab.call(ListProcedures())
+
     def start(
         self,
         procedure: str,
@@ -507,7 +521,8 @@ def connect(
     """The bench of this machine (its simulator with simulate) as this script
     uses it, as script:<name> (the script's file name by default;
     script:agent:<name> in a shell an agent drives: the script has the rights
-    of whoever started it); the daemon is started when none runs. A person at this terminal is asked here too
+    of whoever started it), or as console in the kernel of a window's console
+    (thzdaq_api.console); the daemon is started when none runs. A person at this terminal is asked here too
     what a measurement's start needs allowed. A script the daemon started
     (thzdaq script start) finds that daemon, its own number and its workspace
     by its environment, and is allowed what it was started with. Its
@@ -521,15 +536,11 @@ def connect(
     if STATE.bench is not None:
         return STATE.bench
     path = getattr(sys.modules["__main__"], "__file__", None)  # none in a notebook
-    name = name or (Path(path).stem if path else "interactive")
-    number = os.environ.get(SCRIPT_ID_ENV)
     if simulate is None:
         simulate = os.environ.get(SIMULATE_ENV) == "1"
-    origin = script(name, int(number) if number else None, agent_shell())
+    origin, kind = caller(name or (Path(path).stem if path else "interactive"))
     folder = chosen(workspace)
-    lab = host.connect_or_start(
-        simulate, expected_profile(folder), origin, SCRIPT_CLIENT
-    )
+    lab = host.connect_or_start(simulate, expected_profile(folder), origin, kind)
     warning = profile_warning(lab, folder)
     if warning:
         print(warning, file=sys.stderr)
@@ -538,3 +549,14 @@ def connect(
         person = RemoteLab(lab.host, CLI, ANSWERING_CLI, find=lab.find)
         approve = AnsweredHere(person, lab.origin)
     return Bench(lab, folder, script_source(path, folder), approve, simulate, STATE)
+
+
+def caller(name: str) -> Tuple[str, str]:
+    """What this process calls the daemon as, and the kind of client it
+    listens as: the kernel of a window's console (its window set CONSOLE_ENV)
+    as console; a script as script:<name>, with its number when the daemon
+    runs it, as an agent's in a shell an agent drives."""
+    if os.environ.get(CONSOLE_ENV):
+        return CONSOLE, CONSOLE_CLIENT
+    number = os.environ.get(SCRIPT_ID_ENV)
+    return script(name, int(number) if number else None, agent_shell()), SCRIPT_CLIENT

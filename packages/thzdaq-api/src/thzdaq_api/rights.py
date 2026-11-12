@@ -8,7 +8,8 @@ and a set an agent may do alone is still asked for a jump ×10 or a value
 beyond warn_min..warn_max.
 
 A script has the rights of whoever started it. An agent's script goes by this
-table as its agent does. A person's script goes by PERSON_SCRIPTS: it changes
+table as its agent does. A person's script, and a console of a window (code a
+person types), go by PERSON_SCRIPTS: it changes
 the bench within its limits as the person would in a dock, and what a dock
 confirms (a dangerous step, a jump or a value beyond the warn range, another's
 sweep, a raw write, a change of the profile) waits for a person, unless the
@@ -49,7 +50,7 @@ FIXED: Mapping[Rights, Decision] = {
     Rights.RAW_WRITE: Decision.DENY,
 }
 
-# What a script a person started may do: what the person does in a dock goes
+# What a script a person started, or a console, may do: what the person does in a dock goes
 # at once, what a dock confirms waits for a person (a call that may harm the
 # bench is asked besides, as an agent's)
 PERSON_SCRIPTS: Mapping[Rights, Decision] = {
