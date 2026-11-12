@@ -1038,7 +1038,8 @@ curve, экспорт CSV и `thzdaq show` работают как с любым
 
 Пример: P-V hot/cold по углам сетки, с Y-фактором и Tn. Встроенная процедура `sis.noise_temperature_vs_voltage`
 (Tn-V, `hot_cold` + `use_grid`) делает то же самое. Пример показывает, как это пишется скриптом,
-чтобы потом менять под себя.
+чтобы потом менять под себя. Он же с объявлениями формы — пример `hot_cold_grid`
+(`thzdaq_api/examples/hot_cold_grid.py`, «From an example…»).
 ```python
 from thzdaq import connect
 from thzdaq_analysis.noise import match_hot_cold, noise_temperature  # thzdaq[analysis]
@@ -2454,9 +2455,14 @@ GUI, а отказ доходит до агента текстом.
       ADS-дока на файл (`docks/tabbed.py` — общий контейнер вкладок, им же станет Console);
 
 **Готово, когда:**
-- [ ] пример P-V hot/cold по сетке из этого документа работает скриптом;
-- [ ] его видно и можно остановить из GUI и CLI;
-- [ ] после отмены смещение и угол вернулись;
+- [x] пример P-V hot/cold по сетке из этого документа работает скриптом (пример
+  `hot_cold_grid` с объявлениями: своё измерение и `thzdaq script start`,
+  `thzdaq-daemon/tests/test_examples.py`, `test_hot_cold_grid.py`);
+- [x] его видно и можно остановить из GUI и CLI (`thzdaq status` и `thzdaq cancel` —
+  `test_hot_cold_grid.py`; Processes и Stop окна — `thzdaq-gui/tests/test_external_runs.py`,
+  `test_a_scripts_measurement_is_stopped_from_processes_and_restored`);
+- [x] после отмены смещение и угол вернулись, нагрузка — на cold (те же тесты, на
+  симуляторах);
 - [x] своё измерение из примера создаётся, правится и запускается в программе, а CLI и
   агент запускают его как `custom.<имя>`;
 - [x] его график выводится в новый или в выбранный существующий график окна;

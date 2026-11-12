@@ -8,7 +8,6 @@ from test_process import start
 from thzdaq_api.devices import ReadDevice, SetQuantity
 from thzdaq_api.measurement_file import read_measurement
 from thzdaq_api.measurements import ListRuns
-from thzdaq_api.origins import AGENT_SHELLS
 from thzdaq_api.scripts import ListScripts, ReadScriptLog
 
 SCAN = """\
@@ -28,22 +27,6 @@ with lab.measurement("scan", devices=[bias]) as m:
         m.sleep(0.1)  # until it is stopped
 print("ended", m.run.status)
 """
-
-
-@pytest.fixture
-def thzdaq(capsys, monkeypatch):
-    """thzdaq ARGS against the simulator's daemon, as a person types it."""
-    from thzdaq_cli.app import main
-
-    for name in AGENT_SHELLS:
-        monkeypatch.delenv(name, raising=False)
-
-    def run(*argv):
-        code = main(["--simulate", *argv])
-        out, err = capsys.readouterr()
-        return code, out, err
-
-    return run
 
 
 def logged(lab, id):

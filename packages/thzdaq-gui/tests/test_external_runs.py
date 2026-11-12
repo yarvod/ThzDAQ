@@ -78,6 +78,63 @@ def test_a_scripts_plot_added_while_it_runs_is_drawn(window, session, cli, wait)
     cli.call(EndSession(id=run.id))
 
 
+def test_a_scripts_measurement_is_stopped_from_processes_and_restored(
+    window, session, cli, wait
+):
+    """The grid's hot/cold P-V (thzdaq_api/examples/hot_cold_grid.py) as
+    its script drives it: seen in Processes and its graph, Stop there
+    cancels it, the daemon sets the bias and the grid back."""
+    from thzdaq_api.devices import CallAction
+    from thzdaq_api.measurements import PlotInfo
+    from thzdaq_api.sessions import (
+        CallOnExit,
+        EndSession,
+        KeepSession,
+        RecordSession,
+        RestoreOnExit,
+        StartSession,
+    )
+
+    bias, grid, load = "sis_bias_1", "grid_1", "chopper_1"
+    cli.call(SetQuantity(ref=bias, key="voltage_set", value="1mV"))
+    cli.call(SetQuantity(ref=grid, key="angle", value="15"))
+    pv = PlotInfo(
+        key="p_v", title="P-V", table="pv", x="voltage", y="power",
+        group_by=("angle", "load"),
+    )  # fmt: skip
+    run = cli.call(
+        StartSession(
+            title="pv_hot_cold_grid", devices=(bias, grid, load),
+            exclusive=(bias, grid), plots=(pv,),
+        )  # fmt: skip
+    )
+    cli.call(RestoreOnExit(id=run.id, ref=bias, key="voltage_set"))
+    cli.call(RestoreOnExit(id=run.id, ref=grid, key="angle"))
+    cli.call(CallOnExit(id=run.id, ref=load, action="to_cold"))
+    cli.call(SetQuantity(ref=grid, key="angle", value="40", session=run.id))
+    cli.call(CallAction(ref=load, action="to_hot", session=run.id))
+    cli.call(SetQuantity(ref=bias, key="voltage_set", value="2mV", session=run.id))
+    row = {"angle": 40.0, "load": "hot", "voltage": 2e-3, "power": -30.0}
+    cli.call(RecordSession(id=run.id, table="pv", rows=(row,)))
+
+    wait(lambda: session.processes.items)
+    (process,) = session.processes.items
+    assert f"#{run.id}" in process.title
+    wait(lambda: pv.title in window.hub.graphs)
+    process.stop()
+    assert cli.call(KeepSession(id=run.id, wait=5)).cancelled  # the script hears it
+    cli.call(EndSession(id=run.id, status=CANCELLED))
+    wait(lambda: not session.processes.items)
+    assert session.measurements.items[0].status == CANCELLED
+
+    def now(ref, key):
+        return cli.call(ReadDevice(ref=ref, keys=(key,))).values[key]
+
+    assert now(bias, "voltage_set") == pytest.approx(1e-3)
+    assert now(grid, "angle") == pytest.approx(15.0)
+    assert now(load, "load_state") == "cold"
+
+
 def test_process_stop_cancels_an_external_monitor(window, session, cli, wait):
     run = monitor(cli)
     wait(lambda: session.processes.items)
