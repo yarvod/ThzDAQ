@@ -363,11 +363,11 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   | `sis.current_vs_voltage` | I-V | bias |
   | `sis.current_vs_coil_current` | ток SIS от тока катушки (I-CL) | coil, bias |
   | `sis.demagnetization` | размагничивание | coil |
+  | `sis.current_vs_grid_angle` | ток SIS от угла сетки | grid, bias |
   | `sis.power_vs_voltage` | P-V: мощность ПЧ вместе с I-V | bias, detector |
   | `sis.noise_temperature_vs_voltage` | Tn-V: P-V с hot/cold (Y, Tn от V), опционально углы сетки | bias, detector, load (+grid) |
   | `sis.reflection_vs_frequency` | S-параметры VNA по развёртке смещения | bias, vna |
   | `if.amplifier_noise_vs_voltage` | IF health check: Rd в двух точках, P-IF, шум ПЧ-усилителя | bias, detector, if_filter |
-  | `grid.current_vs_angle` | ток SIS от угла сетки | grid, bias |
   | `if.noise_temperature_vs_frequency` | Tn-IF: P-IF hot/cold, Y и Tn | detector, if_filter, load |
   | `if.power_vs_frequency` | Power-IF YIG: P-IF без нагрузок | detector, if_filter |
   | `monitor.values_vs_time` | выбранные величины устройств во времени (P, T, V, I, давление, ...) | любые |

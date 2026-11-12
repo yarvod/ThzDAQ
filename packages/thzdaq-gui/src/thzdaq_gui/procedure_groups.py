@@ -5,7 +5,7 @@ measurement's icon is an M in a square; the monitor keeps its own."""
 from dataclasses import dataclass
 
 from thzdaq_api.custom import GROUP as CUSTOM
-from thzdaq_api.procedures import GRID, IF, MONITOR, SIS, TWO_SB, group_of
+from thzdaq_api.procedures import IF, MONITOR, SIS, TWO_SB, group_of
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,6 @@ GROUPS = (
     Group(IF, "IF", MEASUREMENT),
     Group(TWO_SB, "2SB", MEASUREMENT),
     Group(MONITOR, "Monitor", "monitor-eye"),
-    Group(GRID, "Grid", MEASUREMENT),
     Group(CUSTOM, "Custom", MEASUREMENT),  # the bench's own measurements
 )
 _BY_KEY = {group.key: group for group in GROUPS}

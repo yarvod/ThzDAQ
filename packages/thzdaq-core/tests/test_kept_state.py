@@ -21,7 +21,7 @@ from thzdaq_api.measurements import (
     WaitMeasurement,
 )
 from thzdaq_api.measurement_file import read_measurement
-from thzdaq_api.procedures import GRID_CURRENT_VS_ANGLE, MONITOR_VALUES_VS_TIME
+from thzdaq_api.procedures import CURRENT_VS_GRID_ANGLE, MONITOR_VALUES_VS_TIME
 from thzdaq_instruments.angle import AngleUnknown
 from thzdaq_instruments.drivers import ArduinoGrid
 
@@ -178,7 +178,7 @@ def scan(lab, speed, settle=0.0):
     devices = {"grid": GRID, "bias": "sis_bias_1"}
     return lab.call(
         StartMeasurement(
-            procedure=GRID_CURRENT_VS_ANGLE, parameters=parameters, devices=devices
+            procedure=CURRENT_VS_GRID_ANGLE, parameters=parameters, devices=devices
         )
     )
 

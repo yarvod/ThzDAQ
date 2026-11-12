@@ -11,6 +11,7 @@ from thzdaq_api.measurement_file import (
 )
 from thzdaq_api.measurements import PlotInfo, ProcedureSummary, saved_plots
 from thzdaq_api.procedures import (
+    CURRENT_VS_GRID_ANGLE,
     CURRENT_VS_VOLTAGE,
     NOISE_TEMPERATURE_VS_FREQUENCY,
     RENAMED,
@@ -30,6 +31,11 @@ def test_old_names_lead_to_the_current_ones():
     assert current_name(CURRENT_VS_VOLTAGE) == CURRENT_VS_VOLTAGE
     assert current_name("custom.scan") == "custom.scan"
     assert former_names(CURRENT_VS_VOLTAGE) == ["sis.iv_curve"]
+    # The grid's measurement left a group of its own for SIS
+    assert former_names(CURRENT_VS_GRID_ANGLE) == [
+        "grid.current_angle",
+        "grid.current_vs_angle",
+    ]
     # No name is both old and current: an old one never leads to another old one
     assert not set(RENAMED) & set(RENAMED.values())
 
