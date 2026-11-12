@@ -61,7 +61,7 @@ from thzdaq_gui import theme
 from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.device_types import type_title
 from thzdaq_gui.dock_names import DEVICE, dock_name
-from thzdaq_gui.docks.measure import ProcedureBox
+from thzdaq_gui.docks.measure import ScanBox
 from thzdaq_gui.docks.raw import RawConsole
 from thzdaq_gui.fields import PrefixBox, QuantityField, default_prefix, format_number
 from thzdaq_gui.forms import CompactDoubleSpinBox, Editor
@@ -899,10 +899,10 @@ class CalibrationGroup(QGroupBox):
 
 
 def scan_group(session, hub, title: str, procedure: str, fixed) -> Collapsible:
-    """A quick measurement of this device, folded by default: the measurement
-    docks run the same; folded, the title line shows how it runs."""
+    """A quick measurement of this device, folded by default: the run bar
+    runs the same; folded, the title line shows how it runs."""
     section = Collapsible(title, sections_path(procedure, scan=True), expanded=False)
-    box = ProcedureBox(session, hub, procedure, fixed, compact=True)
+    box = ScanBox(session, hub, procedure, fixed)
     box.reveal = lambda: section.set_expanded(True)
     box.status_changed.connect(section.set_summary)
     section.addWidget(box)

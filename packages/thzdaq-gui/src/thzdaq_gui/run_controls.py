@@ -1,9 +1,10 @@
-"""Comment, Start/Stop/Abort and progress of a run: a view of its RunStatus.
+"""Comment, Start/Stop/Abort, graphs and progress of a run: a view of its
+RunStatus.
 
 A run (ProcedureBox) keeps how it goes in a RunStatus and tells every change;
-RunControls show it and call the run back. Every measurement dock has its own
-controls; the bar on top shows the chosen measurement's run with another
-one, in a row. Both read the run, never each other.
+RunControls show it and call the run back. The bar on top shows the chosen
+measurement's run in a row; a scan in a device dock has its own controls in
+a column. They read the run, never each other.
 """
 
 from dataclasses import dataclass
@@ -75,8 +76,9 @@ class Run(Protocol):
 
 
 class RunControls(QWidget):
-    """row: one line for the bar on top, the state inside the progress bar;
-    otherwise a column under the setup in a dock."""
+    """row: one line for the bar on top, the graphs first as an icon, the
+    state inside the progress bar; otherwise a column under the setup of a
+    scan in a device dock."""
 
     def __init__(self, row: bool = False, parent=None):
         super().__init__(parent)
@@ -109,16 +111,15 @@ class RunControls(QWidget):
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        buttons = (
-            self.btnStart, self.btnCheck, self.btnStop, self.btnAbort, self.btnGraphs
-        )  # fmt: skip
+        buttons = (self.btnStart, self.btnCheck, self.btnStop, self.btnAbort)
         self.state: Optional[QLabel] = None
         if row:
             layout = QHBoxLayout(self)
             layout.setSpacing(4)
-            self.comment.setMinimumWidth(120)
-            self.comment.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            layout.addWidget(self.comment, 1)
+            self.btnGraphs.setText("")
+            layout.addWidget(self.btnGraphs)
+            self.comment.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            layout.addWidget(self.comment)
             for button in buttons:
                 layout.addWidget(button)
             self.progress.setFixedWidth(200)
@@ -127,7 +128,7 @@ class RunControls(QWidget):
             layout = QVBoxLayout(self)
             layout.addWidget(self.comment)
             line = QHBoxLayout()
-            for button in buttons:
+            for button in (*buttons, self.btnGraphs):
                 line.addWidget(button)
             layout.addLayout(line)
             self.state = QLabel(IDLE)

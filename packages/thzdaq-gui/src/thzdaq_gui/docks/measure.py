@@ -1,14 +1,16 @@
-"""Measurement docks: a procedure configured and run from one widget.
+"""Measurements configured and run: the form of a procedure and its run.
 
 What a procedure takes and needs is its description by the lab
 (describe_procedure). Devices are chosen per slot from the bench, only those
-with the needed capabilities are offered. The same ProcedureBox runs quick
-scans inside device docks with the device fixed (I-V of this SIS bias). In a
-dock only the devices and parameters scroll: comment, Start/Stop, state and
-progress stay at the bottom, so they never scroll out of sight.
+with the needed capabilities are offered. A measurement's form (MeasureForm)
+is what the popup under the run bar's settings button shows: its devices and
+parameters; the bar starts and stops its run and the Log tab tells how it
+goes. A ScanBox runs a quick scan inside a device dock with the device fixed
+(I-V of this SIS bias), with its controls and log under it.
 """
 
 import json
+import logging
 from dataclasses import replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -18,7 +20,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPlainTextEdit,
-    QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -37,6 +38,7 @@ from thzdaq_api.procedures import (
 from thzdaq_gui import procedure_groups, theme
 from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.dock_names import DEVICE, MEASURE, dock_name
+from thzdaq_gui.docks.log import tell
 from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
 from thzdaq_gui.run_controls import (
     CONNECTING,
@@ -60,14 +62,15 @@ CHECK = "Check"
 
 
 class ProcedureBox(QWidget):
-    """Parameters, devices, Start/Stop and progress of one procedure.
+    """Devices and parameters of one procedure, and its run.
 
-    compact (a scan inside a device dock): one column, the dock scrolls it.
-    Otherwise the devices and parameters (under the header) scroll and the
-    controls are pinned below them. How the run goes is a RunStatus; the
-    controls in the footer, and the bar on top for the chosen measurement,
-    show it.
+    One column under its header; whoever shows it scrolls it (the popup of
+    the run bar). How the run goes is a RunStatus: the bar on top shows it
+    for the chosen measurement; what the run tells goes to the Log tab,
+    marked with the measurement.
     """
+
+    scan = False  # a scan in a device dock (ScanBox)
 
     status_changed = Signal(str)  # its line: "Running 42 %", "completed #12"
     comment_changed = Signal(str)
@@ -78,7 +81,6 @@ class ProcedureBox(QWidget):
         hub,
         procedure: str,
         fixed: Optional[Mapping[str, str]] = None,
-        compact: bool = False,
         header: Optional[QWidget] = None,
         parent=None,
     ):
@@ -91,7 +93,6 @@ class ProcedureBox(QWidget):
         # As the parameters in the form describe it: their slots
         self.info: ProcedureInfo = self.described()
         self.fixed = dict(fixed or {})
-        self.compact = compact
         self.process = None  # in the session's Processes while running
         self.reveal = None  # shows this box once its dock is in front (a folded scan)
         self.runner = session.run_model()
@@ -104,7 +105,7 @@ class ProcedureBox(QWidget):
         self.comment = ""  # of the next run
         self.settings_key = procedure_key(procedure)
         # Folded sections are remembered apart for scans in device docks
-        sections = sections_path(procedure, scan=compact)
+        sections = sections_path(procedure, scan=self.scan)
         self.devices_box = Collapsible("Devices", f"{sections}/devices")
         self.devices = self.make_devices()
         self.devices.changed.connect(self.show_devices_summary)
@@ -113,46 +114,12 @@ class ProcedureBox(QWidget):
         self.form = ParameterForm()
         self.form.set_parameters(self.info.parameters)
         self.parameters_box.addWidget(self.form)
-        setup = QWidget()
-        setup_layout = QVBoxLayout(setup)
-        if header is not None:
-            setup_layout.addWidget(header)
-        setup_layout.addWidget(self.devices_box)
-        setup_layout.addWidget(self.parameters_box)
-        self.footer = QFrame()
-        self.footer.setObjectName("procedureFooter")
-        footer = QVBoxLayout(self.footer)
-        self.controls = RunControls()
-        self.controls.bind(self)
-        footer.addWidget(self.controls)
-        # Folded, the log shows its last line
-        self.log_box = Collapsible("Log", f"{sections}/log", expanded=False)
-        self.log = QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(500)
-        self.log.setMaximumHeight(70 if compact else 110)
-        self.log_box.addWidget(self.log)
-        footer.addWidget(self.log_box)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        if compact:
-            setup_layout.setContentsMargins(0, 0, 0, 0)
-            footer.setContentsMargins(0, 6, 0, 0)
-            layout.addWidget(setup)
-            layout.addWidget(self.footer)
-        else:
-            setup_layout.addStretch()
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            scroll.setWidget(setup)
-            self.scroll = scroll
-            self.footer.setStyleSheet(
-                f"#procedureFooter {{ border-top: 1px solid {theme.BORDER}; }}"
-            )
-            footer.setContentsMargins(9, 6, 9, 9)
-            layout.addWidget(scroll, 1)
-            layout.addWidget(self.footer)
+        if header is not None:
+            layout.addWidget(header)
+        layout.addWidget(self.devices_box)
+        layout.addWidget(self.parameters_box)
         self.runner.started.connect(self.on_started)
         self.runner.resetting.connect(self.hub.clear_measurement)
         self.runner.record.connect(self.on_record)
@@ -243,22 +210,19 @@ class ProcedureBox(QWidget):
         """The choice of devices as it is remembered for the next start."""
         return self.devices.mapping()
 
-    # Status for the folded log and for whoever shows this run elsewhere
-    def note(self, text: str) -> None:
-        self.log.appendPlainText(text)
-        self.log_box.set_summary(text.splitlines()[-1] if text else "")
+    # What the run tells, and for whoever shows this run elsewhere
+    def note(self, text: str, level: int = logging.INFO) -> None:
+        """In the Log tab, marked with the measurement."""
+        tell(self.procedure, self.info.title or self.procedure, text, level)
+
+    def clear_notes(self) -> None:
+        """A new run: the Log tab keeps what earlier runs told."""
 
     def process_title(self) -> str:
-        title = self.info.title or self.procedure
-        if self.compact and self.fixed:
-            ref = next(iter(self.fixed.values()))
-            return f"{title} · {self.session.title_of(ref)}"
-        return title
+        return self.info.title or self.procedure
 
     def dock_name(self) -> str:
-        """The dock that shows this box: a scan is in its device's dock."""
-        if self.compact and self.fixed:
-            return dock_name(DEVICE, next(iter(self.fixed.values())))
+        """Where the window shows this run: the measurement in the run bar."""
         return dock_name(MEASURE, self.procedure)
 
     def show_process_status(self, text: str) -> None:
@@ -336,8 +300,7 @@ class ProcedureBox(QWidget):
         self.reached = []
         self.expected = self.graphs_of(run.plots)
         self.hub.show_run(self.expected)
-        self.log.clear()
-        self.log_box.set_summary("")
+        self.clear_notes()
         self.update_status(state=CONNECTING, done=0, total=run.steps or None)
         self.stuck.start()
         self.runner.start(self.procedure, parameters, self.mapping(), self.comment)
@@ -354,7 +317,7 @@ class ProcedureBox(QWidget):
                 self.procedure, self.parameters(), self.mapping()
             )
         except (ValueError, LabError) as e:
-            self.note(f"would not start: {e}")
+            self.note(f"would not start: {e}", logging.WARNING)
             QMessageBox.warning(self, CHECK, str(e))
             return
         steps = f"{planned.total} steps" if planned.total else "until stopped"
@@ -366,7 +329,7 @@ class ProcedureBox(QWidget):
     def on_conflict(self, message: str) -> None:
         """A device it needs is swept by another measurement: one question for
         the whole run."""
-        self.note(message)
+        self.note(message, logging.WARNING)
         answer = QMessageBox.question(
             self,
             self.info.title,
@@ -473,7 +436,7 @@ class ProcedureBox(QWidget):
         self.update_status(done=done, total=total or None)
 
     def on_failed(self, message: str) -> None:
-        self.note(message)
+        self.note(message, logging.WARNING)
         self.update_status(outcome="failed to start")
         QMessageBox.warning(self, self.info.title, message)
 
@@ -484,7 +447,7 @@ class ProcedureBox(QWidget):
             text += f": {measurement.error}"
         if measurement.metadata.get("path"):
             text += f"\nsaved {measurement.metadata['path']}"
-        self.note(text)
+        self.note(text, logging.WARNING if measurement.error else logging.INFO)
         ended = {"outcome": f"{measurement.status} #{measurement.id}"}
         if self.run_status.total is None:  # a busy bar: full at the end
             ended.update(done=1, total=1)
@@ -518,8 +481,55 @@ class ProcedureBox(QWidget):
             self.update_status(running=False, state=IDLE, can_abort=False)
 
 
-class MeasureWidget(QWidget):
-    """Dock content: the procedure box with title and description on top."""
+class ScanBox(ProcedureBox):
+    """A quick scan in a device dock, its device fixed (I-V of this SIS
+    bias): the dock scrolls it; its comment, Start/Stop, state, progress and
+    a folded log are under its devices and parameters."""
+
+    scan = True
+
+    def __init__(self, session, hub, procedure: str, fixed: Mapping[str, str]):
+        super().__init__(session, hub, procedure, fixed)
+        footer = QFrame()
+        column = QVBoxLayout(footer)
+        column.setContentsMargins(0, 6, 0, 0)
+        self.controls = RunControls()
+        self.controls.bind(self)
+        column.addWidget(self.controls)
+        # Folded, the log shows its last line
+        sections = sections_path(procedure, scan=True)
+        self.log_box = Collapsible("Log", f"{sections}/log", expanded=False)
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(500)
+        self.log.setMaximumHeight(70)
+        self.log_box.addWidget(self.log)
+        column.addWidget(self.log_box)
+        self.layout().addWidget(footer)
+
+    def note(self, text: str, level: int = logging.INFO) -> None:
+        self.log.appendPlainText(text)
+        self.log_box.set_summary(text.splitlines()[-1] if text else "")
+
+    def clear_notes(self) -> None:
+        self.log.clear()
+        self.log_box.set_summary("")
+
+    def device(self) -> str:
+        return next(iter(self.fixed.values()))
+
+    def process_title(self) -> str:
+        return f"{super().process_title()} · {self.session.title_of(self.device())}"
+
+    def dock_name(self) -> str:
+        """A scan is in its device's dock."""
+        return dock_name(DEVICE, self.device())
+
+
+class MeasureForm(QWidget):
+    """What the popup under the run bar's settings button shows of a
+    measurement: its title and description on top, its devices and
+    parameters (the box, which runs it) under them."""
 
     def __init__(self, session, hub, procedure: str, parent=None):
         super().__init__(parent)
@@ -678,6 +688,6 @@ class MonitorBox(ProcedureBox):
         return {**super().parameters(), WATCH: self.devices.entries()}
 
 
-class MonitorWidget(MeasureWidget):
+class MonitorForm(MeasureForm):
     def make_box(self, session, hub, procedure, header):
         return MonitorBox(session, hub, procedure, header=header)

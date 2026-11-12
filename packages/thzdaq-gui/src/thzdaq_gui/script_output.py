@@ -1,7 +1,6 @@
 """What a script printed, as a view: places of a traceback are links (a
 double click opens the file at that line), its first and last lines errors.
-The dock of a measurement of the bench's own and the dock of a script's file
-show it."""
+The dock of a script's file shows it."""
 
 import re
 from pathlib import Path

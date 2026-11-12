@@ -201,7 +201,7 @@ def test_local_start_events_before_the_reply_do_not_create_another_model(
         return result
 
     monkeypatch.setattr(session.lab, "call", delayed)
-    box = window.docks[f"measure:{CURRENT_VS_VOLTAGE}"].widget().box
+    box = window.measures.run(CURRENT_VS_VOLTAGE)
     box.form.set_values(
         {
             "voltage": {"start": 0, "stop": 0.001, "points": 3},

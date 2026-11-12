@@ -2,7 +2,8 @@
 
 A row per process (measurement, scan in a device dock, polling, chopper
 rotation): status, progress, time, Stop and, when the process offers it,
-Abort. A double click brings the dock of the process to the front.
+Abort. A double click shows where it runs: its dock, or the measurement
+chosen in the run bar with its parameters open.
 """
 
 from typing import Dict
@@ -37,7 +38,7 @@ def elapsed_text(seconds: float) -> str:
 
 
 class ProcessesWidget(QWidget):
-    show_requested = Signal(str)  # the dock of a process
+    show_requested = Signal(str)  # where a process runs: a dock, a measurement
     count_changed = Signal(int)
 
     def __init__(self, processes, parent=None):
@@ -108,7 +109,7 @@ class ProcessesWidget(QWidget):
         abort.clicked.connect(process.abort)
         show = QToolButton()
         show.setIcon(theme.icon("eye"))
-        show.setToolTip("Show its dock")
+        show.setToolTip("Show where it runs")
         show.clicked.connect(lambda: self.show_process(process))
         for button in (show, stop, abort):
             row.addWidget(button)

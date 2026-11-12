@@ -1,15 +1,19 @@
 """Main window: Qt Advanced Docking System docks, as in the old app.
 
-Every part of the application is a dock: Setup and Data, Processes, Log and
-Daemon pinned to the side bars (base), one dock per instrument and
-configured device, one per measurement and one per graph, placed where the
-user wants. The window builds them, its menus and its toolbar with the bar
-of the chosen measurement on top, and keeps one layout; the parts live apart:
+Setup and Data, Processes, Log and Daemon are docks pinned to the side bars
+(base); every instrument and configured device has a dock, and every graph,
+placed where the user wants. Measurements are chosen, set and run from the
+bar on top: the drop-down under its settings button shows the form of the
+chosen one. The window builds them, its menus and its toolbar, and keeps one
+layout; the parts live apart:
 
 - docking.py: the docks by name and where they open (DockSpace);
-- graph_docks.py, device_docks.py, measure_docks.py, code_docks.py: docks
-  that follow the graphs, the station, the catalog and the scripts opened;
-- runbar.py: the measurement chosen, started and stopped on top;
+- graph_docks.py, device_docks.py, code_docks.py: docks that follow the
+  graphs, the station and the scripts opened;
+- measure_forms.py: the forms of the measurements, following the catalog;
+- runbar.py: the measurement chosen, set, started and stopped on top;
+- navigator.py: the menus that find docks and Ctrl+K (Places: docks and
+  measurements);
 - workspace_menu.py: the workspace in the File menu;
 - update_dialog.py (Updates), workers.py (HangWatch).
 """
@@ -30,7 +34,6 @@ from PySide6.QtWidgets import (
     QToolButton,
     QWidgetAction,
 )
-from thzdaq_api import examples
 from thzdaq_api.daemon import StopMode
 from thzdaq_api.errors import LabError
 
@@ -42,12 +45,10 @@ from thzdaq_gui.dock_names import (
     DEVICE,
     GRAPH,
     LOG,
-    MEASURE,
     PROCESSES,
     SETUP,
-    dock_name,
 )
-from thzdaq_gui.docking import SECTIONS, DockSpace, configure_docking
+from thzdaq_gui.docking import DockSpace, configure_docking
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.processes import ProcessesWidget
@@ -63,12 +64,12 @@ from thzdaq_gui.exit_dialog import (
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.code_docks import CodeDocks
 from thzdaq_gui.graph_docks import GraphDocks
-from thzdaq_gui.measure_docks import MeasureDocks
+from thzdaq_gui.measure_forms import MeasureForms
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
-from thzdaq_gui.navigator import DockNavigator, QuickFind
+from thzdaq_gui.navigator import DockNavigator, Places, QuickFind
 from thzdaq_gui.safe_state import SafeStateAction
 from thzdaq_gui.runbar import RunBar
 from thzdaq_gui.settings import LAYOUT, STATION_PATH, WINDOW_GEOMETRY, location
@@ -123,15 +124,17 @@ class MainWindow(QMainWindow):
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
         self.code = CodeDocks(session, self.docks, self, self.start_measurement)
-        self.measures = MeasureDocks(
-            session, self.hub, self.docks, self.code.open_custom
+        self.measures = MeasureForms(session, self.hub, self.code.open_custom, self)
+        # The chosen measurement is set and run from the bar on top
+        self.runBar = RunBar(
+            session.procedures(),
+            self.measures,
+            self.settings,
+            self.code.new_measurement,
+            self.code.from_example,
         )
-        # The chosen measurement runs from the bar on top too; its dock
-        # shows its setup
-        self.runBar = RunBar(session.procedures(), self.measures.run, self.settings)
-        self.runBar.dock_requested.connect(
-            lambda procedure: self.show_dock(dock_name(MEASURE, procedure))
-        )
+        # What the menus, Ctrl+K and Processes show: docks and measurements
+        self.places = Places(self.docks, self.runBar)
 
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
@@ -217,21 +220,6 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
         file.addAction(quit_action)
         self.menuDevices = bar.addMenu("&Devices")
-        self.menuMeasures = bar.addMenu("&Measures")
-        new_measurement = QAction(theme.icon("plus"), "New measurement…", self)
-        new_measurement.setToolTip("A measurement of the bench's own: a script")
-        new_measurement.triggered.connect(self.code.new_measurement)
-        self.menuMeasures.addAction(new_measurement)
-        from_example = self.menuMeasures.addMenu(
-            theme.icon("book-open-outline"), "From an example"
-        )
-        for example in examples.examples():
-            action = from_example.addAction(example.title)
-            action.setToolTip(example.about)
-            action.triggered.connect(
-                lambda _=False, name=example.name: self.code.from_example(name)
-            )
-        self.menuMeasures.addSeparator()
         self.menuGraphs = bar.addMenu("&Graphs")
         new_graph = QAction(theme.icon("plus"), "New graph…", self)
         new_graph.triggered.connect(self.graphs.new)
@@ -239,9 +227,9 @@ class MainWindow(QMainWindow):
         self.menuGraphs.addSeparator()
         # Each menu is a search field over the tree of its docks
         self.navigators: Dict[str, DockNavigator] = {}
-        for section, menu in zip(
-            SECTIONS,
-            (self.menuDevices, self.menuMeasures, self.menuGraphs),
+        for section, menu in (
+            ("Devices", self.menuDevices),
+            ("Graphs", self.menuGraphs),
         ):
             navigator = self.navigator((section,))
             action = QWidgetAction(menu)
@@ -260,10 +248,10 @@ class MainWindow(QMainWindow):
 
     def navigator(self, sections=None) -> DockNavigator:
         return DockNavigator(
-            self.docks.listed,
-            self.docks.state,
-            self.show_dock,
-            self.docks.toggle,
+            self.places.listed,
+            self.places.state,
+            self.places.show,
+            self.places.toggle,
             sections,
             self.settings,
         )
@@ -308,13 +296,13 @@ class MainWindow(QMainWindow):
         self.dataWidget = DataWidget(self.session)
         self.logWidget = LogWidget()
         self.processesWidget = ProcessesWidget(self.session.processes)
-        self.processesWidget.show_requested.connect(self.show_dock)
+        self.processesWidget.show_requested.connect(self.places.show)
         self.daemonWidget = DaemonWidget(self.daemon)
         # Pinned to their side bars: not in the menus, never closed
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
             (DATA, "Data", self.dataWidget, "database-outline", QtAds.SideBarLeft),
-            (LOG, "Event log", self.logWidget, "text-box-outline", QtAds.SideBarBottom),
+            (LOG, "Log", self.logWidget, "text-box-outline", QtAds.SideBarBottom),
             (
                 PROCESSES,
                 "Processes",
@@ -335,35 +323,29 @@ class MainWindow(QMainWindow):
         self.docks.retitle(PROCESSES, f"Processes ({count})" if count else "Processes")
 
     def on_procedures_changed(self) -> None:
-        """The bench's own measurements changed: the docks, the bar and the
-        graphs follow."""
+        """The bench's own measurements changed: their forms, the bar and
+        the graphs follow."""
         self.measures.sync()
         self.runBar.set_procedures(self.session.procedures())
 
     def start_measurement(self, procedure: str) -> None:
-        """Start a measurement as its dock does, with the values of its form
-        (Run in the dock of its script)."""
+        """Start a measurement as the bar does, with the values of its form
+        (Run in the dock of its script): it is the one chosen from now on."""
         run = self.measures.run(procedure)
         if run is None:
             return
-        self.show_dock(dock_name(MEASURE, procedure))
+        self.runBar.choose(procedure)
         run.start()
 
     def show_dock(self, name: str) -> None:
-        """In front of the user, wherever it is (menus, Ctrl+K, Processes)."""
+        """In front of the user, wherever it is."""
         self.docks.show(name)
 
     def apply_default_layout(self) -> None:
-        """Devices on the left, graphs in the centre, the chosen measurement
-        on the right; the docks it leaves closed open floating when first
-        asked for."""
-        self.docks.close_kinds(GRAPH, MEASURE, DEVICE)
+        """Devices on the left, graphs in the centre; the docks it leaves
+        closed open floating when first asked for."""
+        self.docks.close_kinds(GRAPH, DEVICE)
         self.docks.tab_group(QtAds.CenterDockWidgetArea, self.graphs.default_docks())
-        chosen = self.runBar.chosen_name()
-        if chosen is not None:
-            self.docks.tab_group(
-                QtAds.RightDockWidgetArea, [dock_name(MEASURE, chosen)]
-            )
         self.docks.tab_group(QtAds.LeftDockWidgetArea, self.devices.default_docks())
         self.docks.unplace_closed()
 
@@ -442,9 +424,9 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def fit_columns(self) -> None:
-        """After a default layout: the device and measurement columns as wide
-        as their docks want, the graphs the rest; the layout was made before
-        the docks had their content."""
+        """After a default layout: the device column as wide as its docks
+        want, the graphs the rest; the layout was made before the docks had
+        their content."""
         self.docks.fit_columns()
 
     # State: geometry and the layout

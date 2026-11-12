@@ -161,6 +161,17 @@ QLabel[role="value"] {{ color: {ACCENT}; font-size: 13pt; }}
 QLabel[role="title"] {{ color: {ACCENT}; font-size: 13pt; font-weight: bold; }}
 QLabel[role="muted"] {{ color: {MUTED}; }}
 QScrollArea {{ border: none; }}
+QToolButton[select="true"] {{
+    background: {BASE}; border: 1px solid {BORDER}; border-radius: 3px;
+    min-height: {FIELD_HEIGHT}px; padding: 3px 22px 3px 6px;
+}}
+QToolButton[select="true"]:hover, QToolButton[select="true"]:open {{
+    border-color: {ACCENT};
+}}
+QToolButton[select="true"]::menu-indicator {{
+    image: url("{ARROWS}/down-normal.svg"); width: 10px; height: 6px;
+    subcontrol-origin: padding; subcontrol-position: center right; right: 6px;
+}}
 """
 
 
@@ -234,6 +245,27 @@ def icon(name: str, color: str = TEXT, active: str = ACCENT) -> QIcon:
         return QIcon(qta.icon(f"mdi6.{name}", color=color, color_active=active))
     except Exception:
         return QIcon()
+
+
+class Spinner:
+    """A turning icon for what goes on now, in one widget that paints it (a
+    menu, a button): qtawesome turns it by repainting that widget on a timer
+    of its own, made at the icon's first paint. The timer runs only while
+    the icon is shown: run(False) once nothing shows it."""
+
+    def __init__(self, widget):
+        import qtawesome as qta
+
+        self.animation = qta.Spin(widget, interval=40, step=12)
+        self.icon = QIcon(
+            qta.icon("mdi6.loading", color=ACCENT, animation=self.animation)
+        )
+
+    def run(self, on: bool) -> None:
+        if on:
+            self.animation.start()
+        else:
+            self.animation.stop()
 
 
 # Icons by device kind or capability, for docks, menus and lists
