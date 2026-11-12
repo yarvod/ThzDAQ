@@ -241,15 +241,15 @@ class TestWindow:
         assert tn.isCurrentTab() and not tn.isFloating()
 
     def test_base_docks_are_pinned_to_their_side_bars(self, window):
-        """Setup and Data on the left, the rest at the bottom; no close
-        button, not in the menus or Ctrl+K."""
+        """Setup and Data on the left, the Assistant on the right, the rest
+        at the bottom; no close button, not in the menus or Ctrl+K."""
         import PySide6QtAds as QtAds
 
         sides = {
             "setup": QtAds.SideBarLeft, "data": QtAds.SideBarLeft,
             "processes": QtAds.SideBarBottom, "log": QtAds.SideBarBottom,
             "daemon": QtAds.SideBarBottom, "editor": QtAds.SideBarBottom,
-            "console": QtAds.SideBarBottom,
+            "console": QtAds.SideBarBottom, "assistant": QtAds.SideBarRight,
         }  # fmt: skip
         for name, side in sides.items():
             dock = window.docks[name]

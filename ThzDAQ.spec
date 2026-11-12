@@ -36,8 +36,13 @@ datas += collect_data_files("jedi") + collect_data_files("parso")
 provisioners, provisioner_modules = collect_entry_point(
     "jupyter_client.kernel_provisioners"
 )
+# The assistant keeps its keys in the system's keyring: keyring finds its
+# backends (Windows Credential Locker, macOS Keychain) by their entry points
+keyrings, keyring_modules = collect_entry_point("keyring.backends")
 window = Analysis(
-    ["main.py"], datas=datas + provisioners, hiddenimports=provisioner_modules
+    ["main.py"],
+    datas=datas + provisioners + keyrings,
+    hiddenimports=provisioner_modules + keyring_modules,
 )
 # Commands that packages add to the command line (thzdaq mcp) are found by
 # their entry points: their metadata and modules go in with the guides for

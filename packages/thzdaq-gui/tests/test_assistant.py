@@ -11,7 +11,7 @@ from model_server import NO_TOOLS, calls, says
 from thzdaq_api import catalog, guides
 from thzdaq_api.devices import ReadDevice
 from thzdaq_api.events import ApprovalRequested
-from thzdaq_api.origins import ASSISTANT, ASSISTANT_CLIENT, GUI
+from thzdaq_api.origins import ASSISTANT, ASSISTANT_CLIENT
 from thzdaq_api.tools import Reach, tools
 from thzdaq_gui.assistant.conversation import STOPPED, Conversation, Outcome
 from thzdaq_gui.assistant.keys import SERVICE, Keys

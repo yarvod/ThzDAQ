@@ -63,6 +63,9 @@ PRERELEASES = "updates/prereleases"
 RECENT_WORKSPACES = "workspaces/recent"  # newest first
 DEFAULT_WORKSPACE = "workspaces/default"  # opened at start; none: the program's
 EDITOR = "workspaces/editor"  # the program a workspace opens in without VS Code
+# The assistant's model servers (JSON, keys apart: the keyring) and the one chosen
+ASSISTANT_PROVIDERS = "assistant/providers"
+ASSISTANT_PROVIDER = "assistant/provider"
 
 
 def procedure_key(procedure: str) -> str:

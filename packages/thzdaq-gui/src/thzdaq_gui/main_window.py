@@ -1,7 +1,8 @@
 """Main window: Qt Advanced Docking System docks, as in the old app.
 
-Setup and Data, Processes, Log, Daemon, Editor (a tab per script's file) and
-Console (a tab per Python console) are docks pinned to the side bars (base); every instrument and configured
+Setup and Data, Processes, Log, Daemon, Editor (a tab per script's file),
+Console (a tab per Python console) and Assistant (the chat with a model that
+uses the bench's tools) are docks pinned to the side bars (base); every instrument and configured
 device has a dock, and every graph, placed where the user wants.
 Measurements are chosen, set and run from the bar on top: the drop-down under
 its settings button shows the form of the chosen one. The window builds
@@ -41,6 +42,7 @@ from thzdaq_api.errors import LabError
 from thzdaq_gui import theme
 from thzdaq_gui.device_docks import DeviceDocks
 from thzdaq_gui.dock_names import (
+    ASSISTANT,
     CONSOLE,
     DAEMON,
     DATA,
@@ -52,6 +54,7 @@ from thzdaq_gui.dock_names import (
     SETUP,
 )
 from thzdaq_gui.docking import DockSpace, configure_docking
+from thzdaq_gui.docks.assistant import AssistantWidget
 from thzdaq_gui.docks.data import DataWidget
 from thzdaq_gui.docks.log import LogWidget
 from thzdaq_gui.docks.processes import ProcessesWidget
@@ -72,6 +75,7 @@ from thzdaq_gui.measure_forms import MeasureForms
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
+from thzdaq_gui.models.assistant import AssistantModel, ProvidersModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.navigator import DockNavigator, Places, QuickFind
 from thzdaq_gui.safe_state import SafeStateAction
@@ -147,6 +151,7 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
+        self.assistant = AssistantModel(session, ProvidersModel(self), self)
         self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()
         self.build_toolbar()
@@ -310,6 +315,7 @@ class MainWindow(QMainWindow):
         self.processesWidget = ProcessesWidget(self.session.processes)
         self.processesWidget.show_requested.connect(self.places.show)
         self.daemonWidget = DaemonWidget(self.daemon)
+        self.assistantWidget = AssistantWidget(self.assistant)
         # Pinned to their side bars: not in the menus, never closed
         for name, title, widget, icon_name, side in (
             (SETUP, "Setup", self.setupWidget, "tune-vertical", QtAds.SideBarLeft),
@@ -331,6 +337,13 @@ class MainWindow(QMainWindow):
                 QtAds.SideBarBottom,
             ),
             (CONSOLE, "Console", self.consoles.tabs, "console", QtAds.SideBarBottom),
+            (
+                ASSISTANT,
+                "Assistant",
+                self.assistantWidget,
+                "robot-outline",
+                QtAds.SideBarRight,
+            ),
         ):
             self.docks.add(
                 name, title, widget, "", theme.icon(icon_name), auto_hide=side,
@@ -529,6 +542,7 @@ class MainWindow(QMainWindow):
         # Before the session stops calling the lab: monitors cancel their polls
         self.docks.close()
         self.consoles.close()
+        self.assistant.close()
         self.daemon.close()
         self.logWidget.detach()
         if stop:
