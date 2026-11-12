@@ -102,7 +102,7 @@ packages/
     forms.py             # формы из параметров, выбор устройств по слотам
     measurements.py      # модель таблицы измерений
     settings.py          # реестр (сборка / исходники), папки программы
-    exit_dialog.py, theme.py, resources/docks.css, wheel.py, iv_analysis.py
+    exit_dialog.py, theme.py, resources/docks.css, resources/arrows/, wheel.py, iv_analysis.py
     updates.py, update_dialog.py, updater.py, version.py   # обновления из GitHub Releases
 stations/                # профили стендов (YAML)
 main.py                  # запуск GUI и вход PyInstaller
@@ -623,6 +623,9 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   может обслуживать только один из них.
 - Тема (`theme.py`): тёмная палитра Fusion с оранжевым акцентом, стили доков по
   `focus_highlighting_dark.css` ADS (`resources/docks.css`), иконки Material Design (qtawesome).
+  Стиль Fusion на всех ОС, поэтому поля на Windows и macOS одинаковы: строки, списки, спинбоксы
+  и кнопки одной высоты (`FIELD_HEIGHT`), стрелки спинбоксов и списков — свои картинки в цветах
+  темы (`resources/arrows/`: обычная, при наведении, неактивная), а не мелкие стрелки Fusion.
   `wheel.py`: колесо мыши меняет спинбокс или список только после клика в него, иначе
   прокручивает док.
 - Обновления (Help → Check for updates): `updates.py` читает GitHub Releases (теги `vX.Y.Z`,

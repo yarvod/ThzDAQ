@@ -472,6 +472,49 @@ def test_app_icon_has_a_drawing_for_every_size(app):
     assert pixmap.width() == 16 and pixmap.pixelColor(8, 0).alpha() == 255
 
 
+def test_fields_are_as_tall_as_buttons(app):
+    from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton
+
+    from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
+
+    combo = QComboBox()
+    combo.addItem("GHz")
+    fields = (CompactDoubleSpinBox(), CompactSpinBox(), combo, QLineEdit())
+    button = QPushButton("Set")
+    for widget in (*fields, button):
+        widget.ensurePolished()
+    heights = {type(w).__name__: w.sizeHint().height() for w in (*fields, button)}
+    assert len(set(heights.values())) == 1, heights
+
+
+def test_a_compact_spin_box_shows_its_whole_value(app):
+    from thzdaq_gui.forms import CompactDoubleSpinBox
+
+    spin = CompactDoubleSpinBox()
+    spin.setDecimals(6)
+    spin.setRange(-1e15, 1e15)
+    spin.setSuffix(" mV")
+    spin.setValue(-1234.5)
+    spin.resize(spin.sizeHint())
+    spin.show()
+    app.processEvents()
+    edit = spin.lineEdit()
+    assert edit.fontMetrics().horizontalAdvance(edit.text()) < edit.width()
+    spin.hide()
+
+
+def test_arrows_are_drawn_in_the_theme_colors():
+    from pathlib import Path
+
+    from thzdaq_gui import theme
+
+    colors = {"normal": theme.TEXT, "hover": theme.ACCENT, "disabled": theme.MUTED}
+    for direction in ("up", "down"):
+        for state, color in colors.items():
+            path = Path(theme.ARROWS) / f"{direction}-{state}.svg"
+            assert f'stroke="{color}"' in path.read_text(encoding="utf-8")
+
+
 QUIT = """
 import qtawesome as qta
 from PySide6.QtCore import QTimer
