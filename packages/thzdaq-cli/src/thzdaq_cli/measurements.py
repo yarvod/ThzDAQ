@@ -310,6 +310,9 @@ LINES: Dict[type, Callable[[Any], str]] = {
     + (", ".join(f"{l.device} {l.mode} by #{l.run}" for l in b.leases) or "nothing"),
     events.ApprovalRequested: lambda b: show.approval(b.approval),
     events.ApprovalAnswered: lambda b: show.answer(b.id, b.answer),
+    events.UiRequested: lambda b: f"window {b.window}: {b.operation} "
+    + " ".join(f"{k}={v}" for k, v in b.arguments.items() if v not in (None, {}, ""))
+    + f" ({b.origin})",
     events.Resync: lambda b: "events were lost (the daemon restarted)",
 }
 

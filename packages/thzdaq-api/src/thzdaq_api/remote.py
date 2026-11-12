@@ -36,6 +36,7 @@ from thzdaq_api.transport import (
     PID,
     SEQ,
     TOKEN,
+    WINDOW,
     bearer,
     frames,
     request,
@@ -69,11 +70,16 @@ class RemoteLab:
         origin: str = "client",
         kind: str = "client",
         find: Optional[Find] = None,
+        window: str = "",
     ):
+        """window: the id of the main window this client is (thzdaq_api.ui),
+        told with its event streams: the daemon sends it what agents ask of
+        the window."""
         self.host = host
         self.origin = origin
         self.kind = kind
         self.find = find
+        self.window = window
         self.heartbeat: Optional[Heartbeat] = None  # the last one heard
         self._streams: List["_Stream"] = []
         self._lock = threading.Lock()
@@ -214,6 +220,8 @@ class _Stream:
             ORIGIN: self.lab.origin,
             PID: str(os.getpid()),
         }
+        if self.lab.window:
+            headers[WINDOW] = self.lab.window
         if self.seq is not None:
             headers[LAST_EVENT] = str(self.seq)
         self._connection = http.client.HTTPConnection(

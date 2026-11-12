@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass
 from importlib import metadata, util
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import msgspec
 
@@ -344,10 +344,14 @@ def log_tail(files: DaemonFiles, lines: int = 20) -> str:
 
 
 def connect(
-    simulate: bool = False, origin: str = "client", kind: str = "client"
+    simulate: bool = False,
+    origin: str = "client",
+    kind: str = "client",
+    window: str = "",
 ) -> RemoteLab:
     """The running daemon; LabError UNREACHABLE when none answers, WRONG_VERSION
-    when it speaks another contract."""
+    when it speaks another contract. window: the id of the main window the
+    client is (RemoteLab)."""
     files = DaemonFiles.of(simulate)
     host = read_host(files)
     if host is None:
@@ -370,7 +374,7 @@ def connect(
             f"{answer.api_version}, this client {API_VERSION}",
             "restart it with this installation when no measurement runs",
         )
-    return RemoteLab(host, origin, kind, find=lambda: read_host(files))
+    return RemoteLab(host, origin, kind, lambda: read_host(files), window)
 
 
 def connect_or_start(
@@ -380,11 +384,17 @@ def connect_or_start(
     kind: str = "client",
     command: Optional[Sequence[str]] = None,
     timeout: float = START_S,
+    window: str = "",
 ) -> RemoteLab:
     """The running daemon, started first when none runs. Two clients starting
-    at once start one daemon: the second finds the first one's."""
+    at once start one daemon: the second finds the first one's. window: the
+    id of the main window the client is (RemoteLab)."""
+
+    def reach() -> RemoteLab:
+        return connect(simulate, origin, kind, window)
+
     try:
-        return connect(simulate, origin, kind)
+        return reach()
     except LabError as e:
         if e.code != ErrorCode.UNREACHABLE or os.environ.get(NO_AUTOSTART_ENV):
             raise
@@ -398,7 +408,7 @@ def connect_or_start(
         )
     try:
         try:
-            return connect(simulate, origin, kind)  # another client started it
+            return reach()  # another client started it
         except LabError as e:
             if e.code != ErrorCode.UNREACHABLE:
                 raise
@@ -416,7 +426,7 @@ def connect_or_start(
         if simulate:
             arguments.append(SIMULATE)
         process = spawn(arguments, files)
-        lab = _wait_for_start(files, process, simulate, origin, kind, timeout)
+        lab = _wait_for_start(files, process, reach, timeout)
         logger.info(f"daemon started (pid {lab.host.pid})")
         return lab
     finally:
@@ -426,9 +436,7 @@ def connect_or_start(
 def _wait_for_start(
     files: DaemonFiles,
     process: subprocess.Popen,
-    simulate: bool,
-    origin: str,
-    kind: str,
+    reach: Callable[[], RemoteLab],
     timeout: float,
 ) -> RemoteLab:
     deadline = time.monotonic() + timeout
@@ -441,7 +449,7 @@ def _wait_for_start(
             )
         if read_host(files) is not None:
             try:
-                return connect(simulate, origin, kind)
+                return reach()
             except LabError as e:
                 if e.code != ErrorCode.UNREACHABLE:
                     raise

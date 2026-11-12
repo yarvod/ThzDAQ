@@ -20,14 +20,20 @@ R = TypeVar("R")
 
 class LocalLab:
     def __init__(
-        self, assembled: Assembled, origin: str = "local", kind: str = "local"
+        self,
+        assembled: Assembled,
+        origin: str = "local",
+        kind: str = "local",
+        window: str = "",
     ):
-        """kind: the kind of client it listens as (gui, cli, cli:answers, ...)."""
+        """kind: the kind of client it listens as (gui, cli, cli:answers, ...);
+        window: the id of the main window it is (as RemoteLab's)."""
         self.assembled = assembled
         self.dispatcher = assembled.dispatcher
         self.events = assembled.events
         self.origin = origin
         self.kind = kind
+        self.window = window
 
     def call(self, operation: Operation[R]) -> R:
         data = self.dispatcher.dispatch_json(
@@ -42,7 +48,7 @@ class LocalLab:
         stop = self.events.subscribe(
             lambda event: listener(wire.decode_event(wire.encode(event))), since
         )
-        leave = self.assembled.control.listen(self.kind, self.origin)
+        leave = self.assembled.control.listen(self.kind, self.origin, self.window)
 
         def unsubscribe() -> None:
             stop()
@@ -74,11 +80,11 @@ class LocalControl:
     def clients(self) -> Tuple[ClientInfo, ...]:
         return tuple(self._clients.values())
 
-    def listen(self, kind: str, origin: str) -> Callable[[], None]:
+    def listen(self, kind: str, origin: str, window: str = "") -> Callable[[], None]:
         """A client of this kind until what this returns is called."""
         self._last += 1
         key = self._last
-        self._clients[key] = ClientInfo(kind, os.getpid(), origin, wall_time())
+        self._clients[key] = ClientInfo(kind, os.getpid(), origin, wall_time(), window)
         return lambda: self._clients.pop(key, None)
 
     def stop(self, restart: bool) -> None:

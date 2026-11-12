@@ -47,9 +47,9 @@ def lab(tmp_path):
 def lab_as(lab):
     """The same bench called as another client: lab_as("gui"), lab_as("mcp:x");
     it listens as the kind its origin names unless given (lab_as("cli",
-    "cli:answers"))."""
+    "cli:answers")), as a main window when given its id (window=)."""
     from thzdaq_core.application.local import LocalLab
 
-    return lambda origin, kind=None: LocalLab(
-        lab.assembled, origin, kind or origin.split(":")[0]
+    return lambda origin, kind=None, window="": LocalLab(
+        lab.assembled, origin, kind or origin.split(":")[0], window
     )

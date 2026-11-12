@@ -13,6 +13,7 @@ TOKEN = "Authorization"
 ORIGIN = "X-Thzdaq-Origin"  # who calls: gui, cli, mcp:<name>, assistant
 CLIENT = "X-Thzdaq-Client"  # what kind of client listens
 PID = "X-Thzdaq-Pid"
+WINDOW = "X-Thzdaq-Window"  # the id of the main window a client is (thzdaq_api.ui)
 SEQ = "X-Thzdaq-Seq"  # the last event when an operation ended
 LAST_EVENT = "Last-Event-ID"
 

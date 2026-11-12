@@ -63,6 +63,7 @@ class ClientInfo(msgspec.Struct, frozen=True):
     pid: int
     origin: str
     since: str  # wall time, ISO
+    window: str = ""  # the id of the main window it is: one ui_* go to
 
 
 class LaneInfo(msgspec.Struct, frozen=True):

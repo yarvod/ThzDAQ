@@ -17,6 +17,7 @@ from thzdaq_api import (
     scripts,
     sessions,
     station,
+    ui,
 )
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.operation import Operation
@@ -79,6 +80,12 @@ OPERATIONS: Tuple[Type[Operation], ...] = (
     approvals.AnswerApproval,
     approvals.AskUser,
     approvals.WaitAnswer,
+    ui.UiState,
+    ui.UiOpen,
+    ui.UiFillMeasurement,
+    ui.UiHighlight,
+    ui.WindowActive,
+    ui.AnswerUi,
     daemon.GetDaemonStatus,
     daemon.GetDaemonSettings,
     daemon.SetDaemonSettings,
