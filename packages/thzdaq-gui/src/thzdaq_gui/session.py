@@ -35,7 +35,7 @@ from thzdaq_api.station import (
 )
 
 from thzdaq_gui.bridge import Bridge
-from thzdaq_gui.folders import MEASUREMENTS, PROFILES, Folders
+from thzdaq_gui.folders import MEASUREMENTS, PROFILES, SCRIPTS, Folders
 from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.processes import Processes
 from thzdaq_gui.settings import stations_dir
@@ -81,7 +81,11 @@ class Session(QObject):
         self.measurements = MeasurementsModel(self, self)
         # Where file dialogs start until the user picks a folder of a kind
         self.folders = Folders(
-            {MEASUREMENTS: lambda: self.data_root, PROFILES: stations_dir}
+            {
+                MEASUREMENTS: lambda: self.data_root,
+                PROFILES: stations_dir,
+                SCRIPTS: lambda: self.workspace.scripts,
+            }
         )
         self.runs: List[RunModel] = []
         self.processes = Processes(self)  # what runs now, for the Processes dock

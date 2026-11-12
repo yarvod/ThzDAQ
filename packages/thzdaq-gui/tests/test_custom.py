@@ -1,15 +1,15 @@
 """The bench's own measurements in the window: in the list on top (group
 Custom) and Ctrl+K, made from a blank or an example, their forms in the
 drop-down of the bar, run with what their script prints in the Log tab, and
-their scripts in the dock of a file: saved, checked, completed, changed
-outside, kept by a measurement."""
+their scripts in tabs of the Editor dock: saved, checked, completed, changed
+outside, kept by a measurement, closed asking about what is not saved."""
 
 import msgspec
 import pytest
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 from thzdaq_api.custom import LIBRARY
 
-from thzdaq_gui.dock_names import CODE, MEASURE, dock_name
+from thzdaq_gui.dock_names import CODE, EDITOR, MEASURE, dock_name
 
 TOLD = '''"""Told
 
@@ -41,8 +41,14 @@ def named(monkeypatch):
     return answer
 
 
-def code_dock(window, path):
-    return dock_name(CODE, str(path.resolve()))
+def tab_of(window, path):
+    """The tab of a file in Editor."""
+    return window.code.widgets[str(path.resolve())]
+
+
+def titles(window):
+    tabs = window.code.tabs
+    return [tabs.title(widget) for widget in tabs.widgets()]
 
 
 def appears(window, wait, procedure):
@@ -101,17 +107,64 @@ def test_a_measurement_runs_from_the_bar_and_logs_what_it_prints(window, wait, l
     assert all("custom.told" == r.measurement for r in log.records if r.text in shown)
 
 
-def test_a_new_measurement_opens_in_the_dock_of_its_file(window, wait, named, library):
+def test_a_new_measurement_opens_in_a_tab_of_editor(window, wait, named, library):
+    tabs = window.code.tabs
+    assert tabs.currentWidget() is not tabs.tabs  # nothing open: the hint
     named["name"] = "scan"
     window.code.new_measurement()
     path = library / "scan.py"
     assert path.exists() and 'with lab.measurement("scan"' in path.read_text()
-    dock = window.docks[code_dock(window, path)]
-    assert not dock.isClosed() and dock.isCurrentTab()
-    assert dock.windowTitle() == "scan.py"
+    widget = tab_of(window, path)
+    assert tabs.current() is widget and titles(window) == ["scan.py"]
+    # Editor unfolds in front; files are no docks of their own
+    assert window.docks.state(EDITOR) == "front"
+    assert not any(name.startswith(f"{CODE}:") for name in window.docks)
     appears(window, wait, "custom.scan")
-    window.code.open(path)  # again: the same dock
-    assert sum(1 for n in window.docks if n.startswith(f"{CODE}:")) == 1
+    (library / "told.py").write_text(TOLD, encoding="utf-8")
+    window.code.open(library / "told.py")
+    assert titles(window) == ["scan.py", "told.py"]
+    window.code.open(path, 3)  # again: the same tab, at the line
+    assert titles(window) == ["scan.py", "told.py"] and tabs.current() is widget
+    assert widget.editor.textCursor().blockNumber() == 2
+    # Processes lead to a file run from it: its tab
+    window.code.tabs.show_tab(tab_of(window, library / "told.py"))
+    window.show_dock(dock_name(CODE, str(path.resolve())))
+    assert tabs.current() is widget
+
+
+def test_tabs_close_by_their_button_or_a_middle_click(window, library, monkeypatch):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QTabBar
+
+    paths = []
+    for name in ("one", "two"):
+        paths.append(library / f"{name}.py")
+        paths[-1].write_text(TOLD, encoding="utf-8")
+        window.code.open(paths[-1])
+    tabs = window.code.tabs
+    one, two = (tab_of(window, path) for path in paths)
+    one.editor.insertPlainText("# more\n")
+    assert titles(window) == ["one.py ●", "two.py"]
+    # Unsaved: its close button asks, Cancel keeps it
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Cancel)
+    close = tabs.tabs.tabBar().tabButton(0, QTabBar.RightSide)
+    close.click()
+    assert titles(window) == ["one.py ●", "two.py"]
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Discard)
+    close.click()
+    assert titles(window) == ["two.py"]
+    assert str(paths[0].resolve()) not in window.code.widgets
+    assert not window.code.unsaved()
+    # A middle click closes a tab too; with none the hint is back
+    bar = tabs.tabs.tabBar()
+    at = QPointF(bar.tabRect(0).center())
+    released = QMouseEvent(
+        QEvent.MouseButtonRelease, at, at, Qt.MiddleButton, Qt.NoButton, Qt.NoModifier
+    )
+    tabs.eventFilter(bar, released)
+    assert titles(window) == [] and window.code.widgets == {}
+    assert tabs.currentWidget() is not tabs.tabs
 
 
 def test_an_example_goes_into_the_library_under_a_free_name(
@@ -124,24 +177,25 @@ def test_an_example_goes_into_the_library_under_a_free_name(
     )
 
 
-def test_the_dock_of_a_file_saves_checks_and_asks_before_it_closes(
+def test_the_tab_of_a_file_saves_checks_and_asks_before_it_closes(
     window, wait, library, monkeypatch
 ):
     path = library / "told.py"
     path.write_text(TOLD, encoding="utf-8")
     appears(window, wait, "custom.told")
     window.code.open(path)
-    name = code_dock(window, path)
-    widget = window.code.widgets[name]
+    widget = tab_of(window, path)
+    tabs = window.code.tabs
     widget.editor.setPlainText(TOLD + "print(nothing)\n")
-    assert window.docks[name].windowTitle() == "told.py •"
+    assert tabs.title(widget) == "told.py ●"
+    assert window.code.unsaved()
     widget.save()
     wait(lambda: path.read_text(encoding="utf-8").endswith("print(nothing)\n"))
     wait(
         lambda: widget.problems.count() and "nothing" in widget.problems.item(0).text()
     )
     assert 9 in widget.editor.problems  # its line is marked
-    assert window.docks[name].windowTitle() == "told.py"
+    assert tabs.title(widget) == "told.py"
     # The form follows the script saved
     widget.editor.setPlainText(
         TOLD.replace(
@@ -155,18 +209,20 @@ def test_the_dock_of_a_file_saves_checks_and_asks_before_it_closes(
     # Unsaved: closing asks, Cancel keeps it
     widget.editor.insertPlainText("# more\n")
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Cancel)
-    window.docks[name].requestCloseDockWidget()
-    assert name in window.docks
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Discard)
-    window.docks[name].requestCloseDockWidget()
-    assert name not in window.docks
+    assert not tabs.request_close(widget)
+    assert tabs.widgets() == [widget]
+    # Save: saved, then closed
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Save)
+    assert tabs.request_close(widget)
+    assert tabs.widgets() == []
+    wait(lambda: "# more" in path.read_text(encoding="utf-8"))
 
 
 def test_a_file_changed_outside_is_taken_or_asked_about(window, wait, library):
     path = library / "told.py"
     path.write_text(TOLD, encoding="utf-8")
     window.code.open(path)
-    widget = window.code.widgets[code_dock(window, path)]
+    widget = tab_of(window, path)
     path.write_text(TOLD + "# by an agent\n", encoding="utf-8")
     wait(lambda: widget.text.endswith("# by an agent\n"))
     widget.editor.insertPlainText("# mine\n")
@@ -181,7 +237,7 @@ def test_completions_know_the_bench(window, wait, library):
     path = library / "told.py"
     path.write_text(TOLD, encoding="utf-8")
     window.code.open(path)
-    model = window.code.widgets[code_dock(window, path)].model
+    model = tab_of(window, path).model
     text = 'import thzdaq\nlab = thzdaq.connect()\nbias = lab["sis_bias_1"]\nbias.vo'
     assert "sis_bias_2" in model.complete('x = lab["sis', 1, len('x = lab["sis'))
     words = model.complete(text, 4, len("bias.vo"))
@@ -193,9 +249,9 @@ def test_completions_know_the_bench(window, wait, library):
 
 def test_the_script_a_measurement_kept_opens_as_its_text(window, wait, named, library):
     window.code.open_text("#12 scan.py", TOLD)
-    (name,) = [n for n in window.docks if n.startswith(f"{CODE}:#")]
-    widget = window.code.widgets[name]
-    assert window.docks[name].windowTitle() == "#12 scan.py"
+    window.code.open_text("#12 scan.py", TOLD)  # again: a tab of its own
+    assert titles(window) == ["#12 scan.py", "#12 scan.py"]
+    widget = window.code.tabs.current()
     assert not widget.runButton.isEnabled()
     named["name"] = "scan_again"
     widget.save()  # into the library, under a name

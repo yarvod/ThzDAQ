@@ -1,6 +1,7 @@
-"""Docks of scripts' files: one per file, opened as the current tab (the first
-between the columns, as a graph), titled by the file and marked while its
-text is not saved; closed with unsaved changes, it asks first.
+"""Scripts' files in the Editor dock: a tab per file (and per text a
+measurement kept), opened as the current tab at a line, titled by the file
+and marked while its text is not saved; closed with unsaved changes, it asks
+first. Opening one unfolds Editor at the bottom and puts it in front.
 
 The bench's own measurements are made here: New measurement (a blank one)
 and From an example go into the library (write_custom) and open. The script
@@ -11,21 +12,22 @@ into the library under a name.
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
-import PySide6QtAds as QtAds
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 from thzdaq_api import examples
 from thzdaq_api.custom import WriteCustom, valid_name
 from thzdaq_api.errors import LabError
 
 from thzdaq_gui import theme
-from thzdaq_gui.dock_names import CODE, dock_name
+from thzdaq_gui.dock_names import CODE, EDITOR, dock_name
 from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.code import SAVE_TO_LIBRARY, CodeWidget
+from thzdaq_gui.docks.tabbed import TabbedDock
+from thzdaq_gui.folders import SCRIPTS
 from thzdaq_gui.models.code import CodeModel
 
-SECTION = "Measures"
-GROUP = "Code"
 ICON = "language-python"
+OPEN_SCRIPT = "Open a script…"
+HINT = "No script open"
 NEW_TITLE = "New measurement"
 BLANK = '''"""{title}
 
@@ -56,26 +58,39 @@ class CodeDocks:
         start: Callable[[str], None],
     ):
         """start(procedure): one of the bench's own started as its dock
-        starts it."""
+        starts it. tabs is the content of the Editor dock (the window adds
+        it among the base docks)."""
         self.session = session
         self.docks = docks
         self.window = window
         self.start = start
-        self.texts = 0  # texts opened without a file, to name their docks
-        self.widgets: Dict[str, CodeWidget] = {}  # by dock name
+        self.texts = 0  # texts opened without a file, to tell them apart
+        # by key: the path of its file, or #<n> <title> of a text
+        self.widgets: Dict[str, CodeWidget] = {}
+        self.tabs = TabbedDock(
+            HINT,
+            (
+                (OPEN_SCRIPT, "folder-open-outline", self.open_script),
+                (f"{NEW_TITLE}…", "plus", self.new_measurement),
+            ),
+            self.closing,
+        )
+        self.tabs.closed.connect(self.forget)
+        # A script run from a file is shown by its tab (its Processes entry)
+        docks.show_inside(CODE, lambda key: self.open_place(Path(key), 0))
 
     def open(self, path: Path, line: int = 0) -> None:
-        """The dock of a file, as the current tab; at a line (from 1)."""
-        name = dock_name(CODE, str(Path(path).resolve()))
-        if name not in self.docks:
+        """The tab of a file, as the current one; at a line (from 1)."""
+        key = str(Path(path).resolve())
+        widget = self.widgets.get(key)
+        if widget is None:
             try:
-                model = CodeModel.of_file(self.session, Path(path).resolve())
+                model = CodeModel.of_file(self.session, Path(key))
             except OSError as e:
                 QMessageBox.warning(self.window, Path(path).name, str(e))
                 return
-            self.add(name, model)
-        self.docks.open(name)
-        self.widgets[name].go_to(line)
+            widget = self.add(key, model)
+        self.show(widget, line)
 
     def open_custom(self, procedure: str, line: int = 0) -> None:
         """The script of one of the bench's own measurements."""
@@ -88,34 +103,47 @@ class CodeDocks:
     def open_text(self, title: str, text: str) -> None:
         """A text without a file (the script a measurement kept)."""
         self.texts += 1
-        name = dock_name(CODE, f"#{self.texts} {title}")
-        self.add(name, CodeModel(self.session, None, text, title))
-        self.docks.open(name)
+        key = f"#{self.texts} {title}"
+        self.show(self.add(key, CodeModel(self.session, None, text, title)))
 
-    def add(self, name: str, model: CodeModel) -> None:
+    def open_script(self) -> None:
+        """A file chosen in a dialog (from the workspace's scripts first)."""
+        path = self.session.folders.open_path(
+            self.window, SCRIPTS, OPEN_SCRIPT.rstrip("…"), "Python (*.py)"
+        )
+        if path is not None:
+            self.open(path)
+
+    def add(self, key: str, model: CodeModel) -> CodeWidget:
         widget = CodeWidget(model, self.run_file, self.open_place)
-        self.widgets[name] = widget
-        dock = self.docks.add(
-            name, model.title, widget, SECTION, theme.icon(ICON),
-            QtAds.CenterDockWidgetArea, group=GROUP, hint=str(model.path or ""),
-            closing=lambda: self.closing(name),
-        )  # fmt: skip
-        dock.toggleView(False)  # placed by open()
-        widget.title_changed.connect(lambda title: self.docks.retitle(name, title))
+        self.widgets[key] = widget
+        self.tabs.add(widget, widget.title(), str(model.path or ""), theme.icon(ICON))
+        widget.title_changed.connect(lambda title: self.tabs.retitle(widget, title))
         widget.start_requested.connect(self.start)
         widget.library_requested.connect(
             lambda text: self.to_library(model.title, text)
         )
+        return widget
 
-    def closing(self, name: str) -> bool:
-        """A dock with changes not saved asks first; one that closes goes."""
-        if not self.widgets[name].may_close():
-            return False
-        self.widgets.pop(name)
-        return True
+    def show(self, widget: CodeWidget, line: int = 0) -> None:
+        """Its tab current, Editor unfolded in front, the cursor at the line."""
+        self.tabs.show_tab(widget)
+        self.docks.open(EDITOR)
+        widget.go_to(line)
+        widget.editor.setFocus()
+
+    def closing(self, widget: CodeWidget) -> bool:
+        """A tab with changes not saved asks first."""
+        return widget.may_close()
+
+    def forget(self, widget: CodeWidget) -> None:
+        """Its tab closed."""
+        for key, open_widget in list(self.widgets.items()):
+            if open_widget is widget:
+                del self.widgets[key]
 
     def unsaved(self) -> bool:
-        """Some dock holds changes not saved (the window asks before it goes)."""
+        """Some tab holds changes not saved (the window asks before it goes)."""
         return any(widget.unsaved() for widget in self.widgets.values())
 
     def run_file(self, path: Path) -> None:

@@ -1,10 +1,12 @@
 """Names of docks, as ADS saves them in the layout, and of measurements
 where the window shows them (Ctrl+K, Processes).
 
-A dock of a graph, device or script's file is named by its kind and key
-(graph:I-V, device:sis_bias_1, code:/path/to/pv.py); the base docks by their
-kind alone. Saved layouts hold these names: they never change. A measurement
-is no dock: measure:sis.current_vs_voltage names it in the run bar.
+A dock of a graph or device is named by its kind and key (graph:I-V,
+device:sis_bias_1); the base docks by their kind alone. Saved layouts hold
+these names: they never change. A place inside a dock is named the same way:
+code:/path/to/pv.py is a file's tab in Editor (where Processes leads to a
+script run from it). A measurement is no dock: measure:sis.current_vs_voltage
+names it in the run bar.
 """
 
 from typing import Optional
@@ -17,7 +19,8 @@ DATA = "data"
 LOG = "log"
 PROCESSES = "processes"
 DAEMON = "daemon"
-CODE = "code"  # the dock of a script's file
+EDITOR = "editor"  # the tabs of scripts' files
+CODE = "code"  # a script's file: its tab in Editor
 
 
 def dock_name(kind: str, key: str) -> str:

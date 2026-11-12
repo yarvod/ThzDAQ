@@ -248,7 +248,7 @@ class TestWindow:
         sides = {
             "setup": QtAds.SideBarLeft, "data": QtAds.SideBarLeft,
             "processes": QtAds.SideBarBottom, "log": QtAds.SideBarBottom,
-            "daemon": QtAds.SideBarBottom,
+            "daemon": QtAds.SideBarBottom, "editor": QtAds.SideBarBottom,
         }  # fmt: skip
         for name, side in sides.items():
             dock = window.docks[name]

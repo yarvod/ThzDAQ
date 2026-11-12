@@ -1,15 +1,15 @@
 """Main window: Qt Advanced Docking System docks, as in the old app.
 
-Setup and Data, Processes, Log and Daemon are docks pinned to the side bars
-(base); every instrument and configured device has a dock, and every graph,
-placed where the user wants. Measurements are chosen, set and run from the
-bar on top: the drop-down under its settings button shows the form of the
-chosen one. The window builds them, its menus and its toolbar, and keeps one
-layout; the parts live apart:
+Setup and Data, Processes, Log, Daemon and Editor (a tab per script's file)
+are docks pinned to the side bars (base); every instrument and configured
+device has a dock, and every graph, placed where the user wants.
+Measurements are chosen, set and run from the bar on top: the drop-down under
+its settings button shows the form of the chosen one. The window builds
+them, its menus and its toolbar, and keeps one layout; the parts live apart:
 
 - docking.py: the docks by name and where they open (DockSpace);
-- graph_docks.py, device_docks.py, code_docks.py: docks that follow the
-  graphs, the station and the scripts opened;
+- graph_docks.py, device_docks.py: docks that follow the graphs and the
+  station; code_docks.py: the files in Editor;
 - measure_forms.py: the forms of the measurements, following the catalog;
 - runbar.py: the measurement chosen, set, started and stopped on top;
 - navigator.py: the menus that find docks and Ctrl+K (Places: docks and
@@ -43,6 +43,7 @@ from thzdaq_gui.dock_names import (
     DAEMON,
     DATA,
     DEVICE,
+    EDITOR,
     GRAPH,
     LOG,
     PROCESSES,
@@ -193,6 +194,10 @@ class MainWindow(QMainWindow):
         file = bar.addMenu("&File")
         self.workspaceMenu.add_to(file)
         file.addSeparator()
+        open_script = QAction(theme.icon("language-python"), "Open script…", self)
+        open_script.triggered.connect(self.code.open_script)
+        file.addAction(open_script)
+        file.addSeparator()
         for text, icon_name, shortcut, slot in (
             (
                 "Open station…",
@@ -311,6 +316,13 @@ class MainWindow(QMainWindow):
                 QtAds.SideBarBottom,
             ),
             (DAEMON, "Daemon", self.daemonWidget, "server", QtAds.SideBarBottom),
+            (
+                EDITOR,
+                "Editor",
+                self.code.tabs,
+                "file-code-outline",
+                QtAds.SideBarBottom,
+            ),
         ):
             self.docks.add(
                 name, title, widget, "", theme.icon(icon_name), auto_hide=side,
