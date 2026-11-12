@@ -1,7 +1,7 @@
 """Main window: Qt Advanced Docking System docks, as in the old app.
 
-Setup and Data, Processes, Log, Daemon and Editor (a tab per script's file)
-are docks pinned to the side bars (base); every instrument and configured
+Setup and Data, Processes, Log, Daemon, Editor (a tab per script's file) and
+Console (a tab per Python console) are docks pinned to the side bars (base); every instrument and configured
 device has a dock, and every graph, placed where the user wants.
 Measurements are chosen, set and run from the bar on top: the drop-down under
 its settings button shows the form of the chosen one. The window builds
@@ -9,7 +9,8 @@ them, its menus and its toolbar, and keeps one layout; the parts live apart:
 
 - docking.py: the docks by name and where they open (DockSpace);
 - graph_docks.py, device_docks.py: docks that follow the graphs and the
-  station; code_docks.py: the files in Editor;
+  station; code_docks.py: the files in Editor; console_docks.py: the
+  consoles in Console;
 - measure_forms.py: the forms of the measurements, following the catalog;
 - runbar.py: the measurement chosen, set, started and stopped on top;
 - navigator.py: the menus that find docks and Ctrl+K (Places: docks and
@@ -40,6 +41,7 @@ from thzdaq_api.errors import LabError
 from thzdaq_gui import theme
 from thzdaq_gui.device_docks import DeviceDocks
 from thzdaq_gui.dock_names import (
+    CONSOLE,
     DAEMON,
     DATA,
     DEVICE,
@@ -64,6 +66,7 @@ from thzdaq_gui.exit_dialog import (
 )
 from thzdaq_gui.folders import PROFILES
 from thzdaq_gui.code_docks import CodeDocks
+from thzdaq_gui.console_docks import ConsoleDocks
 from thzdaq_gui.graph_docks import GraphDocks
 from thzdaq_gui.measure_forms import MeasureForms
 from thzdaq_gui.graphs import GraphHub, close_plots
@@ -124,9 +127,11 @@ class MainWindow(QMainWindow):
         self.hub = GraphHub(session.procedures(), session.call, self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
+        self.consoles = ConsoleDocks(session, self.docks, self.open_place)
         self.code = CodeDocks(
-            session, self.docks, self, self.start_measurement, self.choose_measurement
-        )
+            session, self.docks, self, self.start_measurement,
+            self.choose_measurement, self.consoles.run,
+        )  # fmt: skip
         self.measures = MeasureForms(session, self.hub, self.code.open_custom, self)
         # The chosen measurement is set and run from the bar on top
         self.runBar = RunBar(
@@ -136,8 +141,8 @@ class MainWindow(QMainWindow):
             self.code.new_measurement,
             self.code.from_example,
         )
-        # What the menus, Ctrl+K and Processes show: docks and measurements
-        self.places = Places(self.docks, self.runBar)
+        # What the menus, Ctrl+K and Processes show: docks, measurements, consoles
+        self.places = Places(self.docks, self.runBar, self.consoles)
 
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
@@ -325,6 +330,7 @@ class MainWindow(QMainWindow):
                 "file-code-outline",
                 QtAds.SideBarBottom,
             ),
+            (CONSOLE, "Console", self.consoles.tabs, "console", QtAds.SideBarBottom),
         ):
             self.docks.add(
                 name, title, widget, "", theme.icon(icon_name), auto_hide=side,
@@ -355,6 +361,10 @@ class MainWindow(QMainWindow):
             return
         self.runBar.choose(procedure)
         run.start()
+
+    def open_place(self, file: Path, line: int) -> None:
+        """A place of a traceback in a console: its file in Editor."""
+        self.code.open_place(file, line)
 
     def show_dock(self, name: str) -> None:
         """In front of the user, wherever it is."""
@@ -518,6 +528,7 @@ class MainWindow(QMainWindow):
             self.save_state()
         # Before the session stops calling the lab: monitors cancel their polls
         self.docks.close()
+        self.consoles.close()
         self.daemon.close()
         self.logWidget.detach()
         if stop:

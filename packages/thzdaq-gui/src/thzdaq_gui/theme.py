@@ -8,8 +8,9 @@ Icons are Material Design icons from qtawesome, tinted for the dark theme.
 from pathlib import Path
 
 import pyqtgraph as pg
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QToolButton
 
 from thzdaq_gui.device_types import id_type
 
@@ -245,6 +246,17 @@ def icon(name: str, color: str = TEXT, active: str = ACCENT) -> QIcon:
         return QIcon(qta.icon(f"mdi6.{name}", color=color, color_active=active))
     except Exception:
         return QIcon()
+
+
+def tool_button(text: str, name: str, tip: str, slot) -> QToolButton:
+    """A button of a tab's toolbar row: its icon with its text beside it."""
+    button = QToolButton()
+    button.setText(text)
+    button.setIcon(icon(name))
+    button.setToolTip(tip)
+    button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    button.clicked.connect(slot)
+    return button
 
 
 class Spinner:

@@ -53,6 +53,9 @@ jobs:
             & $cli --simulate daemon $action
             if ($LASTEXITCODE -ne 0) { throw "thzdaq-cli daemon $action exited with $LASTEXITCODE" }
           }
+          # A console's kernel as the window starts it, run by the build's thzdaq-cli
+          uv run python check_console.py $cli
+          if ($LASTEXITCODE -ne 0) { throw "the console's kernel does not work in the build" }
 
       - name: Archive
         run: Compress-Archive -Path dist\ThzDAQ -DestinationPath $env:ASSET

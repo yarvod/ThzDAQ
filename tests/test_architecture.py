@@ -39,6 +39,8 @@ ALLOWED = {
 ALLOWED_IDENTIFIERS = {
     "application/json": "the JSON media type: instruments speak HTTP to devices, "
     "the contract to its clients, and neither may import the other",
+    "text/plain": "the plain text media type: a Jupyter kernel's results to the "
+    "window's console, an MCP resource to an agent; clients do not import each other",
 }
 
 IDENTIFIER = re.compile(r"[A-Za-z][\w.\-]*[./][\w.\-/]*\w")

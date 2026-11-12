@@ -13,7 +13,11 @@ daemon by its name); the folder takes the name given after --:
 import argparse
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files, collect_entry_point
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_entry_point,
+    collect_submodules,
+)
 
 options = argparse.ArgumentParser()
 options.add_argument("--folder", default="ThzDAQ")
@@ -27,15 +31,29 @@ datas += collect_data_files("qtawesome")
 # The script editor completes by jedi: its stubs and parso's grammars are data
 datas += collect_data_files("jedi") + collect_data_files("parso")
 
-window = Analysis(["main.py"], datas=datas)
+# A console's kernel is started by jupyter_client, which finds how to start
+# one by its entry points: their metadata and modules go in
+provisioners, provisioner_modules = collect_entry_point(
+    "jupyter_client.kernel_provisioners"
+)
+window = Analysis(
+    ["main.py"], datas=datas + provisioners, hiddenimports=provisioner_modules
+)
 # Commands that packages add to the command line (thzdaq mcp) are found by
 # their entry points: their metadata and modules go in with the guides for
 # agents that thzdaq_api keeps
 commands, modules = collect_entry_point("thzdaq.cli")
+# The kernel of a console runs as thzdaq-cli run-script -m thzdaq_api.kernel:
+# IPython's kernel and what it imports only when asked. Without debugpy (it
+# reads its own sources from disk): the kernel runs without Jupyter's debugger
+kernel = ["thzdaq_api.kernel", *collect_submodules("ipykernel")]
+# What scripts and consoles import, which the command line itself does not
+scripts = ["thzdaq", "thzdaq_analysis"]
 cli = Analysis(
     ["cli_main.py"],
-    datas=commands + collect_data_files("thzdaq_api"),
-    hiddenimports=modules,
+    datas=commands + collect_data_files("thzdaq_api") + collect_data_files("ipykernel"),
+    hiddenimports=modules + kernel + scripts,
+    excludes=["debugpy"],
 )
 
 

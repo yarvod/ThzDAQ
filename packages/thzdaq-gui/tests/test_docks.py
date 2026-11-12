@@ -134,7 +134,7 @@ class TestWindow:
             navigator.tree.topLevelItem(i).text(0)
             for i in range(navigator.tree.topLevelItemCount())
         ]
-        assert sections == ["Devices", "Measures", "Graphs"]
+        assert sections == ["Devices", "Measures", "Graphs", "Consoles"]
         navigator.search.setText("p-v")
         assert navigator.tree.currentItem().data(0, Qt.UserRole) == "graph:P-V"
         from PySide6.QtCore import QEvent
@@ -249,6 +249,7 @@ class TestWindow:
             "setup": QtAds.SideBarLeft, "data": QtAds.SideBarLeft,
             "processes": QtAds.SideBarBottom, "log": QtAds.SideBarBottom,
             "daemon": QtAds.SideBarBottom, "editor": QtAds.SideBarBottom,
+            "console": QtAds.SideBarBottom,
         }  # fmt: skip
         for name, side in sides.items():
             dock = window.docks[name]

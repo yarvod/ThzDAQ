@@ -16,6 +16,7 @@ import sys
 from typing import List, Optional, Tuple
 
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.host import PASSED
 
 from thzdaq_cli import (
     agents,
@@ -38,8 +39,6 @@ from thzdaq_cli.client import (
     Mistyped,
     reach,
 )
-
-PASSED = "--"  # what follows is the script's
 
 
 def parser() -> argparse.ArgumentParser:

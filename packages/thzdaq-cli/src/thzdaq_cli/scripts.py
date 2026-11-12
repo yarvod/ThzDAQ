@@ -67,7 +67,11 @@ def add(commands) -> None:
     run = commands.add_parser(
         host.RUN_SCRIPT, help="run a Python file with this program's Python"
     )
-    run.add_argument("file", help="then -- and the script's arguments")
+    ran = run.add_mutually_exclusive_group(required=True)
+    ran.add_argument("file", nargs="?", help="then -- and the script's arguments")
+    ran.add_argument(
+        host.MODULE, dest="module", help="a module as a program (python -m), then --"
+    )
     run.set_defaults(run=run_script)
 
 
@@ -138,7 +142,12 @@ def stop_script(args, client: Client) -> int:
 
 
 def run_script(args, client: Client) -> int:
-    """The file as Python runs it: __main__, its folder first on the path."""
+    """The file as Python runs it: __main__, its folder first on the path; a
+    module as python -m runs it (the kernel of a window's console)."""
+    if args.module:
+        sys.argv = [args.module, *args.passed]
+        runpy.run_module(args.module, run_name="__main__", alter_sys=True)
+        return OK
     path = Path(args.file).resolve()
     sys.argv = [str(path), *args.passed]
     sys.path.insert(0, str(path.parent))

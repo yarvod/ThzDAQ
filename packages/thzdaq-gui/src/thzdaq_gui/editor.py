@@ -6,16 +6,21 @@ the bench); the editor only shows it.
 Keys: Tab indents (four spaces, the lines of a selection too), Shift+Tab
 dedents, Enter keeps the indent (one more after a colon), Ctrl+Space or a
 dot asks for completions, Ctrl+/ comments lines in and out.
+
+Completions may come later than asked (a console asks its kernel): they are
+shown when they come, each with what it is, filtered by what is typed since.
 """
 
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from PySide6.QtCore import QRect, QSize, QStringListModel, Qt, Signal
+from PySide6.QtCore import QRect, QSize, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFontDatabase,
     QKeySequence,
     QPainter,
+    QStandardItem,
+    QStandardItemModel,
     QSyntaxHighlighter,
     QTextCharFormat,
     QTextCursor,
@@ -37,6 +42,8 @@ INDENT = "    "
 COMMENT = "# "
 # Words that complete a word, at the cursor: (text, line from 1, column from 0)
 Complete = Callable[[str, int, int], List[str]]
+Word = Tuple[str, str]  # a completion: its text, and what it is (may be empty)
+WORD = Qt.UserRole  # the text a completion inserts, apart from what it shows
 
 # Colours of tokens: the theme's, in the order pygments' types nest
 COLOURS = (
@@ -105,13 +112,15 @@ class CodeEditor(QPlainTextEdit):
         self.highlighter = PythonHighlighter(self.document())
         self.numbers = LineNumbers(self)
         self.problems: Dict[int, str] = {}  # line from 1 -> what is wrong there
+        self.completion_start = 0  # where what the completions shown replace begins
         self.blockCountChanged.connect(self._fit_numbers)
         self.updateRequest.connect(self._scroll_numbers)
         self.cursorPositionChanged.connect(self.mark_lines)
         self._fit_numbers()
         self.mark_lines()
         self.completer = QCompleter(self)
-        self.completer.setModel(QStringListModel(self.completer))
+        self.completer.setModel(QStandardItemModel(self.completer))
+        self.completer.setCompletionRole(WORD)
         self.completer.setWidget(self)
         self.completer.setCompletionMode(QCompleter.PopupCompletion)
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -309,20 +318,50 @@ class CodeEditor(QPlainTextEdit):
         return before[start:]
 
     def ask_completions(self) -> None:
-        if self.complete is None:
-            return
         cursor = self.textCursor()
-        found = self.complete(
+        self.request_completions(
             self.toPlainText(), cursor.blockNumber() + 1, cursor.positionInBlock()
         )
-        if not found:
+
+    def request_completions(self, text: str, line: int, column: int) -> None:
+        """Ask for the words that complete the one at the cursor; they are
+        shown by show_completions. The editor of a file asks complete."""
+        if self.complete is not None:
+            self.show_completions([(w, "") for w in self.complete(text, line, column)])
+
+    def show_completions(
+        self, words: Sequence[Word], start: Optional[int] = None
+    ) -> None:
+        """start: where what they replace begins in the text (the word at the
+        cursor by default)."""
+        if start is None:
+            start = self.textCursor().position() - len(self.word())
+        self.completion_start = start
+        model = QStandardItemModel(self.completer)
+        for text, kind in words:
+            item = QStandardItem(f"{text}    {kind}" if kind else text)
+            item.setData(text, WORD)
+            model.appendRow(item)
+        self.completer.setModel(model)
+        if words:
+            self._filter()
+        else:
             self.completer.popup().hide()
-            return
-        self.completer.model().setStringList(found)
-        self._filter()
+
+    def typed(self) -> Optional[str]:
+        """What the completions shown replace, as typed by now; None once the
+        cursor left it."""
+        cursor = self.textCursor().position()
+        if cursor < self.completion_start:
+            return None
+        return self.toPlainText()[self.completion_start : cursor]
 
     def _filter(self) -> None:
-        self.completer.setCompletionPrefix(self.word())
+        typed = self.typed()
+        if typed is None:
+            self.completer.popup().hide()
+            return
+        self.completer.setCompletionPrefix(typed)
         if self.completer.completionCount() == 0:
             self.completer.popup().hide()
             return
@@ -338,7 +377,6 @@ class CodeEditor(QPlainTextEdit):
 
     def insert_completion(self, text: str) -> None:
         cursor = self.textCursor()
-        typed = self.word()
-        cursor.movePosition(QTextCursor.Left, QTextCursor.KeepAnchor, len(typed))
+        cursor.setPosition(self.completion_start, QTextCursor.KeepAnchor)
         cursor.insertText(text)
         self.setTextCursor(cursor)

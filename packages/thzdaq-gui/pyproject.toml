@@ -17,12 +17,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
+    "ipykernel>=6.29",
     "jedi>=0.19",
+    "jupyter-client>=8.6",
     "numpy==1.26.4",
     "pygments>=2.17",
     "pyqtgraph==0.13.7",
     "pyside6==6.8.2.1",
     "pyside6-qtads==4.3.1.4",
+    "pyzmq>=26",
     "qtawesome>=1.3",
     "requests>=2.31",
     "thzdaq-api==0.0.6b2",
