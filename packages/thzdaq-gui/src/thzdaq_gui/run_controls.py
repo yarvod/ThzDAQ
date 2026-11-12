@@ -70,6 +70,9 @@ class Run(Protocol):
     def abort(self) -> None:
         ...
 
+    def show_graphs(self) -> None:
+        ...
+
 
 class RunControls(QWidget):
     """row: one line for the bar on top, the state inside the progress bar;
@@ -100,10 +103,15 @@ class RunControls(QWidget):
         )
         self.btnAbort.clicked.connect(lambda: self.run and self.run.abort())
         self.btnAbort.hide()
+        self.btnGraphs = QPushButton(theme.icon("chart-line"), "Graphs")
+        self.btnGraphs.setToolTip("Show the graphs this measurement draws")
+        self.btnGraphs.clicked.connect(lambda: self.run and self.run.show_graphs())
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        buttons = (self.btnStart, self.btnCheck, self.btnStop, self.btnAbort)
+        buttons = (
+            self.btnStart, self.btnCheck, self.btnStop, self.btnAbort, self.btnGraphs
+        )  # fmt: skip
         self.state: Optional[QLabel] = None
         if row:
             layout = QHBoxLayout(self)

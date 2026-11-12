@@ -13,9 +13,10 @@ from thzdaq_analysis.shot_noise import (
     shot_noise_temperature,
 )
 from thzdaq_core.domain.parameters import FloatParameter, IntParameter
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
+    P_IF_CAPTION,
     BIAS,
     IF_GHZ,
     Group,
@@ -38,10 +39,12 @@ class ShotNoise(Procedure):
         PlotInfo(
             "power", "P-IF", "power", "frequency", "power",
             x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("point",),
+            caption=P_IF_CAPTION,
         ),
         PlotInfo(
             "ta", "Ta-IF", "noise", "frequency", "amplifier_temperature",
             x_label=IF_GHZ, y_label="Ta, K", x_scale=GHZ,
+            caption=plot_caption("Ta–IF", "IF amplifier noise temperature (IF frequency)"),
         ),
     )  # fmt: skip
 

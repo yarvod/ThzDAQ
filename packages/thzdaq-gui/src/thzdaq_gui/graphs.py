@@ -7,6 +7,7 @@ titles and units taken from the measurement's column descriptions.
 """
 
 import bisect
+import html
 import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -16,7 +17,7 @@ import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.graphicsItems.GraphicsWidgetAnchor import GraphicsWidgetAnchor
 from PySide6 import QtGui
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -30,7 +31,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from thzdaq_api.measurement_file import Column, Measurement
-from thzdaq_api.measurements import PlotInfo, ProcedureSummary, unit_of
+from thzdaq_api.measurements import (
+    CAPTION_GAP,
+    PlotInfo,
+    ProcedureSummary,
+    unit_of,
+)
 from thzdaq_api.procedures import plot_for
 
 from thzdaq_gui import theme
@@ -85,11 +91,80 @@ def curve_name(measurement: Measurement, group: Tuple) -> str:
     return " ".join(part for part in (head.strip(), who, rest) if part)
 
 
+def plot_title(text: str) -> str:
+    """A graph's name as its plot shows it: the plot's title is HTML, where
+    the gap after the symbols of a caption would shrink to one space."""
+    return html.escape(text).replace(CAPTION_GAP, "&nbsp;" * len(CAPTION_GAP))
+
+
+def axis_text(axis: pg.AxisItem, value: float) -> str:
+    """A coordinate as its axis shows it: in the axis's SI prefix (mV of a
+    V axis), or in the unit its label names ("Voltage, mV")."""
+    unit = f"{axis.labelUnitPrefix}{axis.labelUnits}" or unit_of(axis.labelText)
+    return f"{value * axis.autoSIPrefixScale:.6g} {unit}".rstrip()
+
+
+class CursorTag(QObject):
+    """x, y (and z of a map) next to the mouse over a plot, in the units of
+    its axes; gone once the mouse leaves the plot's area."""
+
+    def __init__(
+        self,
+        view: pg.GraphicsView,
+        plot: pg.PlotItem,
+        z: Optional[Callable[[float, float], Optional[str]]] = None,
+    ):
+        """z(x, y): the text of the value there; None: nothing there."""
+        super().__init__(view)
+        self.plot = plot
+        self.z = z
+        self.label = pg.TextItem(
+            color=theme.TEXT, fill=pg.mkBrush(theme.PANEL), border=theme.BORDER
+        )
+        self.label.setZValue(1000)
+        self.label.hide()
+        plot.getViewBox().addItem(self.label, ignoreBounds=True)
+        view.scene().sigMouseMoved.connect(self.moved)
+        # Leaving the view moves nothing in its scene
+        view.viewport().installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Leave:
+            self.label.hide()
+        return False
+
+    def text(self) -> str:
+        return self.label.textItem.toPlainText() if self.label.isVisible() else ""
+
+    def moved(self, position) -> None:
+        box = self.plot.getViewBox()
+        area = box.sceneBoundingRect()
+        if not area.contains(position):
+            self.label.hide()
+            return
+        point = box.mapSceneToView(position)
+        lines = [
+            f"x = {axis_text(self.plot.getAxis('bottom'), point.x())}",
+            f"y = {axis_text(self.plot.getAxis('left'), point.y())}",
+        ]
+        z = self.z(point.x(), point.y()) if self.z is not None else None
+        if z is not None:
+            lines.append(f"z = {z}")
+        self.label.setText("\n".join(lines))
+        # Up and right of the mouse, turned inwards near the right and top edges
+        right = (position.x() - area.left()) > 0.7 * area.width()
+        top = (position.y() - area.top()) < 0.3 * area.height()
+        self.label.setAnchor((1 if right else 0, 0 if top else 1))
+        self.label.setPos(point)
+        self.label.show()
+
+
 class GraphWidget(QWidget):
     """A line graph with curves from any measurements.
 
     key names its dock and stays when a graph made with New graph… (custom)
-    is renamed; graphs of the procedures are keyed by their title.
+    is renamed; graphs of the procedures are keyed by their title, and show
+    their caption (PlotInfo.caption) where people read the name.
     """
 
     icon = "chart-line"  # of its dock
@@ -107,11 +182,13 @@ class GraphWidget(QWidget):
         key: Optional[str] = None,
         custom: bool = False,
         call: Optional[Callable[[Any], Any]] = None,
+        caption: str = "",
         parent=None,
     ):
         """call: how the graph asks the lab (an analysis it offers)."""
         super().__init__(parent)
         self.title = title
+        self.caption = caption
         self.key = key or title
         self.custom = custom
         self.x, self.y = x, y
@@ -147,11 +224,12 @@ class GraphWidget(QWidget):
         layout.addLayout(bar)
         self.plot = pg.PlotWidget()
         item = self.plot.getPlotItem()
-        item.setTitle(title, color=theme.ACCENT, size="11pt")
+        item.setTitle(plot_title(self.shown_title()), color=theme.ACCENT, size="11pt")
         item.showGrid(x=True, y=True, alpha=0.25)
         self._label("bottom", x)
         self._label("left", y)
         self.legend = item.addLegend(offset=(-10, 10), labelTextColor=theme.TEXT)
+        self.cursor = CursorTag(self.plot, item)
         layout.addWidget(self.plot, 1)
         # Curve key -> points in display units, and the plotted item
         self.points: Dict[object, List[Tuple[float, float]]] = {}
@@ -177,7 +255,12 @@ class GraphWidget(QWidget):
             Axis(spec.y_label, scale=spec.y_scale),
             analysis=spec.analysis,
             call=call,
+            caption=spec.caption,
         )
+
+    def shown_title(self) -> str:
+        """Its name as people read it."""
+        return self.caption or self.title
 
     def _tool(self, icon_name: str, tip: str, slot) -> QToolButton:
         button = QToolButton()
@@ -188,7 +271,9 @@ class GraphWidget(QWidget):
 
     def set_title(self, title: str) -> None:
         self.title = title
-        self.plot.getPlotItem().setTitle(title, color=theme.ACCENT, size="11pt")
+        self.plot.getPlotItem().setTitle(
+            plot_title(self.shown_title()), color=theme.ACCENT, size="11pt"
+        )
 
     def set_axes(self, x: Axis, y: Axis) -> None:
         self.x = Axis(x.label, x.unit, self.x.scale)
@@ -201,6 +286,14 @@ class GraphWidget(QWidget):
             self.plot.setLabel(side, axis.label, units=axis.unit)
         else:
             self.plot.setLabel(side, axis.label)
+
+    def free_color(self) -> str:
+        """The colour of a new curve: the first of the palette no curve here
+        has. Curves keep theirs, so a removed curve frees its colour for the
+        next one; by the count of curves a new one repeated a colour."""
+        used = [item.opts["pen"].color().name().lower() for item in self.items.values()]
+        free = [c for c in theme.COLORS if c.lower() not in used]
+        return free[0] if free else theme.COLORS[len(self.items) % len(theme.COLORS)]
 
     def curve_label(self, key) -> str:
         return self.names.get(key, "curve")
@@ -230,7 +323,7 @@ class GraphWidget(QWidget):
             del points[:start]
         item = self.items.get(key)
         if item is None:
-            color = theme.COLORS[len(self.items) % len(theme.COLORS)]
+            color = self.free_color()
             item = self.plot.plot(
                 [], [], pen=pg.mkPen(color, width=CURVE_PEN_WIDTH), symbol="o", symbolSize=5,
                 symbolBrush=color, symbolPen=None, name=name,
@@ -311,6 +404,14 @@ class GraphWidget(QWidget):
         self.add_curve_clicked.emit(self)
 
 
+def nearest(cells: List[float], value: float) -> Optional[int]:
+    """The index of the cell (centred on its value, a step wide) holding
+    value; None outside them all."""
+    step = cells[1] - cells[0] if len(cells) > 1 else 1.0
+    index = min(range(len(cells)), key=lambda i: abs(cells[i] - value))
+    return index if abs(cells[index] - value) <= step / 2 else None
+
+
 class MapGraphWidget(QWidget):
     """z over an x/y grid (2SB bias optimization)."""
 
@@ -327,7 +428,7 @@ class MapGraphWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         self.view = pg.GraphicsLayoutWidget()
-        plot = self.view.addPlot(title=spec.title)
+        plot = self.view.addPlot(title=plot_title(spec.shown_title()))
         plot.setLabel("bottom", spec.x_label)
         plot.setLabel("left", spec.y_label)
         self.image = pg.ImageItem()
@@ -338,6 +439,20 @@ class MapGraphWidget(QWidget):
         self.view.addItem(self.histogram)
         layout.addWidget(self.view)
         self.values: Dict[Tuple[float, float], float] = {}
+        self.cursor = CursorTag(self.view, plot, self.z_text)
+
+    def shown_title(self) -> str:
+        return self.spec.shown_title()
+
+    def z_text(self, x: float, y: float) -> Optional[str]:
+        """z of the cell under a point, with its unit; None off the cells."""
+        if not self.values:
+            return None
+        xs, ys, data = self.grid()
+        i, j = nearest(xs, x), nearest(ys, y)
+        if i is None or j is None or not math.isfinite(data[i, j]):
+            return None
+        return f"{data[i, j]:.6g} {self.spec.z_label}".rstrip()
 
     def clear(self) -> None:
         self.values.clear()
@@ -511,7 +626,10 @@ class GraphHub(QObject):
                 )
                 routed.append(spec)
             else:
-                routed.append(msgspec.structs.replace(spec, title=spec.into))
+                # Drawn into another graph: that graph's caption is shown
+                routed.append(
+                    msgspec.structs.replace(spec, title=spec.into, caption="")
+                )
         return tuple(routed)
 
     def plots_of(self, procedure: str) -> Tuple[PlotInfo, ...]:
@@ -546,6 +664,14 @@ class GraphHub(QObject):
                 widget = GraphWidget(title, Axis(), Axis())
             self._add(widget)
         return self.graphs[title]
+
+    def shown_title(self, title: str) -> str:
+        """The name people read of a graph, built or not (its caption)."""
+        spec = self.specs.get(title)
+        if spec is not None:
+            return spec.shown_title()
+        widget = self.graphs.get(title)
+        return widget.shown_title() if widget is not None else title
 
     def type_of(self, title: str) -> type:
         """What draws a graph, built or not (the icon of its dock)."""
@@ -688,6 +814,14 @@ class GraphHub(QObject):
                 )  # fmt: skip
             shown.append(spec.title)
         return shown
+
+    def show_monitor(self, quantities) -> List[str]:
+        """The time graphs of quantities a device dock plots, on screen as a
+        run's are: each in front of its own group (I-t and V-t of a SIS
+        bias side by side)."""
+        titles = list(dict.fromkeys(plot_for(quantity) for quantity in quantities))
+        self.show_run(titles)
+        return titles
 
     def monitor_value(
         self,

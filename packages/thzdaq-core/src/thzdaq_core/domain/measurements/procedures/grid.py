@@ -3,7 +3,7 @@ from thzdaq_api.procedures import GRID_CURRENT_VS_ANGLE
 from thzdaq_instruments.capabilities import Rotator, VoltageCurrentMeter
 from thzdaq_instruments.units import UA
 
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
@@ -24,6 +24,7 @@ class GridCurrentAngle(Procedure):
         PlotInfo(
             "ia", "I-A", "ia", "angle", "current",
             x_label="Angle, deg", y_label=CURRENT_UA, y_scale=UA,
+            caption=plot_caption("I–A", "SIS current (grid angle)"),
         ),
     )  # fmt: skip
 

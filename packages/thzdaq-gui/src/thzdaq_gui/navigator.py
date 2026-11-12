@@ -35,6 +35,12 @@ FLASH_MS = 700
 FIND_KEY = QKeySequence("Ctrl+K")  # Cmd+K on macOS
 
 
+def searchable(text: str) -> str:
+    """Text as a search compares it: the dash of a graph's caption ("p–t")
+    is typed as a hyphen."""
+    return text.lower().replace("–", "-")
+
+
 @dataclass
 class DockEntry:
     name: str
@@ -48,12 +54,12 @@ class DockEntry:
         return f"{self.section} › {self.group}" if self.group else self.section
 
     def matches(self, words: Sequence[str]) -> bool:
-        text = f"{self.title} {self.group} {self.section} {self.hint}".lower()
+        text = searchable(f"{self.title} {self.group} {self.section} {self.hint}")
         return all(word in text for word in words)
 
     def rank(self, words: Sequence[str]) -> int:
         """Lower first: the title itself, then titles starting with the search."""
-        title, query = self.title.lower(), " ".join(words)
+        title, query = searchable(self.title), " ".join(words)
         if title == query:
             return 0
         if title.startswith(query):
@@ -130,7 +136,7 @@ class DockNavigator(QWidget):
         ]
 
     def refresh(self, *_) -> None:
-        words = self.search.text().lower().split()
+        words = searchable(self.search.text()).split()
         self.tree.clear()
         entries = self.entries()
         if words:

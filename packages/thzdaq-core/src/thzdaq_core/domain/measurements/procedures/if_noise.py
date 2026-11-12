@@ -8,6 +8,9 @@ from thzdaq_analysis.noise import noise_temperature, y_factor_db
 from thzdaq_api.measurements import PlotInfo
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
+    P_IF_CAPTION,
+    TN_IF_CAPTION,
+    Y_IF_CAPTION,
     IF_GHZ,
     TN_K,
     Y_DB,
@@ -34,6 +37,7 @@ def power_plot(group_by=()) -> PlotInfo:
         y_label=POWER_DBM,
         x_scale=GHZ,
         group_by=group_by,
+        caption=P_IF_CAPTION,
     )
 
 
@@ -99,6 +103,7 @@ class IFNoise(IFScan):
             x_label=IF_GHZ,
             y_label=Y_DB,
             x_scale=GHZ,
+            caption=Y_IF_CAPTION,
         ),
         PlotInfo(
             key="tn",
@@ -109,6 +114,7 @@ class IFNoise(IFScan):
             x_label=IF_GHZ,
             y_label=TN_K,
             x_scale=GHZ,
+            caption=TN_IF_CAPTION,
         ),
     )
 

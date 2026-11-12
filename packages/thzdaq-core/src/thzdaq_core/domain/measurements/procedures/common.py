@@ -5,6 +5,7 @@ hot/cold checks."""
 import math
 from typing import Iterable, List, Optional, Tuple
 
+from thzdaq_api.measurements import plot_caption
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.quantities import ANGLE, VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, MV
@@ -21,6 +22,12 @@ IF_GHZ = "IF, GHz"
 FREQUENCY_GHZ = "Frequency, GHz"
 Y_DB = "Y, dB"
 TN_K = "Tn, K"
+
+# Captions of graphs several procedures draw into
+IV_CAPTION = plot_caption("I–V", "SIS current (bias voltage)")
+P_IF_CAPTION = plot_caption("P–IF", "IF power (IF frequency)")
+Y_IF_CAPTION = plot_caption("Y–IF", "Y-factor (IF frequency)")
+TN_IF_CAPTION = plot_caption("Tn–IF", "Noise temperature (IF frequency)")
 
 Range = Tuple[float, float, int]
 

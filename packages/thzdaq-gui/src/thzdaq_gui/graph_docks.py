@@ -79,7 +79,7 @@ class GraphDocks:
                 continue
             self.add_dock(
                 dock_name(GRAPH, title),
-                title,
+                self.hub.shown_title(title),
                 lambda title=title: self.hub.graph(title),
                 self.hub.type_of(title).icon,
             )
@@ -93,7 +93,7 @@ class GraphDocks:
             custom = getattr(widget, "custom", False)
             self.add_dock(
                 name,
-                widget.title,
+                widget.shown_title(),
                 lambda: widget,
                 widget.icon,
                 group="Custom" if custom else "",
@@ -163,7 +163,7 @@ class GraphDocks:
     def rename(self, widget) -> None:
         name = graph_dock(widget)
         if name in self.docks:
-            self.docks.retitle(name, widget.title)
+            self.docks.retitle(name, widget.shown_title())
 
     def delete(self, widget) -> None:
         answer = QMessageBox.question(

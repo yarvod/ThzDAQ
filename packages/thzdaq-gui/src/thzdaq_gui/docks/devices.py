@@ -336,6 +336,7 @@ class QuantityPanel(QWidget):
     def set_monitoring(self, on: bool) -> None:
         if on:
             self.started = time.monotonic()
+            self.raised = False
             if self.process is None:
                 self.process = self.session.processes.start(
                     f"Monitor · {self.title}",
@@ -418,13 +419,15 @@ class QuantityPanel(QWidget):
         for quantity in self.plotted:
             if quantity.key not in values:
                 continue
-            graph = self.hub.monitor_value(
+            self.hub.monitor_value(
                 self.ref, self.title, quantity, now, values[quantity.key], window
             )
-            if graph is not None and not self.raised:
-                # The graph of the first value comes to the front, once
-                self.raised = True
-                self.hub.raise_graph(graph)
+        plotted = [q for q in self.plotted if values.get(q.key) is not None]
+        if plotted and not self.raised:
+            # The graphs of the values come on screen once a monitor or Plot
+            # starts, each in front of its own group
+            self.raised = True
+            self.hub.show_monitor(plotted)
 
     def compare(self, quantity: QuantityInfo, value) -> None:
         """Mark a configuration that differs between the device and the profile."""
