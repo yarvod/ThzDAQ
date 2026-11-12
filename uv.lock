@@ -1576,7 +1576,7 @@ requires-dist = [
 
 [[package]]
 name = "thzdaq-workspace"
-version = "0.2.0"
+version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "thzdaq" },
