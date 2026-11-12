@@ -15,6 +15,7 @@ FOLDER = "assistant"
 SUFFIX = ".md"
 AGENTS = "agents"  # how an agent measures with the bench: the AGENTS.md of a workspace
 ASSISTANT = "assistant"  # the assistant in the window: its part of the system prompt
+HINTS = "hints"  # code the assistant writes in the editor and the console
 # Sections of the agents' guide the assistant reads too
 RULES = "Rules"
 OWN_MEASUREMENT = "A measurement of the bench's own"
