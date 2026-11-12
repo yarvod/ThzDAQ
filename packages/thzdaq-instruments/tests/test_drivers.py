@@ -406,6 +406,36 @@ class TestJsonHttpClient:
                 client.get("/")
 
 
+@pytest.fixture
+def system_proxy(monkeypatch):
+    """A proxy of the system or the environment (as macOS or a VPN sets one,
+    with no exception for 127.0.0.1) that answers 503 to all it is asked."""
+    with json_server(status=503, body={"error": "proxy"}) as (port, asked):
+        for name in ("no_proxy", "NO_PROXY", "all_proxy", "ALL_PROXY"):
+            monkeypatch.delenv(name, raising=False)
+        for name in ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
+            monkeypatch.setenv(name, f"http://127.0.0.1:{port}")
+        yield asked
+
+
+class TestNoProxy:
+    """Instruments are on the bench's own network: a proxy never stands
+    between the program and them."""
+
+    def test_a_device_is_asked_directly(self, system_proxy):
+        with json_server() as (port, requests):
+            client = JsonHttpClient(ConnectionSpec(HTTP, host="127.0.0.1", port=port))
+            assert client.get("/") == {"result": 7}
+            client.close()
+        assert len(requests) == 1 and system_proxy == []
+
+    def test_a_device_that_is_off_is_not_answered_by_the_proxy(self, system_proxy):
+        spec = ConnectionSpec(HTTP, host="127.0.0.1", port=closed_port(), timeout=2)
+        with pytest.raises(InstrumentConnectionError):
+            JsonHttpClient(spec).get("/")
+        assert system_proxy == []
+
+
 def make_chopper(**kwargs):
     registers = MotorRegisters(**kwargs)
     chopper = ModbusChopper(
