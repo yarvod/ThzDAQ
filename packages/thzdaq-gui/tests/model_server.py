@@ -88,7 +88,10 @@ class ModelServer:
                     pass  # the client stopped listening: a stopped turn
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        # a short poll: close() returns at once, not after the default 0.5 s
+        self.thread = threading.Thread(
+            target=self.httpd.serve_forever, args=(0.01,), daemon=True
+        )
         self.thread.start()
 
     @property

@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -283,6 +284,11 @@ class TestUpdater:
         finally:
             if alive(held):
                 os.kill(held, 9)
+
+    def test_waiting_for_a_running_program_takes_its_timeout_not_more(self):
+        started = time.monotonic()
+        assert not updater.wait_for_exit(os.getpid(), 0.01)
+        assert time.monotonic() - started < 0.1
 
     def test_processes_are_listed_with_their_programs(self):
         found = dict(updater.processes())

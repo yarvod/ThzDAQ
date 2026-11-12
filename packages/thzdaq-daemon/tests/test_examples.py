@@ -34,7 +34,7 @@ SHORT = {
         "grid_settle": "0.05",
     },
     "monitor": {"interval": "0.05", "duration": "0.5"},
-    "iv_analysis": {"voltage": "0:7:141"},
+    "iv_analysis": {"voltage": "0:7:41"},
     "map": {"voltage": "0:7:5", "current": "0:10:3", "settle": "1"},
     "raw_instrument": {"level": "0:5:6", "settle": "1"},
 }
@@ -137,7 +137,9 @@ def test_a_monitor_runs_until_it_is_stopped(home, tmp_path):
             devices={slot: BENCH[slot] for slot in DEVICES["monitor"]},
         )  # fmt: skip
     )
-    wait_for(lambda: lab.call(WaitMeasurement(id=run.id)).done >= 3, timeout=30)
+    wait_for(
+        lambda: lab.call(WaitMeasurement(id=run.id, timeout=0)).done >= 3, timeout=30
+    )
     lab.call(CancelMeasurement(id=run.id))
     done = ended(lab, run.id)
     log = log_of(lab, "monitor")

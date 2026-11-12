@@ -36,6 +36,10 @@ class JsonHttpClient:
         )
         self.timeout = spec.timeout
         self._session = requests.Session()
+        # Instruments are on the bench's own network: never through a proxy
+        # of the system or the environment (one would answer for a device
+        # that is off, or not reach it at all)
+        self._session.trust_env = False
         self._session.headers["Content-Type"] = "application/json"
 
     def _request(self, method: str, path: str, data=None) -> Dict[str, Any]:

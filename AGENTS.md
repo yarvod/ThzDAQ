@@ -86,6 +86,8 @@ Python with 4-space indentation, formatted by Black; autoflake removes unused im
 
 Tests live next to each package (`packages/*/tests`, `test_*.py`, pytest); `tests/` at the root checks the whole repository (architecture rules). Drivers are tested against protocol emulators on `FakeLink` and the shared capability contracts in `packages/thzdaq-instruments/tests/contracts.py`; procedures run on simulators; GUI tests run offscreen. Hardware is never needed for tests. For changes that need real instruments, document the bench and steps used.
 
+During work run the tests of what you touched (its package, or its test files); run the full suite only before a merge, and say in the report which you ran. Tests stay fast: sweeps of a few points, zero settles and delays in their parameters, waits on a condition (asking a run's state with `WaitMeasurement(timeout=0)`), never on a fixed time.
+
 ## Commit & Pull Request Guidelines
 
 Short imperative messages, optionally with a conventional prefix (`feat:`, `fix:`, `docs:`). Pull requests describe the affected package, list manual test steps (bench, profile, simulate or hardware), mention profile changes in `stations/`, and include screenshots for visible UI changes.
