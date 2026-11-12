@@ -44,6 +44,13 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
         "At one IF over a SIS1 x SIS2 bias grid: test tone in both sidebands "
         "and hot/cold in both channels give SRR and Tn maps."
     )
+    guide = (
+        "Chooses the bias of the 2SB pair: at one IF it maps Tn and the sideband "
+        "rejection of both channels over a SIS1 x SIS2 grid. Pump both mixers, set "
+        "the test tone and the loads first. The grid's points multiply: start "
+        "coarse (the default 6 x 6 near the first photon step) and refine around "
+        "the best cell."
+    )
     plots = (
         _map("tn_upper"),
         _map("tn_lower"),

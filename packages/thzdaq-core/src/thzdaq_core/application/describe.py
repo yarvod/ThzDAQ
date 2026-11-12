@@ -188,6 +188,7 @@ def procedure_info(
         plots=tuple(procedure.active_plots(quantities)),
         steps=procedure.estimate_steps(),
         plot_window=procedure.plot_window(),
+        guide=procedure.guide,
     )
 
 

@@ -56,6 +56,14 @@ class PVCurve(Procedure):
     slot_modes = {"bias": EXCLUSIVE, "detector": READ}
     title = "SIS P-V measurement"
     description = "Sweep the bias and read the IF power at every point."
+    guide = (
+        "IF power against bias on one load: where the mixer gives IF power, and "
+        "where it is flat enough to work. Pump the mixer first (LO on, a pumped I-V "
+        "shows photon steps) and suppress the Josephson current. Sweep the same "
+        "range as the I-V; the power over the first photon step below the gap is "
+        "the working region. For the noise temperature take "
+        f"{NOISE_TEMPERATURE_VS_VOLTAGE}, which does this on both loads."
+    )
     requires = {"bias": BIAS, "detector": PowerDetector}
     plots = pv_plots()
 
@@ -103,6 +111,15 @@ class TnVoltage(PVCurve):
     description = (
         "P-V with the hot and the cold load: Y-factor and noise temperature "
         "versus bias; optionally at several grid angles."
+    )
+    guide = (
+        "Receiver noise temperature against bias by the Y-factor: a P-V on the hot "
+        "load, then on the cold one, matched point by point. Pump the mixer and "
+        "suppress the Josephson current first; give t_hot and t_cold as the loads "
+        "really are (room temperature and liquid nitrogen as a rule). The lowest Tn "
+        "on the first photon step below the gap is the bias to work at. With "
+        "use_grid the grid turns to each angle in turn: Tn against the LO power the "
+        "grid lets through."
     )
     plots = pv_plots(("angle", "load")) + (
         PlotInfo(

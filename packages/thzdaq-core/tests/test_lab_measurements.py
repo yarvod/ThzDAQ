@@ -52,6 +52,14 @@ def test_procedures_are_listed_and_described(lab):
     assert [(s.name, s.kind) for s in info.slots] == [("bias", "sis_bias")]
     assert "VoltageSource" in info.slots[0].capabilities
     assert "I-V" in {p.title for p in info.plots}
+    assert info.guide.startswith("The first look at a junction")
+
+
+def test_every_built_in_procedure_tells_how_to_measure_with_it(lab):
+    """Agents and the assistant read it in describe_procedure."""
+    for summary in lab.call(ListProcedures()):
+        info = lab.call(DescribeProcedure(procedure=summary.name))
+        assert len(info.guide) > 100, summary.name
 
 
 def test_slots_follow_the_parameters(lab):

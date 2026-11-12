@@ -247,6 +247,8 @@ def procedure(info: ProcedureInfo, bench: Sequence[DeviceInfo]) -> str:
     ]
     if info.plots:
         parts.append(f"plots: {', '.join(p.title for p in info.plots)}")
+    if info.guide:
+        parts.append(f"how to measure: {info.guide}")
     return "\n".join(parts)
 
 

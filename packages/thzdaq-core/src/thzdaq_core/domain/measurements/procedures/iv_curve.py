@@ -1,5 +1,5 @@
 from thzdaq_api.leases import EXCLUSIVE
-from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
+from thzdaq_api.procedures import CURRENT_VS_COIL_CURRENT, CURRENT_VS_VOLTAGE
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.units import MV, UA
 
@@ -20,6 +20,16 @@ class IVCurve(Procedure):
     slot_modes = {"bias": EXCLUSIVE}
     title = "SIS I-V curve"
     description = "Sweep the bias voltage and read voltage and current."
+    guide = (
+        "The first look at a junction and the check before any other SIS "
+        "measurement. Unpumped (LO off) it shows the gap, the normal-state "
+        "resistance Rn and the subgap leakage; with the LO on, the photon steps "
+        "below the gap tell how strongly the mixer is pumped. Sweep from 0 up to "
+        "above the gap (the default 0:7:351 mV) and stay within the range "
+        "describe_device gives for the bias. A Josephson peak near zero bias means "
+        f"the coil does not suppress it yet ({CURRENT_VS_COIL_CURRENT}). The plot's "
+        "I-V analysis gives Rn and the gap."
+    )
     requires = {"bias": (VoltageSource, VoltageCurrentMeter)}
     plots = (
         PlotInfo(

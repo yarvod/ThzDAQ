@@ -22,6 +22,14 @@ class Demagnetize(Procedure):
         "Sweep the coil current over the full range, then swing it around the "
         "centre with a shrinking amplitude and leave it at the centre."
     )
+    guide = (
+        "Takes trapped flux out of the junction and the magnet: the coil swings "
+        "with a shrinking amplitude and stops at the centre. Run it after a quench, "
+        "a thermal cycle or when the Josephson current cannot be suppressed as "
+        "before; then find the suppressing current again "
+        f"({CURRENT_VS_COIL_CURRENT}). Keep minimum and maximum within the coil "
+        "limits."
+    )
     requires = {"coil": CurrentSource}
     plots = (
         PlotInfo(
@@ -84,6 +92,14 @@ class CLCurve(Procedure):
     description = (
         "Sweep the magnet coil current and read the bias current: finds the "
         "coil current that suppresses the Josephson current."
+    )
+    guide = (
+        "Finds the coil current that suppresses the Josephson current: the SIS "
+        "current against the coil current at a small fixed bias. Set the bias first "
+        "(below the gap, where the Josephson current shows, about a third of the "
+        "gap or less) with the LO off. The minimum of the current is the coil "
+        "current to set and keep for the other measurements. A curve that changed "
+        f"shape asks for {DEMAGNETIZATION} first."
     )
     requires = {"coil": CurrentSource, "bias": VoltageCurrentMeter}
     plots = (

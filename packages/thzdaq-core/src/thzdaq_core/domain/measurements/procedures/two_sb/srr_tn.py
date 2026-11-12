@@ -1,6 +1,10 @@
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import TWO_SB_SIDEBAND_RATIO, TWO_SB_NOISE_TEMPERATURE
+from thzdaq_api.procedures import (
+    TWO_SB_BIAS_OPTIMIZATION,
+    TWO_SB_NOISE_TEMPERATURE,
+    TWO_SB_SIDEBAND_RATIO,
+)
 from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
 
@@ -66,6 +70,13 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
     description = (
         "Test tone in each sideband, power in both IF channels: wanted minus "
         "image (dB) over the IF band; optionally Y-factor and Tn afterwards."
+    )
+    guide = (
+        "The sideband rejection ratio of the 2SB receiver over the IF band: the "
+        "test tone in each sideband in turn, its power in both IF channels (wanted "
+        "minus image, dB). Bias the pair at its working point "
+        f"({TWO_SB_BIAS_OPTIMIZATION} tells it) and pump it. With the Y factor "
+        "afterwards the same run gives Tn of both channels."
     )
     plots = (
         PlotInfo(
@@ -184,6 +195,13 @@ class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
     slot_modes = {"if_filter": EXCLUSIVE, "detector": READ}
     title = "2SB noise temperature"
     description = "Hot/cold Y-factor and Tn of the upper and lower IF channels."
+    guide = (
+        "Tn of the upper and the lower channel of the 2SB receiver over the IF band "
+        "by the Y-factor, at fixed biases of both mixers. Bias the pair at its "
+        "working point and pump it; give t_hot and t_cold as the loads really are. "
+        "Switch the test tone off (tone_off) when it is in the band: it would read "
+        "as noise."
+    )
     plots = NOISE_PLOTS
 
     lo_frequency = LOFrequency(263 * GHZ)

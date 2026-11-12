@@ -19,6 +19,13 @@ class GridCurrentAngle(Procedure):
     slot_modes = {"grid": EXCLUSIVE, "bias": READ}
     title = "SIS I-angle (grid)"
     description = "Rotate the wire grid and read the pumped SIS current (I-A curve)."
+    guide = (
+        "The pumped SIS current against the angle of the wire grid: how much LO "
+        "power the grid lets through at each angle. Bias the mixer on the first "
+        "photon step with the LO on; the bias is only read. Use it to choose the "
+        "angle that gives the pumping wanted (a current between the unpumped and "
+        "the fully pumped one)."
+    )
     requires = {"grid": Rotator, "bias": VoltageCurrentMeter}
     plots = (
         PlotInfo(
