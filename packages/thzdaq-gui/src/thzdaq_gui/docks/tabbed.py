@@ -32,6 +32,7 @@ EMPTY, TABS = 0, 1  # pages
 
 class TabbedDock(QStackedWidget):
     closed = Signal(object)  # the widget of a tab that closed (deleted next)
+    current_changed = Signal(object)  # the widget of the current tab, or None
 
     def __init__(
         self,
@@ -51,6 +52,9 @@ class TabbedDock(QStackedWidget):
         self.tabs.setElideMode(Qt.ElideNone)
         self.tabs.setUsesScrollButtons(True)
         self.tabs.tabBar().installEventFilter(self)
+        self.tabs.currentChanged.connect(
+            lambda index: self.current_changed.emit(self.tabs.widget(index))
+        )
         self.tabs.setCornerWidget(self._more(starts), Qt.TopRightCorner)
         self.addWidget(self.tabs)
 

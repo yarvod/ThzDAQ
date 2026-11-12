@@ -1,7 +1,9 @@
 """Scripts' files in the Editor dock: a tab per file (and per text a
 measurement kept), opened as the current tab at a line, titled by the file
 and marked while its text is not saved; closed with unsaved changes, it asks
-first. Opening one unfolds Editor at the bottom and puts it in front.
+first. Opening one unfolds Editor at the bottom and puts it in front. The
+tab of a library script, opened or made current, chooses its measurement in
+the bar.
 
 The bench's own measurements are made here: New measurement (a blank one)
 and From an example go into the library (write_custom) and open. The script
@@ -56,14 +58,17 @@ class CodeDocks:
         docks: DockSpace,
         window: QWidget,
         start: Callable[[str], None],
+        choose: Callable[[str], None],
     ):
         """start(procedure): one of the bench's own started as its dock
-        starts it. tabs is the content of the Editor dock (the window adds
-        it among the base docks)."""
+        starts it; choose(procedure): one of the bench's own whose script is
+        the current tab, for the bar. tabs is the content of the Editor dock
+        (the window adds it among the base docks)."""
         self.session = session
         self.docks = docks
         self.window = window
         self.start = start
+        self.choose = choose
         self.texts = 0  # texts opened without a file, to tell them apart
         # by key: the path of its file, or #<n> <title> of a text
         self.widgets: Dict[str, CodeWidget] = {}
@@ -76,6 +81,7 @@ class CodeDocks:
             self.closing,
         )
         self.tabs.closed.connect(self.forget)
+        self.tabs.current_changed.connect(self.current_changed)
         # A script run from a file is shown by its tab (its Processes entry)
         docks.show_inside(CODE, lambda key: self.open_place(Path(key), 0))
 
@@ -128,9 +134,17 @@ class CodeDocks:
     def show(self, widget: CodeWidget, line: int = 0) -> None:
         """Its tab current, Editor unfolded in front, the cursor at the line."""
         self.tabs.show_tab(widget)
+        self.current_changed(widget)  # opened again while current: no signal
         self.docks.open(EDITOR)
         widget.go_to(line)
         widget.editor.setFocus()
+
+    def current_changed(self, widget: Optional[CodeWidget]) -> None:
+        """The measurement whose script is the current tab is the bar's."""
+        path = widget.model.path if widget is not None else None
+        procedure = self.session.custom_of(path) if path is not None else None
+        if procedure is not None:
+            self.choose(procedure)
 
     def closing(self, widget: CodeWidget) -> bool:
         """A tab with changes not saved asks first."""

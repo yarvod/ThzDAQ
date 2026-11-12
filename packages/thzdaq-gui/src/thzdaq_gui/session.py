@@ -3,7 +3,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, Signal
-from thzdaq_api.custom import CustomInfo, CustomLibrary, ListCustom
+from thzdaq_api.custom import (
+    SUFFIX,
+    CustomInfo,
+    CustomLibrary,
+    ListCustom,
+    procedure_name,
+)
 from thzdaq_api.devices import (
     DescribeDevice,
     DeviceDescription,
@@ -182,6 +188,16 @@ class Session(QObject):
         return next(
             (m for m in self.library().measurements if m.procedure == procedure), None
         )
+
+    def custom_of(self, path: Path) -> Optional[str]:
+        """The bench's own measurement a file is the script of: custom.<name>
+        for a file of the library, described yet or not; None for another."""
+        file = Path(path).resolve()
+        if file.suffix != SUFFIX:
+            return None
+        if file.parent != Path(self.library().folder).resolve():
+            return None
+        return procedure_name(file.stem)
 
     def drivers(self) -> Dict[str, DriverInfo]:
         """Drivers a profile may name, by key."""

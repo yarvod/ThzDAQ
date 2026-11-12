@@ -62,6 +62,7 @@ class RunBar(QWidget):
         self.procedures: List[ProcedureSummary] = []
         self.items: Dict[str, QAction] = {}  # by procedure
         self.chosen: Optional[str] = None
+        self.wanted: Optional[str] = None  # to choose once it is listed
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -130,7 +131,9 @@ class RunBar(QWidget):
                 lambda _=False, name=example.name: self.from_example(name)
             )
         self.fit_select()
-        if self.chosen is not None and not self.select_name(self.chosen):
+        if self.wanted in self.items:
+            self.choose(self.wanted)
+        elif self.chosen is not None and not self.select_name(self.chosen):
             self.choose(DEFAULT_MEASUREMENT)
 
     def fit_select(self) -> None:
@@ -181,9 +184,21 @@ class RunBar(QWidget):
 
     def choose(self, procedure: str) -> None:
         """Run this measurement from the bar from now on; remembered."""
+        self.wanted = None
         self.select_name(procedure)
         self.show_chosen()
         self.settings.setValue(CHOSEN_MEASUREMENT, self.chosen)
+
+    def want(self, procedure: str) -> None:
+        """Chosen now when it is in the list, else as soon as it is (a script
+        just written is listed once the daemon has described it); choosing
+        another first cancels it."""
+        if procedure not in self.items:
+            self.wanted = procedure
+        elif procedure == self.chosen:
+            self.wanted = None
+        else:
+            self.choose(procedure)
 
     def show_chosen(self) -> None:
         """The controls drive the run of the chosen measurement's form, and

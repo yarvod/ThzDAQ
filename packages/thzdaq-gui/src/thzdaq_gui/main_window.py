@@ -124,7 +124,9 @@ class MainWindow(QMainWindow):
         self.hub = GraphHub(session.procedures(), session.call, self)
         self.graphs = GraphDocks(session, self.hub, self.docks, self.settings, self)
         self.devices = DeviceDocks(session, self.hub, self.docks)
-        self.code = CodeDocks(session, self.docks, self, self.start_measurement)
+        self.code = CodeDocks(
+            session, self.docks, self, self.start_measurement, self.choose_measurement
+        )
         self.measures = MeasureForms(session, self.hub, self.code.open_custom, self)
         # The chosen measurement is set and run from the bar on top
         self.runBar = RunBar(
@@ -339,6 +341,11 @@ class MainWindow(QMainWindow):
         the graphs follow."""
         self.measures.sync()
         self.runBar.set_procedures(self.session.procedures())
+
+    def choose_measurement(self, procedure: str) -> None:
+        """The bench's own measurement whose script is the current tab of
+        Editor is the bar's (once it is listed)."""
+        self.runBar.want(procedure)
 
     def start_measurement(self, procedure: str) -> None:
         """Start a measurement as the bar does, with the values of its form

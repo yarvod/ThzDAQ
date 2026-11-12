@@ -107,6 +107,35 @@ def test_a_measurement_runs_from_the_bar_and_logs_what_it_prints(window, wait, l
     assert all("custom.told" == r.measurement for r in log.records if r.text in shown)
 
 
+def test_the_tab_of_a_library_script_chooses_its_measurement(
+    window, wait, library, tmp_path
+):
+    bar, tabs = window.runBar, window.code.tabs
+    told = library / "told.py"
+    told.write_text(TOLD, encoding="utf-8")
+    # Opened before the daemon has described it: chosen once it is listed
+    window.code.open(told)
+    wait(lambda: bar.chosen_name() == "custom.told", timeout=10)
+    # A script outside the library chooses nothing
+    free = tmp_path / "free.py"
+    free.write_text("print(1)\n", encoding="utf-8")
+    bar.choose("sis.current_vs_voltage")
+    window.code.open(free)
+    assert bar.chosen_name() == "sis.current_vs_voltage"
+    # Its tab made current again, or opened again while current: chosen
+    tabs.show_tab(tab_of(window, told))
+    assert bar.chosen_name() == "custom.told"
+    bar.choose("sis.current_vs_voltage")
+    window.code.open(told)
+    assert bar.chosen_name() == "custom.told"
+    # One not listed yet waits; choosing another in the bar cancels it
+    (library / "later.py").write_text(TOLD, encoding="utf-8")
+    window.code.open(library / "later.py")
+    bar.choose("sis.current_vs_voltage")
+    appears(window, wait, "custom.later")
+    assert bar.chosen_name() == "sis.current_vs_voltage"
+
+
 def test_a_new_measurement_opens_in_a_tab_of_editor(window, wait, named, library):
     tabs = window.code.tabs
     assert tabs.currentWidget() is not tabs.tabs  # nothing open: the hint
@@ -120,6 +149,7 @@ def test_a_new_measurement_opens_in_a_tab_of_editor(window, wait, named, library
     assert window.docks.state(EDITOR) == "front"
     assert not any(name.startswith(f"{CODE}:") for name in window.docks)
     appears(window, wait, "custom.scan")
+    assert window.runBar.chosen_name() == "custom.scan"  # its tab is current
     (library / "told.py").write_text(TOLD, encoding="utf-8")
     window.code.open(library / "told.py")
     assert titles(window) == ["scan.py", "told.py"]
