@@ -202,6 +202,14 @@ class GraphWidget(QWidget):
         else:
             self.plot.setLabel(side, axis.label)
 
+    def free_color(self) -> str:
+        """The colour of a new curve: the first of the palette no curve here
+        has. Curves keep theirs, so a removed curve frees its colour for the
+        next one; by the count of curves a new one repeated a colour."""
+        used = [item.opts["pen"].color().name().lower() for item in self.items.values()]
+        free = [c for c in theme.COLORS if c.lower() not in used]
+        return free[0] if free else theme.COLORS[len(self.items) % len(theme.COLORS)]
+
     def curve_label(self, key) -> str:
         return self.names.get(key, "curve")
 
@@ -230,7 +238,7 @@ class GraphWidget(QWidget):
             del points[:start]
         item = self.items.get(key)
         if item is None:
-            color = theme.COLORS[len(self.items) % len(theme.COLORS)]
+            color = self.free_color()
             item = self.plot.plot(
                 [], [], pen=pg.mkPen(color, width=CURVE_PEN_WIDTH), symbol="o", symbolSize=5,
                 symbolBrush=color, symbolPen=None, name=name,
