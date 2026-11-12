@@ -45,6 +45,20 @@ def test_a_dangerous_set_is_asked_and_refused_without_a_terminal(thzdaq):
     assert code == 0 and "active = off" in out
 
 
+def test_a_person_at_a_terminal_is_asked_there(thzdaq, monkeypatch):
+    answers, asked = iter(["n", "y"]), []
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt="": asked.append(prompt) or next(answers)
+    )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code, out, _ = thzdaq("set", "sis_bias_1", "active", "off")
+    assert code == 1 and out == ""
+    code, out, _ = thzdaq("set", "sis_bias_1", "active", "off")
+    assert code == 0 and "active = off" in out
+    assert asked[0] == asked[1] and "sis_bias_1" in asked[0]
+    assert asked[0].endswith(" [y/N] ")
+
+
 def test_a_raw_query_answers_and_a_raw_write_is_asked(thzdaq, lab):
     code, out, _ = thzdaq("raw", "sis_block_1", "*IDN?")
     assert code == 0 and out.strip() == "THZDAQ,SimSisBlock,0,1.0"
