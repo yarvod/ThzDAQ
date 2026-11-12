@@ -17,6 +17,8 @@ import PySide6QtAds as QtAds
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtWidgets import QSplitter, QStyle, QWidget
 
+from thzdaq_api.ui import BEHIND, CLOSED, FRONT, DockState
+
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import (
     ASSISTANT,
@@ -33,7 +35,7 @@ from thzdaq_gui.dock_names import (
 )
 from thzdaq_gui.docks.body import DockBody
 from thzdaq_gui.graphs import close_views
-from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, SECTIONS, DockEntry, Flash
+from thzdaq_gui.navigator import SECTIONS, DockEntry, Flash
 
 AUTO_HIDE_SIZES = {
     SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220, EDITOR: 480, CONSOLE: 420,
@@ -267,6 +269,18 @@ class DockSpace(Mapping):
             container = dock.autoHideDockContainer()
             return FRONT if container is not None and container.isVisible() else BEHIND
         return FRONT if dock.isCurrentTab() else BEHIND
+
+    def described(self) -> List[DockState]:
+        """Every dock as agents see it: name, title, where it is."""
+        return [
+            DockState(name, dock.windowTitle(), self.state(name))
+            for name, dock in self._docks.items()
+        ]
+
+    def reveal(self, name: str) -> QWidget:
+        """In front, wherever it is (opened when closed or folded)."""
+        self.show(name)
+        return self._docks[name]
 
     def show_inside(self, kind: str, show: Callable[[str], None]) -> None:
         """Places of a kind inside a dock are shown by show(key)."""

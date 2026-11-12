@@ -16,6 +16,8 @@ them, its menus and its toolbar, and keeps one layout; the parts live apart:
 - runbar.py: the measurement chosen, set, started and stopped on top;
 - navigator.py: the menus that find docks and Ctrl+K (Places: docks and
   measurements);
+- guide.py: what agents ask of the window (WindowGuide: its state, places
+  shown, a form filled, highlights drawn by overlay.py);
 - workspace_menu.py: the workspace in the File menu;
 - update_dialog.py (Updates), workers.py (HangWatch).
 """
@@ -77,6 +79,7 @@ from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.assistant import AssistantModel, ProvidersModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
+from thzdaq_gui.guide import WindowGuide
 from thzdaq_gui.navigator import DockNavigator, Places, QuickFind
 from thzdaq_gui.safe_state import SafeStateAction
 from thzdaq_gui.runbar import RunBar
@@ -147,6 +150,8 @@ class MainWindow(QMainWindow):
         )
         # What the menus, Ctrl+K and Processes show: docks, measurements, consoles
         self.places = Places(self.docks, self.runBar, self.consoles)
+        # What agents ask of this window: its state, places shown, highlights
+        self.guide = WindowGuide(session, self.places, self.runBar, self.docks, self)
 
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)

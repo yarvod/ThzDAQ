@@ -27,10 +27,11 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
+from thzdaq_api.ui import BEHIND, CLOSED, FRONT
+
 from thzdaq_gui import theme
 from thzdaq_gui.settings import NAVIGATOR_EXPANDED
 
-FRONT, BEHIND, CLOSED = "front", "behind", "closed"
 SECTIONS = ("Devices", "Measures", "Graphs", "Consoles")  # of the finder, in order
 NAME_ROLE = Qt.UserRole
 GROUP_ROLE = Qt.UserRole + 1
@@ -72,9 +73,15 @@ class DockEntry:
 
 
 class Owner(Protocol):
-    """What shows some of the rows found: the docks, the run bar."""
+    """What shows some of the rows found: the docks, the run bar, the
+    consoles. reveal shows a place agents name (thzdaq_api.ui), listed or
+    not (a base dock, a field of a measurement's form), and gives the widget
+    to point at; LabError when it cannot be shown now."""
 
     def __contains__(self, name: str) -> bool:
+        ...
+
+    def reveal(self, name: str) -> QWidget:
         ...
 
     def listed(self) -> List[DockEntry]:
@@ -116,6 +123,12 @@ class Places:
         owner = self.owner(name)
         if owner is not None:
             owner.toggle(name)
+
+    def reveal(self, name: str) -> Optional[QWidget]:
+        """Shown by its owner, the widget it is shown as; None: no owner
+        knows the name."""
+        owner = self.owner(name)
+        return owner.reveal(name) if owner is not None else None
 
 
 class DockNavigator(QWidget):

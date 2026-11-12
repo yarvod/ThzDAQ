@@ -89,8 +89,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     folder = Path(args.workspace) if args.workspace else default_workspace()
     station = start_profile(args.station, folder)
     session = Session(
-        lambda simulate, origin=GUI, kind=GUI: connect_or_start(
-            simulate, station, origin, kind
+        lambda simulate, origin=GUI, kind=GUI, window="": connect_or_start(
+            simulate, station, origin, kind, window=window
         ),
         folder,
     )

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from thzdaq_api import console
+from thzdaq_api.ui import BEHIND, CLOSED, FRONT
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import CONSOLE, dock_name, key_of
@@ -19,7 +20,7 @@ from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.console import ConsoleWidget
 from thzdaq_gui.docks.tabbed import TabbedDock
 from thzdaq_gui.models.console import ConsoleModel
-from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, DockEntry
+from thzdaq_gui.navigator import DockEntry
 from thzdaq_gui.script_output import OpenPlace
 
 ICON = "console"
@@ -123,3 +124,7 @@ class ConsoleDocks:
     def toggle(self, name: str) -> None:
         """A console is only shown (Console stays among the base docks)."""
         self.show(name)
+
+    def reveal(self, name: str) -> ConsoleWidget:
+        self.show(name)
+        return self.current()
