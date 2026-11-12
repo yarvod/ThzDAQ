@@ -2525,16 +2525,23 @@ GUI, а отказ доходит до агента текстом.
 - `uv run pytest`:
   - [x] сервис: операции, подписки опроса, снимок и догон событий; [ ] политика (М2);
   - аренды:
-    - [ ] внутри своего скрипта set и call на свои устройства — без вопросов (М3);
+    - [x] внутри своего скрипта set и call на свои устройства — без вопросов (М3;
+      `thzdaq-core/tests/test_lab_sessions.py`:
+      `test_an_agents_session_is_allowed_by_a_person_once`,
+      `test_a_persons_script_changes_the_bench_as_the_person_would`);
     - [x] `shared`: чужое изменение устройства идущего измерения выполняется сразу, запись
       в `interactions` (сейчас — set клиента; скрипт — М3);
     - [x] `exclusive`: set устройства идущей развёртки без `share` → `conflict`; с `share`
       → запись `conflict` в обоих измерениях, значение меняется; [ ] вопрос человеку
       вместо отказа (М2);
-    - [ ] скрипт с `share=["sis_bias_1"]` проходит без вопроса, без него — вопрос
-      человеку; агент — вопрос человеку, а не отказ (М2–М3);
-    - [ ] устройство, не объявленное в `devices`, добавляется в сессию при первом
-      обращении (М3);
+    - [x] скрипт с `share=["sis_bias_1"]` проходит без вопроса, без него — вопрос
+      человеку; агент — вопрос человеку, а не отказ (М2–М3;
+      `test_lab_scripts.py::test_a_script_shares_what_it_was_told_to`,
+      `test_lab_sessions.py::test_a_scripts_conflict_is_the_persons_to_allow`,
+      `test_an_agents_session_is_allowed_by_a_person_once`);
+    - [x] устройство, не объявленное в `devices`, добавляется в сессию при первом
+      обращении (М3; `test_lab_script.py::test_a_device_the_script_did_not_name_joins_its_measurement`,
+      `test_lab_sessions.py::test_a_device_it_did_not_name_joins_it`);
     - [x] `monitor.values_vs_time` (все слоты `read`) ни с чем не конфликтует;
     - [ ] изменение профиля, затрагивающее занятый прибор, — отказ, а не затрагивающее —
       применяется (шаг 6); [x] другой профиль во время измерений — отказ;
@@ -2583,13 +2590,19 @@ GUI, а отказ доходит до агента текстом.
       умолчанию (шаг 6);
   - [ ] CLI против демона в тесте (шаг 7);
   - Python-клиент (М3):
-    - [ ] объекты устройств и функции дают одинаковые вызовы операций;
-    - [ ] сессия скрипта создаёт измерение с арендами и графиками;
-    - [ ] `thzdaq cancel` останавливает `m.sweep`;
-    - [ ] убитый процесс скрипта → `interrupted` и `restore`;
-    - [ ] `thzdaq script start/stop` с логом;
-    - [ ] колонки получают единицу и `source` из показаний и развёрток; старый файл без
-      `source` читается;
+    - [x] объекты устройств и функции дают одинаковые вызовы операций
+      (`thzdaq-core/tests/test_lab_script.py::test_device_objects_and_functions_make_the_same_calls`);
+    - [x] сессия скрипта создаёт измерение с арендами и графиками
+      (`test_lab_sessions.py::test_a_session_is_a_measurement_the_script_fills`);
+    - [x] `thzdaq cancel` останавливает `m.sweep` (`thzdaq-daemon/tests/test_hot_cold_grid.py`,
+      `test_lab_script.py::test_a_cancel_from_elsewhere_ends_it_and_the_script_goes_on`);
+    - [x] убитый процесс скрипта → `interrupted` и `restore`
+      (`test_lab_scripts.py::test_stopping_cancels_its_measurements_and_restores`,
+      `test_lab_sessions.py::test_a_silent_script_ends_interrupted_and_is_restored`);
+    - [x] `thzdaq script start/stop` с логом (`thzdaq-daemon/tests/test_scripts.py`);
+    - [x] колонки получают единицу и `source` из показаний и развёрток
+      (`test_lab_script.py::test_a_scripts_measurement_records_what_values_know`); старый
+      файл без `source` читается (`test_parameters_plots_data.py::test_store_roundtrip`);
     - [x] процесс убит посреди записи → JSON + хвост `.jsonl` дают все строки
       (`thzdaq-core/tests/test_running_file.py`, `thzdaq-api/tests/test_measurement_file.py`);
     - [x] окно графиков (`thzdaq plot`) получает точки по событиям, после конца прогона
@@ -2607,11 +2620,17 @@ GUI, а отказ доходит до агента текстом.
     - [x] изменённый профиль даёт новую копию в папке, неизменённый — нет (М3);
     - [x] папка программы по умолчанию читает старые данные;
   - редактор (offscreen; сам редактор — М3, шаг 9, правки ассистента — М4):
-    - [ ] подсказки устройств и величин из описания стенда;
-    - [ ] проверка находит несуществующее устройство;
+    - [x] подсказки устройств и величин из описания стенда
+      (`thzdaq-gui/tests/test_custom.py::test_completions_know_the_bench`);
+    - [x] проверка находит несуществующее устройство
+      (`thzdaq-core/tests/test_lab_custom.py::test_a_check_tells_what_is_wrong_and_where`;
+      строки отмечены в редакторе —
+      `test_custom.py::test_the_tab_of_a_file_saves_checks_and_asks_before_it_closes`);
     - [ ] правка ассистента показывается кусками, ✓/✗ применяют и откатывают;
-    - [ ] изменение файла на диске при несохранённом тексте даёт баннер конфликта;
-    - [ ] Run запускает скрипт через демон, а вывод приходит в панель;
+    - [x] изменение файла на диске при несохранённом тексте даёт баннер конфликта
+      (`test_custom.py::test_a_file_changed_outside_is_taken_or_asked_about`);
+    - [x] Run запускает скрипт через демон, а вывод приходит во вкладку Log
+      (`test_custom.py::test_a_measurement_runs_from_the_bar_and_logs_what_it_prints`);
   - [ ] пул: простаивающее соединение Prologix перед закрытием шлёт `++loc` использованным
     адресам (`FakeLink`; шаг 8);
   - [ ] опасные действия (компрессор, нагреватель) всегда `ask` с вводом подтверждения,
@@ -2647,7 +2666,8 @@ GUI, а отказ доходит до агента текстом.
      текст;
   9. [ ] (М3) свой скрипт — пример P-V hot/cold по сетке — через `thzdaq script start`: кривые в
      GUI, `thzdaq status` и `thzdaq cancel <id>` из другого терминала; после отмены
-     смещение и угол вернулись, нагрузка на cold;
+     смещение и угол вернулись, нагрузка на cold (автоматически — `test_hot_cold_grid.py`
+     и `test_external_runs.py`; руками в окне — нет);
   10. [ ] (М3) `thzdaq init` в новой папке, `thzdaq run ...` там же, затем `thzdaq gui`: GUI
       открылся в этой папке, измерение из CLI видно в Data, копия профиля лежит в
       `stations/` папки;
