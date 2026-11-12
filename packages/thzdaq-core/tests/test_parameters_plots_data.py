@@ -1,10 +1,11 @@
 import json
 import math
+import sys
 
 import pytest
 from thzdaq_api.measurement_file import INTERRUPTED, Column, Measurement, Table
 from thzdaq_core.adapters.json_store import MeasurementStore
-from thzdaq_api.measurement_file import export_csv, read_measurement
+from thzdaq_api.measurement_file import export_csv, read_measurement, write_measurement
 from thzdaq_api.measurement_file import dumps, loads
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import (
@@ -199,6 +200,30 @@ class TestDataStore:
         assert {m.id for m in store} == {1, 41, "20261023-022400-ab12"}
         loaded = read_measurement(store.path_for(first))
         assert len(loaded.started) == len("2026-10-23T03:08:22.123")  # ms
+
+    def test_a_file_name_is_one_every_system_allows(self, tmp_path):
+        """A script's measurement is script:<title>: a colon names a stream of
+        a file on NTFS, a slash a folder. Files named so before are read."""
+        store = MeasurementStore(tmp_path)
+        names = {
+            "script:pv fine/2": "000001_script_pv_fine_2.json",
+            "custom.hot_cold": "000002_custom_hot_cold.json",
+            "script:узкий P-V": "000003_script_узкий_P-V.json",
+        }
+        for number, procedure in enumerate(names, 1):
+            measurement = Measurement(procedure, id=number, started=STARTED)
+            assert store.save(measurement).name == names[procedure]
+        old = {}
+        if sys.platform != "win32":  # where such a name could be written
+            old[4] = Measurement("script:scan", id=4, started=STARTED)
+            write_measurement(
+                old[4], tmp_path / STARTED[:10] / "000004_script:scan.json"
+            )
+        assert MeasurementStore(tmp_path).next_id() == 4 + len(old)
+        assert {m.procedure for m in store} == {
+            *names,
+            *(m.procedure for m in old.values()),
+        }
 
     def test_runner_numbers_measurements(self, tmp_path):
         from thzdaq_api.measurement_file import DeviceUse
