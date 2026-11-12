@@ -14,6 +14,14 @@ from thzdaq_api.scripts import RUNNING, ListScripts, ReadScriptLog
 
 BIAS, DETECTOR, LOAD, GRID = "sis_bias_1", "power_meter_1", "chopper_1", "grid_1"
 POINTS = 21  # of each bias sweep
+# The example's defaults made short; the grid's settle stays long enough for
+# the cancel to land well before the last angle
+SHORT = {
+    '"0:7:351"': f'"0:7:{POINTS}"',
+    'value("Grid settle", 1,': 'value("Grid settle", 0.5,',
+    'value("Load settle", 2,': 'value("Load settle", 0.05,',
+    'value("Settle", 10,': 'value("Settle", 1,',
+}
 
 
 def value(lab, ref, key):
@@ -27,7 +35,10 @@ def test_the_grid_hot_cold_runs_as_a_script_and_is_cancelled(home, tmp_path, thz
     lab.call(CallAction(ref=LOAD, action="to_hot"))
     path = examples.create("hot_cold_grid", tmp_path / "scripts")
     text = path.read_text(encoding="utf-8")
-    path.write_text(text.replace('"0:7:351"', f'"0:7:{POINTS}"'), encoding="utf-8")
+    for default, short in SHORT.items():
+        assert default in text
+        text = text.replace(default, short)
+    path.write_text(text, encoding="utf-8")
 
     allowed = [f"--allow=set:{ref}" for ref in (BIAS, DETECTOR, LOAD, GRID)]
     code, out, err = thzdaq(
@@ -38,7 +49,10 @@ def test_the_grid_hot_cold_runs_as_a_script_and_is_cancelled(home, tmp_path, thz
     wait_for(lambda: lab.call(ListRuns()), timeout=30)
     (run,) = lab.call(ListRuns())
     # into the second angle: the grid has turned
-    wait_for(lambda: lab.call(WaitMeasurement(id=run.id)).done > 2 * POINTS, timeout=60)
+    wait_for(
+        lambda: lab.call(WaitMeasurement(id=run.id, timeout=0)).done > 2 * POINTS,
+        timeout=60,
+    )
 
     code, out, err = thzdaq("status")
     assert code == 0, err
