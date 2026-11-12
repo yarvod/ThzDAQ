@@ -17,7 +17,7 @@ from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import MCPError
-from thzdaq_api import host
+from thzdaq_api import host, present
 from thzdaq_api.approvals import ANSWER_S
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.origins import MCP_CLIENT
@@ -58,7 +58,7 @@ def progress_of(ctx: ServerRequestContext) -> Optional[Progress]:
 
 def failed(error: LabError) -> types.CallToolResult:
     return types.CallToolResult(
-        content=[types.TextContent(text=f"{error.code.value}: {error}")],
+        content=[types.TextContent(text=present.failure(error))],
         is_error=True,
     )
 

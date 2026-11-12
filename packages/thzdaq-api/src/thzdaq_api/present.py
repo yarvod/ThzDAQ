@@ -22,6 +22,7 @@ from thzdaq_api.devices import (
     Value,
     shown,
 )
+from thzdaq_api.errors import LabError
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.measurements import (
     ColumnSummary,
@@ -34,6 +35,12 @@ from thzdaq_api.measurements import (
 from thzdaq_api.station import ConnectionInfo
 
 NOTHING = "none"
+
+
+def failure(error: LabError) -> str:
+    """A refused or failed call as the model reads it: its code, what went
+    wrong and what to do instead (a person's words when they refused)."""
+    return f"{error.code.value}: {error}"
 
 
 def lines(found: Iterable[str]) -> str:
