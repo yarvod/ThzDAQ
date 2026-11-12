@@ -54,6 +54,11 @@ do is seen in the window, and what you change waits for the person's consent.
     (`write_custom`: the person sees the change first), and run it with
     `start_measurement(procedure="custom.<name>", typed=..., devices=...)` as any
     procedure. The format is below.
+12. **Show the curves.** A run is drawn in the ThzDAQ window by itself. When the window
+    is closed, `thzdaq plot <number|file>` opens a window with only the plots of that
+    measurement, live while it runs (a plot of your own: `--table pv --x voltage --y
+    power --group load`); it changes nothing and needs nobody. In a script: `m.show()`
+    within `lab.measurement`, `run.show()` of `lab.run`, `lab.plot(<number|file>)`.
 
 ## Tools of the MCP server `thzdaq`
 
@@ -101,7 +106,7 @@ The same operations from your shell, with `--json` for answers to parse:
 `thzdaq describe sis.current_vs_voltage`, `thzdaq raw sis_block_1 "*IDN?"`,
 `thzdaq run sis.current_vs_voltage --device bias=sis_bias_1 --set voltage=0:7:351`
 (follows the run to its end; `--detach` only starts it), `thzdaq status`, `thzdaq cancel 12`,
-`thzdaq show <file>`. In an agent's shell the command is the agent's (`cli:agent`): `--yes`
+`thzdaq plot 12` (its plots in a window of their own), `thzdaq show <file>`. In an agent's shell the command is the agent's (`cli:agent`): `--yes`
 does not answer for the person, and what changes the bench waits for them as with MCP.
 
 ## Connecting an agent
@@ -163,7 +168,8 @@ with lab.measurement("pv", devices=[bias, detector, load], exclusive=[bias]) as 
 - `device(title, *capabilities, kind=...)`: the device chosen for the slot.
 - `value(title, default, unit=..., minimum=..., maximum=..., choices=...)`: a number in
   SI (typed in `unit`), a sweep for `m.sweep`, true/false, a choice, a text or a list.
-- `plot(title, table, x, y, group_by=..., kind="map", z=...)`: a plot known before the start.
+- `plot(title, table, x, y, group_by=..., kind="map", z=...)`: a plot known before the start;
+  `m.plot(...)` adds one while it runs, `m.show()` opens the plots window.
 - `instrument(id, driver="generic.scpi", connection="tcp://host:port", name=reading(...),
   other=setting(...))`: an instrument without a driver of its own, spoken to in raw
   commands. `reading(query, unit, parse, scale)` makes a value of an answer (`parse`: a

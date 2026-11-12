@@ -384,6 +384,24 @@ def test_watch_asks_the_person_at_the_terminal(thzdaq, lab, window, monkeypatch)
     lab.call(AnswerApproval(id=last.id, allowed=False))
 
 
+def test_the_agents_guide_names_commands_there_are(capsys):
+    """Every `thzdaq <command>` of the agents' guide is one, and a run's plots
+    window (thzdaq plot, m.show in a script) is among what it tells."""
+    import re
+
+    from thzdaq_api import guides
+    from thzdaq_cli.app import parser
+
+    text = guides.guide(guides.AGENTS)
+    named = set(re.findall(r"`thzdaq (?:--[a-z]+ )*([a-z][a-z-]*)", text))
+    assert {"plot", "run", "show"} <= named and "m.show()" in text
+    for command in sorted(named):
+        with pytest.raises(SystemExit) as ended:
+            parser().parse_args([command, "--help"])
+        assert ended.value.code == 0, command
+    capsys.readouterr()
+
+
 def test_agent_setup_writes_what_agents_read_in_a_folder(thzdaq, tmp_path):
     import tomllib
 

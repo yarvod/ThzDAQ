@@ -2318,8 +2318,11 @@ GUI, а отказ доходит до агента текстом.
      прогон — окно отписывается;
    - [x] Data → Plot в главном окне рисует и графики `m.plot` из файла
      (`measurements.saved_plots`, как окно графиков; сделано в шаге 9);
-   - [ ] (следующая версия) `thzdaq plot` и `lab.plot` / `m.show` — в гайдах агентов
-     (`thzdaq_api/assistant/*.md`, `AGENTS.md` рабочей папки) и в MCP.
+   - [x] `thzdaq plot` и `lab.plot` / `run.show` / `m.show` — в гайде агентов
+     (`thzdaq_api/assistant/agents.md`, он же `AGENTS.md` рабочей папки; каждая команда
+     гайда есть у `thzdaq`: `test_the_agents_guide_names_commands_there_are`);
+   - [ ] (следующая версия) окно графиков инструментом MCP — не решено, нужен ли агенту
+     инструмент, открывающий окно на экране человека (без оболочки, как у Claude Desktop).
 5. ✅ **Дозапись `.jsonl` для долгих измерений:**
    - [x] описание без строк во время прогона, строки в `<id>_<имя>.jsonl`, целый JSON в
      конце (`MeasurementWriter` в `application/ports.py`, `json_store.RunningFile`);
