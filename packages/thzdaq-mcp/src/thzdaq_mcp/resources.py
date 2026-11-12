@@ -6,13 +6,12 @@ from urllib.parse import urlsplit
 
 import mcp_types as types
 import msgspec
-from thzdaq_api import guides
+from thzdaq_api import guides, present
 from thzdaq_api.devices import ListDevices
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import DescribeProcedure, ListProcedures
 from thzdaq_api.station import CONNECTION, INSTRUMENTS, KIND, GetStation
 
-from thzdaq_mcp import present
 from thzdaq_mcp.bench import Bench
 
 SCHEME = "thzdaq"

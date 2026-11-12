@@ -1,4 +1,5 @@
-"""What an agent reads back: short text, values with their units, no arrays.
+"""What an agent and the assistant read back: short text, values with their
+units, no arrays (the answers of the tools, thzdaq_api.tools).
 
 Values travel in SI (power in dBm); each is shown with the prefix that keeps
 it from 1 to 999 ("2.3 mV"), as the daemon reads it back when it is typed.
