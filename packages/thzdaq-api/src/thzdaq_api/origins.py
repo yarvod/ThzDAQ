@@ -15,7 +15,8 @@ from typing import Optional
 GUI = "gui"  # a window: people answer in it
 CLI = "cli"  # the command line in a terminal of a person
 AGENT_CLI = "cli:agent"  # the command line in a shell an agent runs
-ASSISTANT = "assistant"  # the chat in the window
+ASSISTANT = "assistant"  # the chat in the window: an agent
+ASSISTANT_CLIENT = "assistant"  # the kind of client the chat listens as
 MCP = "mcp:"  # mcp:<the agent's name> (Claude Code, Codex)
 MCP_CLIENT = "mcp"  # the kind of client an MCP server listens as
 SCRIPT = "script:"  # script:<its name>
