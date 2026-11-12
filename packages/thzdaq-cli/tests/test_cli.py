@@ -209,6 +209,22 @@ def test_the_daemon_is_asked_about_itself(thzdaq):
     assert code == 0 and "no safe state" in out
 
 
+def test_the_status_tells_how_the_daemon_fares(lab):
+    """What a daemon in a process of its own knows of itself: memory, threads,
+    the last errors of its log."""
+    from thzdaq_api.daemon import GetDaemonStatus
+    from thzdaq_cli.daemon import status_text
+
+    status = lab.call(GetDaemonStatus())
+    assert "MB" not in status_text(status)  # a lab in this process: not known
+    process = msgspec.structs.replace(
+        status.process, memory=50 * 2**20, threads=7, errors=("10:01 x: it broke",)
+    )
+    shown = status_text(msgspec.structs.replace(status, process=process))
+    assert shown.splitlines()[0].endswith(", 50 MB, 7 threads")
+    assert shown.endswith("\n\nlast errors:\n10:01 x: it broke")
+
+
 def test_the_command_starts_the_daemon_it_needs(tmp_path):
     """No daemon runs: status says so (exit 3); another command starts the
     simulator's daemon and says it did; stop ends it."""

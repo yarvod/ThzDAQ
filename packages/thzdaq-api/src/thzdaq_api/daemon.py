@@ -54,6 +54,15 @@ class ProcessInfo(msgspec.Struct, frozen=True):
     started: str  # wall time, ISO
     port: int
     simulate: bool
+    memory: int = 0  # bytes it holds in RAM; 0: not known (a lab in a client)
+    threads: int = 0  # 0: not known
+    errors: Tuple[str, ...] = ()  # the last errors of its log, the latest last
+
+    def usage(self) -> str:
+        """Its memory and threads as people read them; empty when not known."""
+        if not self.memory:
+            return ""
+        return f"{self.memory / 2**20:.0f} MB, {self.threads} threads"
 
 
 class ClientInfo(msgspec.Struct, frozen=True):

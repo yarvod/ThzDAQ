@@ -1472,12 +1472,14 @@ name = "thzdaq-daemon"
 version = "0.0.6b2"
 source = { editable = "packages/thzdaq-daemon" }
 dependencies = [
+    { name = "psutil" },
     { name = "thzdaq-api" },
     { name = "thzdaq-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "psutil", specifier = ">=5.9" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-core", editable = "packages/thzdaq-core" },
 ]

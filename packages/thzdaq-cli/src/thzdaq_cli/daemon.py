@@ -96,7 +96,8 @@ def status_text(status: DaemonStatus) -> str:
     process = status.process
     lines = [
         f"ThzDAQ {process.app_version} daemon{' (simulator)' if process.simulate else ''}"
-        f", pid {process.pid}, port {process.port}, since {process.started}",
+        f", pid {process.pid}, port {process.port}, since {process.started}"
+        + (f", {process.usage()}" if process.usage() else ""),
         f"profile {show.profile(status.station, status.path)}",
     ]
     sections = (
@@ -119,6 +120,8 @@ def status_text(status: DaemonStatus) -> str:
             lines += ["", f"{title}:", text]
     if status.problems:
         lines += ["", "problems:", *status.problems]
+    if process.errors:
+        lines += ["", "last errors:", *process.errors]
     return "\n".join(lines)
 
 

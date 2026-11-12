@@ -3,6 +3,7 @@ after a restart, ended by a stop, an idle timeout or a kill."""
 
 import contextlib
 import json
+import logging
 import subprocess
 import sys
 import threading
@@ -135,6 +136,12 @@ def in_thread(home, idle):
         assert read_host(files) is None
 
 
+def client_of(daemon):
+    files = daemon.options.files
+    wait_for(lambda: read_host(files) is not None, timeout=5)
+    return RemoteLab(read_host(files), "test", "test")
+
+
 def test_idle_it_ends(home):
     with in_thread(home, idle=0.05) as (_, running):
         running.join(timeout=5)
@@ -143,14 +150,23 @@ def test_idle_it_ends(home):
 
 def test_a_listener_keeps_it(home):
     with in_thread(home, idle=0.0) as (daemon, running):
-        wait_for(lambda: read_host(daemon.options.files) is not None, timeout=5)
-        lab = RemoteLab(read_host(daemon.options.files), "test", "test")
+        lab = client_of(daemon)
         lab.subscribe(lambda event: None)
         wait_for(lambda: daemon.clients(), timeout=5)
         lab.call(SetDaemonSettings(idle_timeout=0.05))  # idle from now on
         time.sleep(0.5)  # ten idle timeouts, fifty looks
         assert running.is_alive()
         lab.close()
+
+
+def test_its_status_tells_how_it_fares(home):
+    with in_thread(home, idle=0.0) as (daemon, _):
+        lab = client_of(daemon)
+        logging.getLogger("thzdaq.test").error("it broke", exc_info=OSError("gone"))
+        process = lab.call(GetDaemonStatus()).process
+        lab.close()
+    assert process.memory > 2**20 and process.threads > 2
+    assert process.errors[-1].endswith(" thzdaq.test: it broke (OSError: gone)")
 
 
 def test_a_stop_waits_for_measurements_unless_it_cancels_them(home):
