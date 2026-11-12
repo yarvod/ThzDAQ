@@ -201,6 +201,18 @@ class TestWindow:
         window.show_dock("device:sis_bias_1")
         assert bias.dockAreaWidget() is group and bias.isCurrentTab()
 
+    def test_graphs_are_named_by_their_caption(self, window):
+        """The key names the dock (layouts, into=); people read the caption:
+        in the dock's title, the graph's own title, the Graphs menu and Ctrl+K."""
+        coil = window.docks["graph:Coil-t"]
+        assert coil.windowTitle() == "I–t   Coil current (time)"
+        assert window.docks["graph:p-t"].windowTitle() == "p–t   Pressure (time)"
+        graph = window.hub.graph("I-V")
+        assert graph.title == "I-V"
+        shown = graph.plot.getPlotItem().titleLabel.text
+        assert shown == "I–V&nbsp;&nbsp;&nbsp;SIS current (bias voltage)"
+        assert window.docks["graph:I-V"].windowTitle() == graph.caption
+
     def test_graphs_open_with_their_kind(self, window):
         """A graph not on screen joins the open graphs."""
         tn = window.docks["graph:Tn-V"]
@@ -803,8 +815,10 @@ class TestDeviceDocks:
     def test_monitor_plots_to_time_graphs(self, window, wait):
         panel = window.docks["device:power_meter_1"].widget().panels[0]
         panel.interval.setValue(0.1)
-        raised = []
-        window.hub.raise_requested.connect(lambda w: raised.append(w.title))
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
         panel.plot.setChecked(True)
         panel.monitor.setChecked(True)
         graph = window.hub.graph("P-t")
@@ -812,7 +826,33 @@ class TestDeviceDocks:
         panel.monitor.setChecked(False)
         key = ("monitor", "power_meter_1", "power")
         assert graph.curve_label(key) == "R&S NRX Power"
-        assert raised == ["P-t"]  # once, not on every reading
+        assert shown == [["P-t"]]  # once, not on every reading
+
+    def test_a_sis_bias_monitor_shows_both_its_graphs(self, window, wait, app):
+        """I-t and V-t come on screen when the monitor starts, each in front
+        of a group of its own, so both are seen at once; again at the next
+        start."""
+        panel = window.docks["device:sis_bias_1"].widget().panels[0]
+        panel.interval.setValue(0.1)
+        for title in ("I-t", "V-t"):
+            window.docks[f"graph:{title}"].toggleView(False)
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append(sorted(w.title for w in widgets))
+        )
+        panel.plot.setChecked(True)
+        panel.monitor.setChecked(True)
+        wait(lambda: shown)
+        panel.monitor.setChecked(False)
+        app.processEvents()
+        assert shown == [["I-t", "V-t"]]
+        current, voltage = (window.docks[f"graph:{t}"] for t in ("I-t", "V-t"))
+        assert not current.isClosed() and not voltage.isClosed()
+        assert current.isCurrentTab() and voltage.isCurrentTab()
+        assert current.dockAreaWidget() is not voltage.dockAreaWidget()
+        panel.monitor.setChecked(True)
+        wait(lambda: len(shown) == 2)
+        panel.monitor.setChecked(False)
 
     def test_sis_bias_offsets_and_calibration(
         self, window, session, profile, wait, monkeypatch, bench
@@ -1685,6 +1725,22 @@ class TestRunGraphs:
         monkeypatch.setattr(box.runner, "start", lambda *a, **k: None)
         box.start()
         assert shown == [["P-V", "I-V"]]
+
+    def test_graphs_button_shows_the_graphs_of_a_measurement(self, window):
+        """Graphs, in its dock and on the bar on top: the graphs its
+        parameters would fill come on screen, without a start."""
+        shown = []
+        window.hub.run_requested.connect(
+            lambda widgets: shown.append([w.title for w in widgets])
+        )
+        box = window.docks["measure:sis.power_vs_voltage"].widget().box
+        box.controls.btnGraphs.click()
+        assert shown == [["P-V", "I-V"]]
+        assert not window.docks["graph:P-V"].isClosed()
+        window.runBar.choose("sis.current_vs_voltage")
+        window.runBar.controls.btnGraphs.click()
+        assert shown[-1] == ["I-V"]
+        assert not box.status().running
 
 
 class TestProcesses:

@@ -334,10 +334,7 @@ class ProcedureBox(QWidget):
         self.window = run.plot_window
         self.raised = False
         self.reached = []
-        self.expected = [
-            plot.title
-            for plot in self.hub.route(self.chosen_plots(run.plots), lambda _: None)
-        ]
+        self.expected = self.graphs_of(run.plots)
         self.hub.show_run(self.expected)
         self.log.clear()
         self.log_box.set_summary("")
@@ -416,6 +413,32 @@ class ProcedureBox(QWidget):
     def chosen_plots(self, plots):
         """The plots of a run as the dock draws them (where each goes)."""
         return plots
+
+    def graphs_of(self, plots) -> List[str]:
+        """The graphs plots of a run are drawn in."""
+        routed = self.hub.route(self.chosen_plots(plots), lambda _: None)
+        return list(dict.fromkeys(plot.title for plot in routed))
+
+    def show_graphs(self) -> None:
+        """Its graphs on screen, each in front of its own group: those of the
+        run going, else those the parameters and devices chosen would fill
+        (all of the procedure's while they describe no run)."""
+        if self.run_status.running and self.expected:
+            titles = self.expected + [t for t in self.reached if t not in self.expected]
+        else:
+            try:
+                run = self.session.call(
+                    DescribeProcedure(
+                        procedure=self.procedure,
+                        parameters=self.parameters(),
+                        devices=self.mapping(),
+                    )
+                )
+                plots = run.plots
+            except (ValueError, LabError):
+                plots = self.plots
+            titles = self.graphs_of(plots)
+        self.hub.show_run(titles)
 
     def on_started(self, measurement) -> None:
         self.measurement = measurement
