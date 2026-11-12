@@ -7,7 +7,7 @@ import pytest
 from lab_helpers import Window, calling
 from thzdaq_api.approvals import AnswerApproval
 from thzdaq_api.daemon import GetDaemonSettings, SetDaemonSettings
-from thzdaq_api.devices import ListDevices, SafeState, SetQuantity
+from thzdaq_api.devices import CallAction, ListDevices, SafeState, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.operation import Rights
 from thzdaq_api.origins import GUI
@@ -77,6 +77,23 @@ def test_an_allowed_set_that_may_harm_is_still_asked(sets_alone, lab_as, window)
     assert asked(lab_as, window, bias("2mV")).text == "100 µV → 2 mV (×20)"
     dangerous = SetQuantity(ref="sis_bias_1", key="active", value=False)
     assert asked(lab_as, window, dangerous).confirm == "sis_bias_1"
+
+
+def test_a_dangerous_action_is_asked_typing_the_device_though_allowed(
+    lab, lab_as, window
+):
+    """Agents may change devices alone; stopping the compressor still waits for
+    a person who types its name: no setting lets it go without one."""
+    profile = copy.deepcopy(lab.call(GetStation()).profile)
+    profile["instruments"]["compressor_1"] = {
+        "driver": "sumitomo.f70_rest",
+        "connection": {"kind": "http", "host": "10.0.0.5", "port": 21024},
+    }
+    lab.call(UpdateStation(profile=profile))
+    lab.call(SetDaemonSettings(agents={Rights.SET: Decision.ALLOW}))
+    stop = CallAction(ref="compressor_1", action="turn_off")
+    approval = asked(lab_as, window, stop)
+    assert approval.confirm == "compressor_1" and "warms up" in approval.warning
 
 
 def test_people_choose_any_rights_but_the_fixed_ones(lab, lab_as):
