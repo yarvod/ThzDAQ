@@ -1008,7 +1008,8 @@ with lab.measurement("pv_fine", devices=[bias, pm], comment="узкий P-V") as
 - `thzdaq script start my_scan.py [--python PATH] [--allow …] [--share REF] [-- args]` —
   скрипт запускает демон (`start_script`, порт `Launcher`, адаптер
   `adapters/processes.py`): тем же интерпретатором, что вызвал команду (у сборки —
-  `thzdaq-cli.exe run-script`, он выполняет файл как `__main__`), или указанным, в рабочей
+  `thzdaq-cli.exe run-script`, он выполняет файл как `__main__`, аргументы после файла — как
+  у `python`), или указанным, в рабочей
   папке, с переменными `THZDAQ_SCRIPT_ID` и `THZDAQ_SIMULATE` — по ним `connect()` находит
   свой демон и называет себя `script:<имя>@<id>`. Номер сквозной по демону и не повторяет
   логи, уже лежащие в папке. Скрипт переживает закрытие терминала, вывод (без буфера)
@@ -1038,7 +1039,8 @@ curve, экспорт CSV и `thzdaq show` работают как с любым
 
 Пример: P-V hot/cold по углам сетки, с Y-фактором и Tn. Встроенная процедура `sis.noise_temperature_vs_voltage`
 (Tn-V, `hot_cold` + `use_grid`) делает то же самое. Пример показывает, как это пишется скриптом,
-чтобы потом менять под себя.
+чтобы потом менять под себя. Он же с объявлениями формы — пример `hot_cold_grid`
+(`thzdaq_api/examples/hot_cold_grid.py`, «From an example…»).
 ```python
 from thzdaq import connect
 from thzdaq_analysis.noise import match_hot_cold, noise_temperature  # thzdaq[analysis]
@@ -1341,7 +1343,8 @@ my-experiment/
   и консоль работают интерпретатором той рабочей папки, из которой их запустили.
 - **Сборка:** PyInstaller кладёт в exe только найденные модули. Для скриптов на встроенном
   Python в сборку включается стандартная библиотека целиком, иначе скрипт упадёт на
-  `import statistics`. Тяжёлое (scipy и т. п.) — через своё окружение.
+  `import statistics` (`script_modules.py` — что берётся и что нет, `check_scripts.py`
+  проверяет сборку). Тяжёлое (scipy и т. п.) — через своё окружение.
 
 ## Редактор скриптов в GUI
 
@@ -2297,11 +2300,10 @@ GUI, а отказ доходит до агента текстом.
      `run-script` (`thzdaq_api/scripts.py`, `application/processes.py`,
      `thzdaq_cli/scripts.py`); скрипты в доке Daemon; сквозной тест на живом
      демоне-симуляторе (`thzdaq-daemon/tests/test_scripts.py`);
-   - [ ] (следующая версия) гонка: `ALLOWED` пишется в измерение после его старта
-     (`scripts.note` в обработчиках), и `_Run.note` теряет запись, пока у прогона нет
-     `measurement`, а короткий прогон может уже сохраниться. Передавать разрешения в сам
-     старт (`noted` у `_Run.execute`); тест
-     `test_what_a_script_was_allowed_goes_without_a_person` падает примерно 1 раз из 6.
+   - [x] гонка: `ALLOWED` писался в измерение после его старта, а короткий прогон мог уже
+     сохраниться. Теперь разрешения скрипта идут в сам старт (`ScriptProcesses.noted` →
+     `noted` у `Runs.start` и `Sessions.start`);
+     `test_what_a_script_was_allowed_is_in_a_run_that_ends_at_once`.
 3. ✅ **Рабочие папки целиком:**
    - [x] `thzdaq.toml`, поиск вверх (`thzdaq_api/workspace.py`), `thzdaq init`,
      `thzdaq gui`; CLI, MCP и `connect()` — в найденной папке, демон стартует с её
@@ -2317,8 +2319,11 @@ GUI, а отказ доходит до агента текстом.
      прогон — окно отписывается;
    - [x] Data → Plot в главном окне рисует и графики `m.plot` из файла
      (`measurements.saved_plots`, как окно графиков; сделано в шаге 9);
-   - [ ] (следующая версия) `thzdaq plot` и `lab.plot` / `m.show` — в гайдах агентов
-     (`thzdaq_api/assistant/*.md`, `AGENTS.md` рабочей папки) и в MCP.
+   - [x] `thzdaq plot` и `lab.plot` / `run.show` / `m.show` — в гайде агентов
+     (`thzdaq_api/assistant/agents.md`, он же `AGENTS.md` рабочей папки; каждая команда
+     гайда есть у `thzdaq`: `test_the_agents_guide_names_commands_there_are`);
+   - [ ] (следующая версия) окно графиков инструментом MCP — не решено, нужен ли агенту
+     инструмент, открывающий окно на экране человека (без оболочки, как у Claude Desktop).
 5. ✅ **Дозапись `.jsonl` для долгих измерений:**
    - [x] описание без строк во время прогона, строки в `<id>_<имя>.jsonl`, целый JSON в
      конце (`MeasurementWriter` в `application/ports.py`, `json_store.RunningFile`);
@@ -2352,13 +2357,20 @@ GUI, а отказ доходит до агента текстом.
      с обработкой), проверены на демоне-симуляторе;
    - [x] «скрипт этого измерения» из Data: тот же файл по sha256 или копия
      `scripts/<имя>_<id>.py`;
-   - [ ] (следующая версия) сессии скриптов пишут файл `<id>_script:<имя>.json`: двоеточие
-     в имени файла Windows не допускает (NTFS понимает его как поток файла) — заменить при
-     записи (`json_store`), как `.` в имени процедуры;
-   - [ ] (следующая версия) сборка: `thzdaq-cli run-script` берёт модули из PYZ CLI, а по
-     `ThzDAQ.spec` в нём нет `thzdaq`, `thzdaq_analysis`, numpy и всей stdlib — шаблоны в
-     сборке, видимо, упадут на импорте (сборкой не проверено; раздел «Интерпретатор для
-     скриптов» → «Сборка»).
+   - [x] сессии скриптов писали файл `<id>_script:<имя>.json`: двоеточие в имени файла
+     Windows не допускает (NTFS понимает его как поток файла), а `/` в названии делал папку.
+     Теперь в имени файла всё, кроме букв, цифр, `_` и `-`, — `_` (`json_store.UNSAFE`,
+     как `.` раньше); старые файлы с `:` читаются
+     (`test_a_file_name_is_one_every_system_allows`);
+   - [x] сборка: `thzdaq-cli run-script` берёт модули из PYZ CLI; шаг 10 добавил туда
+     `thzdaq` и `thzdaq_analysis`, но без их модулей (`thzdaq_analysis.noise` примеров
+     hot/cold падал на импорте) и без stdlib, которую CLI сам не импортирует (34 модуля:
+     `email.mime`, `html.parser`, `shelve`, …). Теперь `ThzDAQ.spec` берёт наши пакеты со
+     всеми модулями и stdlib целиком, кроме того, что скрипту у стенда не нужно
+     (`script_modules.py`, +1 МБ); `check_scripts.py` импортирует сборкой всё, что
+     импортируют примеры, и эту stdlib (smoke-тест релиза). Проверено на сборке macOS
+     (и запуск демоном сборки `script start x.py -- a -b`); на Windows — первый прогон
+     релиза в CI.
 9. **Свои измерения (Custom) и редактор** (раздел «Свои измерения (Custom)»; решено
    2026-11-05: формат `with lab` + объявления, библиотека стенда, свой редактор на Qt,
    отладка — вывод и Check, док Scripts убрать):
@@ -2454,9 +2466,14 @@ GUI, а отказ доходит до агента текстом.
       ADS-дока на файл (`docks/tabbed.py` — общий контейнер вкладок, им же станет Console);
 
 **Готово, когда:**
-- [ ] пример P-V hot/cold по сетке из этого документа работает скриптом;
-- [ ] его видно и можно остановить из GUI и CLI;
-- [ ] после отмены смещение и угол вернулись;
+- [x] пример P-V hot/cold по сетке из этого документа работает скриптом (пример
+  `hot_cold_grid` с объявлениями: своё измерение и `thzdaq script start`,
+  `thzdaq-daemon/tests/test_examples.py`, `test_hot_cold_grid.py`);
+- [x] его видно и можно остановить из GUI и CLI (`thzdaq status` и `thzdaq cancel` —
+  `test_hot_cold_grid.py`; Processes и Stop окна — `thzdaq-gui/tests/test_external_runs.py`,
+  `test_a_scripts_measurement_is_stopped_from_processes_and_restored`);
+- [x] после отмены смещение и угол вернулись, нагрузка — на cold (те же тесты, на
+  симуляторах);
 - [x] своё измерение из примера создаётся, правится и запускается в программе, а CLI и
   агент запускают его как `custom.<имя>`;
 - [x] его график выводится в новый или в выбранный существующий график окна;
@@ -2508,16 +2525,23 @@ GUI, а отказ доходит до агента текстом.
 - `uv run pytest`:
   - [x] сервис: операции, подписки опроса, снимок и догон событий; [ ] политика (М2);
   - аренды:
-    - [ ] внутри своего скрипта set и call на свои устройства — без вопросов (М3);
+    - [x] внутри своего скрипта set и call на свои устройства — без вопросов (М3;
+      `thzdaq-core/tests/test_lab_sessions.py`:
+      `test_an_agents_session_is_allowed_by_a_person_once`,
+      `test_a_persons_script_changes_the_bench_as_the_person_would`);
     - [x] `shared`: чужое изменение устройства идущего измерения выполняется сразу, запись
       в `interactions` (сейчас — set клиента; скрипт — М3);
     - [x] `exclusive`: set устройства идущей развёртки без `share` → `conflict`; с `share`
       → запись `conflict` в обоих измерениях, значение меняется; [ ] вопрос человеку
       вместо отказа (М2);
-    - [ ] скрипт с `share=["sis_bias_1"]` проходит без вопроса, без него — вопрос
-      человеку; агент — вопрос человеку, а не отказ (М2–М3);
-    - [ ] устройство, не объявленное в `devices`, добавляется в сессию при первом
-      обращении (М3);
+    - [x] скрипт с `share=["sis_bias_1"]` проходит без вопроса, без него — вопрос
+      человеку; агент — вопрос человеку, а не отказ (М2–М3;
+      `test_lab_scripts.py::test_a_script_shares_what_it_was_told_to`,
+      `test_lab_sessions.py::test_a_scripts_conflict_is_the_persons_to_allow`,
+      `test_an_agents_session_is_allowed_by_a_person_once`);
+    - [x] устройство, не объявленное в `devices`, добавляется в сессию при первом
+      обращении (М3; `test_lab_script.py::test_a_device_the_script_did_not_name_joins_its_measurement`,
+      `test_lab_sessions.py::test_a_device_it_did_not_name_joins_it`);
     - [x] `monitor.values_vs_time` (все слоты `read`) ни с чем не конфликтует;
     - [ ] изменение профиля, затрагивающее занятый прибор, — отказ, а не затрагивающее —
       применяется (шаг 6); [x] другой профиль во время измерений — отказ;
@@ -2566,13 +2590,19 @@ GUI, а отказ доходит до агента текстом.
       умолчанию (шаг 6);
   - [ ] CLI против демона в тесте (шаг 7);
   - Python-клиент (М3):
-    - [ ] объекты устройств и функции дают одинаковые вызовы операций;
-    - [ ] сессия скрипта создаёт измерение с арендами и графиками;
-    - [ ] `thzdaq cancel` останавливает `m.sweep`;
-    - [ ] убитый процесс скрипта → `interrupted` и `restore`;
-    - [ ] `thzdaq script start/stop` с логом;
-    - [ ] колонки получают единицу и `source` из показаний и развёрток; старый файл без
-      `source` читается;
+    - [x] объекты устройств и функции дают одинаковые вызовы операций
+      (`thzdaq-core/tests/test_lab_script.py::test_device_objects_and_functions_make_the_same_calls`);
+    - [x] сессия скрипта создаёт измерение с арендами и графиками
+      (`test_lab_sessions.py::test_a_session_is_a_measurement_the_script_fills`);
+    - [x] `thzdaq cancel` останавливает `m.sweep` (`thzdaq-daemon/tests/test_hot_cold_grid.py`,
+      `test_lab_script.py::test_a_cancel_from_elsewhere_ends_it_and_the_script_goes_on`);
+    - [x] убитый процесс скрипта → `interrupted` и `restore`
+      (`test_lab_scripts.py::test_stopping_cancels_its_measurements_and_restores`,
+      `test_lab_sessions.py::test_a_silent_script_ends_interrupted_and_is_restored`);
+    - [x] `thzdaq script start/stop` с логом (`thzdaq-daemon/tests/test_scripts.py`);
+    - [x] колонки получают единицу и `source` из показаний и развёрток
+      (`test_lab_script.py::test_a_scripts_measurement_records_what_values_know`); старый
+      файл без `source` читается (`test_parameters_plots_data.py::test_store_roundtrip`);
     - [x] процесс убит посреди записи → JSON + хвост `.jsonl` дают все строки
       (`thzdaq-core/tests/test_running_file.py`, `thzdaq-api/tests/test_measurement_file.py`);
     - [x] окно графиков (`thzdaq plot`) получает точки по событиям, после конца прогона
@@ -2590,11 +2620,17 @@ GUI, а отказ доходит до агента текстом.
     - [x] изменённый профиль даёт новую копию в папке, неизменённый — нет (М3);
     - [x] папка программы по умолчанию читает старые данные;
   - редактор (offscreen; сам редактор — М3, шаг 9, правки ассистента — М4):
-    - [ ] подсказки устройств и величин из описания стенда;
-    - [ ] проверка находит несуществующее устройство;
+    - [x] подсказки устройств и величин из описания стенда
+      (`thzdaq-gui/tests/test_custom.py::test_completions_know_the_bench`);
+    - [x] проверка находит несуществующее устройство
+      (`thzdaq-core/tests/test_lab_custom.py::test_a_check_tells_what_is_wrong_and_where`;
+      строки отмечены в редакторе —
+      `test_custom.py::test_the_tab_of_a_file_saves_checks_and_asks_before_it_closes`);
     - [ ] правка ассистента показывается кусками, ✓/✗ применяют и откатывают;
-    - [ ] изменение файла на диске при несохранённом тексте даёт баннер конфликта;
-    - [ ] Run запускает скрипт через демон, а вывод приходит в панель;
+    - [x] изменение файла на диске при несохранённом тексте даёт баннер конфликта
+      (`test_custom.py::test_a_file_changed_outside_is_taken_or_asked_about`);
+    - [x] Run запускает скрипт через демон, а вывод приходит во вкладку Log
+      (`test_custom.py::test_a_measurement_runs_from_the_bar_and_logs_what_it_prints`);
   - [ ] пул: простаивающее соединение Prologix перед закрытием шлёт `++loc` использованным
     адресам (`FakeLink`; шаг 8);
   - [ ] опасные действия (компрессор, нагреватель) всегда `ask` с вводом подтверждения,
@@ -2630,7 +2666,8 @@ GUI, а отказ доходит до агента текстом.
      текст;
   9. [ ] (М3) свой скрипт — пример P-V hot/cold по сетке — через `thzdaq script start`: кривые в
      GUI, `thzdaq status` и `thzdaq cancel <id>` из другого терминала; после отмены
-     смещение и угол вернулись, нагрузка на cold;
+     смещение и угол вернулись, нагрузка на cold (автоматически — `test_hot_cold_grid.py`
+     и `test_external_runs.py`; руками в окне — нет);
   10. [ ] (М3) `thzdaq init` в новой папке, `thzdaq run ...` там же, затем `thzdaq gui`: GUI
       открылся в этой папке, измерение из CLI видно в Data, копия профиля лежит в
       `stations/` папки;

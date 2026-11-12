@@ -66,3 +66,20 @@ def home(tmp_path, monkeypatch):
     yield tmp_path
     for simulate in (True, False):
         kill(simulate)
+
+
+@pytest.fixture
+def thzdaq(capsys, monkeypatch):
+    """thzdaq ARGS against the simulator's daemon, as a person types it."""
+    from thzdaq_api.origins import AGENT_SHELLS
+    from thzdaq_cli.app import main
+
+    for name in AGENT_SHELLS:
+        monkeypatch.delenv(name, raising=False)
+
+    def run(*argv):
+        code = main(["--simulate", *argv])
+        out, err = capsys.readouterr()
+        return code, out, err
+
+    return run

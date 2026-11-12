@@ -1,5 +1,6 @@
 """Measurements on disk, as the daemon writes them: one JSON file each,
-<root>/<YYYY-MM-DD>/<id>_<procedure>.json (thzdaq_api.measurement_file).
+<root>/<YYYY-MM-DD>/<id>_<procedure>.json (thzdaq_api.measurement_file), the
+procedure's name with _ for what a file name may not hold.
 
 Ids are numbers counted per data folder: the next one is one more than the
 largest in the file names, so they keep growing across runs of the program.
@@ -17,6 +18,7 @@ records of its records file.
 
 import logging
 import os
+import re
 import threading
 from pathlib import Path
 from typing import IO, Any, Dict, Mapping, Optional, Tuple
@@ -36,6 +38,11 @@ from thzdaq_api.measurement_file import (
 )
 
 logger = logging.getLogger(__name__)
+
+# What a file name of every system allows of a procedure's name: letters,
+# digits, _ and -; a script's "script:<title>" has a colon (a stream of a
+# file on NTFS) and may have a slash (a folder)
+UNSAFE = re.compile(r"[^\w-]+")
 
 
 class MeasurementStore(MeasurementFolder):
@@ -60,7 +67,7 @@ class MeasurementStore(MeasurementFolder):
                 "a measurement has no file before it starts (no start time)"
             )
         day = measurement.started[:10]
-        procedure = measurement.procedure.replace(".", "_")
+        procedure = UNSAFE.sub("_", measurement.procedure)
         number = measurement.id
         name = f"{number:06d}" if isinstance(number, int) else str(number)
         return self.root / day / f"{name}_{procedure}.json"

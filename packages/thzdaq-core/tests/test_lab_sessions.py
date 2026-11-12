@@ -5,7 +5,7 @@ import math
 
 import pytest
 from lab_helpers import Window, bodies, calling, wait_for
-from thzdaq_api.devices import ReadDevice, SetQuantity
+from thzdaq_api.devices import CallAction, ReadDevice, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.events import MeasurementLog, MeasurementPlotted, MeasurementRecords
 from thzdaq_api.leases import EXCLUSIVE, READ, SHARED, ListLeases
@@ -270,8 +270,9 @@ def test_a_sweep_is_typed_as_people_type_it(lab):
 # What a script may do: an agent's asks a person for its session once
 def test_an_agents_session_is_allowed_by_a_person_once(lab_as, window):
     scan = lab_as(AGENTS, "script")
+    named = ("sis_bias_1", "chopper_1")
     thread, done = calling(
-        scan, StartSession(title="scan", devices=("sis_bias_1",), comment="narrow")
+        scan, StartSession(title="scan", devices=named, comment="narrow")
     )
     approval = window.asked()
     assert approval.title == "Start script scan" and approval.origin == AGENTS
@@ -280,7 +281,8 @@ def test_an_agents_session_is_allowed_by_a_person_once(lab_as, window):
     thread.join(5)
     run = done["result"]
     asked = len(window.waiting())
-    scan.call(bias("1mV", session=run.id))  # its own device: nobody asked
+    scan.call(bias("1mV", session=run.id))  # its own devices: nobody asked
+    scan.call(CallAction(ref="chopper_1", action="to_hot", session=run.id))
     scan.call(RestoreOnExit(id=run.id, ref="sis_bias_1", key="voltage_set"))
     scan.call(RecordSession(id=run.id, table="t", rows=({"x": 1},)))
     scan.call(AdvanceSession(id=run.id))

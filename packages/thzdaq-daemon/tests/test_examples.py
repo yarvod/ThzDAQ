@@ -26,6 +26,13 @@ from thzdaq_api.scripts import ListScripts, ReadScriptLog, StartScript
 SHORT = {
     "sweep": {"voltage": "0:7:21", "settle": "1"},
     "hot_cold": {"voltage": "0:7:21", "settle": "1", "load_settle": "0.05"},
+    "hot_cold_grid": {
+        "voltage": "0:7:11",
+        "angle": "0:90:3",
+        "settle": "1",
+        "load_settle": "0.05",
+        "grid_settle": "0.05",
+    },
     "monitor": {"interval": "0.05", "duration": "0.5"},
     "iv_analysis": {"voltage": "0:7:141"},
     "map": {"voltage": "0:7:5", "current": "0:10:3", "settle": "1"},
@@ -34,11 +41,12 @@ SHORT = {
 # The devices of the form, as a window or the command line fills the slots
 BENCH = {
     "bias": "sis_bias_1", "detector": "power_meter_1", "load": "chopper_1",
-    "coil": "sis_coil_1",
+    "coil": "sis_coil_1", "grid": "grid_1",
 }  # fmt: skip
 DEVICES = {
     "sweep": ("bias", "detector"),
     "hot_cold": ("bias", "detector", "load"),
+    "hot_cold_grid": ("bias", "detector", "load", "grid"),
     "monitor": ("detector", "bias"),
     "iv_analysis": ("bias",),
     "map": ("bias", "coil", "detector"),
@@ -49,6 +57,7 @@ DEVICES = {
 MEASURES = {
     "sweep": ("iv", 21, "completed"),
     "hot_cold": ("pv", 42, "Tn "),
+    "hot_cold_grid": ("pv", 66, "completed"),
     "monitor": ("samples", 3, "readings in"),
     "iv_analysis": (None, 0, "Vgap = "),  # its records are the I-V run's
     "map": ("map", 15, "completed"),

@@ -7,6 +7,7 @@ call:<device>, run:<procedure>, raw:<instrument>; an agent's allows
 nothing: a script has the rights of whoever started it). stop cancels its
 measurements, and ends it when it has not ended a few seconds later."""
 
+import argparse
 import runpy
 import sys
 import time
@@ -68,10 +69,13 @@ def add(commands) -> None:
         host.RUN_SCRIPT, help="run a Python file with this program's Python"
     )
     ran = run.add_mutually_exclusive_group(required=True)
-    ran.add_argument("file", nargs="?", help="then -- and the script's arguments")
+    ran.add_argument("file", nargs="?", help="then the script's arguments, as python")
     ran.add_argument(
         host.MODULE, dest="module", help="a module as a program (python -m), then --"
     )
+    # Everything after the file is the script's, as python takes it: the daemon
+    # starts a script as <its python> <file> <arguments>
+    run.add_argument("arguments", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     run.set_defaults(run=run_script)
 
 
@@ -149,7 +153,7 @@ def run_script(args, client: Client) -> int:
         runpy.run_module(args.module, run_name="__main__", alter_sys=True)
         return OK
     path = Path(args.file).resolve()
-    sys.argv = [str(path), *args.passed]
+    sys.argv = [str(path), *args.arguments, *args.passed]
     sys.path.insert(0, str(path.parent))
     runpy.run_path(str(path), run_name="__main__")
     return OK

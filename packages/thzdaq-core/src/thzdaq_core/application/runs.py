@@ -298,10 +298,14 @@ class Runs:
         workspace: Optional[str] = None,
         dry_run: bool = False,
         shares: Collection[str] = (),
+        noted: Optional[Mapping[str, Any]] = None,
     ) -> RunInfo:
         """share: every device it uses may be swept by another measurement too,
         shares: these devices may. dry_run: check all a start checks, open and
-        write nothing, and return the run it would be (planned, number 0)."""
+        write nothing, and return the run it would be (planned, number 0).
+        noted: what the measurement notes from its start besides the copy of
+        the profile (what its script was allowed): in its file however soon
+        it ends."""
         folder = self.workspaces.folder(workspace)
         try:
             procedure.validate()
@@ -316,7 +320,7 @@ class Runs:
         if dry_run:
             return self._plan(procedure, refs, modes, comment, origin, shared, folder)
         store = self.workspaces.store(folder)
-        noted = self._profile_copy(folder)
+        noted = {**self._profile_copy(folder), **(noted or {})}
         with self._lock:
             run_id = self._last_id = max(store.next_id(), self._last_id + 1)
         try:

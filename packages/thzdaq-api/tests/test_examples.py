@@ -9,7 +9,15 @@ from thzdaq_api import examples
 from thzdaq_api.custom import declared_names
 from thzdaq_api.errors import ErrorCode, LabError
 
-NAMES = ["hot_cold", "iv_analysis", "map", "monitor", "raw_instrument", "sweep"]
+NAMES = [
+    "hot_cold",
+    "hot_cold_grid",
+    "iv_analysis",
+    "map",
+    "monitor",
+    "raw_instrument",
+    "sweep",
+]
 
 
 def test_every_example_has_a_title_says_what_it_does_and_declares_its_form():

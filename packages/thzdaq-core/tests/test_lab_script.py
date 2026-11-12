@@ -8,7 +8,7 @@ import time
 import pytest
 from lab_helpers import Window, wait_for
 from thzdaq_api.data import Measured
-from thzdaq_api.devices import ReadDevice
+from thzdaq_api.devices import DescribeDevice, ReadDevice
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lab import Bench
 from thzdaq_api.leases import READ, ListLeases
@@ -53,6 +53,33 @@ def test_devices_are_objects_of_their_quantities_and_actions(bench):
     with pytest.raises(LabError) as caught:
         bias.voltag_set = 1e-3
     assert caught.value.code == ErrorCode.NOT_FOUND
+
+
+def test_device_objects_and_functions_make_the_same_calls(bench, monkeypatch):
+    """A device object only calls the bench's functions (bench.set, read,
+    call): the daemon gets the same operations either way."""
+    calls = []
+    call = bench.lab.call
+    monkeypatch.setattr(bench.lab, "call", lambda op: calls.append(op) or call(op))
+    bias, load = bench["sis_bias_1"], bench["chopper_1"]
+
+    def made(do):
+        calls.clear()
+        do()
+        return [op for op in calls if not isinstance(op, DescribeDevice)]
+
+    same = [
+        (lambda: setattr(bias, "voltage_set", "1mV"),
+         lambda: bench.set("sis_bias_1", "voltage_set", "1mV")),
+        (lambda: bias.__setitem__("voltage_set", 2e-3),
+         lambda: bench.set("sis_bias_1", "voltage_set", 2e-3)),
+        (lambda: bias.voltage, lambda: bench.read("sis_bias_1", "voltage")),
+        (lambda: bias.read("voltage", "current"),
+         lambda: bench.read("sis_bias_1", "voltage", "current")),
+        (load.to_hot, lambda: bench.call("chopper_1", "to_hot")),
+    ]  # fmt: skip
+    for by_object, by_function in same:
+        assert made(by_object) == made(by_function) != []
 
 
 def test_a_procedure_runs_and_its_table_is_read(bench):

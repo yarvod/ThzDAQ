@@ -31,9 +31,8 @@ class StartSession(_OfSession):
     operation = api.StartSession
 
     def handle(self, args, origin):
-        started = self.sessions.start(self._shared(args, origin), origin)
-        self.scripts.note(started.id, origin)
-        return started
+        shared = self._shared(args, origin)
+        return self.sessions.start(shared, origin, self.scripts.noted(origin))
 
     def _shared(self, args, origin):
         """With the devices its script shares (thzdaq script start --share)."""
