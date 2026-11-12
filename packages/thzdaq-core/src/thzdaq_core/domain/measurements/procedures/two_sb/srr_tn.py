@@ -5,6 +5,8 @@ from thzdaq_instruments.capabilities import Switchable
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_core.domain.measurements.procedures.common import (
+    TN_IF_CAPTION,
+    Y_IF_CAPTION,
     Group,
     IF_GHZ,
     TN_K,
@@ -24,7 +26,7 @@ from thzdaq_core.domain.parameters import (
     shown_while,
     When,
 )
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedures.two_sb.common import (
     SIDE_BAND_CHOICES,
     SOURCE,
@@ -41,14 +43,17 @@ NOISE_PLOTS = (
     PlotInfo(
         "noise_power", "P-IF hot/cold", "power", "frequency", "power",
         x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("channel", "load"),
+        caption=plot_caption("P–IF", "IF power, hot and cold load (IF frequency)"),
     ),
     PlotInfo(
         "y_factor", "Y-IF", "noise", "frequency", "y_factor",
         x_label=IF_GHZ, y_label=Y_DB, x_scale=GHZ, group_by=("channel",),
+        caption=Y_IF_CAPTION,
     ),
     PlotInfo(
         "tn", "Tn-IF", "noise", "frequency", "noise_temperature",
         x_label=IF_GHZ, y_label=TN_K, x_scale=GHZ, group_by=("channel",),
+        caption=TN_IF_CAPTION,
     ),
 )  # fmt: skip
 
@@ -66,10 +71,12 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
         PlotInfo(
             "tone", "Test tone P-IF", "tone", "frequency", "power",
             x_label=IF_GHZ, y_label=POWER_DBM, x_scale=GHZ, group_by=("tone", "channel"),
+            caption=plot_caption("P–IF", "Test tone power (IF frequency)"),
         ),
         PlotInfo(
             "ratio", "SRR-IF", "ratio", "frequency", "power_difference",
             x_label=IF_GHZ, y_label="P wanted - P image, dB", x_scale=GHZ, group_by=("tone",),
+            caption=plot_caption("SRR–IF", "Sideband rejection ratio (IF frequency)"),
         ),
     ) + NOISE_PLOTS  # fmt: skip
     shown_if = shown_while(

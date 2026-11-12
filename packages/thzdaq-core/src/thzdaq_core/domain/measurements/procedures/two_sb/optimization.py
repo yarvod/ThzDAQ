@@ -10,7 +10,7 @@ from thzdaq_analysis.two_sb import (
 )
 from thzdaq_api.measurement_file import KNOWN_COLUMNS
 from thzdaq_core.domain.parameters import FloatParameter
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedures.common import (
     Group,
     IFFrequency,
@@ -32,6 +32,7 @@ def _map(column: str) -> PlotInfo:
         column, known.title, "map", "sis1_voltage_set", "sis2_voltage_set",
         x_label="SIS1, mV", y_label="SIS2, mV", x_scale=MV, y_scale=MV,
         kind="map", z=column, z_label=known.unit,
+        caption=plot_caption(known.title, "over the bias of SIS1 and SIS2"),
     )  # fmt: skip
 
 

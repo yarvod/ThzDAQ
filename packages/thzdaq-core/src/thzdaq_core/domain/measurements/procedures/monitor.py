@@ -31,15 +31,15 @@ from thzdaq_core.domain.measurements.procedures.common import (
 )
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.domain.parameters import FloatParameter, StringListParameter
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedure import Procedure
 
 
-def _time_plot(title, y_label, y_scale=1.0) -> PlotInfo:
+def _time_plot(title, caption, y_label, y_scale=1.0) -> PlotInfo:
     return PlotInfo(
         title, title, "samples", "time", "value", x_label="Time, s",
         y_label=y_label, y_scale=y_scale, group_by=("device", "quantity"),
-        where=(("plot", title),),
+        where=(("plot", title),), caption=caption,
     )  # fmt: skip
 
 
@@ -51,14 +51,32 @@ class Monitor(Procedure):
         "compressor) at a fixed interval until stopped or the duration ends."
     )
     plots = (
-        _time_plot(UNIT_PLOTS["dBm"], POWER_DBM),
-        _time_plot(UNIT_PLOTS["K"], "Temperature, K"),
-        _time_plot(UNIT_PLOTS["V"], VOLTAGE_MV, MV),
-        _time_plot(UNIT_PLOTS["A"], CURRENT_UA, UA),
-        _time_plot(COIL_PLOT, COIL_CURRENT_MA, MA),
-        _time_plot(UNIT_PLOTS["Pa"], "Pressure, Pa"),
-        _time_plot(UNIT_PLOTS["Hz"], FREQUENCY_GHZ, GHZ),
-        _time_plot(OTHER_PLOT, "Value"),
+        _time_plot(UNIT_PLOTS["dBm"], plot_caption("P–t", "Power (time)"), POWER_DBM),
+        _time_plot(
+            UNIT_PLOTS["K"], plot_caption("T–t", "Temperature (time)"), "Temperature, K"
+        ),
+        _time_plot(
+            UNIT_PLOTS["V"], plot_caption("V–t", "Voltage (time)"), VOLTAGE_MV, MV
+        ),
+        _time_plot(
+            UNIT_PLOTS["A"], plot_caption("I–t", "Current (time)"), CURRENT_UA, UA
+        ),
+        # Its key stays Coil-t: layouts and scripts name it so
+        _time_plot(
+            COIL_PLOT, plot_caption("I–t", "Coil current (time)"), COIL_CURRENT_MA, MA
+        ),
+        _time_plot(
+            UNIT_PLOTS["Pa"], plot_caption("p–t", "Pressure (time)"), "Pressure, Pa"
+        ),
+        _time_plot(
+            UNIT_PLOTS["Hz"],
+            plot_caption("f–t", "Frequency (time)"),
+            FREQUENCY_GHZ,
+            GHZ,
+        ),
+        _time_plot(
+            OTHER_PLOT, plot_caption("x–t", "Values without a unit (time)"), "Value"
+        ),
     )
 
     watch = StringListParameter(

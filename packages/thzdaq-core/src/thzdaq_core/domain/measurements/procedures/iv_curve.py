@@ -4,6 +4,7 @@ from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
 from thzdaq_instruments.units import MV, UA
 
 from thzdaq_core.domain.measurements.procedures.common import (
+    IV_CAPTION,
     CURRENT_UA,
     VOLTAGE_MV,
     BiasVoltage,
@@ -32,6 +33,7 @@ class IVCurve(Procedure):
             x_scale=MV,
             y_scale=UA,
             analysis="iv",
+            caption=IV_CAPTION,
         ),
     )
 

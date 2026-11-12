@@ -127,6 +127,13 @@ def fill_slots(
 
 GroupKey = Tuple[Any, ...]
 LABEL_UNIT = ", "  # "Voltage, V": the unit of an axis after its title
+CAPTION_GAP = "   "  # "p–t   Pressure (time)": the symbols, then the words
+
+
+def plot_caption(symbols: str, words: str) -> str:
+    """What people read as a graph's name: ("p–t", "Pressure (time)") ->
+    "p–t   Pressure (time)"."""
+    return f"{symbols}{CAPTION_GAP}{words}"
 
 
 def unit_of(label: str) -> str:
@@ -142,6 +149,11 @@ class PlotInfo(msgspec.Struct, frozen=True):
     (value / scale), e.g. x_scale=1e9 shows Hz as GHz. Records with different
     values of the group_by keys form separate curves; kind="map" draws z over
     x and y. A procedure declares its plots so; a viewer draws them so.
+
+    title names the graph it is drawn in: layouts, into= of scripts and files
+    hold it, so it never changes. caption is what people read as the graph's
+    name (plot_caption: its quantities' symbols and what they are), free to
+    change; empty: the title.
     """
 
     key: str
@@ -165,6 +177,11 @@ class PlotInfo(msgspec.Struct, frozen=True):
     # other measurements; None, or a graph there is not or of other units:
     # a graph of its own
     into: Optional[str] = None
+    caption: str = ""
+
+    def shown_title(self) -> str:
+        """The graph's name as people read it."""
+        return self.caption or self.title
 
     def accepts(self, record: Mapping[str, Any]) -> bool:
         return all(record.get(key) == value for key, value in self.where)

@@ -14,7 +14,7 @@ from thzdaq_core.domain.parameters import (
     MultiChoiceParameter,
     SweepParameter,
 )
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
     BIAS,
@@ -38,6 +38,7 @@ class SisReflection(Procedure):
         PlotInfo(
             "magnitude", "|S| (band mean) - V", "summary", "voltage", "magnitude_db",
             x_label=VOLTAGE_MV, y_label=S_DB, x_scale=MV, group_by=("parameter",),
+            caption=plot_caption("|S|–V", "Reflection, band mean (bias voltage)"),
         ),
     )  # fmt: skip
 

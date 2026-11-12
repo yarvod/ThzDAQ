@@ -11,9 +11,10 @@ from thzdaq_core.domain.parameters import (
     shown_while,
     When,
 )
-from thzdaq_api.measurements import PlotInfo
+from thzdaq_api.measurements import PlotInfo, plot_caption
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.measurements.procedures.common import (
+    IV_CAPTION,
     BIAS,
     CURRENT_UA,
     TN_K,
@@ -40,11 +41,12 @@ def pv_plots(group_by=()):
         PlotInfo(
             "pv", "P-V", "pv", "voltage", "power",
             x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV, group_by=group_by,
+            caption=plot_caption("P–V", "IF power (bias voltage)"),
         ),
         PlotInfo(
             "iv", "I-V", "pv", "voltage", "current",
             x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
-            group_by=group_by, analysis="iv",
+            group_by=group_by, analysis="iv", caption=IV_CAPTION,
         ),
     )  # fmt: skip
 
@@ -106,10 +108,12 @@ class TnVoltage(PVCurve):
         PlotInfo(
             "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
             x_label=VOLTAGE_MV, y_label=Y_DB, x_scale=MV, group_by=("angle",),
+            caption=plot_caption("Y–V", "Y-factor (bias voltage)"),
         ),
         PlotInfo(
             "tn", "Tn-V", "y_factor", "voltage", "noise_temperature",
             x_label=VOLTAGE_MV, y_label=TN_K, x_scale=MV, group_by=("angle",),
+            caption=plot_caption("Tn–V", "Noise temperature (bias voltage)"),
         ),
     )  # fmt: skip
     shown_if = {

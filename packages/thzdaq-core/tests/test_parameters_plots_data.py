@@ -128,6 +128,19 @@ class TestPlotSpec:
         assert curves[("hot",)] == [(4.0, -30)]
         assert spec.label(("cold",)) == "cold"
 
+    def test_every_graph_of_the_procedures_has_a_caption(self):
+        """People read the caption; the title is the graph's key, one caption
+        for each key however many procedures draw into it."""
+        from thzdaq_core.domain.measurements.procedures import BUILTIN
+
+        captions = {}
+        for procedure in BUILTIN:
+            for spec in procedure.plots:
+                assert spec.caption, (procedure.name, spec.title)
+                assert captions.setdefault(spec.title, spec.caption) == spec.caption
+        assert captions["Coil-t"] == "I–t   Coil current (time)"
+        assert PlotInfo("k", "P-t", "t", "x", "y").shown_title() == "P-t"
+
     def test_map_points(self):
         spec = PlotInfo(
             "m", "Tn", "grid", "v1", "v2", kind="map", z="tn", x_scale=MV, y_scale=MV
