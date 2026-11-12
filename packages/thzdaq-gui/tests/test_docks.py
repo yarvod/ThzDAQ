@@ -1573,7 +1573,7 @@ class TestHangs:
         box.start()
         assert warnings and "still running" in warnings[0]
 
-    def test_connections_group(self, app, wait, tmp_path):
+    def test_connections_group(self, app, wait, tmp_path, monkeypatch):
         from thzdaq_core.adapters.json_store import MeasurementStore
         from thzdaq_api.custom import LIBRARY
         from thzdaq_core.adapters.library import FolderLibrary
@@ -1586,6 +1586,7 @@ class TestHangs:
         from thzdaq_core.application.workspaces import Workspaces
         from thzdaq_core.domain.station.config import InstrumentConfig, StationConfig
         from thzdaq_core.domain.station.station import Station
+        from thzdaq_gui.docks import setup
         from thzdaq_gui.docks.setup import ConnectionsGroup
         from thzdaq_gui.workers import DeviceWorker
         from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
@@ -1615,6 +1616,7 @@ class TestHangs:
                 return self.lab.call(operation)
 
         client = Client()
+        monkeypatch.setattr(setup, "REFRESH_MS", 20)  # its own refreshes, often
         group = ConnectionsGroup(client)
         (state,) = group.rows.values()
         assert state.text() == "not connected"
