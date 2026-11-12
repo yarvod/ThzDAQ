@@ -2646,7 +2646,8 @@ GUI, а отказ доходит до агента текстом.
 ## Проверка
 Отметки как в «Вехах»: `[x]` — тест есть и проходит, `[ ]` — впереди.
 - `uv run pytest`:
-  - [x] сервис: операции, подписки опроса, снимок и догон событий; [ ] политика (М2);
+  - [x] сервис: операции, подписки опроса, снимок и догон событий; [x] политика (М2;
+    `thzdaq-core/tests/test_lab_rights.py`, `test_lab_approvals.py`);
   - аренды:
     - [x] внутри своего скрипта set и call на свои устройства — без вопросов (М3;
       `thzdaq-core/tests/test_lab_sessions.py`:
@@ -2655,8 +2656,10 @@ GUI, а отказ доходит до агента текстом.
     - [x] `shared`: чужое изменение устройства идущего измерения выполняется сразу, запись
       в `interactions` (сейчас — set клиента; скрипт — М3);
     - [x] `exclusive`: set устройства идущей развёртки без `share` → `conflict`; с `share`
-      → запись `conflict` в обоих измерениях, значение меняется; [ ] вопрос человеку
-      вместо отказа (М2);
+      → запись `conflict` в обоих измерениях, значение меняется; [x] вопрос человеку
+      вместо отказа (М2; агенту — `test_lab_approvals.py::test_an_agents_set_on_a_swept_device_is_the_persons_to_allow`,
+      человеку — `thzdaq-cli/tests/test_cli.py::test_a_conflict_is_asked_and_shared_with_yes`,
+      `thzdaq-gui/tests/test_docks.py::test_a_device_dock_shows_who_sweeps_it_and_asks`);
     - [x] скрипт с `share=["sis_bias_1"]` проходит без вопроса, без него — вопрос
       человеку; агент — вопрос человеку, а не отказ (М2–М3;
       `test_lab_scripts.py::test_a_script_shares_what_it_was_told_to`,
@@ -2666,12 +2669,17 @@ GUI, а отказ доходит до агента текстом.
       обращении (М3; `test_lab_script.py::test_a_device_the_script_did_not_name_joins_its_measurement`,
       `test_lab_sessions.py::test_a_device_it_did_not_name_joins_it`);
     - [x] `monitor.values_vs_time` (все слоты `read`) ни с чем не конфликтует;
-    - [ ] изменение профиля, затрагивающее занятый прибор, — отказ, а не затрагивающее —
-      применяется (шаг 6); [x] другой профиль во время измерений — отказ;
+    - [x] изменение профиля, затрагивающее занятый прибор, — отказ, а не затрагивающее —
+      применяется (шаг 6; `test_lab_leases.py::test_a_profile_edit_waits_for_the_measurements_it_disturbs`);
+      [x] другой профиль во время измерений — отказ;
   - [x] поток уставок: развёртка даёт не больше ~10 событий `quantity_set` в секунду на
     величину (журнала ещё нет);
-  - [ ] подтверждения: человек в CLI получает вопрос в терминале; агент ответить не может;
-    `--allow` скрипта не распространяется на опасные действия (М2);
+  - [x] подтверждения: человек в CLI получает вопрос в терминале; агент ответить не может;
+    `--allow` скрипта не распространяется на опасные действия (М2;
+    `thzdaq-cli/tests/test_cli.py::test_a_person_at_a_terminal_is_asked_there`,
+    `test_watch_asks_the_person_at_the_terminal`, `test_an_agents_shell_does_not_answer`;
+    `test_lab_approvals.py::test_an_agents_cli_cannot_answer`;
+    `test_lab_scripts.py::test_what_a_script_was_allowed_goes_without_a_person`);
   - защита:
     - [x] вне паспорта и вне `min/max` → отказ без команды прибору (`FakeLink` пуст);
     - [x] «было» берётся из кэша: на set не уходит лишний запрос;
@@ -2707,12 +2715,16 @@ GUI, а отказ доходит до агента текстом.
     - [x] restart → клиент находит новый демон, подписчики получают `Resync`;
     - [x] kill завершает демон; [x] файл измерения после kill читается `interrupted` со
       всеми строками, о которых демон рассказал (`thzdaq-daemon/tests/test_process.py`);
-    - [ ] `/status` показывает зависшую полосу;
+    - [x] `/status` показывает зависшую полосу (`test_lab_daemon.py::test_the_status_shows_a_lane_that_hangs`,
+      контракт на LocalLab и RemoteLab);
     - [x] реальный демон и демон-симулятор работают одновременно, а `--simulate` идёт в
       симулятор;
-    - [ ] выход GUI при подключённом CLI-клиенте не предлагает останавливать демон по
-      умолчанию (шаг 6);
-  - [ ] CLI против демона в тесте (шаг 7);
+    - [x] выход GUI при подключённом CLI-клиенте не предлагает останавливать демон по
+      умолчанию (шаг 6; `thzdaq-gui/tests/test_served.py::test_a_cli_listening_keeps_the_daemon_at_the_exit`:
+      слушатель в другом процессе);
+  - [x] CLI против демона в тесте (шаг 7; `thzdaq-cli/tests/test_cli.py::test_the_command_starts_the_daemon_it_needs`
+    — CLI в подпроцессе запускает демон-симулятор и останавливает его;
+    `thzdaq-daemon/tests/test_hot_cold_grid.py` — `thzdaq script start` против демона);
   - Python-клиент (М3):
     - [x] объекты устройств и функции дают одинаковые вызовы операций
       (`thzdaq-core/tests/test_lab_script.py::test_device_objects_and_functions_make_the_same_calls`);
@@ -2755,16 +2767,19 @@ GUI, а отказ доходит до агента текстом.
       (`test_custom.py::test_a_file_changed_outside_is_taken_or_asked_about`);
     - [x] Run запускает скрипт через демон, а вывод приходит во вкладку Log
       (`test_custom.py::test_a_measurement_runs_from_the_bar_and_logs_what_it_prints`);
-  - [ ] пул: простаивающее соединение Prologix перед закрытием шлёт `++loc` использованным
-    адресам (`FakeLink`; шаг 8);
-  - [ ] опасные действия (компрессор, нагреватель) всегда `ask` с вводом подтверждения,
-    «разрешить всегда» недоступно (М2);
-  - [ ] MCP — список и вызов инструментов (М2);
+  - [x] пул: простаивающее соединение Prologix перед закрытием шлёт `++loc` использованным
+    адресам (`FakeLink`; шаг 8; `thzdaq-instruments/tests/test_recovery.py::test_gpib_instruments_go_local_before_an_idle_prologix_closes`);
+  - [x] опасные действия (компрессор, нагреватель) всегда `ask` с вводом подтверждения,
+    «разрешить всегда» недоступно (М2; `test_lab_rights.py::test_a_dangerous_action_is_asked_typing_the_device_though_allowed`,
+    `test_lab_approvals.py::test_a_dangerous_step_is_allowed_only_typing_the_device`);
+  - [x] MCP — список и вызов инструментов (М2; `thzdaq-mcp/tests/test_server.py`:
+    `test_the_tools_are_the_chosen_operations_of_the_catalog`, `test_values_come_with_their_units`);
   - [x] агент на фейковом провайдере (М4; `thzdaq-gui/tests/test_assistant.py`: сервер
     модели на localhost и стенд на симуляторах — вызовы, отказ человека, ошибки, лимит
     шагов, Stop, Test; `test_assistant_dock.py` — модель вида и док offscreen);
-  - [ ] GUI offscreen с демоном в потоке: set из CLI обновляет док, измерение из CLI
-    рисуется, карточка подтверждения, подсветка находит якорь (шаг 6, М2, М4);
+  - [x] GUI offscreen с демоном в потоке: set из CLI обновляет док, измерение из CLI
+    рисуется, карточка подтверждения (шаг 6, М2; `thzdaq-gui/tests/test_served.py` — окно на
+    `RemoteLab` к демону, который служит по HTTP в этом процессе), подсветка находит якорь (М4);
     - [x] подсветка находит якорь — поле формы под ⚙, док в боковой панели, кнопку панели —
       идёт за ним и уходит от клика, Esc и вместе с якорем
       (`thzdaq-gui/tests/test_guide.py`, окно на `LocalLab`);
