@@ -267,6 +267,8 @@ class ProcedureInfo(msgspec.Struct, frozen=True):
     plots: Tuple[PlotInfo, ...]
     steps: Optional[int] = None
     plot_window: Optional[float] = None
+    # How to measure with it: what to do first, what to look at in the result
+    guide: str = ""
 
 
 class RunInfo(msgspec.Struct, frozen=True):

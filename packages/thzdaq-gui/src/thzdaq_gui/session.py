@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, List, Optional, Protocol, Tuple, TypeVar
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api.custom import (
@@ -27,6 +27,7 @@ from thzdaq_api.measurements import (
     RunInfo,
 )
 from thzdaq_api.operation import Operation
+from thzdaq_api.origins import ASSISTANT, ASSISTANT_CLIENT, GUI
 from thzdaq_api.procedures import current_name
 from thzdaq_api.station import (
     ConnectionKindInfo,
@@ -54,8 +55,11 @@ from thzdaq_gui.workspace import Workspace
 logger = logging.getLogger(__name__)
 R = TypeVar("R")
 
-# The lab of the bench, or of its simulator (simulate): a daemon to call
-Connect = Callable[[bool], Lab]
+
+class Connect(Protocol):
+    def __call__(self, simulate: bool, origin: str = GUI, kind: str = GUI) -> Lab:
+        """The lab of the bench, or of its simulator (simulate): a daemon to
+        call as origin, listened to as a client of kind."""
 
 
 class Session(QObject):
@@ -143,6 +147,11 @@ class Session(QObject):
     @property
     def data_root(self) -> Path:
         return self.workspace.data
+
+    def assistant_lab(self) -> Lab:
+        """The lab this window works with, called as its assistant: an agent
+        whose changes wait for the person; LabError when it cannot be reached."""
+        return self.lab_of(self.simulate, ASSISTANT, ASSISTANT_CLIENT)
 
     def run_model(self) -> RunModel:
         """The runs of one procedure box; Data lists what they measure, with

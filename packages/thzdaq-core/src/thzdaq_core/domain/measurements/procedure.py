@@ -32,6 +32,9 @@ class Procedure:
     name: ClassVar[str] = ""  # registry key, e.g. "sis.current_vs_voltage"
     title: ClassVar[str] = ""
     description: ClassVar[str] = ""
+    # How to measure with it, for agents and the assistant (describe_procedure):
+    # what to do first, how a run goes, what to look at in the result
+    guide: ClassVar[str] = ""
     # Device slots and the capabilities each needs, e.g. {"bias": VoltageSource}
     requires: ClassVar[Mapping[str, Capabilities]] = {}
     slot_titles: ClassVar[Mapping[str, str]] = {}

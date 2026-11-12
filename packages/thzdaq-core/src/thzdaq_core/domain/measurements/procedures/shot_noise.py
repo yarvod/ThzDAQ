@@ -34,6 +34,13 @@ class ShotNoise(Procedure):
         "At two bias points above the gap: fit the dynamic resistance, sweep "
         "the IF power and compute the IF amplifier noise temperature."
     )
+    guide = (
+        "The IF amplifier's noise temperature from the shot noise of the junction "
+        "biased above the gap, no loads needed: a health check of the IF chain. "
+        "Turn the LO off. Both bias points must lie on the linear part of the I-V "
+        "above the gap (take them from an I-V) and within the bias limits; t_sis is "
+        "the junction's physical temperature."
+    )
     requires = {"bias": BIAS, "detector": PowerDetector, "if_filter": TunableFilter}
     plots = (
         PlotInfo(

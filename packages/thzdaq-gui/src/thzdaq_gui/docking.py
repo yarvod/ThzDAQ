@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QSplitter, QStyle, QWidget
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import (
+    ASSISTANT,
     CONSOLE,
     DATA,
     DEVICE,
@@ -36,6 +37,7 @@ from thzdaq_gui.navigator import BEHIND, CLOSED, FRONT, SECTIONS, DockEntry, Fla
 
 AUTO_HIDE_SIZES = {
     SETUP: 460, DATA: 640, LOG: 260, PROCESSES: 220, EDITOR: 480, CONSOLE: 420,
+    ASSISTANT: 440,
 }  # fmt: skip
 CENTRED = (GRAPH,)  # the first of these kinds opens right of the devices
 COLUMNS = (DEVICE,)  # sized for their docks (fit_columns)

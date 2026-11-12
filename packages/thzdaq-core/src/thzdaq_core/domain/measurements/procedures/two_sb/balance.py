@@ -53,6 +53,12 @@ class IfBalance(IfSwitchProcedure):
     description = (
         "IF power of both channels over the IF band for every SIS1 x SIS2 bias pair."
     )
+    guide = (
+        "The IF power of the upper and the lower channel over the band for every "
+        "SIS1 x SIS2 bias pair: how evenly the two mixers of the 2SB pair give "
+        "power. Pump both mixers first. List a few bias values of each (the steps "
+        "of both mixers' I-V); the run takes every pair, so keep the lists short."
+    )
     plots = (
         PlotInfo(
             "power", "P-IF", "power", "frequency", "power",
@@ -134,6 +140,12 @@ class PumpBalance(TwoSbProcedure):
     description = (
         "Pumped currents of both mixers versus LO or RF frequency for paired "
         "SIS1/SIS2 bias points."
+    )
+    guide = (
+        "How evenly the LO (or the RF test tone) pumps the two mixers of the 2SB "
+        "pair over frequency: both SIS currents at paired bias points while the "
+        "source sweeps. Keep the source power within its limits; silence_other "
+        "turns the other source off so it does not pump them too."
     )
     plots = (
         PlotInfo(

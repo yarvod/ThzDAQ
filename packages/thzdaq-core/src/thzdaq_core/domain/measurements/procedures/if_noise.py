@@ -1,6 +1,10 @@
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
-from thzdaq_api.procedures import NOISE_TEMPERATURE_VS_FREQUENCY, POWER_VS_FREQUENCY
+from thzdaq_api.procedures import (
+    NOISE_TEMPERATURE_VS_FREQUENCY,
+    NOISE_TEMPERATURE_VS_VOLTAGE,
+    POWER_VS_FREQUENCY,
+)
 from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFilter
 from thzdaq_instruments.units import GHZ
 
@@ -75,6 +79,11 @@ class PowerIF(IFScan):
     name = POWER_VS_FREQUENCY
     title = "Power-IF YIG"
     description = "Sweep the YIG filter over the IF band and read the IF power."
+    guide = (
+        "The IF spectrum through the YIG filter at the bias the mixer has now: a "
+        "check that the IF chain gives power over the band (no dead amplifier, no "
+        "standing waves). Set the bias first; nothing else changes but the filter."
+    )
     plots = (power_plot(),)
 
     def estimate_steps(self) -> int:
@@ -90,6 +99,13 @@ class IFNoise(IFScan):
     description = (
         "Sweep the IF filter with the cold and the hot load and compute the "
         "Y-factor and the receiver noise temperature."
+    )
+    guide = (
+        "Receiver noise temperature over the IF band at one bias: the YIG sweep on "
+        "the cold load, then on the hot one. Bias the mixer at its best point first "
+        f"(the lowest Tn of {NOISE_TEMPERATURE_VS_VOLTAGE}) and pump it; give t_hot "
+        "and t_cold as the loads really are. Tn rising at the band edges is the IF "
+        "chain; a peak at one IF is a standing wave or interference."
     )
     requires = {**IFScan.requires, "load": LoadSwitch}
     plots = (

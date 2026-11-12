@@ -229,6 +229,7 @@ async def test_resources_tell_procedures_profile_and_guides(connect):
     profile = station.contents[0].text
     assert '"kind": "socket"' in profile and "169.254" not in profile  # no addresses
     assert "bias: sis_bias_1, sis_bias_2" in procedure.contents[0].text
+    assert "how to measure: The first look at a junction" in procedure.contents[0].text
     assert guide.contents[0].text == guides.guide(guides.AGENTS)
     # An old name finds the procedure; a field says when it is used
     text = tn.contents[0].text

@@ -17,16 +17,17 @@ from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import MCPError
-from thzdaq_api import host, wire
+from thzdaq_api import host, present
 from thzdaq_api.approvals import ANSWER_S
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.origins import MCP_CLIENT
 from thzdaq_api.remote import RemoteLab
+from thzdaq_api.tools import by_name, tools
 from thzdaq_api.workspace import chosen, expected_profile
 
 from thzdaq_mcp import resources
-from thzdaq_mcp.bench import Bench, Connect
-from thzdaq_mcp.tools import Progress, by_name, tools
+from thzdaq_mcp.bench import Bench, Connect, Progress
+from thzdaq_mcp.tools import definition
 
 NAME = "thzdaq"
 UNNAMED = "agent"  # a client that does not say its name
@@ -57,17 +58,17 @@ def progress_of(ctx: ServerRequestContext) -> Optional[Progress]:
 
 def failed(error: LabError) -> types.CallToolResult:
     return types.CallToolResult(
-        content=[types.TextContent(text=f"{error.code.value}: {error}")],
+        content=[types.TextContent(text=present.failure(error))],
         is_error=True,
     )
 
 
 def server(bench: Bench, workspace: Optional[Path]) -> Server:
-    found = by_name(tools(workspace))
+    found = by_name(tools(lambda: workspace))
 
     async def list_tools(ctx, params) -> types.ListToolsResult:
         return types.ListToolsResult(
-            tools=[tool.definition() for tool in found.values()]
+            tools=[definition(tool) for tool in found.values()]
         )
 
     async def call_tool(
@@ -83,9 +84,9 @@ def server(bench: Bench, workspace: Optional[Path]) -> Server:
                 )
             )
         try:
-            args = wire.decode_arguments(tool.name, wire.encode(params.arguments or {}))
+            args = tool.arguments(params.arguments or {})
             await bench.open(agent(ctx))
-            text = await tool.call(bench, args, progress_of(ctx))
+            text = await bench.run(tool, args, progress_of(ctx))
         except LabError as e:
             return failed(e)
         return types.CallToolResult(content=[types.TextContent(text=text)])

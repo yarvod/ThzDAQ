@@ -22,6 +22,7 @@ DAEMON = "daemon"
 EDITOR = "editor"  # the tabs of scripts' files
 CODE = "code"  # a script's file: its tab in Editor
 CONSOLE = "console"  # the tabs of Python consoles; console:<number> is one of them
+ASSISTANT = "assistant"  # the assistant's chat
 
 
 def dock_name(kind: str, key: str) -> str:

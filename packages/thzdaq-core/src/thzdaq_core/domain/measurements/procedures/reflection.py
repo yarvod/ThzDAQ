@@ -33,6 +33,12 @@ class SisReflection(Procedure):
     slot_modes = {"bias": EXCLUSIVE}
     title = "SIS reflection (VNA)"
     description = "S-parameters of the SIS IF port over a bias sweep."
+    guide = (
+        "S-parameters of the SIS IF port from the VNA at each bias point: the match "
+        "between the junction and the IF chain. Keep the VNA power low (the default "
+        "-30 dBm) so the probe does not pump the junction; averages and the wait "
+        "after each change trade speed for noise."
+    )
     requires = {"bias": BIAS, "vna": (NetworkAnalyzer, PowerLevel)}
     plots = (
         PlotInfo(

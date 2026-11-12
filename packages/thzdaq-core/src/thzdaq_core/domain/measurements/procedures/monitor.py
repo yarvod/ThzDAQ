@@ -50,6 +50,14 @@ class Monitor(Procedure):
         "Read the chosen values of devices (power, temperature, bias, pressure, "
         "compressor) at a fixed interval until stopped or the duration ends."
     )
+    guide = (
+        "Reads devices at an interval and changes nothing: for watching the bench "
+        "while something else happens (cooldown, LO drift, the IF power while a "
+        "person tunes by hand). Name devices (or a device and its quantity, as the "
+        "form shows, for one value) in watch; duration 0 runs until it is "
+        "cancelled, so cancel it when done. It shares devices with any other "
+        "measurement."
+    )
     plots = (
         _time_plot(UNIT_PLOTS["dBm"], plot_caption("P–t", "Power (time)"), POWER_DBM),
         _time_plot(

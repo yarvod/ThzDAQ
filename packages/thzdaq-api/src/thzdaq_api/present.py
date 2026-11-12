@@ -1,4 +1,5 @@
-"""What an agent reads back: short text, values with their units, no arrays.
+"""What an agent and the assistant read back: short text, values with their
+units, no arrays (the answers of the tools, thzdaq_api.tools).
 
 Values travel in SI (power in dBm); each is shown with the prefix that keeps
 it from 1 to 999 ("2.3 mV"), as the daemon reads it back when it is typed.
@@ -21,6 +22,7 @@ from thzdaq_api.devices import (
     Value,
     shown,
 )
+from thzdaq_api.errors import LabError
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.measurements import (
     ColumnSummary,
@@ -33,6 +35,12 @@ from thzdaq_api.measurements import (
 from thzdaq_api.station import ConnectionInfo
 
 NOTHING = "none"
+
+
+def failure(error: LabError) -> str:
+    """A refused or failed call as the model reads it: its code, what went
+    wrong and what to do instead (a person's words when they refused)."""
+    return f"{error.code.value}: {error}"
 
 
 def lines(found: Iterable[str]) -> str:
@@ -246,6 +254,8 @@ def procedure(info: ProcedureInfo, bench: Sequence[DeviceInfo]) -> str:
     ]
     if info.plots:
         parts.append(f"plots: {', '.join(p.title for p in info.plots)}")
+    if info.guide:
+        parts.append(f"how to measure: {info.guide}")
     return "\n".join(parts)
 
 
