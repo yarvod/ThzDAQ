@@ -609,7 +609,7 @@ def test_the_app_works_with_a_daemon_it_starts(app, tmp_path, profile, monkeypat
     try:
         code = main(
             ["--simulate", "--station", str(profile), "--workspace", str(tmp_path)]
-            + ["--quit-after", "1", "--settings", str(tmp_path / "settings.ini")]
+            + ["--quit-after", "0", "--settings", str(tmp_path / "settings.ini")]
         )
         assert code == 0
         deadline = time.monotonic() + 10
