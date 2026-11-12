@@ -2,13 +2,16 @@
 line, measuring through the client a script imports (thzdaq), restored by the
 daemon when it is stopped."""
 
+import sys
+
 import pytest
 from lab_helpers import wait_for
 from test_process import start
 from thzdaq_api.devices import ReadDevice, SetQuantity
 from thzdaq_api.measurement_file import read_measurement
 from thzdaq_api.measurements import ListRuns
-from thzdaq_api.scripts import ListScripts, ReadScriptLog
+from thzdaq_api.host import RUN_SCRIPT
+from thzdaq_api.scripts import RUNNING, ListScripts, ReadScriptLog, StartScript
 
 SCAN = """\
 import sys
@@ -65,3 +68,22 @@ def test_a_script_started_from_the_command_line_measures_and_is_stopped(
     assert out.splitlines() == ["swept", "ended cancelled"]
     code, out, _ = thzdaq("script", "list")
     assert "scan" in out and "stopped" in out
+
+
+def test_a_builds_python_takes_a_scripts_arguments(home, tmp_path):
+    """A build has no python of its own: the daemon runs a script with
+    thzdaq-cli run-script (host.script_python), the arguments after the file
+    as python takes them."""
+    lab = start(home)
+    file = tmp_path / "told.py"
+    file.write_text("import sys\nprint(sys.argv[1:])\n")
+    built = (sys.executable, "-m", "thzdaq_cli", RUN_SCRIPT)
+    lab.call(
+        StartScript(
+            path=str(file), python=built, arguments=("a", "-b"),
+            workspace=str(tmp_path),
+        )  # fmt: skip
+    )
+    wait_for(lambda: lab.call(ListScripts())[0].status != RUNNING, timeout=30)
+    (script,) = lab.call(ListScripts())
+    assert (script.exit_code, logged(lab, script.id)) == (0, "['a', '-b']\n")

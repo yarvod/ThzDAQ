@@ -1008,7 +1008,8 @@ with lab.measurement("pv_fine", devices=[bias, pm], comment="узкий P-V") as
 - `thzdaq script start my_scan.py [--python PATH] [--allow …] [--share REF] [-- args]` —
   скрипт запускает демон (`start_script`, порт `Launcher`, адаптер
   `adapters/processes.py`): тем же интерпретатором, что вызвал команду (у сборки —
-  `thzdaq-cli.exe run-script`, он выполняет файл как `__main__`), или указанным, в рабочей
+  `thzdaq-cli.exe run-script`, он выполняет файл как `__main__`, аргументы после файла — как
+  у `python`), или указанным, в рабочей
   папке, с переменными `THZDAQ_SCRIPT_ID` и `THZDAQ_SIMULATE` — по ним `connect()` находит
   свой демон и называет себя `script:<имя>@<id>`. Номер сквозной по демону и не повторяет
   логи, уже лежащие в папке. Скрипт переживает закрытие терминала, вывод (без буфера)

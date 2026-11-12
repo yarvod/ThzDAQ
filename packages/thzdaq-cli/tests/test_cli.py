@@ -469,8 +469,9 @@ def test_a_file_is_run_as_python_runs_it(thzdaq, tmp_path, monkeypatch):
         "import sys\nfrom pathlib import Path\n"
         "print(__name__, sys.argv[1:], Path(sys.path[0]).name)\n"
     )
-    code, out, _ = thzdaq("run-script", str(file), "--", "a", "-b")
-    assert code == 0 and out == f"__main__ ['a', '-b'] {tmp_path.name}\n"
+    for passed in (("a", "-b"), ("--", "a", "-b")):  # after the file, as python
+        code, out, _ = thzdaq("run-script", str(file), *passed)
+        assert code == 0 and out == f"__main__ ['a', '-b'] {tmp_path.name}\n"
 
 
 def test_a_script_is_started_with_what_it_may_do(thzdaq, lab, tmp_path):
