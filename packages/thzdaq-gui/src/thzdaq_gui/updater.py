@@ -49,13 +49,15 @@ def wait_for_exit(pid: int, timeout: float = EXIT_TIMEOUT_S) -> bool:
         finally:
             kernel32.CloseHandle(handle)
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+    while True:
         try:
             os.kill(pid, 0)
         except OSError:
             return True
-        time.sleep(0.2)
-    return False
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return False
+        time.sleep(min(0.2, left))  # another process: nothing to wait on, look again
 
 
 def processes() -> Iterator[Tuple[int, str]]:
