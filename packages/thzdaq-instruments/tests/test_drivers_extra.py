@@ -462,7 +462,8 @@ def test_json_client_accepts_plain_text():
             pass
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # a short poll: shutdown() returns at once, not after the default 0.5 s
+    threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True).start()
     try:
         spec = ConnectionSpec("http", host="127.0.0.1", port=server.server_address[1])
         grid = ArduinoGrid(spec)

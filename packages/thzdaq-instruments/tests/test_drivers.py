@@ -348,7 +348,8 @@ def json_server(status=200, body=None):
             pass
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # a short poll: shutdown() returns at once, not after the default 0.5 s
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     try:
         yield server.server_address[1], requests
