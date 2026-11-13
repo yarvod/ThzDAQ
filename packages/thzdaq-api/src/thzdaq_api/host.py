@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import msgspec
 
+from thzdaq_api.atomic import file_access
 from thzdaq_api.daemon import API_VERSION, HostInfo, Installation
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.lock import FileLock
@@ -151,6 +152,13 @@ def app_version() -> str:
 
 def read_host(files: DaemonFiles) -> Optional[HostInfo]:
     """The host file, None when there is none (or it is not one)."""
+    if not files.directory.exists():
+        return None
+    with file_access(files.host):
+        return _read_host(files)
+
+
+def _read_host(files: DaemonFiles) -> Optional[HostInfo]:
     try:
         return msgspec.json.decode(files.host.read_bytes(), type=HostInfo)
     except FileNotFoundError:
@@ -163,15 +171,26 @@ def read_host(files: DaemonFiles) -> Optional[HostInfo]:
 def write_host(files: DaemonFiles, host: HostInfo) -> None:
     """Atomically: a client never reads half of it."""
     files.directory.mkdir(parents=True, exist_ok=True)
-    partial = files.host.with_suffix(".partial")
-    partial.write_bytes(msgspec.json.encode(host))
-    os.replace(partial, files.host)
+    with file_access(files.host):
+        partial = files.host.with_suffix(".partial")
+        partial.write_bytes(msgspec.json.encode(host))
+        os.replace(partial, files.host)
 
 
 def remove_host(files: DaemonFiles, pid: int) -> None:
     """The host file of this process goes; one another daemon wrote stays."""
-    host = read_host(files)
-    if host is not None and host.pid == pid:
+    if not files.directory.exists():
+        return
+    with file_access(files.host):
+        host = _read_host(files)
+        if host is not None and host.pid == pid:
+            files.host.unlink(missing_ok=True)
+
+
+def _discard_host(files: DaemonFiles) -> None:
+    if not files.directory.exists():
+        return
+    with file_access(files.host):
         files.host.unlink(missing_ok=True)
 
 
@@ -420,7 +439,7 @@ def connect_or_start(
                 f"The daemon (pid {host.pid}) runs but does not answer",
                 "kill() ends it",
             )
-        files.host.unlink(missing_ok=True)  # left by a daemon that died
+        _discard_host(files)  # left by a daemon that died
         arguments = list(command or start_command())
         if station:
             arguments += ["--station", str(station)]
@@ -468,7 +487,7 @@ def kill(simulate: bool = False) -> Optional[int]:
     files = DaemonFiles.of(simulate)
     host = read_host(files)
     if host is None or not pid_alive(host.pid):
-        files.host.unlink(missing_ok=True)
+        _discard_host(files)
         return None
     terminate(host.pid)
     remove_host(files, host.pid)

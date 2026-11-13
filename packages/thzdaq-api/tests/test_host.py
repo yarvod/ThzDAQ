@@ -3,7 +3,9 @@
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import msgspec
 import pytest
@@ -46,6 +48,30 @@ def test_a_host_file_is_read_as_written_and_only_its_owner_removes_it(tmp_path):
     assert read_host(files) is None  # not a host file: as good as none
     remove_host(files, pid=41)
     assert files.host.exists()  # unreadable, so not known to be its own
+
+
+def test_host_readers_and_publishers_share_the_file(tmp_path):
+    files = DaemonFiles(tmp_path, "thzdaq")
+    first = HostInfo(41, 5000, "t", API_VERSION, "1.0", "py", "now", None, False)
+    second = msgspec.structs.replace(first, pid=42)
+    write_host(files, first)
+    start = Barrier(3)
+
+    def publish(info):
+        start.wait()
+        for _ in range(250):
+            write_host(files, info)
+
+    def discover():
+        start.wait()
+        for _ in range(250):
+            assert read_host(files) in (first, second)
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        jobs = [pool.submit(publish, first), pool.submit(publish, second)]
+        jobs.append(pool.submit(discover))
+        for job in jobs:
+            job.result(timeout=10)
 
 
 def test_a_lock_is_held_by_one(tmp_path):

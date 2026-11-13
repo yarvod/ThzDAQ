@@ -2,6 +2,7 @@
 instrument a script declares goes into the profile once a person allows it."""
 
 import copy
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -237,6 +238,12 @@ def test_what_the_profile_cannot_take_is_refused_before_asking(
 def test_a_profile_keeps_its_earlier_versions(lab, monkeypatch):
     from thzdaq_core.adapters import yaml_profiles
 
+    class FrozenClock(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 11, 13, 12, 0, 0)
+
+    monkeypatch.setattr(yaml_profiles, "datetime", FrozenClock)
     monkeypatch.setattr(yaml_profiles, "KEPT", 2)
     station = lab.call(GetStation())
     for title in ("one", "two", "three"):
@@ -246,4 +253,7 @@ def test_a_profile_keeps_its_earlier_versions(lab, monkeypatch):
     lab.call(UpdateStation(profile=profile))  # the same: nothing written
     kept = versions(station.path)
     assert len(kept) == 2 and kept[0].parent == Path(station.path).parent / ".history"
-    assert load_station(kept[-1]).instruments["power_meter_1"].title == "two"
+    assert [load_station(p).instruments["power_meter_1"].title for p in kept] == [
+        "one",
+        "two",
+    ]

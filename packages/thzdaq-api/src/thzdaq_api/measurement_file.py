@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple, Union
 
 from thzdaq_api.data import decode_values, encode_values
+from thzdaq_api.atomic import file_access, read_bytes
 
 PathLike = Union[str, Path]
 
@@ -363,9 +364,10 @@ def write_file(path: PathLike, text: str) -> Path:
     """Through a temporary file: a crash leaves the previous complete version."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, path)
+    with file_access(path):
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
     return path
 
 
@@ -407,7 +409,7 @@ def read_measurement(path: PathLike) -> Measurement:
     writer is gone or has not finished), with the records its records file
     holds. ValueError when it is not one."""
     try:
-        data = loads(Path(path).read_text(encoding="utf-8"))
+        data = loads(read_bytes(Path(path)).decode("utf-8"))
         measurement = Measurement.from_dict(data)
         if measurement.status == RUNNING:
             measurement.status = INTERRUPTED

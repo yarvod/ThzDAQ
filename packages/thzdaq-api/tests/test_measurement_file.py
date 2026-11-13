@@ -3,6 +3,8 @@ a file still marked running gets them, one that ended is whole."""
 
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 from thzdaq_api.measurement_file import (
     COMPLETED,
@@ -34,6 +36,32 @@ def running(tmp_path, rows=0):
 def append(path, *lines):
     with open(records_path(path), "a", encoding="utf-8", newline="\n") as file:
         file.writelines(lines)
+
+
+def test_reading_does_not_prevent_replacing_a_measurement(tmp_path):
+    first, path = running(tmp_path)
+    first.finish(COMPLETED, STARTED)
+    first.comment = "first"
+    second = Measurement.from_dict(first.to_dict())
+    second.comment = "second"
+    write_measurement(first, path)
+    start = Barrier(3)
+
+    def publish(measurement):
+        start.wait()
+        for _ in range(100):
+            write_measurement(measurement, path)
+
+    def discover():
+        start.wait()
+        for _ in range(100):
+            assert read_measurement(path).comment in ("first", "second")
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        jobs = [pool.submit(publish, first), pool.submit(publish, second)]
+        jobs.append(pool.submit(discover))
+        for job in jobs:
+            job.result(timeout=10)
 
 
 def test_the_records_file_lies_next_to_the_measurement(tmp_path):
