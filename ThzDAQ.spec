@@ -27,6 +27,13 @@ folder = options.parse_args().folder
 icon = "assets/thzdaq.ico" if sys.platform == "win32" else "assets/thzdaq.icns"
 datas = [("assets", "assets")]
 datas += collect_data_files("thzdaq_gui")
+# thzdaq_api keeps the guides of agents and the assistant, and the examples of
+# measurements of the bench's own: scripts, data for it, which collect_data_files
+# leaves out unless asked for .py files
+api = collect_data_files("thzdaq_api") + collect_data_files(
+    "thzdaq_api", subdir="examples", include_py_files=True
+)
+datas += api
 datas += collect_data_files("qtawesome")
 # The script editor completes by jedi: its stubs and parso's grammars are data
 datas += collect_data_files("jedi") + collect_data_files("parso")
@@ -45,8 +52,7 @@ window = Analysis(
     hiddenimports=provisioner_modules + keyring_modules,
 )
 # Commands that packages add to the command line (thzdaq mcp) are found by
-# their entry points: their metadata and modules go in with the guides for
-# agents that thzdaq_api keeps
+# their entry points: their metadata and modules go in with thzdaq_api's data
 commands, modules = collect_entry_point("thzdaq.cli")
 # The kernel of a console runs as thzdaq-cli run-script -m thzdaq_api.kernel:
 # IPython's kernel and what it imports only when asked. Without debugpy (it
@@ -64,7 +70,7 @@ scripts = [
 ]
 cli = Analysis(
     ["cli_main.py"],
-    datas=commands + collect_data_files("thzdaq_api") + collect_data_files("ipykernel"),
+    datas=commands + api + collect_data_files("ipykernel"),
     hiddenimports=modules + kernel + scripts,
     excludes=["debugpy"],
 )
