@@ -212,6 +212,12 @@ def test_the_one_the_workspace_names_is_listed_and_current(tmp_path, bare):
     assert interpreters.current(found, workspace) == found[0]
 
 
+def test_two_venvs_are_two_though_they_link_to_one_python(tmp_path):
+    one, other = venv(tmp_path / "one"), venv(tmp_path / "other")
+    assert Environment(PROJECT, "one", str(tmp_path / "one")).runs(one)
+    assert not Environment(PROJECT, "one", str(tmp_path / "one")).runs(other)
+
+
 def test_a_found_environment_named_by_its_interpreter_is_current(tmp_path):
     python = venv(tmp_path / ".venv")
     create(tmp_path, python=str(python))

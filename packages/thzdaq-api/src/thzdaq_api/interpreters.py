@@ -175,14 +175,17 @@ class Environment(msgspec.Struct, frozen=True):
 
     def runs(self, interpreter: Optional[Path]) -> bool:
         """Whether it is the environment of an interpreter (None: the
-        program's own)."""
+        program's own). Two venvs' interpreters link to one Python, so they
+        are told apart by where they are, not by what they link to."""
         mine = self.interpreter()
         if mine is None or interpreter is None:
             return mine is None and interpreter is None
-        try:
-            return mine.samefile(interpreter)
-        except OSError:  # one of them is not there
-            return False
+        return same_place(mine, interpreter)
+
+
+def same_place(one: PathLike, other: PathLike) -> bool:
+    """Whether two paths name one place (located: their own links kept)."""
+    return os.path.normcase(located(one)) == os.path.normcase(located(other))
 
 
 def own() -> Environment:
@@ -324,15 +327,26 @@ class Checked(msgspec.Struct, frozen=True):
     def ok(self) -> bool:
         return not self.problem
 
-    def text(self) -> str:
-        """One line for people."""
+    def summary(self) -> str:
+        """What it is to scripts, short: the problem, or its versions (and
+        that a console needs ipykernel there)."""
         if not self.ok:
-            return f"{self.problem}: {self.hint}" if self.hint else self.problem
+            return self.problem
         told = f"Python {self.version}, {PACKAGE} {self.thzdaq}"
         if not self.console:
-            needed = install(self.python, KERNEL_PACKAGE)
-            told += f"; a console needs {KERNEL_PACKAGE}: {needed}"
+            told += f"; a console needs {KERNEL_PACKAGE}"
         return told
+
+    def remedy(self) -> str:
+        """What mends it; "" when nothing needs to."""
+        if not self.ok:
+            return self.hint
+        return "" if self.console else install(self.python, KERNEL_PACKAGE)
+
+    def text(self) -> str:
+        """One line for people."""
+        remedy = self.remedy()
+        return f"{self.summary()}: {remedy}" if remedy else self.summary()
 
 
 def install(python: str, *packages: str) -> str:
@@ -392,7 +406,7 @@ def judged(interpreter: str, told: dict) -> Checked:
     """What scripts make of what an interpreter told of itself (PROBE)."""
     version, has, console = told["version"], told.get("thzdaq", ""), told["console"]
     found = Checked(interpreter, version, has, console)
-    hint = f"install it there: {install(interpreter, wanted())}"
+    hint = install(interpreter, wanted())
     if tuple(int(part) for part in version.split(".")[:2]) < OLDEST:
         oldest = ".".join(map(str, OLDEST))
         problem = f"Python {version} is older than {oldest}, which {PACKAGE} needs"
