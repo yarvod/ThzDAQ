@@ -38,3 +38,10 @@ def test_reading_needs_no_lock_file_next_to_the_data(tmp_path):
     path.write_bytes(b"readable")
     assert read_bytes(path) == b"readable"
     assert list(tmp_path.iterdir()) == [path]
+
+
+def test_publishing_leaves_nothing_next_to_the_data(tmp_path):
+    path = tmp_path / "000001_sis.json"
+    with file_access(path):
+        path.write_bytes(b"published")
+    assert list(tmp_path.iterdir()) == [path]

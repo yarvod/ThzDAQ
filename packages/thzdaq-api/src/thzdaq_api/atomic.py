@@ -1,13 +1,22 @@
 """Coordinate atomic file replacement with readers, including on Windows."""
 
+import hashlib
 import os
 import sys
+import tempfile
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from thzdaq_api.lock import FileLock
 
 ACCESS_S = 15.0
+
+
+def _key(path: Path) -> str:
+    """One name per file however the path is spelled, never beside the file:
+    the folders of data stay as people left them."""
+    where = os.path.normcase(str(path.parent.resolve() / path.name))
+    return hashlib.sha256(where.encode("utf-8")).hexdigest()
 
 
 def read_bytes(path: Path) -> bytes:
@@ -19,7 +28,6 @@ def read_bytes(path: Path) -> bytes:
 
 if sys.platform == "win32":
     import ctypes
-    import hashlib
     from ctypes import wintypes
 
     _kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -35,8 +43,7 @@ if sys.platform == "win32":
     @contextmanager
     def file_access(path: Path, timeout: float = ACCESS_S):
         """Serialize access across threads, processes and Windows sessions."""
-        key = os.path.normcase(str(path.parent.resolve() / path.name))
-        name = "Global\\ThzDAQ-file-" + hashlib.sha256(key.encode("utf-8")).hexdigest()
+        name = "Global\\ThzDAQ-file-" + _key(path)
         handle = _kernel.CreateMutexW(None, False, name)
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
@@ -55,11 +62,15 @@ if sys.platform == "win32":
             _kernel.CloseHandle(handle)
 
 else:
+    # This user's locks, as a named mutex is this machine's: a folder of /tmp
+    # one user made the others could not write in
+    LOCKS = Path(tempfile.gettempdir()) / f"thzdaq-locks-{os.getuid()}"
 
     @contextmanager
     def file_access(path: Path, timeout: float = ACCESS_S):
         """Serialize publishers; POSIX readers need no lock for replacement."""
-        lock = FileLock(path.with_name(path.name + ".lock"))
+        LOCKS.mkdir(parents=True, exist_ok=True)
+        lock = FileLock(LOCKS / f"{_key(path)}.lock")
         if not lock.acquire(timeout):
             raise TimeoutError(f"File access timed out: {path}")
         try:
