@@ -77,6 +77,21 @@ def test_an_older_file_without_a_python_runs_the_programs_own(tmp_path):
     assert scripts_python(None) == host.script_python()
 
 
+def test_a_build_runs_them_with_its_own_python_unless_one_is_named(
+    tmp_path, bare, monkeypatch
+):
+    monkeypatch.setattr(host, "frozen", lambda: True)
+    monkeypatch.setattr(host, "program_dir", lambda: tmp_path / "ThzDAQ")
+    built = str(host.executable(tmp_path / "ThzDAQ", host.CLI_PROGRAM))
+    create(tmp_path / "w")
+    assert scripts_python(tmp_path / "w") == (built, host.RUN_SCRIPT)
+    assert interpreters.module_command(tmp_path / "w", "m")[:4] == [
+        built, host.RUN_SCRIPT, host.MODULE, "m",
+    ]  # fmt: skip
+    write_python(tmp_path / "w", str(bare))
+    assert scripts_python(tmp_path / "w") == (str(bare),)
+
+
 def test_a_python_is_written_into_its_line_and_the_rest_stays(tmp_path, bare):
     create(tmp_path, "lab")
     path = tmp_path / "thzdaq.toml"
