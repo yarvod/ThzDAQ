@@ -11,11 +11,16 @@ block closed by an empty line), else Enter goes on to a new line.
 
 Inputs are IPython's history, one for every console of the program: the last
 ones are read as the kernel opens, and each run is added.
+
+The last block that raised is kept with its traceback (failed) until another
+runs: the assistant mends it on Fix, told the blocks run before it.
 """
 
 import codeop
 import os
-from typing import List, Optional, Tuple
+import re
+from collections import OrderedDict
+from typing import List, NamedTuple, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api import console
@@ -25,7 +30,20 @@ from thzdaq_gui.kernel import Kernel
 # States of a console
 STARTING, IDLE, BUSY, ENDED = "starting", "idle", "busy", "ended"
 HISTORY = 1000  # inputs read as a kernel opens
+RECENT = 10  # blocks run that a fix is told of
 Completion = Tuple[str, str]  # its text, and what it is (its unit, its range)
+CONTROL = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")  # a terminal's code (colours)
+
+
+def plain(text: str) -> str:
+    """Text without the codes of a terminal."""
+    return CONTROL.sub("", text)
+
+
+class Failed(NamedTuple):
+    code: str  # the block that raised
+    error: str  # its traceback, plain
+    before: Tuple[str, ...]  # blocks run before it, the oldest first
 
 
 def complete_block(code: str) -> bool:
@@ -113,6 +131,7 @@ class ConsoleModel(QObject):
     told = Signal(str)  # what the console says itself: started, ended
     completed = Signal(list, int, int)  # Completion of each, the span they replace
     input_requested = Signal(str, bool)  # input(): the prompt, whether a password
+    failed_changed = Signal()
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
@@ -122,6 +141,8 @@ class ConsoleModel(QObject):
         self.history = History()
         self.asked: Optional[str] = None  # the completion request answered
         self.histories: Optional[str] = None  # the history request answered
+        self.sent: "OrderedDict[str, str]" = OrderedDict()  # recent blocks, by request
+        self.failed: Optional[Failed] = None  # the last block, when it raised
         # The session owns it: its thread may outlive this console's tab.
         # Its signals reach methods of this object: queued into the window's
         # thread, and gone with it
@@ -176,8 +197,13 @@ class ConsoleModel(QObject):
     def _shown(self, _id: str, text: str) -> None:
         self.shown.emit(text)
 
-    def _raised(self, _id: str, lines: list) -> None:
+    def _raised(self, id: str, lines: list) -> None:
         self.raised.emit(lines)
+        if id in self.sent:
+            ids = list(self.sent)
+            before = tuple(self.sent[i] for i in ids[: ids.index(id)])
+            self.failed = Failed(self.sent[id], plain("\n".join(lines)), before)
+            self.failed_changed.emit()
 
     def _input_requested(self, prompt: str, password: bool) -> None:
         self.input_requested.emit(prompt, password)
@@ -209,7 +235,15 @@ class ConsoleModel(QObject):
 
     def _send(self, code: str, history: bool = True) -> None:
         self.entered.emit(code)
-        self.kernel.execute(code, history)
+        id = self.kernel.execute(code, history)
+        if not history:
+            return  # the opening: not the person's
+        self.sent[id] = code
+        while len(self.sent) > RECENT:
+            self.sent.popitem(last=False)
+        if self.failed is not None:
+            self.failed = None
+            self.failed_changed.emit()
 
     def answer(self, text: str) -> None:
         """What input() asked for."""

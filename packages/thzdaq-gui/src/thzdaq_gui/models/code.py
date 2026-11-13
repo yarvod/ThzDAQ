@@ -7,6 +7,11 @@ is saved through the daemon (write_custom), which describes it at once and
 tells every client; a script of the workspace is written as a file. A text
 without a file is saved into the library under a name.
 
+A change of its file on disk (an agent, the assistant's write_custom, VS
+Code) is looked at hunk by hunk (thzdaq_gui.review): made already when
+nothing here was unsaved (outside: kept or undone), else compared with the
+text here when the person asks (compare: the file's hunks taken or not).
+
 Completions are jedi's (Python and the thzdaq module the script imports)
 with the bench's first: devices in lab["…"], and after the dot of a device
 (declared or lab["ref"]) its quantities and actions.
@@ -27,6 +32,7 @@ from thzdaq_api.custom import (
 from thzdaq_api.measurements import SlotInfo
 
 from thzdaq_gui.models.scripts import ScriptRun, ScriptsModel
+from thzdaq_gui.review import Review, Source
 
 LIBRARY_CALLS = "library"  # the lane of saves and checks
 # lab["sis_bi| (the cursor at |): a device's ref is typed
@@ -60,6 +66,7 @@ class CodeModel(QObject):
         self.session = session
         self.path = path
         self.saved_text = text
+        self.writing: Optional[str] = None  # a text the daemon writes into its file
         self.title = title
         self.script = self._library_name()
         self.shown: Optional[int] = None  # the run whose output is shown
@@ -114,6 +121,7 @@ class CodeModel(QObject):
             self.check(text)
             return
         lab, write = self.session.lab, WriteCustom(script=self.script, text=text)
+        self.writing = text
         self.session.calls.submit(
             lambda: lab.call(write),
             lambda checked: self._written(text, checked),
@@ -122,6 +130,7 @@ class CodeModel(QObject):
         )
 
     def _written(self, text: str, checked: CustomCheck) -> None:
+        self.writing = None
         self._saved(text)
         self.checked.emit(checked)
 
@@ -136,6 +145,7 @@ class CodeModel(QObject):
         )
 
     def _failed(self, error: BaseException) -> None:
+        self.writing = None
         self.failed.emit(str(error))
 
     # Its file, changed outside
@@ -147,12 +157,25 @@ class CodeModel(QObject):
             text = Path(path).read_text(encoding="utf-8")
         except OSError:
             return  # gone, or being replaced: the next change tells
-        if text != self.saved_text:
+        # Its own save may be heard before the daemon answers it
+        if text not in (self.saved_text, self.writing):
             self.disk_changed.emit(text)
 
     def take(self, text: str) -> None:
         """The text on disk is the one held from now on (reloaded)."""
         self.saved_text = text
+
+    def outside(self, here: str, disk: str) -> Review:
+        """Its file changed outside while the text here was saved: the file's
+        text is held, its change looked at (kept, or undone hunk by hunk)."""
+        self.take(disk)
+        return Review(here, disk, Source.OUTSIDE)
+
+    def compare(self, mine: str, disk: str) -> Review:
+        """Its file changed outside while the text here was not saved: the
+        file's text is held, its hunks taken into mine or not."""
+        self.take(disk)
+        return Review(mine, disk, Source.COMPARED)
 
     # Completions
     def complete(self, text: str, line: int, column: int) -> List[str]:

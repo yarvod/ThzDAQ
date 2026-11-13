@@ -45,6 +45,18 @@ class Session(QObject):
         self.workspace = SimpleNamespace(folder=folder)
 
 
+@pytest.fixture
+def hints(app):
+    """The assistant's hints, without a server unless a test adds one."""
+    from thzdaq_gui.models.assistant import ProvidersModel
+    from thzdaq_gui.models.hints import HintsModel
+
+    providers = ProvidersModel()
+    yield HintsModel(SimpleNamespace(devices=lambda: ()), providers)
+    for provider in providers.all():
+        providers.remove(provider.name)
+
+
 class Heard:
     """What a model told, in order."""
 
@@ -202,11 +214,11 @@ def type_in(widget, text):
     QTest.keyClicks(widget.input, text)
 
 
-def test_enter_runs_a_complete_block_else_goes_on(started, wait):
+def test_enter_runs_a_complete_block_else_goes_on(started, hints, wait):
     from thzdaq_gui.docks.console import ConsoleWidget
 
     model, heard = started()
-    widget = ConsoleWidget(model, lambda *place: None)
+    widget = ConsoleWidget(model, lambda *place: None, hints)
     type_in(widget, "for v in (1, 2):")
     QTest.keyClick(widget.input, Qt.Key_Return)
     type_in(widget, "print(v)")
@@ -224,11 +236,11 @@ def test_enter_runs_a_complete_block_else_goes_on(started, wait):
     widget.deleteLater()
 
 
-def test_arrows_and_ctrl_r_bring_earlier_inputs(started, wait):
+def test_arrows_and_ctrl_r_bring_earlier_inputs(started, hints, wait):
     from thzdaq_gui.docks.console import ConsoleWidget
 
     model, _ = started()
-    widget = ConsoleWidget(model, lambda *place: None)
+    widget = ConsoleWidget(model, lambda *place: None, hints)
     for code in ("a = 1", "b = 2"):
         model.run(code)
     type_in(widget, "draft")
@@ -268,12 +280,12 @@ def anchor_point(output):
     return None
 
 
-def test_a_place_of_a_traceback_opens_its_file(started, wait, tmp_path):
+def test_a_place_of_a_traceback_opens_its_file(started, hints, wait, tmp_path):
     from thzdaq_gui.docks.console import ConsoleWidget
 
     model, heard = started()
     opened = []
-    widget = ConsoleWidget(model, lambda *place: opened.append(place))
+    widget = ConsoleWidget(model, lambda *place: opened.append(place), hints)
     widget.resize(900, 600)
     widget.show()
     widget.output.clear_output()
@@ -288,6 +300,35 @@ def test_a_place_of_a_traceback_opens_its_file(started, wait, tmp_path):
     )
     assert opened and opened[0][0].resolve() == file.resolve() and opened[0][1] == 4
     widget.close()
+    widget.deleteLater()
+
+
+def test_fix_mends_the_block_that_raised_into_the_input(started, hints, model, wait):
+    from model_server import says
+    from thzdaq_gui.assistant.provider import Provider
+    from thzdaq_gui.docks.console import ConsoleWidget
+
+    hints.providers.save(Provider("local", model.url, "qwen"), "secret")
+    model_, heard = started()
+    widget = ConsoleWidget(model_, lambda *place: None, hints)
+    assert (
+        not widget.fixButton.isEnabled()
+    )  # the opening's traceback is not the person's
+    model_.run("a = 2")
+    model_.run("print(a / b)")
+    wait(lambda: model_.failed is not None, 15)
+    assert widget.fixButton.isEnabled() and model_.failed.before == ("a = 2",)
+    assert "NameError" in model_.failed.error and "\x1b" not in model_.failed.error
+    model.replies = [says("```python\nb = 1\nprint(a / b)\n```")]
+    widget.fixButton.click()
+    wait(lambda: widget.input.review is not None)
+    told = model.asked[-1]["messages"][-1]["content"]
+    assert "a = 2" in told and "print(a / b)" in told and "NameError" in told
+    widget.input.reviewBar.takeAll.click()
+    assert widget.input.toPlainText() == "b = 1\nprint(a / b)"  # the person runs it
+    assert heard.of("entered")[-1] == ("print(a / b)",)
+    model_.run("b = 1")
+    wait(lambda: model_.failed is None)
     widget.deleteLater()
 
 

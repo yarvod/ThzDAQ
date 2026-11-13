@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox
 from thzdaq_api.custom import LIBRARY
 
 from thzdaq_gui.dock_names import CODE, EDITOR, MEASURE, dock_name
+from thzdaq_gui.review import Source
 
 TOLD = '''"""Told
 
@@ -248,19 +249,44 @@ def test_the_tab_of_a_file_saves_checks_and_asks_before_it_closes(
     wait(lambda: "# more" in path.read_text(encoding="utf-8"))
 
 
-def test_a_file_changed_outside_is_taken_or_asked_about(window, wait, library):
+def test_a_file_changed_outside_is_shown_hunk_by_hunk_or_asked_about(
+    window, wait, library
+):
     path = library / "told.py"
     path.write_text(TOLD, encoding="utf-8")
     window.code.open(path)
     widget = tab_of(window, path)
+    editor = widget.editor
+    # Nothing unsaved: the change is the text's, shown to keep or undo
     path.write_text(TOLD + "# by an agent\n", encoding="utf-8")
-    wait(lambda: widget.text.endswith("# by an agent\n"))
-    widget.editor.insertPlainText("# mine\n")
+    wait(lambda: editor.review is not None)
+    assert editor.review.source is Source.OUTSIDE
+    assert widget.text.endswith("# by an agent\n") and not widget.unsaved()
+    editor.hunkButtons[0].leave.click()  # undone here: the file still has it
+    assert widget.text == TOLD and widget.unsaved() and editor.review is None
+    widget.save()
+    wait(lambda: path.read_text(encoding="utf-8") == TOLD)
+    # Changes here: a banner asks; Compare takes the file's hunks or not
+    editor.insertPlainText("# mine\n")
+    path.write_text(TOLD + "# theirs\n", encoding="utf-8")
+    wait(lambda: not widget.banner.isHidden())
+    assert "# mine" in widget.text and editor.review is None
+    widget.compare()
+    assert editor.review.source is Source.COMPARED and widget.banner.isHidden()
+    assert "# mine" in widget.text  # mine until a hunk of the file is taken
+    editor.reviewBar.takeAll.click()
+    assert widget.text == TOLD + "# theirs\n" and not widget.unsaved()
+    # Reload drops what is here; Keep mine keeps it, not saved
+    editor.insertPlainText("# mine\n")
     path.write_text(TOLD, encoding="utf-8")
     wait(lambda: not widget.banner.isHidden())
-    assert "# mine" in widget.text
+    widget.keep_mine()
+    assert "# mine" in widget.text and widget.unsaved()
+    path.write_text(TOLD + "# again\n", encoding="utf-8")
+    wait(lambda: not widget.banner.isHidden())
     widget.reload()
-    assert widget.text == TOLD and widget.banner.isHidden()
+    assert widget.text == TOLD + "# again\n" and widget.banner.isHidden()
+    assert not widget.unsaved()
 
 
 def test_completions_know_the_bench(window, wait, library):
