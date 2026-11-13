@@ -1,7 +1,8 @@
 """thzdaq script start|list|logs|stop, thzdaq run-script: scripts the daemon
 runs apart from any terminal, so closing this one leaves them running; their
 output goes to data/scripts/<id>.log of their workspace. A script runs with
-this command's Python (a build's thzdaq-cli.exe run-script) or --python; what
+--python, else with the Python its workspace names (thzdaq.toml), else with
+this command's (a build's thzdaq-cli.exe run-script); what
 it may do without asking a person is given with --allow (set:<device>,
 call:<device>, run:<procedure>, raw:<instrument>; an agent's allows
 nothing: a script has the rights of whoever started it). stop cancels its
@@ -12,9 +13,9 @@ import runpy
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
-from thzdaq_api import host
+from thzdaq_api import host, interpreters
 from thzdaq_api.scripts import (
     Grant,
     ListScripts,
@@ -39,7 +40,11 @@ def add(commands) -> None:
         "start", help="run a Python script in the daemon: it outlives this terminal"
     )
     start.add_argument("file", help="then -- and the script's arguments")
-    start.add_argument("--python", help="the interpreter (default: this command's)")
+    start.add_argument(
+        "--python",
+        help="an environment's folder or its interpreter (default: the "
+        "workspace's, else this command's)",
+    )
     start.add_argument(
         "--allow", action="append", default=[], metavar="KIND:TARGET",
         help="done without asking: set:<device>, call:<device>, run:<procedure>,"
@@ -79,9 +84,12 @@ def add(commands) -> None:
     run.set_defaults(run=run_script)
 
 
-def interpreter(given: str) -> Tuple[str, ...]:
-    """How the daemon runs a file: --python, else this command's Python."""
-    return (given,) if given else host.script_python()
+def interpreter(given: str, workspace: Optional[Path]) -> Tuple[str, ...]:
+    """How the daemon runs a file: --python, else the Python of its
+    workspace."""
+    if given:
+        return (str(interpreters.python_in(interpreters.located(given))),)
+    return interpreters.scripts_python(workspace)
 
 
 def grants(given: List[str]) -> Tuple[Grant, ...]:
@@ -102,7 +110,7 @@ def start_script(args, client: Client) -> int:
     started = client.call(
         StartScript(
             path=str(Path(args.file).resolve()),
-            python=interpreter(args.python),
+            python=interpreter(args.python, client.workspace),
             arguments=tuple(args.passed),
             workspace=client.folder(),
             allow=grants(args.allow),

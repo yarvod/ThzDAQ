@@ -9,7 +9,9 @@ from pathlib import Path
 
 from thzdaq_api import host
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.interpreters import python_in
 from thzdaq_api.measurement_file import PROFILE, read_measurement
+from thzdaq_api.scripts import ListScripts
 from thzdaq_api.workspace import FILE, WORKSPACE_ENV, create, read
 
 FAST = ["--set", "settle_time=0", "--set", "first_point_delay=0"]
@@ -159,3 +161,74 @@ def test_a_real_daemon_started_for_a_workspace_loads_its_profile(tmp_path):
         assert (tmp_path / "experiment" / noted["file"]).exists()
     finally:
         thzdaq("daemon", "kill")
+
+
+def bare_venv(folder: Path) -> Path:
+    """A venv without thzdaq; its interpreter."""
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(folder)], check=True
+    )
+    return python_in(folder)
+
+
+def test_init_names_the_python_of_its_scripts(thzdaq, tmp_path):
+    code, out, err = thzdaq("init", "experiment", "--python", sys.executable)
+    assert code == 0, err
+    assert f"scripts run with {sys.executable}" in out
+    assert f"thzdaq {host.app_version()}" in out
+    assert read(tmp_path / "experiment").python == sys.executable
+    code, out, _ = thzdaq("init", "other")
+    assert code == 0 and "scripts run with the program's own: Python" in out
+    assert read(tmp_path / "other").python == ""
+
+
+def test_init_with_a_python_without_thzdaq_says_how_to_mend_it(thzdaq, tmp_path):
+    python = bare_venv(tmp_path / "experiment" / ".venv")
+    code, out, _ = thzdaq("init", "experiment", "--python", "experiment/.venv")
+    assert code == 1  # made, but its scripts would not run
+    assert read(tmp_path / "experiment").python == ".venv"  # moves with it
+    assert "has no thzdaq" in out and f"thzdaq=={host.app_version()}" in out
+    assert str(python) in out
+
+
+def test_python_is_shown_set_and_listed_in_a_workspace(thzdaq, tmp_path, monkeypatch):
+    create(tmp_path / "experiment", "bench")
+    python = bare_venv(tmp_path / "experiment" / ".venv")
+    monkeypatch.chdir(tmp_path / "experiment")
+    code, out, _ = thzdaq("python", "show")
+    assert code == 0 and out.startswith("scripts run with the program's own")
+    code, out, _ = thzdaq("python", "list")
+    assert [line.split()[:2] for line in out.splitlines()[1:3]] == [
+        ["*", "built-in"],
+        ["venv", ".venv"],
+    ]
+    code, out, _ = thzdaq("python", "set", ".venv")
+    assert code == 1 and f"scripts run with .venv ({python})" in out
+    code, out, _ = thzdaq("python", "list")
+    assert out.splitlines()[2].split()[:3] == ["*", "venv", ".venv"]
+    code, _, _ = thzdaq("python", "set", "--own")
+    assert code == 0 and read(Path.cwd()).python == ""
+    code, _, err = thzdaq("python", "set", "nowhere")
+    assert code == 1 and "No Python" in err and read(Path.cwd()).python == ""
+
+
+def test_python_is_set_only_in_a_workspace(thzdaq, tmp_path):
+    code, _, err = thzdaq("python", "set", sys.executable)
+    assert code == 1 and "thzdaq init" in err
+    assert not (tmp_path / FILE).exists()
+
+
+def test_a_script_started_here_runs_with_the_workspaces_python(thzdaq, lab, tmp_path):
+    python = bare_venv(tmp_path / ".venv")
+    create(tmp_path, python=".venv")
+    (tmp_path / "scripts" / "hello.py").write_text("print('hello')\n")
+    code, _, err = thzdaq("script", "start", "scripts/hello.py")
+    assert code == 0, err
+    (script,) = lab.call(ListScripts())
+    assert script.command[0] == str(python)
+    code, _, err = thzdaq(
+        "script", "start", "scripts/hello.py", "--python", sys.executable
+    )
+    assert code == 0, err
+    last = max(lab.call(ListScripts()), key=lambda script: script.id)
+    assert last.command[0] == sys.executable
