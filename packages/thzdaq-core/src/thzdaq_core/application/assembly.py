@@ -4,7 +4,7 @@ connections go) to stop at the end."""
 
 from dataclasses import dataclass
 
-from thzdaq_api.host import script_python
+from thzdaq_api.interpreters import scripts_python
 from thzdaq_api.origins import answers
 
 from thzdaq_core.application.approvals import Approvals
@@ -89,7 +89,7 @@ def assemble(
         bench, workspaces, runs, events, script_sessions, launcher,
         lambda: control.process().simulate, procedures.get,
     )  # fmt: skip
-    custom_runs = CustomRuns(customs, processes, script_sessions, script_python)
+    custom_runs = CustomRuns(customs, processes, script_sessions, scripts_python)
     checks = Checks(customs, bench, access)
     polling = Polling(access, events)
     profile = StationService(bench, profiles, runs, events, workspaces)

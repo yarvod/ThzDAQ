@@ -27,7 +27,8 @@ class Failed(Exception):
 
 def check(built: Optional[Path]) -> None:
     app = QCoreApplication.instance() or QCoreApplication([])
-    kernel = Kernel(console.kernel_command(built))
+    command = console.kernel_command(built=built)
+    kernel = Kernel()
     told: List[tuple] = []
     for name in ("started", "failed", "died", "printed", "shown", "raised", "finished"):
         getattr(kernel, name).connect(lambda *a, n=name: told.append((n, *a)))
@@ -45,7 +46,7 @@ def check(built: Optional[Path]) -> None:
         return ("finished", id, "ok") in told or ("finished", id, "error") in told
 
     try:
-        kernel.start(dict(os.environ), Path.cwd())
+        kernel.start(command, dict(os.environ), Path.cwd())
         until("started", lambda: ("started",) in told)
         id = kernel.execute("import thzdaq, numpy\n6 * 7")
         until("runs code", lambda: finished(id))
@@ -56,7 +57,7 @@ def check(built: Optional[Path]) -> None:
         kernel.interrupt()
         until("interrupted", lambda: ("finished", id, "error") in told)
         told.clear()
-        kernel.restart(dict(os.environ), Path.cwd())
+        kernel.restart(command, dict(os.environ), Path.cwd())
         until("restarted", lambda: ("started",) in told)
     finally:
         kernel.stop()

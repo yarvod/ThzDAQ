@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from thzdaq_api import console, host
+from thzdaq_api import console, host, workspace
 from thzdaq_api.devices import (
     ActionInfo,
     ArgumentInfo,
@@ -64,6 +64,17 @@ def test_a_kernel_runs_the_scripts_python(monkeypatch, tmp_path):
         str(built), host.RUN_SCRIPT, "-m", console.KERNEL, "--",
         "-f", console.CONNECTION,
     ]  # fmt: skip
+
+
+def test_a_kernel_runs_the_python_of_its_workspace(tmp_path):
+    python = tmp_path / ("python.exe" if sys.platform == "win32" else "python")
+    python.write_text("")
+    workspace.create(tmp_path / "w", python=str(python))
+    assert console.kernel_command(tmp_path / "w") == [
+        str(python), "-m", console.KERNEL, "-f", console.CONNECTION,
+    ]  # fmt: skip
+    workspace.create(tmp_path / "own")
+    assert console.kernel_command(tmp_path / "own") == console.kernel_command()
 
 
 def test_a_kernel_works_where_its_window_does(tmp_path):

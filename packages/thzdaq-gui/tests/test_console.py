@@ -3,14 +3,17 @@ model without widgets, its tab offscreen (keys, history, tracebacks), and
 the Console tab of the window with Editor's Run in console."""
 
 import os
+import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from thzdaq_api import console, host
+from thzdaq_api import console, host, workspace
+from thzdaq_api.interpreters import python_in
 
 from thzdaq_gui.models.console import (
     ENDED,
@@ -117,13 +120,14 @@ def test_history_browses_back_to_what_was_typed():
 def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(app, wait):
     from thzdaq_gui.kernel import Kernel
 
-    kernel = Kernel(console.kernel_command())
+    command = console.kernel_command()
+    kernel = Kernel()
     told = []
     for name in ("started", "failed", "died", "printed", "shown", "raised", "finished"):
         getattr(kernel, name).connect(lambda *a, n=name: told.append((n, *a)))
     kinds = lambda id: [t[0] for t in told if t[1:2] == (id,)]  # noqa: E731
     try:
-        kernel.start(dict(os.environ), Path.cwd())
+        kernel.start(command, dict(os.environ), Path.cwd())
         wait(lambda: told, START_S)
         if told[0][0] == "failed":
             pytest.skip(f"no kernel starts here: {told[0][1]}")
@@ -141,7 +145,7 @@ def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(app, wait):
         assert kinds(id) == ["raised", "finished"]
         told.clear()
         kernel.execute("kept = 1")
-        kernel.restart(dict(os.environ), Path.cwd())
+        kernel.restart(command, dict(os.environ), Path.cwd())
         wait(lambda: ("started",) in told, START_S)
         id = kernel.execute("kept")  # a new kernel: its names went
         wait(lambda: "finished" in kinds(id), START_S)
@@ -163,12 +167,12 @@ def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(app, wait):
 def test_a_kernel_that_does_not_start_is_told_and_stops(app, wait, command):
     from thzdaq_gui.kernel import Kernel
 
-    kernel = Kernel(command)
+    kernel = Kernel()
     failed = []
     kernel.failed.connect(failed.append)
-    kernel.start(dict(os.environ), Path.cwd())
+    kernel.start(command, dict(os.environ), Path.cwd())
     wait(lambda: failed, START_S)
-    kernel.restart(dict(os.environ), Path.cwd())  # fails again, as cleanly
+    kernel.restart(command, dict(os.environ), Path.cwd())  # fails again, as cleanly
     wait(lambda: len(failed) == 2, START_S)
     kernel.stop()
     assert kernel.join(15)
@@ -356,3 +360,56 @@ def test_the_window_has_a_console_tab_editor_runs_code_in(window, wait, tmp_path
     assert len(window.consoles.consoles) == 2
     window.consoles.tabs.request_close(console_tab)  # its kernel ends
     assert model.state == ENDED and model.kernel.join(15)
+
+
+def venv_with_ours(folder: Path) -> Path:
+    """A venv of its own that reaches this environment's packages (thzdaq,
+    ipykernel) through a .pth file; its folder."""
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(folder)], check=True
+    )
+    done = subprocess.run(
+        [str(python_in(folder)), "-c",
+         "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    ours = sysconfig.get_paths()["purelib"]
+    (Path(done.stdout.strip()) / "ours.pth").write_text(
+        f"import site; site.addsitedir({ours!r})\n"
+    )
+    return folder
+
+
+def prefix(model, heard, wait) -> Path:
+    """Where the console's kernel runs: its sys.prefix."""
+    before = len(heard.of("printed"))
+    model.run("import sys; print(sys.prefix)")
+    wait(lambda: len(heard.of("printed")) > before, START_S)
+    return Path(heard.of("printed")[-1][1].strip()).resolve()
+
+
+def test_a_console_keeps_its_python_until_it_restarts(started, wait, tmp_path):
+    workspace.create(tmp_path)
+    model, heard = started()
+    own = prefix(model, heard, wait)
+    assert own == Path(sys.prefix).resolve()
+    venv_with_ours(tmp_path / ".venv")
+    workspace.write_python(tmp_path, ".venv")
+    assert prefix(model, heard, wait) == own  # until its Restart
+    model.restart()
+    wait(lambda: model.state == STARTING, START_S)
+    wait(lambda: model.state == IDLE and len(heard.of("raised")) == 2, START_S)
+    assert prefix(model, heard, wait) == (tmp_path / ".venv").resolve()
+
+
+def test_a_console_whose_python_is_not_there_says_so(app, tmp_path):
+    workspace.create(tmp_path, python=".venv")
+    model = ConsoleModel(Session(tmp_path))
+    told = []
+    model.told.connect(told.append)
+    assert model.state == ENDED
+    model.restart()  # not restarted: it says why again
+    assert model.state == ENDED
+    assert told[0].startswith("Not restarted") and "names the Python" in told[0]
+    model.stop()
+    model.kernel.join(15)

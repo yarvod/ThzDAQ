@@ -74,14 +74,12 @@ class Kernel(QObject):
     history_found = Signal(str, list)  # inputs, the oldest first
     input_requested = Signal(str, bool)  # the prompt, whether a password
 
-    def __init__(self, command: Sequence[str], parent=None):
-        """command: how the kernel starts, with {connection_file}; parent:
-        what deletes it, in the window's thread, once its thread has ended
-        (the session, with the program), never a tab that closes. Deleted
-        from its own thread, or while that thread runs, it would take Qt's
-        memory with it."""
+    def __init__(self, parent=None):
+        """parent: what deletes it, in the window's thread, once its thread
+        has ended (the session, with the program), never a tab that closes.
+        Deleted from its own thread, or while that thread runs, it would take
+        Qt's memory with it."""
         super().__init__(parent)
-        self.command = list(command)
         self.manager: Optional[AsyncKernelManager] = None
         self.client = None
         self.tasks: List[asyncio.Task] = []
@@ -110,17 +108,22 @@ class Kernel(QObject):
             logger.error("The console's kernel failed", exc_info=done.exception())
 
     # Its life, from the window's thread
-    def start(self, environment: Dict[str, str], folder: Path) -> None:
-        """environment: the whole environment of its process; folder: where
-        it runs."""
-        self._soon(self._start(environment, folder))
+    def start(
+        self, command: Sequence[str], environment: Dict[str, str], folder: Path
+    ) -> None:
+        """command: how it starts, with {connection_file} (its Python);
+        environment: the whole environment of its process; folder: where it
+        runs."""
+        self._soon(self._start(list(command), environment, folder))
 
     def interrupt(self) -> None:
         self._soon(self._interrupt())
 
-    def restart(self, environment: Dict[str, str], folder: Path) -> None:
-        """Anew, with this environment and folder."""
-        self._soon(self._restart(environment, folder))
+    def restart(
+        self, command: Sequence[str], environment: Dict[str, str], folder: Path
+    ) -> None:
+        """Anew, with this command, environment and folder."""
+        self._soon(self._restart(list(command), environment, folder))
 
     def stop(self) -> None:
         """It ends, then this thread; nothing is told after."""
@@ -172,9 +175,11 @@ class Kernel(QObject):
             session.msg(kind, content, header=header)
         )
 
-    async def _start(self, environment: Dict[str, str], folder: Path) -> None:
+    async def _start(
+        self, command: List[str], environment: Dict[str, str], folder: Path
+    ) -> None:
         spec = KernelSpec(
-            argv=self.command, language="python", display_name="ThzDAQ",
+            argv=command, language="python", display_name="ThzDAQ",
             interrupt_mode="signal",
         )  # fmt: skip
         self.manager = AsyncKernelManager(
@@ -223,9 +228,11 @@ class Kernel(QObject):
         if self.manager is not None and self.manager.has_kernel:
             await self.manager.interrupt_kernel()
 
-    async def _restart(self, environment: Dict[str, str], folder: Path) -> None:
+    async def _restart(
+        self, command: List[str], environment: Dict[str, str], folder: Path
+    ) -> None:
         await self._end()
-        await self._start(environment, folder)
+        await self._start(command, environment, folder)
 
     async def _stop(self) -> None:
         try:

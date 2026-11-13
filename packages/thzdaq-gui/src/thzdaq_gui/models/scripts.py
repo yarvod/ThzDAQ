@@ -2,8 +2,8 @@
 printed: the window's own (Run of a script's file, the bench's own
 measurements started here) and the others'.
 
-Run is StartScript with this program's Python (host.script_python) in the
-window's workspace; Stop is StopScript: their measurements are cancelled,
+Run is StartScript in the window's workspace with its Python
+(thzdaq_api.interpreters: the one its thzdaq.toml names, else the program's); Stop is StopScript: their measurements are cancelled,
 then a script that goes on is ended. The daemon tells every client a script's
 start, what it prints, part by part, and its end; a run heard of later (the
 daemon's list), or one whose part was missed, reads its log up to the parts
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QObject, Signal
-from thzdaq_api import host
+from thzdaq_api.interpreters import scripts_python
 from thzdaq_api.events import ScriptEnded, ScriptOutput, ScriptStarted
 from thzdaq_api.scripts import (
     RUNNING,
@@ -131,14 +131,15 @@ class ScriptsModel(QObject):
     def run(self, path: Path, dock: str) -> None:
         """Start the script in the daemon, apart from the window; dock: where
         the window shows it (its Processes entry leads there)."""
-        start = StartScript(
-            path=str(path),
-            python=host.script_python(),
-            workspace=str(self.session.workspace.folder),
-        )
-        lab = self.session.lab
+        lab, folder = self.session.lab, self.session.workspace.folder
+
+        def start() -> ScriptInfo:
+            """LabError when the workspace names a Python not there."""
+            python = scripts_python(folder)
+            return lab.call(StartScript(str(path), python, workspace=str(folder)))
+
         self.calls.submit(
-            lambda: lab.call(start),
+            start,
             lambda info: self._run_started(info, dock),
             self._failed,
             key=CALLS,

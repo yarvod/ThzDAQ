@@ -107,7 +107,8 @@ packages/
   thzdaq-api/src/thzdaq_api/    # контракт по областям (devices, measurements, station, daemon,
                                  # scripts, …), catalog, events, errors, measurement_file; remote
                                  # (RemoteLab), host (файлы демона), lanes, lab (connect()),
-                                 # tools и present (агенты), workspace
+                                 # tools и present (агенты), workspace, interpreters
+                                 # (Python скриптов рабочей папки)
   thzdaq-daemon/src/thzdaq_daemon/   # compose (точка сборки), server (HTTP + SSE), process
   thzdaq-cli/src/thzdaq_cli/     # thzdaq: daemon, devices, measurements, scripts, agents, …
   thzdaq-mcp/src/thzdaq_mcp/     # thzdaq mcp: инструменты агентов по MCP stdio
@@ -124,6 +125,8 @@ packages/
     code_docks.py        # файлы скриптов вкладками в доке Editor (docks/tabbed.py, docks/code.py)
     console_docks.py     # Python-консоли вкладками в доке Console (docks/console.py)
     kernel.py            # ядро консоли (ipykernel) и клиент jupyter_client в своём потоке
+    workspace_menu.py, workspace_settings.py   # рабочая папка в меню File; её настройки:
+                         # Python скриптов (модель models/interpreter.py)
     console_output.py    # вывод консоли: блоки, цвета ANSI, места traceback — ссылки
     editor.py            # редактор скриптов (и поле ввода консоли): правка кусками, серый
                          # текст подсказки, Ctrl+I
@@ -502,9 +505,10 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   показывает владелец (`DockSpace.show_inside`).
 - **Console** — Python-консоли вкладками в базовом доке (тот же `TabbedDock`; `ConsoleDocks`,
   `console_docks.py`): «New console» в «+», на пустом доке и в Ctrl+K (раздел Consoles: и
-  открытые консоли). У каждой своё ядро — процесс `ipykernel` на Python скриптов
-  (`thzdaq_api.console`: команда, окружение; сторона ядра — `thzdaq_api.kernel`, подсказки
-  стенда). `Kernel` (`kernel.py`) — единственный владелец ядра: поток с циклом asyncio, в нём
+  открытые консоли). У каждой своё ядро — процесс `ipykernel` на Python скриптов рабочей
+  папки окна (`thzdaq_api.console`: команда, окружение; сторона ядра — `thzdaq_api.kernel`,
+  подсказки стенда); команду `Kernel` получает при каждом старте, поэтому идущее ядро держит
+  свой Python до Restart. `Kernel` (`kernel.py`) — единственный владелец ядра: поток с циклом asyncio, в нём
   асинхронные менеджер и клиент `jupyter_client`; сообщения ядра — сигналы Qt в поток окна.
   Удаляет `Kernel` сессия (его родитель Qt) в потоке окна: сам себя он не удаляет — удаление
   из своего потока или пока поток жив портит память Qt. `ConsoleModel` (`models/console.py`)
@@ -959,6 +963,14 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
   папки и передаёт демону (`workspace` у `start_measurement` и у сессий скриптов); без неё
   измерения идут в `data/` домашней папки демона. Изменённый профиль оставляет в папке свою
   копию. Номер измерения выдаёт демон, один на все папки.
+- **Python скриптов рабочей папки** (`thzdaq_api.interpreters`, М4, шаг 4): `python` в
+  `thzdaq.toml` (`.venv`, окружение uv или conda, любой интерпретатор), иначе свой Python
+  программы. Правило у одного владельца, спрашивает его тот, кто запускает: демон — для
+  своего измерения (папка из `start_measurement`), CLI и окно — для `start_script` (уходит
+  уже выбранный), окно — для ядра консоли. Окно (File → Workspace settings…) показывает
+  найденные окружения и проверяет выбранное: оно запускается, Python не ниже 3.11, `thzdaq`
+  ровно версии программы, `ipykernel` для консоли. Каталог своих измерений описывается
+  Python программы — он один на все папки.
 
 ## 5. SOLID — как выполняется
 

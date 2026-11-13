@@ -48,6 +48,7 @@ from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.processes import Processes
 from thzdaq_gui.settings import stations_dir
 from thzdaq_gui.models.run import RunModel
+from thzdaq_gui.models.interpreter import InterpreterModel
 from thzdaq_gui.models.runs import RunEvents
 from thzdaq_gui.models.scripts import ScriptsModel
 from thzdaq_gui.workers import DeviceWorker
@@ -111,6 +112,7 @@ class Session(QObject):
         self.run_events.remembered.connect(self.measurements.remember)
         # Scripts of the workspace, and those the daemon runs
         self.scripts = ScriptsModel(self, self)
+        self.interpreters = InterpreterModel(self.workspace, self)  # their Python
         self.values = {}
         self.bridge.values.connect(self._values_heard)
         self.bridge.quantity_set.connect(self._quantity_heard)
@@ -318,3 +320,4 @@ class Session(QObject):
         self.bridge.stop()
         self.calls.stop(timeout)
         self.scripts.close(timeout)
+        self.interpreters.close(timeout)
