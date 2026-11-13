@@ -20,9 +20,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "import-linter>=2.1",
-    "pillow==11.1.0",  # PyInstaller converts the PNG icon with it
+    "pillow==11.1.0", # PyInstaller converts the PNG icon with it
     "pyinstaller==6.12.0",
     "pytest>=8.2",
+    "pytest-timeout>=2.3",
 ]
 
 [tool.uv]

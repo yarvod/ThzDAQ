@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: windows-2022
+    # A test that hangs fails the run in minutes instead of hours
+    timeout-minutes: 45
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -29,4 +31,6 @@ jobs:
         run: uv run lint-imports
 
       - name: Tests
-        run: uv run pytest -q -p no:faulthandler
+        # --timeout fails a hung test with its stack (a thread: Windows has no SIGALRM);
+        # --durations tells where the time goes
+        run: uv run pytest -q -p no:faulthandler --timeout=240 --timeout-method=thread --durations=30
