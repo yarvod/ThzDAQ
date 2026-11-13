@@ -2,6 +2,7 @@
 
 import threading
 import time
+from contextlib import contextmanager
 
 import msgspec
 from thzdaq_api import wire
@@ -16,6 +17,27 @@ def wait_for(predicate, timeout=3.0):
     while not predicate():
         assert time.monotonic() < deadline, "not reached in time"
         time.sleep(0.005)
+
+
+@contextmanager
+def paused_measurement(monkeypatch):
+    """Hold a run after its first setpoint until the test leaves the context."""
+    from thzdaq_core.application.runner import Context
+
+    reached, released = threading.Event(), threading.Event()
+    sleep = Context.sleep
+
+    def pause(ctx, seconds):
+        reached.set()
+        released.wait()
+        sleep(ctx, seconds)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Context, "sleep", pause)
+        try:
+            yield reached
+        finally:
+            released.set()
 
 
 def bodies(events, kind):

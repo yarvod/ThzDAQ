@@ -2,6 +2,7 @@ import time
 import json
 
 import pytest
+from lab_helpers import paused_measurement
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
@@ -2259,27 +2260,35 @@ class TestConflicts:
     def test_a_device_dock_shows_who_sweeps_it_and_asks(
         self, window, session, bench, wait, monkeypatch
     ):
+        from thzdaq_api.measurements import CancelMeasurement, WaitMeasurement
+
         widget = window.docks["device:sis_bias_1"].widget()
         assert widget.use.isHidden()
-        other = sweep_bias(session)
-        wait(lambda: not widget.use.isHidden())
-        assert (
-            f"#{other.id}" in widget.use.text() and "sweeps SIS1" in widget.use.text()
-        )
-        asked = []
-        monkeypatch.setattr(
-            QMessageBox,
-            "question",
-            lambda *a, **k: asked.append(a[2]) or QMessageBox.Yes,
-        )
-        panel = widget.panels[0]
-        voltage = next(q for q in panel.quantities if q.key == "voltage_set")
-        panel.write(voltage, 1e-3)  # refused, asked, set anyway
-        wait(lambda: asked and not panel.fields["voltage_set"].pending)
-        assert f"#{other.id}" in asked[0]
-        wait(lambda: panel.fields["voltage_set"].value() == 1e-3)
+        with paused_measurement(monkeypatch) as reached:
+            other = sweep_bias(session)
+            try:
+                wait(reached.is_set)
+                wait(lambda: not widget.use.isHidden())
+                assert (
+                    f"#{other.id}" in widget.use.text()
+                    and "sweeps SIS1" in widget.use.text()
+                )
+                asked = []
+                monkeypatch.setattr(
+                    QMessageBox,
+                    "question",
+                    lambda *a, **k: asked.append(a[2]) or QMessageBox.Yes,
+                )
+                panel = widget.panels[0]
+                voltage = next(q for q in panel.quantities if q.key == "voltage_set")
+                panel.write(voltage, 1e-3)  # refused, asked, set anyway
+                wait(lambda: asked and not panel.fields["voltage_set"].pending)
+                assert f"#{other.id}" in asked[0]
+                wait(lambda: panel.fields["voltage_set"].value() == 1e-3)
+            finally:
+                session.call(CancelMeasurement(id=other.id))
         # The sweep notes who changed its device (and restores it at its end)
-        noted = ended(session, other).conflicts
+        noted = session.call(WaitMeasurement(id=other.id, timeout=10)).conflicts
         assert [(c["key"], c["by"]) for c in noted] == [("voltage_set", "gui")]
         wait(lambda: widget.use.isHidden())
 

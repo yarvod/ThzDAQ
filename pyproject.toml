@@ -58,7 +58,7 @@ testpaths = [
     "packages/thzdaq-gui/tests",
     "packages/thzdaq-mcp/tests",
 ]
-addopts = "--import-mode=importlib --durations=20"
+addopts = "--import-mode=importlib --durations=20 -n auto --maxprocesses=6 --dist=worksteal --max-worker-restart=0"
 timeout = 120
 timeout_method = "thread"
 

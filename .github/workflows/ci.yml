@@ -31,6 +31,7 @@ jobs:
         run: uv run lint-imports
 
       - name: Tests
+        # The root pytest config distributes tests across up to six worker processes.
         # --timeout fails a hung test with its stack (a thread: Windows has no SIGALRM);
         # -vv names the active test even if it hangs; --durations tells where the time goes
         run: uv run pytest -vv -p no:faulthandler --timeout=240 --timeout-method=thread --durations=30

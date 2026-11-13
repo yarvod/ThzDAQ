@@ -2,7 +2,7 @@
 and RemoteLab)."""
 
 import pytest
-from lab_helpers import Window, bodies, calling, wait_for
+from lab_helpers import Window, bodies, calling, paused_measurement, wait_for
 from thzdaq_api.approvals import AnswerApproval, AskUser, WaitAnswer
 from thzdaq_api.devices import CallAction, ListDevices, SafeState, SetQuantity
 from thzdaq_api.errors import ErrorCode, LabError
@@ -110,22 +110,25 @@ def test_a_dangerous_step_is_allowed_only_typing_the_device(lab_as, window):
     assert done["result"].value is False
 
 
-def test_an_agents_set_on_a_swept_device_is_the_persons_to_allow(lab_as, window):
+def test_an_agents_set_on_a_swept_device_is_the_persons_to_allow(
+    lab_as, window, monkeypatch
+):
     """Not refused for the conflict: the person reads which measurement sweeps
     the device, and a yes changes it shared, noted in that measurement."""
-    slow = {**IV["parameters"], "voltage": {"start": 0, "stop": 0.005, "points": 2000}}
-    sweep = window.lab.call(StartMeasurement(**{**IV, "parameters": slow}))
-    try:
-        thread, done = calling(
-            lab_as(AGENT), SetQuantity(ref="sis_bias_1", key="voltage_set", value=0)
-        )
-        approval = window.asked()
-        assert f"#{sweep.id}" in approval.warning
-        window.answer(allowed=True)
-        thread.join(5)
-        assert done["result"].value == 0
-    finally:
-        window.lab.call(CancelMeasurement(id=sweep.id))
+    with paused_measurement(monkeypatch) as reached:
+        sweep = window.lab.call(StartMeasurement(**IV))
+        try:
+            wait_for(reached.is_set)
+            thread, done = calling(
+                lab_as(AGENT), SetQuantity(ref="sis_bias_1", key="voltage_set", value=0)
+            )
+            approval = window.asked()
+            assert f"#{sweep.id}" in approval.warning
+            window.answer(allowed=True)
+            thread.join(5)
+            assert done["result"].value == 0
+        finally:
+            window.lab.call(CancelMeasurement(id=sweep.id))
     ended = window.lab.call(WaitMeasurement(id=sweep.id, timeout=5))
     assert [c["by"] for c in ended.conflicts] == [AGENT]
 
