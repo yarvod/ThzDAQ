@@ -33,9 +33,20 @@ def test_create_makes_a_workspace_and_keeps_its_file(tmp_path):
 
 
 def test_the_file_reads_back_what_was_written(tmp_path):
-    written = WorkspaceFile(station='a "b" \\ c', notes="Смесь\nвторая строка\t!")
+    written = WorkspaceFile(
+        station='a "b" \\ c',
+        notes="Смесь\nвторая строка\t!",
+        python="C:\\Users\\me\\miniforge3\\envs\\sci",
+    )
     (tmp_path / FILE).write_text(written.text(), encoding="utf-8")
     assert read(tmp_path) == written
+
+
+def test_a_new_workspace_names_its_python_or_none(tmp_path):
+    create(tmp_path / "a")
+    assert read(tmp_path / "a").python == ""
+    create(tmp_path / "b", "lab", python=".venv")
+    assert read(tmp_path / "b") == WorkspaceFile(station="lab", python=".venv")
 
 
 def test_a_folder_without_the_file_expects_nothing(tmp_path):

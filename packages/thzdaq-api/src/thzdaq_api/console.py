@@ -3,9 +3,10 @@ console it opens.
 
 The kernel is IPython's (ipykernel, thzdaq_api.kernel), a process of its own
 that the window talks to over the Jupyter protocol: code that hangs or dies
-there leaves the window and the daemon alone. It runs with the scripts' Python
-(host.python_module: this interpreter from sources, a build's own), so it has
-every module a script has. It is a client of the daemon as a script is: it
+there leaves the window and the daemon alone. It runs with the Python of the
+window's workspace, as its scripts do (thzdaq_api.interpreters: the one its
+thzdaq.toml names, else the program's own), so it has every module a script
+has; a kernel keeps the one it started with until it restarts. It is a client of the daemon as a script is: it
 calls as console (thzdaq_api.origins), with the rights of a person's script,
 in the window's workspace, on the window's daemon (the simulator's too).
 
@@ -17,7 +18,7 @@ settings stay out of the bench's console).
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from thzdaq_api import host
+from thzdaq_api import host, interpreters
 from thzdaq_api.origins import CONSOLE_ENV
 from thzdaq_api.scripts import SIMULATE_ENV
 from thzdaq_api.workspace import WORKSPACE_ENV
@@ -29,12 +30,16 @@ IPYTHON_DIR_ENV = "IPYTHONDIR"  # where IPython keeps its history and settings
 OPENING = "from thzdaq import *\nlab = connect()"
 
 
-def kernel_command(built: Optional[Path] = None) -> List[str]:
-    """How the window starts a console's kernel; built: with that build's
-    thzdaq-cli (the release checks its build so)."""
+def kernel_command(
+    workspace: Optional[Path] = None, built: Optional[Path] = None
+) -> List[str]:
+    """How the window starts a console's kernel: with the Python of its
+    workspace; built: with that build's thzdaq-cli (the release checks its
+    build so). LabError when the workspace names a Python that is not
+    there."""
     if built is not None:
         return host.built_module(built, KERNEL, "-f", CONNECTION)
-    return host.python_module(KERNEL, "-f", CONNECTION)
+    return interpreters.module_command(workspace, KERNEL, "-f", CONNECTION)
 
 
 def history_dir() -> Path:

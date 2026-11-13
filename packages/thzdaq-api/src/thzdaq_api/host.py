@@ -44,6 +44,7 @@ CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
 RUN_SCRIPT = "run-script"  # thzdaq-cli run-script <file>: a build's Python runs it
 MODULE = "-m"  # thzdaq-cli run-script -m <module>: a module run as a program
 PASSED = "--"  # what follows is the script's (or module's) own arguments
+UNKNOWN = "unknown"  # the version of a build without package metadata
 
 
 @dataclass(frozen=True)
@@ -145,7 +146,7 @@ def app_version() -> str:
     try:
         return metadata.version("thzdaq-api")
     except metadata.PackageNotFoundError:  # a build without package metadata
-        return "unknown"
+        return UNKNOWN
 
 
 def read_host(files: DaemonFiles) -> Optional[HostInfo]:
