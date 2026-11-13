@@ -16,6 +16,7 @@ from typing import Callable, Sequence, Tuple
 import msgspec
 from thzdaq_api.custom import DESCRIBE_ENV, INPUTS_ENV, SUFFIX, Declarations
 from thzdaq_api.host import apart, script_python
+from thzdaq_api.scripts import OUTPUT_ENV
 
 from thzdaq_core.application.ports import DescribeFailed, LibraryFile
 
@@ -55,10 +56,13 @@ class FolderLibrary:
 
     @staticmethod
     def _file(path: Path, data: bytes) -> LibraryFile:
+        # Text uses the editor's newlines; the fingerprint identifies file bytes.
         return LibraryFile(
             path.stem,
             str(path),
-            data.decode("utf-8", errors="replace"),
+            data.decode("utf-8", errors="replace")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n"),
             hashlib.sha256(data).hexdigest(),
         )
 
@@ -91,6 +95,7 @@ class FolderLibrary:
                 key: value for key, value in os.environ.items() if key != INPUTS_ENV
             }
             environment[DESCRIBE_ENV] = str(declared)
+            environment.update(OUTPUT_ENV)
             try:
                 done = subprocess.run(
                     [*self.python(), str(copy)],

@@ -1,11 +1,11 @@
 """How answers are printed: aligned text for people, JSON for scripts."""
 
+import json
 from typing import Any, Iterable, Optional, Sequence
 
 import msgspec
 from thzdaq_api.approvals import Answer, Approval
 from thzdaq_api.scripts import RUNNING, ScriptInfo
-
 
 NO_FILE = "no file"  # a profile, or a run, not kept in a file
 
@@ -15,7 +15,8 @@ def profile(name: str, path: Optional[str]) -> str:
 
 
 def as_json(value: Any) -> str:
-    return msgspec.json.encode(value).decode()
+    # JSON escapes preserve Unicode even through a Windows legacy code page.
+    return json.dumps(json.loads(msgspec.json.encode(value)), ensure_ascii=True)
 
 
 def table(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:

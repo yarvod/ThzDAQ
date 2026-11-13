@@ -52,8 +52,10 @@ def check(built: Optional[Path]) -> None:
         until("runs code", lambda: finished(id))
         if ("shown", id, "42") not in told:
             raise Failed(f"6 * 7 is not 42: {told[-3:]}")
-        id = kernel.execute("import time\ntime.sleep(60)")
-        until("runs long", lambda: kernel.busy)
+        # IPython's Windows interrupt is delivered when Python executes again,
+        # not while it is blocked in a native time.sleep.
+        id = kernel.execute("print('running', flush=True)\nwhile True:\n    pass")
+        until("runs long", lambda: ("printed", id, "stdout", "running\n") in told)
         kernel.interrupt()
         until("interrupted", lambda: ("finished", id, "error") in told)
         told.clear()

@@ -266,6 +266,7 @@ def test_a_file_changed_outside_is_shown_hunk_by_hunk_or_asked_about(
     assert widget.text == TOLD and widget.unsaved() and editor.review is None
     widget.save()
     wait(lambda: path.read_text(encoding="utf-8") == TOLD)
+    wait(lambda: widget.model.writing is None)
     # Changes here: a banner asks; Compare takes the file's hunks or not
     editor.insertPlainText("# mine\n")
     path.write_text(TOLD + "# theirs\n", encoding="utf-8")

@@ -27,6 +27,7 @@ SCRIPTS = "scripts"  # the folder of a workspace's data/ that holds their logs
 SCRIPT_ID_ENV = "THZDAQ_SCRIPT_ID"  # a script the daemon started: its number
 SIMULATE_ENV = "THZDAQ_SIMULATE"  # "1": the daemon that started it simulates
 STOP_S = 5.0  # a stopped script has this long to end after its cancel
+OUTPUT_ENV = {"PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
 
 # Statuses of a script
 RUNNING = "running"
@@ -87,7 +88,8 @@ class ScriptInfo(msgspec.Struct, frozen=True):
 
 
 class ScriptLog(msgspec.Struct, frozen=True):
-    """Output of a script from an offset: more follows from next while it runs."""
+    """UTF-8 output with CRLF as LF; next is a byte offset in the original log,
+    not the encoded length of text. More follows while the script runs."""
 
     text: str
     next: int

@@ -295,7 +295,11 @@ class TestUpdater:
         assert os.getpid() in found
         if sys.platform != "linux":  # ps there names a program without its folder
             program = Path(found[os.getpid()]).resolve()
-            assert program == Path(sys.executable).resolve()
+            # A Windows venv launcher runs the base interpreter as its child.
+            executable = (
+                sys._base_executable if sys.platform == "win32" else sys.executable
+            )
+            assert program == Path(executable).resolve()
 
     def test_main_leaves_the_build_while_its_programs_run(self, tmp_path, monkeypatch):
         target = make_build(tmp_path / "app", self.OLD)

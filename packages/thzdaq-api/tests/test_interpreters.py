@@ -69,6 +69,17 @@ def bare(tmp_path) -> Path:
     return venv(tmp_path / "bare")
 
 
+@pytest.fixture
+def isolated_projects(tmp_path, monkeypatch):
+    """Real venvs under tmp_path, without environments of the developer's home."""
+    candidates = interpreters._interpreters
+    monkeypatch.setattr(
+        interpreters,
+        "_interpreters",
+        lambda folder: candidates(folder) if folder.is_relative_to(tmp_path) else (),
+    )
+
+
 # thzdaq.toml
 def test_an_older_file_without_a_python_runs_the_programs_own(tmp_path):
     (tmp_path / "thzdaq.toml").write_text('station = "lab"\nnotes = ""\n')
@@ -167,7 +178,7 @@ def test_a_venvs_interpreter_is_not_taken_for_the_python_it_links_to(tmp_path):
 
 
 # Found
-def test_the_workspaces_venv_and_those_above_are_found(tmp_path):
+def test_the_workspaces_venv_and_those_above_are_found(tmp_path, isolated_projects):
     venv(tmp_path / ".venv")
     workspace = tmp_path / "experiment"
     venv(workspace / ".venv")
@@ -233,7 +244,9 @@ def test_two_venvs_are_two_though_they_link_to_one_python(tmp_path):
     assert not Environment(PROJECT, "one", str(tmp_path / "one")).runs(other)
 
 
-def test_a_found_environment_named_by_its_interpreter_is_current(tmp_path):
+def test_a_found_environment_named_by_its_interpreter_is_current(
+    tmp_path, isolated_projects
+):
     python = venv(tmp_path / ".venv")
     create(tmp_path, python=str(python))
     found = environments(tmp_path, conda=(), uv=())

@@ -8,9 +8,9 @@ Icons are Material Design icons from qtawesome, tinted for the dark theme.
 from pathlib import Path
 
 import pyqtgraph as pg
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPalette
-from PySide6.QtWidgets import QApplication, QToolButton
+from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionSpinBox, QToolButton
 
 from thzdaq_gui.device_types import id_type
 
@@ -37,8 +37,7 @@ RESOURCES = Path(__file__).parent / "resources"
 # Fusion draws its own a few pixels wide once a style sheet styles the box
 ARROWS = (RESOURCES / "arrows").as_posix()
 
-# Fields as tall as buttons, 28 px: content + padding + border. A spin box
-# gets its height with no padding: Fusion frames its text 7 px past the content
+# Fields as tall as buttons, 28 px: content + padding + border.
 FIELD_HEIGHT = 20
 STEP_WIDTH = 18  # the up/down buttons of a spin box, the arrow of a combo box
 
@@ -76,7 +75,7 @@ QLineEdit, QComboBox {{
     min-height: {FIELD_HEIGHT}px; padding-top: 3px; padding-bottom: 3px;
 }}
 QAbstractSpinBox {{
-    min-height: {FIELD_HEIGHT + 1}px; padding-top: 0; padding-bottom: 0; padding-right: 2px;
+    min-height: $spin_heightpx; padding-top: 0; padding-bottom: 0; padding-right: 2px;
 }}
 QAbstractSpinBox QLineEdit {{
     background: transparent; border: none; padding: 0; min-height: 0;
@@ -209,7 +208,14 @@ def palette() -> QPalette:
 def apply(app: QApplication) -> None:
     app.setStyle("Fusion")
     app.setPalette(palette())
-    app.setStyleSheet(STYLE)
+    option = QStyleOptionSpinBox()
+    option.frame = True
+    # Qt adds the native spin-box frame as well as the stylesheet's border;
+    # its size varies by platform, even with Fusion.
+    frame = (
+        app.style().sizeFromContents(QStyle.CT_SpinBox, option, QSize(0, 0)).height()
+    )
+    app.setStyleSheet(STYLE.replace("$spin_height", str(FIELD_HEIGHT + 6 - frame)))
     pg.setConfigOptions(antialias=True, background=PLOT_BACKGROUND, foreground=TEXT)
     import qtawesome as qta
 

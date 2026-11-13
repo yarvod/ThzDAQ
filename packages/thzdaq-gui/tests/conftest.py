@@ -18,6 +18,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parents[2] / "thzdaq-core" / "tests"))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def completion_cache(tmp_path_factory):
+    """Jedi's parser cache belongs to the tests, not the person's profile."""
+    import jedi
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            jedi.settings, "cache_directory", str(tmp_path_factory.mktemp("jedi"))
+        )
+        yield
+
+
 @pytest.fixture(scope="session")
 def app(tmp_path_factory):
     # Settings go to a temporary INI file, never to the registry
@@ -217,4 +229,9 @@ def window(session, tmp_path):
     window.show()
     yield window
     if window.isVisible():
-        window.close()
+        # A failed assertion may leave an unsaved editor; teardown cannot ask.
+        from PySide6.QtWidgets import QMessageBox
+
+        with pytest.MonkeyPatch.context() as closing:
+            closing.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+            window.close()

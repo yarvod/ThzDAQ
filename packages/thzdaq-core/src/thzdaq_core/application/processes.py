@@ -46,6 +46,7 @@ from thzdaq_api.scripts import (
     CALL,
     EXITED,
     KINDS,
+    OUTPUT_ENV,
     RAW,
     RUN,
     RUNNING,
@@ -75,7 +76,6 @@ LAST_WORDS = 8192  # bytes of the end of a log that tell how a script ended
 TRACEBACK = "Traceback (most recent call last):"
 OUTPUT_S = 0.2  # how often a running script's log is looked at for its output
 KEPT = 100  # scripts that ended, remembered for list and logs
-UNBUFFERED = {"PYTHONUNBUFFERED": "1"}  # its output reaches the log as it prints
 
 
 @dataclass
@@ -100,10 +100,14 @@ def read_part(log: str, since: int, final: bool) -> Tuple[str, int]:
             data = file.read(LOG_PART)
     except FileNotFoundError:
         data = b""
+    ended = final and len(data) < LOG_PART
+    # CRLF can straddle reads; keep its CR until the next byte arrives.
+    if not ended and data.endswith(b"\r"):
+        data = data[:-1]
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    text = decoder.decode(data, final=final and len(data) < LOG_PART)
+    text = decoder.decode(data, final=ended)
     waiting, _ = decoder.getstate()
-    return text, since + len(data) - len(waiting)
+    return text.replace("\r\n", "\n"), since + len(data) - len(waiting)
 
 
 def last_words(log: str) -> str:
@@ -192,7 +196,7 @@ class ScriptProcesses:
                 WORKSPACE_ENV: str(folder),
                 **({AGENT_ENV: "1"} if by_agent else {}),
                 **({} if inputs is None else {INPUTS_ENV: inputs_text(inputs)}),
-                **UNBUFFERED,
+                **OUTPUT_ENV,
             }
             removed = () if by_agent else AGENT_SHELLS
             starting(script(path.stem, number, by_agent))

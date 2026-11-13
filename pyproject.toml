@@ -24,6 +24,7 @@ dev = [
     "pyinstaller==6.12.0",
     "pytest>=8.2",
     "pytest-timeout>=2.3",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.uv]
@@ -57,7 +58,9 @@ testpaths = [
     "packages/thzdaq-gui/tests",
     "packages/thzdaq-mcp/tests",
 ]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib --durations=20"
+timeout = 120
+timeout_method = "thread"
 
 # Architecture boundaries (AGENTS.md, «Architecture Rules»; docs/daemon.md, «Пакеты, слои
 # и границы»). `uv run lint-imports` checks them in pre-commit and CI. An ignore that no

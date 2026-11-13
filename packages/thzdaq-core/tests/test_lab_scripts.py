@@ -58,7 +58,7 @@ def quick_stop(lab):
 
 def written(folder: Path, name: str, text: str) -> Path:
     path = folder / name
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -101,7 +101,7 @@ def test_a_script_runs_apart_and_prints_into_its_log(lab, tmp_path):
     done = ended(lab, started.id)
     assert (done.status, done.exit_code, done.pid) == ("exited", 0, None)
     log = lab.call(ReadScriptLog(id=started.id))
-    assert not log.running and log.next == len(log.text.encode())
+    assert not log.running and log.next == Path(started.log).stat().st_size
     assert log.text.splitlines() == [
         f"hello ['a', 'b'] {tmp_path.resolve()}",
         f"{started.id} 1",  # its daemon simulates
@@ -111,7 +111,8 @@ def test_a_script_runs_apart_and_prints_into_its_log(lab, tmp_path):
     assert rest.text == "" and rest.next == log.next
 
 
-def test_clients_hear_a_script_start_print_and_end(lab, tmp_path):
+def test_clients_hear_a_script_start_print_and_end(lab, tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONIOENCODING", "ascii")
     heard = []
     stop = lab.subscribe(heard.append)
     try:

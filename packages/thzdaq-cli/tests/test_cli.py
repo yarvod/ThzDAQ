@@ -20,6 +20,14 @@ def bias(value):
     return SetQuantity(ref="sis_bias_1", key="voltage_set", value=value)
 
 
+def test_json_survives_a_windows_output_code_page():
+    from thzdaq_cli.show import as_json
+
+    value = {"unit": "μA", "text": "Привет → стенд 🧪"}
+    assert json.loads(as_json(value).encode("cp1251").decode("cp1251")) == value
+    assert json.loads(as_json({"missing": float("nan")})) == {"missing": None}
+
+
 SLOW_IV = {
     "voltage": {"start": 0.0, "stop": 5e-3, "points": 2000},
     "settle_time": 0.01,
@@ -450,7 +458,9 @@ def test_agent_setup_writes_what_agents_read_in_a_folder(thzdaq, tmp_path):
     codex = tomllib.loads((folder / ".codex" / "config.toml").read_text())
     assert codex["mcp_servers"]["thzdaq"]["args"] == started[1:] + args
     assert codex["mcp_servers"]["thzdaq"]["tool_timeout_sec"] >= 60
-    assert (folder / "AGENTS.md").read_text() == guides.guide(guides.AGENTS)
+    assert (folder / "AGENTS.md").read_text(encoding="utf-8") == guides.guide(
+        guides.AGENTS
+    )
     assert (folder / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     assert "written .mcp.json" in out and " ".join(started + args) in out
     # The bench's own measurements: agents may write them too
@@ -486,8 +496,10 @@ def test_agent_setup_keeps_what_a_person_wrote(thzdaq, tmp_path, monkeypatch):
     codex = (tmp_path / ".codex" / "config.toml").read_text()
     assert codex.startswith('model = "o4"\n') and "[mcp_servers.thzdaq]" in codex
     code, out, _ = thzdaq("agent-setup")  # again: nothing twice
-    assert "kept .codex/config.toml" in out and "kept CLAUDE.md" in out
-    assert "kept .claude/settings.json" in out
+    from thzdaq_cli.agents import CLAUDE_SETTINGS, CODEX_CONFIG
+
+    assert f"kept {CODEX_CONFIG}" in out and "kept CLAUDE.md" in out
+    assert f"kept {CLAUDE_SETTINGS}" in out
     assert (tmp_path / ".codex" / "config.toml").read_text() == codex
     code, out, _ = thzdaq("agent-setup", "--force")
     assert (

@@ -245,8 +245,10 @@ with lab.measurement("x", devices=[bias]) as m:
 """
 
 
-def test_the_library_is_listed_read_and_written(lab):
-    saved(lab, "pv", PV)
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_the_library_is_listed_read_and_written(lab, newline):
+    path = saved(lab, "pv", PV)
+    path.write_bytes(PV.replace("\n", newline).encode("utf-8"))
     listed = lab.call(ListCustom())
     assert listed.folder == str(library(lab))
     (pv,) = listed.measurements

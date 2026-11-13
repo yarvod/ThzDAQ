@@ -117,17 +117,20 @@ def test_history_browses_back_to_what_was_typed():
     assert history.end_search() == "draft"
 
 
-def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(app, wait):
+def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(
+    app, wait, tmp_path
+):
     from thzdaq_gui.kernel import Kernel
 
     command = console.kernel_command()
+    environment = {**os.environ, console.IPYTHON_DIR_ENV: str(tmp_path)}
     kernel = Kernel()
     told = []
     for name in ("started", "failed", "died", "printed", "shown", "raised", "finished"):
         getattr(kernel, name).connect(lambda *a, n=name: told.append((n, *a)))
     kinds = lambda id: [t[0] for t in told if t[1:2] == (id,)]  # noqa: E731
     try:
-        kernel.start(command, dict(os.environ), Path.cwd())
+        kernel.start(command, environment, tmp_path)
         wait(lambda: told, START_S)
         if told[0][0] == "failed":
             pytest.skip(f"no kernel starts here: {told[0][1]}")
@@ -138,14 +141,16 @@ def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(app, wait):
             ("shown", id, "42"),
             ("finished", id, "ok"),
         ]
-        id = kernel.execute("import time\ntime.sleep(60)")
-        wait(lambda: kernel.busy, START_S)
+        # IPython's Windows interrupt schedules a Python handler; it cannot
+        # wake a native time.sleep. Exercise running Python, after it starts.
+        id = kernel.execute("print('running', flush=True)\nwhile True:\n    pass")
+        wait(lambda: ("printed", id, "stdout", "running\n") in told, START_S)
         kernel.interrupt()
         wait(lambda: "finished" in kinds(id), 15)
-        assert kinds(id) == ["raised", "finished"]
+        assert kinds(id) == ["printed", "raised", "finished"]
         told.clear()
         kernel.execute("kept = 1")
-        kernel.restart(command, dict(os.environ), Path.cwd())
+        kernel.restart(command, environment, tmp_path)
         wait(lambda: ("started",) in told, START_S)
         id = kernel.execute("kept")  # a new kernel: its names went
         wait(lambda: "finished" in kinds(id), START_S)

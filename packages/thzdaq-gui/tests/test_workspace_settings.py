@@ -19,10 +19,18 @@ CHECK_S = 30.0  # a check starts an interpreter
 
 
 @pytest.fixture(autouse=True)
-def nothing_else(monkeypatch):
-    """No uv or conda of this machine: only what a test makes is found."""
+def nothing_else(tmp_path, monkeypatch):
+    """Only environments made by the test, including in parent folders."""
     monkeypatch.setattr(interpreters, "conda_command", lambda: ())
     monkeypatch.setattr(interpreters, "uv_command", lambda: ())
+    projects = interpreters.projects
+    monkeypatch.setattr(
+        interpreters,
+        "projects",
+        lambda folder: [
+            env for env in projects(folder) if Path(env.path).is_relative_to(tmp_path)
+        ],
+    )
 
 
 @pytest.fixture

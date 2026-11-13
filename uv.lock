@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.11.*"
 
 [manifest]
@@ -232,6 +232,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/10/e8/1fa16a94af7d8b86c3ca336d7d32b78cb2c475266d0bb889732d2bc50310/debugpy-1.8.22-cp311-cp311-win32.whl", hash = "sha256:745e1800ec2961e5660c1a317c0a20e28c0fef4de36c04f17a21c33f2b37a92a", size = 5258392, upload-time = "2026-09-15T21:44:15.182Z" },
     { url = "https://files.pythonhosted.org/packages/32/1a/c086b883a4561017bfdd83c1bc70bf2b05ab6540ff767dedf207cadab938/debugpy-1.8.22-cp311-cp311-win_amd64.whl", hash = "sha256:1e76339d5510bc17e9181dba9577508afcb21aad5728f1a55ef74d7d97d255f3", size = 5277955, upload-time = "2026-09-15T21:44:16.986Z" },
     { url = "https://files.pythonhosted.org/packages/56/3d/c7dc9f35bc9e22cdb53679f844bee40fd5cff871862f60595869a433400d/debugpy-1.8.22-py2.py3-none-any.whl", hash = "sha256:a9e9d3550e15ca479c59333e90845029190531f0cacfedab3b815a57bd913947", size = 5374857, upload-time = "2026-09-15T21:44:54.454Z" },
+]
+
+[[package]]
+name = "execnet"
+version = "2.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", hash = "sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd", size = 166622, upload-time = "2025-11-12T09:56:37.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708, upload-time = "2025-11-12T09:56:36.333Z" },
 ]
 
 [[package]]
@@ -1083,6 +1092,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-xdist"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "execnet" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1611,6 +1633,7 @@ dev = [
     { name = "pyinstaller" },
     { name = "pytest" },
     { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
 ]
 
 [package.metadata]
@@ -1633,6 +1656,7 @@ dev = [
     { name = "pyinstaller", specifier = "==6.12.0" },
     { name = "pytest", specifier = ">=8.2" },
     { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
 ]
 
 [[package]]
