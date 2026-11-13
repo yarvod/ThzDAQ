@@ -1,10 +1,12 @@
 """A Python console of the window: its kernel (thzdaq_gui.kernel), what it was
 asked to run and what it answered, the inputs it browses, its completions.
 
-The kernel opens on the window's daemon in its workspace (thzdaq_api.console)
-and runs OPENING first (from thzdaq import *, lab = connect()), again after
-each restart; code asked for while it starts runs after that. Restart opens it
-anew on the daemon and workspace the window has then.
+The kernel opens on the window's daemon in its workspace, with that
+workspace's Python (thzdaq_api.console), and runs OPENING first (from thzdaq
+import *, lab = connect()), again after each restart; code asked for while it
+starts runs after that. Restart opens it anew on the daemon, workspace and
+Python the window has then: until then a kernel keeps the Python it opened
+with.
 
 A block runs on Enter when it is complete as typed (codeop: a statement, or a
 block closed by an empty line), else Enter goes on to a new line.
@@ -24,6 +26,7 @@ from typing import List, NamedTuple, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api import console
+from thzdaq_api.errors import LabError
 
 from thzdaq_gui.kernel import Kernel
 
@@ -146,7 +149,7 @@ class ConsoleModel(QObject):
         # The session owns it: its thread may outlive this console's tab.
         # Its signals reach methods of this object: queued into the window's
         # thread, and gone with it
-        self.kernel = Kernel(console.kernel_command(), parent=session)
+        self.kernel = Kernel(parent=session)
         self.kernel.started.connect(self._started)
         self.kernel.failed.connect(self._failed)
         self.kernel.died.connect(self._died)
@@ -157,13 +160,18 @@ class ConsoleModel(QObject):
         self.kernel.completed.connect(self._completed)
         self.kernel.history_found.connect(self._history_found)
         self.kernel.input_requested.connect(self._input_requested)
-        self.kernel.start(*self._place())
+        try:
+            self.kernel.start(*self._place())
+        except LabError as e:  # the workspace names a Python that is not there
+            self._failed(str(e))
 
     def _place(self):
-        """Where its kernel runs: the window's daemon and workspace now."""
+        """Where its kernel runs: the window's daemon and workspace now, with
+        that workspace's Python; LabError when it names one not there."""
         folder = self.session.workspace.folder
+        command = console.kernel_command(folder)
         added = console.kernel_environment(self.session.simulate, folder)
-        return {**os.environ, **added}, folder
+        return command, {**os.environ, **added}, folder
 
     def _set(self, state: str) -> None:
         self.state = state
@@ -215,9 +223,14 @@ class ConsoleModel(QObject):
     def restart(self) -> None:
         """A new kernel, its names gone; a measurement of the old one ends
         interrupted (its devices restored)."""
+        try:
+            place = self._place()
+        except LabError as e:  # the kernel that runs stays
+            self.told.emit(f"Not restarted: {e}")
+            return
         self._set(STARTING)
         self.told.emit("Restarting…")
-        self.kernel.restart(*self._place())
+        self.kernel.restart(*place)
 
     def stop(self) -> None:
         """Its kernel ends (the console's tab closed)."""

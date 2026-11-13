@@ -1,5 +1,6 @@
 """The workspace in the File menu: open one (or a recent one), make a new one,
-open it at start, open it in VS Code or in the file manager. A workspace that
+open it at start, its settings (workspace_settings.py: the Python of its
+scripts), open it in VS Code or in the file manager. A workspace that
 expects another profile than the daemon's asks whether to switch the daemon
 to it, when it opens (the daemon refuses while measurements run).
 
@@ -33,6 +34,7 @@ from thzdaq_api.workspace import mismatch_text, other_profile, profile_name
 
 from thzdaq_gui import theme
 from thzdaq_gui.external_editor import EDITOR_TITLE, ExternalEditor
+from thzdaq_gui.workspace_settings import TITLE as SETTINGS, WorkspaceSettings
 
 WORKSPACE = "Workspace"  # the title of its dialogs
 OPEN_WORKSPACE = "Open workspace"
@@ -115,6 +117,7 @@ class WorkspaceMenu(QObject):
         self.atStart = QAction("Open this workspace at start", self)
         self.atStart.setCheckable(True)
         self.atStart.toggled.connect(self.workspace.make_default)
+        self.settingsAction = self._action(f"{SETTINGS}…", "cog-outline", self.edit)
 
     def add_to(self, menu: QMenu) -> None:
         opening = self._action(f"{OPEN_WORKSPACE}…", "folder-open-outline", self.open)
@@ -124,6 +127,7 @@ class WorkspaceMenu(QObject):
         self.recentMenu = menu.addMenu(theme.icon("history"), "Recent workspaces")
         self.recentMenu.aboutToShow.connect(self.fill_recent)
         menu.addAction(self.atStart)
+        menu.addAction(self.settingsAction)
         menu.aboutToShow.connect(self.show_default)
         menu.addAction(
             self._action(
@@ -143,6 +147,17 @@ class WorkspaceMenu(QObject):
         self.atStart.blockSignals(True)
         self.atStart.setChecked(self.workspace.is_default())
         self.atStart.blockSignals(False)
+        editable = self.session.interpreters.editable()
+        self.settingsAction.setEnabled(editable)
+        self.settingsAction.setToolTip(
+            "" if editable else "The program's own folder: New workspace… makes one"
+        )
+
+    def edit(self) -> None:
+        """The workspace's settings: the Python of its scripts."""
+        dialog = WorkspaceSettings(self.session.interpreters, self.window)
+        dialog.exec()
+        dialog.deleteLater()
 
     def fill_recent(self) -> None:
         self.recentMenu.clear()
