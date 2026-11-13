@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.11.*"
 
 [manifest]
@@ -1387,7 +1387,7 @@ wheels = [
 
 [[package]]
 name = "thzdaq"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq" }
 dependencies = [
     { name = "thzdaq-api" },
@@ -1431,7 +1431,7 @@ provides-extras = ["analysis", "daemon", "gui", "mcp", "all"]
 
 [[package]]
 name = "thzdaq-analysis"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-analysis" }
 dependencies = [
     { name = "numpy" },
@@ -1450,7 +1450,7 @@ dev = [{ name = "pytest", specifier = ">=8.2" }]
 
 [[package]]
 name = "thzdaq-api"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-api" }
 dependencies = [
     { name = "msgspec" },
@@ -1461,7 +1461,7 @@ requires-dist = [{ name = "msgspec", specifier = ">=0.19" }]
 
 [[package]]
 name = "thzdaq-cli"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-cli" }
 dependencies = [
     { name = "thzdaq-api" },
@@ -1472,7 +1472,7 @@ requires-dist = [{ name = "thzdaq-api", editable = "packages/thzdaq-api" }]
 
 [[package]]
 name = "thzdaq-core"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-core" }
 dependencies = [
     { name = "numpy" },
@@ -1503,7 +1503,7 @@ dev = [{ name = "pytest", specifier = ">=8.2" }]
 
 [[package]]
 name = "thzdaq-daemon"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-daemon" }
 dependencies = [
     { name = "psutil" },
@@ -1520,7 +1520,7 @@ requires-dist = [
 
 [[package]]
 name = "thzdaq-gui"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-gui" }
 dependencies = [
     { name = "ipykernel" },
@@ -1565,7 +1565,7 @@ dev = [{ name = "pytest", specifier = ">=8.2" }]
 
 [[package]]
 name = "thzdaq-instruments"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-instruments" }
 dependencies = [
     { name = "pymodbus" },
@@ -1597,7 +1597,7 @@ dev = [{ name = "pytest", specifier = ">=8.2" }]
 
 [[package]]
 name = "thzdaq-mcp"
-version = "0.0.6b2"
+version = "0.0.6b3"
 source = { editable = "packages/thzdaq-mcp" }
 dependencies = [
     { name = "mcp" },

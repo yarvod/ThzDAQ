@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-api"
-version = "0.0.6b2"
+version = "0.0.6b3"
 description = "ThzDAQ contract and client: operations, data types and events of the bench daemon"
 readme = "README.md"
 requires-python = ">=3.11"

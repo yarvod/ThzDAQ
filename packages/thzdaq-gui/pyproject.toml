@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-gui"
-version = "0.0.6b2"
+version = "0.0.6b3"
 description = "ThzDAQ window: a client of the bench daemon (PySide6)"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
@@ -29,7 +29,7 @@ dependencies = [
     "pyzmq>=26",
     "qtawesome>=1.3",
     "requests>=2.31",
-    "thzdaq-api==0.0.6b2",
+    "thzdaq-api==0.0.6b3",
 ]
 
 [project.urls]

@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq"
-version = "0.0.6b2"
+version = "0.0.6b3"
 description = "ThzDAQ: SIS mixer bench control and measurements (command, client library, extras)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,8 +17,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "thzdaq-api==0.0.6b2",
-    "thzdaq-cli==0.0.6b2",
+    "thzdaq-api==0.0.6b3",
+    "thzdaq-cli==0.0.6b3",
 ]
 
 [project.urls]
@@ -28,15 +28,15 @@ Issues = "https://github.com/yarvod/ThzDAQ/issues"
 Releases = "https://github.com/yarvod/ThzDAQ/releases"
 
 [project.optional-dependencies]
-analysis = ["thzdaq-analysis==0.0.6b2"]
-daemon = ["thzdaq-daemon==0.0.6b2"]
-gui = ["thzdaq-gui==0.0.6b2"]
-mcp = ["thzdaq-mcp==0.0.6b2"]
+analysis = ["thzdaq-analysis==0.0.6b3"]
+daemon = ["thzdaq-daemon==0.0.6b3"]
+gui = ["thzdaq-gui==0.0.6b3"]
+mcp = ["thzdaq-mcp==0.0.6b3"]
 all = [
-    "thzdaq-analysis==0.0.6b2",
-    "thzdaq-daemon==0.0.6b2",
-    "thzdaq-gui==0.0.6b2",
-    "thzdaq-mcp==0.0.6b2",
+    "thzdaq-analysis==0.0.6b3",
+    "thzdaq-daemon==0.0.6b3",
+    "thzdaq-gui==0.0.6b3",
+    "thzdaq-mcp==0.0.6b3",
 ]
 
 [tool.uv.sources]

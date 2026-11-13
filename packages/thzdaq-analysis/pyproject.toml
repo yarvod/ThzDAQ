@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-analysis"
-version = "0.0.6b2"
+version = "0.0.6b3"
 description = "ThzDAQ analysis: I-V curves, noise temperature, shot noise, 2SB sideband ratios"
 readme = "README.md"
 requires-python = ">=3.11"

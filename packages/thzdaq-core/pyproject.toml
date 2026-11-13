@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-core"
-version = "0.0.6b2"
+version = "0.0.6b3"
 description = "ThzDAQ bench model, measurements and data without GUI"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,9 +21,9 @@ dependencies = [
     "numpy>=1.26,<2",
     "pyflakes>=3.2",
     "pyyaml>=6.0",
-    "thzdaq-analysis==0.0.6b2",
-    "thzdaq-api==0.0.6b2",
-    "thzdaq-instruments==0.0.6b2",
+    "thzdaq-analysis==0.0.6b3",
+    "thzdaq-api==0.0.6b3",
+    "thzdaq-instruments==0.0.6b3",
 ]
 
 [project.urls]
