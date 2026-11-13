@@ -16,8 +16,8 @@ from pyqtgraph.Qt import QtGui
 from api.Agilent.signal_generator import SignalGenerator
 from api.Chopper import chopper_manager
 from api.NationalInstruments.yig_filter import NiYIGManager
+from api.Rigol.DP832A import PowerSupplyDP832A
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from api.RohdeSchwarz.power_supply import PowerSupplyHMP2030
 from api.Scontel.sis_block import SisBlock
 from threads import Thread
 from utils.functions import (
@@ -53,23 +53,24 @@ class MeasThread(Thread):
         lo = SignalGenerator(host="169.254.156.103", gpib=19)
         test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
         yig = NiYIGManager(host="169.254.0.86")
-        rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
-        sis2 = SisBlock(
-            host="169.254.190.83",
-            port=9876,
-            bias_dev="DEV2",
-            ctrl_dev="DEV4",
-            offset_voltage=-0.187e-3,
-            offset_current=-1.3e-6,
-        )
-
+        # rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
+        rs_power = PowerSupplyDP832A(host="169.254.0.14", port=5555)
         sis1 = SisBlock(
             host="169.254.190.83",
             port=9876,
             bias_dev="DEV4",
-            ctrl_dev="DEV1",
-            offset_voltage=0.04e-3,
+            ctrl_dev="DEV3",
+            offset_voltage=0.033e-3,
             offset_current=0,
+        )
+
+        sis2 = SisBlock(
+            host="169.254.190.83",
+            port=9876,
+            bias_dev="DEV2",
+            ctrl_dev="DEV1",
+            offset_voltage=0.2e-3,
+            offset_current=-0.5e-6,
         )
 
         data = {
@@ -113,11 +114,11 @@ class MeasThread(Thread):
 
             test_tone.set_rf_output_state(True)
             lo.set_rf_output_state(True)
-            lo.set_frequency(lo_frequency / 18)
+            lo.set_frequency(lo_frequency)
 
-            rs_power.set_output_state(2, True)  # turn on YIG
+            # rs_power.set_output_state(2, True)  # turn on YIG
 
-            yig.set_frequency(inter_frequency - 1e6)
+            yig.set_frequency(inter_frequency - 10e6)
 
             chopper_manager.chopper.align_to_hot()
 
@@ -141,7 +142,8 @@ class MeasThread(Thread):
                         test_tone.set_frequency(tt_freq)
                         time.sleep(0.5)
                         for sideband in if_channels.keys():
-                            rs_power.set_output_state(1, if_channels[sideband])
+                            # rs_power.set_output_state(1, if_channels[sideband])
+                            rs_power.set_output(2, if_channels[sideband])
                             time.sleep(1)
                             nrx.get_power()
                             nrx.get_power()
@@ -368,17 +370,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # lo_frequency = args.lo_frequency
-    lo_frequency = 223e9
-    inter_frequency = 5e9
+    lo_frequency = 318.8e9
+    inter_frequency = 5.4e9
 
     voltage_step_1 = 0.1e-3
     voltage_step_2 = 0.1e-3
-    voltage_range_1 = np.arange(2.1e-3, 2.7e-3, voltage_step_1)
-    voltage_range_2 = np.arange(2.1e-3, 2.7e-3, voltage_step_2)
+    voltage_range_1 = np.arange(1.6e-3, 2.6e-3, voltage_step_1)
+    voltage_range_2 = np.arange(1.6e-3, 2.6e-3, voltage_step_2)
 
     if_channels = {
-        "upper": True,
-        "lower": False,
+        "upper": False,
+        "lower": True,
     }
 
     side_bands = ["upper", "lower"]

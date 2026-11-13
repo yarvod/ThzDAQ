@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 import numpy as np
@@ -44,30 +45,30 @@ if __name__ == "__main__":
     # )
 
     sis1 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV4",
         ctrl_dev="DEV3",
-        offset_voltage=0.040e-3,
+        offset_voltage=0.033e-3,
         offset_current=0,
     )
 
     sis2 = SisBlock(
-        host="169.254.71.6",
+        host="169.254.190.83",
         port=9876,
         bias_dev="DEV2",
         ctrl_dev="DEV1",
-        offset_voltage=0.205e-3,
-        offset_current=0.3e-6,
+        offset_voltage=0.2e-3,
+        offset_current=-0.5e-6,
     )
 
     data = []
-    npoints = 3
+    npoints = 1
 
-    freqs = np.arange(220e9, 265e9, 0.5e9)
+    freqs = np.arange(300e9, 350e9, 0.2e9)
     print(freqs)
-    voltages2 = np.linspace(2.4e-3, 2.6e-3, npoints)
-    voltages1 = np.linspace(2.4e-3, 2.6e-3, npoints)
+    voltages2 = np.linspace(2.2e-3, 2.2e-3, npoints)
+    voltages1 = np.linspace(2.2e-3, 2.2e-3, npoints)
 
     try:
         lo.set_power(-80)
@@ -91,6 +92,7 @@ if __name__ == "__main__":
             for voltage1, voltage2 in zip(voltages1, voltages2):
                 sis2.set_bias_voltage(voltage2)
                 sis1.set_bias_voltage(voltage1)
+                time.sleep(0.5)
                 volt2 = sis2.get_bias_voltage()
                 curr2 = sis2.get_bias_current()
                 volt1 = sis1.get_bias_voltage()

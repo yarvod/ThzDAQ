@@ -14,8 +14,8 @@ import pyqtgraph as pg
 from api.Agilent.signal_generator import SignalGenerator
 from api.Chopper import chopper_manager
 from api.NationalInstruments.yig_filter import NiYIGManager
+from api.Rigol.DP832A import PowerSupplyDP832A
 from api.RohdeSchwarz.power_meter_nrx import NRXPowerMeter
-from api.RohdeSchwarz.power_supply import PowerSupplyHMP2030
 from api.Scontel.sis_block import SisBlock
 from threads import Thread
 from utils.functions import send_to_telegram
@@ -59,23 +59,24 @@ class MeasThread(Thread):
         lo = SignalGenerator(host="169.254.156.103", gpib=19)
         test_tone = SignalGenerator(host="169.254.156.103", gpib=18)
         yig = NiYIGManager(host="169.254.0.86")
-        rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
-        sis2 = SisBlock(
-            host="169.254.190.83",
-            port=9876,
-            bias_dev="DEV2",
-            ctrl_dev="DEV4",
-            offset_voltage=-0.187e-3,
-            offset_current=-1.3e-6,
-        )
-
+        # rs_power = PowerSupplyHMP2030(host="169.254.0.30", port=5025, adapter="SOCKET")
+        rs_power = PowerSupplyDP832A(host="169.254.0.14", port=5555)
         sis1 = SisBlock(
             host="169.254.190.83",
             port=9876,
             bias_dev="DEV4",
-            ctrl_dev="DEV1",
-            offset_voltage=0.04e-3,
+            ctrl_dev="DEV3",
+            offset_voltage=0.033e-3,
             offset_current=0,
+        )
+
+        sis2 = SisBlock(
+            host="169.254.190.83",
+            port=9876,
+            bias_dev="DEV2",
+            ctrl_dev="DEV1",
+            offset_voltage=0.2e-3,
+            offset_current=-0.5e-6,
         )
 
         data = {"upper": {}, "lower": {}, "y_factor": {}}
@@ -87,9 +88,9 @@ class MeasThread(Thread):
 
             test_tone.set_rf_output_state(True)
             lo.set_rf_output_state(True)
-            lo.set_frequency(lo_frequency / 18)
+            lo.set_frequency(lo_frequency)
 
-            rs_power.set_output_state(2, True)  # turn on YIG
+            # rs_power.set_output_state(2, True)  # turn on YIG
 
             if measure_y_factor:
                 chopper_manager.chopper.align_to_hot()
@@ -114,8 +115,10 @@ class MeasThread(Thread):
                         break
 
                     for if_channel in if_channels.keys():
-                        rs_power.set_output_state(1, if_channels[if_channel])
-                        time.sleep(1)
+                        # rs_power.set_output_state(1, if_channels[if_channel])
+                        rs_power.set_output(2, if_channels[if_channel])
+                        logger.info("Switch channel wait 0.5 s")
+                        time.sleep(0.5)
                         for fi, freq in enumerate(freq_range):
                             test_tone_freq = (
                                 lo_frequency + freq
@@ -124,7 +127,9 @@ class MeasThread(Thread):
                             )
                             test_tone.set_frequency(test_tone_freq)
                             yig.set_frequency(freq)
-                            time.sleep(0.05)
+                            time.sleep(0.1)
+                            power = nrx.get_power()
+                            power = nrx.get_power()
                             power = nrx.get_power()
                             _data[f"power_{if_channel}"].append(power)
                             logger.info(
@@ -158,7 +163,7 @@ class MeasThread(Thread):
 
             if measure_y_factor:
                 chopper_manager.chopper.align_to_cold()
-                rs_power.set_output_state(2, True)  # turn on YIG
+                # rs_power.set_output_state(2, True)  # turn on YIG
                 data["y_factor"] = {
                     "p_upper_hot": [],
                     "p_upper_cold": [],
@@ -168,7 +173,8 @@ class MeasThread(Thread):
                 logger.info("Start measuring Y-factor")
                 test_tone.set_rf_output_state(False)
                 for side_band in side_bands:
-                    rs_power.set_output_state(1, if_channels[side_band])
+                    # rs_power.set_output_state(1, if_channels[side_band])
+                    rs_power.set_output(2, if_channels[side_band])
                     for chopper_state in ["cold", "hot"]:
                         logger.info(f"Channel {side_band} Load {chopper_state}")
                         rotate = getattr(
@@ -176,7 +182,7 @@ class MeasThread(Thread):
                         )
                         rotate()
                         for fi, freq in enumerate(inter_frequencies):
-                            yig.set_frequency(freq - 1e6)
+                            yig.set_frequency(freq - 10e6)
                             time.sleep(0.05)
                             power = nrx.get_power()
                             data["y_factor"][f"p_{side_band}_{chopper_state}"].append(
@@ -323,19 +329,19 @@ if __name__ == "__main__":
     # Parameters
     ###
     measure_y_factor = True
-    lo_frequency = 223e9
+    lo_frequency = 306.8e9
     inter_frequencies = np.arange(4e9, 12e9, 40e6)
     one_range_len = 10
     inter_frequencies_reshaped = inter_frequencies.reshape(
         len(inter_frequencies) // one_range_len, one_range_len
     )
 
-    sis_voltage_1 = 2.6e-3
-    sis_voltage_2 = 2.4e-3
+    sis_voltage_1 = 2.2e-3
+    sis_voltage_2 = 2.2e-3
 
     if_channels = {
-        "upper": True,
-        "lower": False,
+        "upper": False,
+        "lower": True,
     }
 
     side_bands = ["upper", "lower"]

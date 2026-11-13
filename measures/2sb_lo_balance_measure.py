@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 import numpy as np
@@ -23,8 +24,8 @@ logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     # nrx = NRXPowerMeter(delay=0)
-    rf = SignalGenerator(host="169.254.156.103", gpib=18)
-    lo = SignalGenerator(host="169.254.156.103", gpib=19)
+    lo = SignalGenerator(host="169.254.156.103", gpib=18)
+    rf = SignalGenerator(host="169.254.156.103", gpib=19)
     # sis1 = SisBlock(
     #     host="169.254.190.83",
     #     port=9876,
@@ -62,12 +63,12 @@ if __name__ == "__main__":
     )
 
     data = []
-    npoints = 3
+    npoints = 1
 
-    freqs = np.arange(220e9, 265e9, 1e9)
+    freqs = np.arange(300e9, 350e9, 0.2e9)
     print(freqs)
-    voltages2 = np.linspace(2.4e-3, 2.6e-3, npoints)
-    voltages1 = np.linspace(2.4e-3, 2.6e-3, npoints)
+    voltages2 = np.linspace(2.2e-3, 2.2e-3, npoints)
+    voltages1 = np.linspace(2.2e-3, 2.2e-3, npoints)
 
     try:
         rf.set_power(-80)
@@ -79,7 +80,7 @@ if __name__ == "__main__":
         for step_freq, freq in enumerate(freqs, 1):
             logger.info(f"[{step_freq}/{len(freqs)}] Set freq {freq/1e9:.4f} GHz")
             send_to_telegram(f"[{step_freq}/{len(freqs)}] Set freq {freq/1e9:.4f} GHz")
-            lo.set_frequency(freq / 18.0)
+            lo.set_frequency(freq)
             _data = {
                 "frequency": freq,
                 "voltage1": [],
@@ -91,6 +92,7 @@ if __name__ == "__main__":
             for voltage1, voltage2 in zip(voltages1, voltages2):
                 sis2.set_bias_voltage(voltage2)
                 sis1.set_bias_voltage(voltage1)
+                time.sleep(0.5)
                 volt2 = sis2.get_bias_voltage()
                 curr2 = sis2.get_bias_current()
                 volt1 = sis1.get_bias_voltage()
