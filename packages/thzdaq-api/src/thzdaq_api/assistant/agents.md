@@ -196,3 +196,7 @@ with lab.measurement("pv", devices=[bias, detector, load], exclusive=[bias]) as 
   profile as declared, your script may read it (raw queries are asked like a set).
 - The first line of the docstring is its title. Records: one table per kind of point,
   every loop variable a column.
+- Import what the program's own Python may lack (scipy, a module of your own) below
+  `connect()`, never at the top: the form and the catalog are read with the program's
+  Python, which stops at `connect()`; the run goes on with the Python of the workspace
+  it was started from (`thzdaq python show`).
