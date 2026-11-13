@@ -50,7 +50,7 @@ IDENTIFIER = re.compile(r"[A-Za-z][\w.\-]*[./][\w.\-/]*\w")
 
 
 def module_of(path: Path) -> str:
-    return str(path.relative_to(ROOT)).split("/src/", 1)[1]
+    return path.relative_to(ROOT).as_posix().split("/src/", 1)[1]
 
 
 def docstrings(tree: ast.AST) -> Set[int]:
