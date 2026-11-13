@@ -13,11 +13,13 @@ import signal
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 import msgspec
+import psutil
 from thzdaq_api.daemon import (
     API_VERSION,
     ClientInfo,
@@ -50,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 IDLE_S = 600.0  # default idle timeout
 LOCK_S = 10.0  # a restarted daemon waits this long for the old one to let go
+ERRORS = 20  # the last errors of its log its status tells
 
 
 class Settings(msgspec.Struct):
@@ -82,6 +85,7 @@ class Options:
     simulate: bool = False
     port: int = 0
     idle_timeout: Optional[float] = None  # None: as daemon.json says
+    idle_check: float = HEARTBEAT_S  # how often it looks whether it is idle
     lively: bool = True
 
     @property
@@ -107,6 +111,23 @@ class Options:
         return found
 
 
+class RecentErrors(logging.Handler):
+    """The last errors logged in the process, a line each, for its status: a
+    daemon tells what went wrong without anyone opening its log."""
+
+    def __init__(self, size: int = ERRORS):
+        super().__init__(logging.ERROR)
+        self.recent: Deque[str] = deque(maxlen=size)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
+        line = f"{when} {record.name}: {record.getMessage()}"
+        error = record.exc_info[1] if record.exc_info else None
+        if error is not None:
+            line += f" ({type(error).__name__}: {error})"
+        self.recent.append(line)
+
+
 class Daemon:
     """Implements the DaemonControl port for the use cases."""
 
@@ -118,6 +139,7 @@ class Daemon:
         self.server: Optional[Server] = None
         self.composed: Optional[Composed] = None
         self.restart = False
+        self.errors = RecentErrors()
         self._stopping = threading.Event()
 
     @property
@@ -131,9 +153,11 @@ class Daemon:
         if not lock.acquire(LOCK_S):
             logger.error(f"Another daemon runs (it holds {files.lock})")
             return 1
+        logging.getLogger().addHandler(self.errors)
         try:
             self._serve()
         finally:
+            logging.getLogger().removeHandler(self.errors)
             lock.release()
         if self.restart:
             station = self.composed.bench.path if self.composed else None
@@ -208,7 +232,7 @@ class Daemon:
     def _watch(self) -> None:
         """End after idle_timeout with no client and no measurement."""
         quiet_since: Optional[float] = None
-        while not self._stopping.wait(HEARTBEAT_S):
+        while not self._stopping.wait(self.options.idle_check):
             timeout = self.idle_timeout
             assembled = self.composed.assembled
             busy = (
@@ -236,6 +260,9 @@ class Daemon:
         return ProcessInfo(
             os.getpid(), API_VERSION, app_version(), sys.executable, self.started,
             self.server.port if self.server else 0, self.options.simulate,
+            memory=psutil.Process().memory_info().rss,
+            threads=threading.active_count(),
+            errors=tuple(self.errors.recent),
         )  # fmt: skip
 
     def clients(self) -> Tuple[ClientInfo, ...]:

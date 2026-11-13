@@ -197,11 +197,14 @@ class DaemonWidget(QWidget):
         process = status.process
         self.details.setText(
             f"ThzDAQ {process.app_version} · pid {process.pid} · port {process.port} · "
-            f"since {process.started}<br>Profile: {status.path or 'none'}"
+            f"since {process.started}"
+            + (f" · {process.usage()}" if process.usage() else "")
+            + f"<br>Profile: {status.path or 'none'}"
         )
         self.tree.clear()
         sections = (
             ("Problems", [(problem, "") for problem in status.problems]),
+            ("Errors", [(error, "") for error in reversed(process.errors)]),
             ("Clients", [
                 (f"{c.kind} {c.origin}", f"pid {c.pid}, since {c.since}")
                 for c in status.clients

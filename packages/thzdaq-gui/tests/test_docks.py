@@ -2079,10 +2079,32 @@ class TestDaemon:
             for i in range(widget.tree.topLevelItemCount())
         ]
         assert [s.split(" (")[0] for s in sections] == [
-            "Problems", "Clients", "Measurements", "Scripts", "Queues", "Connections",
-            "Polls",
+            "Problems", "Errors", "Clients", "Measurements", "Scripts", "Queues",
+            "Connections", "Polls",
         ]  # fmt: skip
         assert widget.btnStop.isEnabled() and not widget.btnStart.isEnabled()
+        assert "MB" not in widget.details.text()  # a lab in this process: not known
+
+    def test_the_daemon_tells_how_it_fares(self, window, wait):
+        import msgspec
+        from thzdaq_gui.models.daemon import OK
+
+        model = window.daemon
+        wait(lambda: model.state == OK)
+        model.timer.stop()  # this status stays
+        process = msgspec.structs.replace(
+            model.status.process,
+            memory=50 * 2**20,
+            threads=7,
+            errors=("10:00 thzdaq.lanes: first", "10:01 thzdaq.lanes: last"),
+        )
+        model.status = msgspec.structs.replace(model.status, process=process)
+        model.changed.emit()
+        widget = window.daemonWidget
+        assert "50 MB, 7 threads" in widget.details.text()
+        errors = widget.tree.topLevelItem(1)
+        assert errors.text(0) == "Errors (2)" and errors.isExpanded()
+        assert errors.child(0).text(0).endswith("last")  # the latest first
 
     def test_a_running_script_is_shown(self, window, session, wait, tmp_path):
         import sys

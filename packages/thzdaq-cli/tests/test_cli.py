@@ -45,6 +45,20 @@ def test_a_dangerous_set_is_asked_and_refused_without_a_terminal(thzdaq):
     assert code == 0 and "active = off" in out
 
 
+def test_a_person_at_a_terminal_is_asked_there(thzdaq, monkeypatch):
+    answers, asked = iter(["n", "y"]), []
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt="": asked.append(prompt) or next(answers)
+    )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    code, out, _ = thzdaq("set", "sis_bias_1", "active", "off")
+    assert code == 1 and out == ""
+    code, out, _ = thzdaq("set", "sis_bias_1", "active", "off")
+    assert code == 0 and "active = off" in out
+    assert asked[0] == asked[1] and "sis_bias_1" in asked[0]
+    assert asked[0].endswith(" [y/N] ")
+
+
 def test_a_raw_query_answers_and_a_raw_write_is_asked(thzdaq, lab):
     code, out, _ = thzdaq("raw", "sis_block_1", "*IDN?")
     assert code == 0 and out.strip() == "THZDAQ,SimSisBlock,0,1.0"
@@ -207,6 +221,22 @@ def test_the_daemon_is_asked_about_itself(thzdaq):
     assert "sis_block_1" in out and "sis_bias_1: SIS1 (sis_bias)" in out
     code, out, _ = thzdaq("--yes", "safe")
     assert code == 0 and "no safe state" in out
+
+
+def test_the_status_tells_how_the_daemon_fares(lab):
+    """What a daemon in a process of its own knows of itself: memory, threads,
+    the last errors of its log."""
+    from thzdaq_api.daemon import GetDaemonStatus
+    from thzdaq_cli.daemon import status_text
+
+    status = lab.call(GetDaemonStatus())
+    assert "MB" not in status_text(status)  # a lab in this process: not known
+    process = msgspec.structs.replace(
+        status.process, memory=50 * 2**20, threads=7, errors=("10:01 x: it broke",)
+    )
+    shown = status_text(msgspec.structs.replace(status, process=process))
+    assert shown.splitlines()[0].endswith(", 50 MB, 7 threads")
+    assert shown.endswith("\n\nlast errors:\n10:01 x: it broke")
 
 
 def test_the_command_starts_the_daemon_it_needs(tmp_path):

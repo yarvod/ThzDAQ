@@ -2,6 +2,7 @@
 
 import copy
 import os
+import threading
 
 import pytest
 from thzdaq_api.daemon import GetDaemonStatus, RestartDaemon, StopDaemon, StopMode
@@ -10,6 +11,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
 from thzdaq_api.procedures import MONITOR_VALUES_VS_TIME
 from thzdaq_api.station import GetStation, UpdateStation
+from lab_helpers import wait_for
 
 FOREVER = {"watch": ["power_meter_1/power"], "interval": 0.02, "duration": 0.0}
 
@@ -31,6 +33,28 @@ def test_the_status_tells_what_the_daemon_holds(lab):
     assert [(p.ref, p.interval) for p in status.polls] == [("power_meter_1", 5.0)]
     assert "power_meter_1" in {lane.instrument for lane in status.lanes}
     assert status.problems == () and status.seq > 0
+
+
+def test_the_status_shows_a_lane_that_hangs(lab):
+    """A job that does not end names its instrument among the problems, in the
+    status and its heartbeat; once it ends, the problem goes."""
+    service = lab.assembled.daemon
+    service.stuck = 0.05  # a job running longer hangs
+    answer = threading.Event()
+    hangs = lambda meter: answer.wait(10)  # noqa: E731
+    service.bench.submit("power_meter_1", hangs, lambda result, error: None)
+    try:
+        wait_for(lambda: lab.call(GetDaemonStatus()).problems)
+        status = lab.call(GetDaemonStatus())
+        (lane,) = [lane for lane in status.lanes if lane.instrument == "power_meter_1"]
+        assert lane.stuck and lane.current
+        assert status.problems == (
+            f"power_meter_1: {lane.current} runs for {lane.busy_for:.0f} s",
+        )
+        assert service.heartbeat(status.seq).problems
+    finally:
+        answer.set()
+    wait_for(lambda: not lab.call(GetDaemonStatus()).problems)
 
 
 def test_a_graceful_stop_is_refused_while_measurements_run(lab):

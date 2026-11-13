@@ -17,6 +17,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
+    "psutil>=5.9",
     "thzdaq-api==0.0.6b2",
     "thzdaq-core==0.0.6b2",
 ]

@@ -1,6 +1,7 @@
 [project]
 name = "thzdaq-workspace"
-version = "0.2.0"
+# Not published (package = false): versions live in packages/, stamped by release.py
+version = "0.0.0"
 description = "ThzDAQ workspace: SIS mixer control and measurements"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
