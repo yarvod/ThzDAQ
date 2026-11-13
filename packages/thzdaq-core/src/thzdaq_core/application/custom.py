@@ -10,8 +10,11 @@ those listening (the catalog, application.procedures, tells clients).
 
 A run of one (start_measurement custom.<name>) is a session made before its
 script starts (CustomRun): the daemon starts the script's process as the
-caller would (thzdaq script start), with the devices and values chosen
-(Inputs), and the script's lab.measurement takes the session over. A script
+caller would (thzdaq script start), with the Python of the workspace the run
+was started in (thzdaq_api.interpreters) and the devices and values chosen
+(Inputs), and the script's lab.measurement takes the session over. The
+library describes its scripts with the program's own Python: the catalog is
+one for every workspace. A script
 that opens none leaves it to its process: the run ends when the process does,
 completed or failed by its exit code. A cancel reaches the script as any
 session's does, and its process is ended STOP_S later if it goes on.
@@ -318,9 +321,10 @@ class CustomRuns:
         customs: CustomMeasurements,
         processes: ScriptProcesses,
         sessions: Sessions,
-        python: Callable[[], Sequence[str]],
+        python: Callable[[Optional[str]], Sequence[str]],
     ):
-        """python: how a script is run (this program's Python)."""
+        """python(workspace): how a script of a workspace is run
+        (interpreters.scripts_python)."""
         self.customs = customs
         self.processes = processes
         self.sessions = sessions
@@ -335,19 +339,20 @@ class CustomRuns:
     ) -> Procedure:
         """What runs a procedure: a built-in one runs itself; the bench's own
         one its script, started as origin would start it (by_agent: an
-        agent's) in workspace, once the run has its number."""
+        agent's) in workspace, with its Python, once the run has its
+        number. LabError when the workspace names a Python not there."""
         if not isinstance(procedure, CustomProcedure):
             return procedure
         file = self.customs.described(procedure.name).file
+        start = StartScript(
+            path=file.path, python=tuple(self.python(workspace)), workspace=workspace
+        )
 
         def launch(run: CustomRun, ctx: Context) -> ScriptInfo:
             devices = ctx.measurement.devices
             inputs = Inputs(
                 devices={slot: use.ref for slot, use in devices.items()},
                 values=procedure.given(),
-            )
-            start = StartScript(
-                path=file.path, python=tuple(self.python()), workspace=workspace
             )
 
             def starting(script: str) -> None:
