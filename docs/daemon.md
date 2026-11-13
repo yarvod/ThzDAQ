@@ -1985,8 +1985,10 @@ with lab.measurement("pv_hot_cold", devices=[bias, detector, load], exclusive=[b
     и msgspec (на Python 3.11 и 3.13), команда и `from thzdaq import connect` работают.
     `thzdaq[all]` ставит всё одной версии, демон на симуляторах запускается и
     останавливается. В wheel'е каждого пакета — все файлы его исходников;
-  - job `pypi` после сборки exe и `packages`: trusted publishing (`id-token: write`,
-    environment `pypi`, `pypa/gh-action-pypi-publish`), без токенов в репозитории. Бета
+  - job `pypi` после сборки exe и `packages`: `pypa/gh-action-pypi-publish` с API-токеном
+    аккаунта (секрет репозитория `PYPI_API_TOKEN`). Trusted publishing не подошёл (2026-11-13):
+    PyPI держит не больше трёх pending publisher сразу, а пакетов девять; когда проекты
+    появятся, можно добавить им обычных издателей (у них лимита нет) и убрать токен. Бета
     уходит pre-release'ом: `pip install thzdaq` её не ставит, нужен `--pre` или точная
     версия;
   - `release.py --again` меняет zip на GitHub, а PyPI оставляет пакеты первой сборки
@@ -2003,10 +2005,8 @@ with lab.measurement("pv_hot_cold", devices=[bias, detector, load], exclusive=[b
   клиенту numpy не попадает.
 - Python ≥ 3.11. Лицензия MIT: `LICENSE` в корне и его копия в каждом пакете (в sdist и
   wheel попадает только файл из папки пакета).
-- Один раз руками, до первого релиза с PyPI:
-  - на pypi.org для каждого из девяти имён — pending trusted publisher: владелец `yarvod`,
-    репозиторий `ThzDAQ`, workflow `release.yml`, environment `pypi`;
-  - в GitHub — environment `pypi` (Settings → Environments; можно ограничить тегами `v*`).
+- Один раз руками, до первого релиза с PyPI: API-токен аккаунта на pypi.org (scope —
+  весь аккаунт: проектов ещё нет) в секрете репозитория `PYPI_API_TOKEN`.
 
 ## Агенты рядом с GUI (Claude Code, Codex)
 Сценарий: человек работает в GUI, рядом в терминале или в приложении открыт Claude Code
@@ -2538,10 +2538,9 @@ GUI, а отказ доходит до агента текстом.
      README мета-пакета; `thzdaq-gui` зависит от thzdaq-api, а не от core;
      `tests/test_packages.py`;
    - [x] `release.yml`: `packages` (сборка, `check_packages.py` в чистых окружениях) и
-     `pypi` (trusted publishing, `skip-existing`); проверено локально, публикации ещё не
-     было;
-   - [ ] (руками) pending trusted publisher на pypi.org для девяти имён и environment `pypi`
-     в GitHub.
+     `pypi` (API-токен из секрета `PYPI_API_TOKEN`, `skip-existing`); проверено локально,
+     публикации ещё не было;
+   - [x] (руками) токен аккаунта PyPI в секрете `PYPI_API_TOKEN` (2026-11-13).
 8. ✅ **Док Scripts, первый шаг** (раздел «Редактор скриптов в GUI» → «Первый шаг»):
    - [x] список `scripts/` и добавленных папок (`script_folders` в `thzdaq.toml`),
      «Открыть в VS Code» (`external_editor.py`, общий с меню File);
