@@ -27,6 +27,18 @@ class Heard:
     def __init__(self):
         self.told = []
 
+    def asking(self):
+        self.told.append(("asking",))
+
+    def taken(self, count):
+        self.told.append(("taken", count))
+
+    def thought(self, piece):
+        self.told.append(("thought", piece))
+
+    def usage(self, usage):
+        self.told.append(("usage", usage))
+
     def text(self, piece):
         self.told.append(("text", piece))
 
@@ -124,7 +136,8 @@ def test_tool_calls_go_to_the_bench_and_their_answers_to_the_model(
     assert read["content"].startswith("sis_bias_1: ")
     # The model is asked again with what the tools answered
     assert model.asked[1]["messages"][-2:] == conversation.messages[2:4]
-    assert [t[0] for t in heard.told[:4]] == ["called", "answered"] * 2
+    calls_told = [t[0] for t in heard.told if t[0] in ("called", "answered")]
+    assert calls_told == ["called", "answered"] * 2
 
 
 def test_what_it_changes_waits_for_the_person_whose_no_it_reads(

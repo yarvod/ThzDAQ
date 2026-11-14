@@ -3,14 +3,30 @@ chat/completions (vLLM, Ollama, LM Studio, OpenAI and the like), with tools.
 
 A reply streams (server-sent events): its text as it comes, the tool calls
 it makes once they are whole. A server that answers whole (plain JSON) is
-read so too. test() checks that the server answers and takes tools: vLLM
-refuses them without --enable-auto-tool-choice and a tool call parser.
+read so too. What a reasoning model thinks before it answers comes apart from
+its text: in reasoning_content or reasoning (vLLM, DeepSeek, Ollama, LM
+Studio), or within <think>…</think> at the start of its text (Qwen and the
+like on a server without a reasoning parser). How many tokens a step took
+comes last (stream_options.include_usage). test() checks that the server
+answers and takes tools: vLLM refuses them without
+--enable-auto-tool-choice and a tool call parser; context() asks the
+server how long a conversation its model takes, when it tells it.
 """
 
 import ipaddress
 import json
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 from urllib.parse import urlsplit
 
 import requests
@@ -20,6 +36,11 @@ READ_S = 180.0  # a local model may think long before its first word
 TEST_TOOL = "ping"
 JSON_TYPE = "application/json"
 DONE = "[DONE]"
+THINK, THOUGHT = "<think>", "</think>"
+REASONING = ("reasoning_content", "reasoning")  # where servers put thoughts
+# How servers tell their model's context in GET /models: vLLM, OpenRouter and
+# others, LM Studio
+CONTEXT_KEYS = ("max_model_len", "context_length", "max_context_length")
 
 Message = Dict[str, Any]  # a message of the chat as the server takes it
 
@@ -28,12 +49,14 @@ Message = Dict[str, Any]  # a message of the chat as the server takes it
 class Provider:
     """Where the model is and which one: the URL up to /v1 (its
     chat/completions is asked), the model's name as the server knows it, and
-    its temperature (None: the server's own). The key is kept apart (keys.py)."""
+    its temperature (None: the server's own) and the context it takes in
+    tokens (None: not known). The key is kept apart (keys.py)."""
 
     name: str
     url: str
     model: str
     temperature: Optional[float] = None
+    context: Optional[int] = None  # tokens the model takes; None: not known
 
     def endpoint(self) -> str:
         return self.url.rstrip("/") + "/chat/completions"
@@ -63,12 +86,37 @@ class ToolCall:
         }
 
 
+@dataclass(frozen=True)
+class Usage:
+    """Tokens of one step: what the model read (the whole conversation so
+    far) and what it wrote, its thoughts among them."""
+
+    prompt: int = 0
+    completion: int = 0
+    reasoning: int = 0
+
+    @staticmethod
+    def of(found: Any) -> Optional["Usage"]:
+        """As a server tells it; None when it does not."""
+        if not isinstance(found, Mapping):
+            return None
+        details = found.get("completion_tokens_details") or {}
+        return Usage(
+            int(found.get("prompt_tokens") or 0),
+            int(found.get("completion_tokens") or 0),
+            int(details.get("reasoning_tokens") or 0),
+        )
+
+
 @dataclass
 class Reply:
-    """What the model said in one step: text, tool calls, or both."""
+    """What the model said in one step: text, tool calls, or both; what it
+    thought first, and the tokens it took when the server tells them."""
 
     text: str = ""
     calls: List[ToolCall] = field(default_factory=list)
+    reasoning: str = ""
+    usage: Optional[Usage] = None
 
     def message(self) -> Message:
         """As the conversation keeps it for the next step."""
@@ -103,14 +151,17 @@ class Client:
         tools: Sequence[Dict[str, Any]],
         heard: Callable[[str], None],
         stream: bool = True,
+        thought: Callable[[str], None] = lambda piece: None,
     ) -> Reply:
-        """The model's next step; heard(text) gets its text as it comes (what
-        it raises stops the reply)."""
+        """The model's next step; heard(text) gets its text as it comes,
+        thought(text) what it thinks (what either raises stops the reply)."""
         body: Dict[str, Any] = {
             "model": self.provider.model,
             "messages": list(messages),
             "stream": stream,
         }
+        if stream:
+            body["stream_options"] = {"include_usage": True}
         if tools:
             body["tools"] = list(tools)
             body["tool_choice"] = "auto"
@@ -120,10 +171,33 @@ class Client:
         with response:
             if response.headers.get("content-type", "").startswith(JSON_TYPE):
                 reply = whole(_json(response))
+                if reply.reasoning:
+                    thought(reply.reasoning)
                 if reply.text:
                     heard(reply.text)
                 return reply
-            return streamed(_events(response), heard)
+            return streamed(_events(response), heard, thought)
+
+    def context(self) -> Optional[int]:
+        """The tokens its model takes, as the server's GET /models tells
+        them; None when it does not (Ollama, OpenAI) or does not answer."""
+        try:
+            with self._session() as session:
+                response = session.get(
+                    self.provider.url.rstrip("/") + "/models",
+                    headers=self._headers(),
+                    timeout=(CONNECT_S, CONNECT_S),
+                )
+            found = response.json() if response.status_code == 200 else {}
+        except (requests.RequestException, ValueError):
+            return None
+        listed = found.get("data") if isinstance(found, dict) else None
+        for model in listed if isinstance(listed, list) else ():
+            if isinstance(model, dict) and model.get("id") == self.provider.model:
+                for key in CONTEXT_KEYS:
+                    if isinstance(model.get(key), int):
+                        return model[key]
+        return None
 
     def test(self) -> str:
         """Whether the server answers and takes tools, in a line; ProviderError
@@ -144,18 +218,25 @@ class Client:
             "model did not call the test tool: it may use tools poorly"
         )
 
-    def _ask(self, body: Dict[str, Any], stream: bool) -> requests.Response:
+    def _headers(self) -> Dict[str, str]:
         headers = {"Content-Type": JSON_TYPE}
         if self.key:
             headers["Authorization"] = f"Bearer {self.key}"
+        return headers
+
+    def _session(self) -> requests.Session:
+        session = requests.Session()
+        # A server elsewhere through the proxy the person set, if any
+        session.trust_env = not self.provider.on_this_machine()
+        return session
+
+    def _ask(self, body: Dict[str, Any], stream: bool) -> requests.Response:
         try:
-            with requests.Session() as session:
-                # A server elsewhere through the proxy the person set, if any
-                session.trust_env = not self.provider.on_this_machine()
+            with self._session() as session:
                 response = session.post(
                     self.provider.endpoint(),
                     json=body,
-                    headers=headers,
+                    headers=self._headers(),
                     stream=stream,
                     timeout=(CONNECT_S, READ_S),
                 )
@@ -194,8 +275,12 @@ def whole(found: Mapping[str, Any]) -> Reply:
         message = found["choices"][0]["message"]
     except (KeyError, IndexError, TypeError):
         raise ProviderError(f"the server answered no message: {found}") from None
+    split = Thinking()
+    text, thought = split.split(message.get("content") or "")
+    rest, more = split.end()
+    reasoning = "".join(message.get(key) or "" for key in REASONING)
     return Reply(
-        message.get("content") or "",
+        text + rest,
         [
             ToolCall(
                 call.get("id") or f"call_{index}",
@@ -204,6 +289,8 @@ def whole(found: Mapping[str, Any]) -> Reply:
             )
             for index, call in enumerate(message.get("tool_calls") or ())
         ],
+        reasoning + thought + more,
+        Usage.of(found.get("usage")),
     )
 
 
@@ -221,19 +308,94 @@ def _events(response: requests.Response) -> Iterator[Dict[str, Any]]:
             raise ProviderError(f"the server streamed what is not JSON: {data}")
 
 
-def streamed(chunks: Iterator[Mapping[str, Any]], heard: Callable[[str], None]):
-    """A reply put together from its chunks: text as it comes, each tool call
-    from the pieces of its index."""
+class Thinking:
+    """Splits a model's text into its thoughts and its answer: what stands
+    within <think>…</think> at its start is thought. The text comes in pieces,
+    a tag maybe cut between two: the end of a piece that may start a tag
+    waits for the next one."""
+
+    def __init__(self):
+        self._inside = False
+        self._started = False  # the text began: a <think> later is words
+        self._held = ""
+
+    def split(self, piece: str) -> Tuple[str, str]:
+        """(the answer's part, the thought's part) of piece."""
+        held, self._held = self._held + piece, ""
+        answer, thought = "", ""
+        while held:
+            if self._inside:
+                at = held.find(THOUGHT)
+                if at < 0:
+                    keep = _tail(held, THOUGHT)
+                    thought += held[: len(held) - keep]
+                    self._held = held[len(held) - keep :]
+                    break
+                thought += held[:at]
+                held = held[at + len(THOUGHT) :].lstrip("\n")
+                self._inside, self._started = False, True
+                continue
+            if not self._started:
+                stripped = held.lstrip()
+                if stripped.startswith(THINK):
+                    held, self._inside = stripped[len(THINK) :], True
+                    continue
+                if THINK.startswith(stripped):  # perhaps a tag, cut
+                    self._held = held
+                    break
+                self._started = True
+            answer += held
+            break
+        return answer, thought
+
+    def end(self) -> Tuple[str, str]:
+        """What was held when the text ends: within a tag never closed it is
+        thought, else words."""
+        held, self._held = self._held, ""
+        return ("", held) if self._inside else (held, "")
+
+
+def _tail(text: str, tag: str) -> int:
+    """How many letters at the end of text may start tag."""
+    for size in range(min(len(tag) - 1, len(text)), 0, -1):
+        if tag.startswith(text[-size:]):
+            return size
+    return 0
+
+
+def streamed(
+    chunks: Iterator[Mapping[str, Any]],
+    heard: Callable[[str], None],
+    thought: Callable[[str], None] = lambda piece: None,
+) -> Reply:
+    """A reply put together from its chunks: text and thoughts as they come,
+    each tool call from the pieces of its index, the tokens from the last."""
     text: List[str] = []
+    reasoning: List[str] = []
     calls: Dict[int, Dict[str, str]] = {}
+    usage: Optional[Usage] = None
+    split = Thinking()
+
+    def words(answered: str, thinking: str) -> None:
+        if thinking:
+            reasoning.append(thinking)
+            thought(thinking)
+        if answered:
+            text.append(answered)
+            heard(answered)
+
     for chunk in chunks:
         if "error" in chunk:
             raise ProviderError(f"the server stopped: {chunk['error']}")
+        usage = Usage.of(chunk.get("usage")) or usage
         for choice in chunk.get("choices") or ():
             delta = choice.get("delta") or {}
+            for key in REASONING:
+                if delta.get(key):
+                    reasoning.append(delta[key])
+                    thought(delta[key])
             if delta.get("content"):
-                text.append(delta["content"])
-                heard(delta["content"])
+                words(*split.split(delta["content"]))
             for piece in delta.get("tool_calls") or ():
                 call = calls.setdefault(
                     piece.get("index", len(calls)),
@@ -243,6 +405,7 @@ def streamed(chunks: Iterator[Mapping[str, Any]], heard: Callable[[str], None]):
                 function = piece.get("function") or {}
                 call["name"] += function.get("name") or ""
                 call["arguments"] += function.get("arguments") or ""
+    words(*split.end())
     return Reply(
         "".join(text),
         [
@@ -251,4 +414,6 @@ def streamed(chunks: Iterator[Mapping[str, Any]], heard: Callable[[str], None]):
             )
             for index, call in sorted(calls.items())
         ],
+        "".join(reasoning),
+        usage,
     )

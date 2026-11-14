@@ -1,6 +1,8 @@
 """The model servers of the assistant: a list, the form of the chosen one (name,
-URL, model, key, temperature) and Test, which asks the server whether it
-answers and takes tools. A view of ProvidersModel: Save hands it the form."""
+URL, model, key, temperature, the tokens its model takes) and Test, which
+asks the server whether it answers and takes tools, and fills in the tokens
+when the server tells them. A view of ProvidersModel: Save hands it the
+form."""
 
 from typing import Optional
 
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -26,6 +29,7 @@ from thzdaq_gui.models.assistant import ProvidersModel
 TITLE = "Assistant: model servers"
 NEW = "New server"
 NO_TEMPERATURE = -0.1  # the spin box's special value: the server's own
+MAX_CONTEXT = 10_000_000  # tokens
 
 
 class ProvidersDialog(QDialog):
@@ -62,12 +66,22 @@ class ProvidersDialog(QDialog):
         self.temperature.setSingleStep(0.1)
         self.temperature.setDecimals(2)
         self.temperature.setSpecialValueText("the server's own")
+        self.context = QSpinBox()
+        self.context.setRange(0, MAX_CONTEXT)
+        self.context.setSingleStep(1024)
+        self.context.setSuffix(" tokens")
+        self.context.setSpecialValueText("not known (Test asks the server)")
+        self.context.setToolTip(
+            "How long a conversation the model takes: the chat shows how much"
+            " of it is filled"
+        )
         form = QFormLayout()
         form.addRow("Name", self.name)
         form.addRow("URL", self.url)
         form.addRow("Model", self.model)
         form.addRow("Key", self.key)
         form.addRow("Temperature", self.temperature)
+        form.addRow("Context", self.context)
         self.keptLabel = QLabel()
         self.keptLabel.setProperty("role", "muted")
         self.keptLabel.setWordWrap(True)
@@ -102,6 +116,7 @@ class ProvidersDialog(QDialog):
         layout.addWidget(close)
 
         providers.tested.connect(self.show_test)
+        providers.context_found.connect(self.show_context)
         self.fill_list()
 
     def fill_list(self, current: Optional[str] = None) -> None:
@@ -128,6 +143,7 @@ class ProvidersDialog(QDialog):
         self.temperature.setValue(
             NO_TEMPERATURE if temperature is None else temperature
         )
+        self.context.setValue((found.context or 0) if found else 0)
         keys = self.providers.keys
         self.keptLabel.setText(
             "" if keys.kept() else
@@ -158,6 +174,7 @@ class ProvidersDialog(QDialog):
             self.url.text().strip(),
             self.model.text().strip(),
             None if temperature <= NO_TEMPERATURE else temperature,
+            self.context.value() or None,
         )
 
     def missing(self, provider: Provider) -> str:
@@ -201,6 +218,12 @@ class ProvidersDialog(QDialog):
         self.testButton.setEnabled(True)
         if name == self.name.text().strip():
             self.show_result(works, text)
+
+    def show_context(self, name: str, tokens: int) -> None:
+        """The tokens the server told for its model: into the form (Save
+        keeps them)."""
+        if tokens and name == self.name.text().strip():
+            self.context.setValue(tokens)
 
     def show_result(self, good: bool, text: str) -> None:
         self.result.setStyleSheet(f"color: {theme.GOOD if good else theme.BAD};")

@@ -7,20 +7,28 @@ thread as queued signals of the model, which owns the chat's items. Stop
 ends the turn at once (Conversation.stop): what was still on its way from
 the stopped turn is dropped.
 
+What the person sends while a turn runs waits and joins at the turn's next
+step (queued, then sent). The model tells what the turn does now (phase:
+thinking, writing, running a tool), how long it runs, what the model thought
+(a card that folds), and the tokens: of each turn, of the chat, and how much
+of the model's context the conversation fills.
+
 The conversation is not kept: it ends with the window, while the
 measurements it started go on in the daemon.
 """
 
 import json
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api.errors import LabError
 from thzdaq_api.tools import Reach, tools
 
+from thzdaq_gui.assistant.attachments import Attachment, Content, content
 from thzdaq_gui.assistant.conversation import (
     MAX_STEPS,
     Conversation,
@@ -34,11 +42,14 @@ from thzdaq_gui.assistant.provider import (
     Provider,
     ProviderError,
     ToolCall,
+    Usage,
 )
 from thzdaq_gui.settings import ASSISTANT_PROVIDER, ASSISTANT_PROVIDERS, settings
 
 NO_PROVIDER = "Add the server of a model first (the gear above)"
 SHOWN = 40  # letters of an argument a card's line shows
+# What a turn does now
+THINKING, WRITING, RUNNING = "Thinking", "Writing", "Running"
 
 
 class ProvidersModel(QObject):
@@ -47,6 +58,7 @@ class ProvidersModel(QObject):
 
     changed = Signal()
     tested = Signal(str, bool, str)  # provider, it works, what was found
+    context_found = Signal(str, int)  # provider, its model's tokens (0: unknown)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -102,13 +114,18 @@ class ProvidersModel(QObject):
 
     def test(self, provider: Provider, key: str) -> None:
         """Whether the server answers and takes tools; told by tested, from a
-        thread of its own."""
+        thread of its own, after context_found: the tokens its model takes
+        as the server tells them."""
 
         def run() -> None:
+            client = Client(provider, key)
             try:
-                self.tested.emit(provider.name, True, Client(provider, key).test())
+                told = client.test()
             except ProviderError as e:
                 self.tested.emit(provider.name, False, str(e))
+                return
+            self.context_found.emit(provider.name, client.context() or 0)
+            self.tested.emit(provider.name, True, told)
 
         threading.Thread(target=run, name="provider test", daemon=True).start()
 
@@ -125,12 +142,14 @@ class ProvidersModel(QObject):
 class Kind(str, Enum):
     PERSON = "person"  # what the person wrote
     ANSWER = "answer"  # what the model answered
+    THOUGHT = "thought"  # what the model thought before: a card
     CALL = "call"  # a tool call: a card
     NOTE = "note"  # how a turn ended when it did not answer
+    STATS = "stats"  # how long a turn took and its tokens
 
 
 class State(str, Enum):
-    """Of a tool call."""
+    """Of a tool call, or of a thought."""
 
     RUNNING = "running"
     DONE = "done"
@@ -148,6 +167,11 @@ class Item:
     arguments: Dict[str, Any] = field(default_factory=dict)
     state: State = State.DONE
     progress: Optional[Tuple[float, Optional[float]]] = None
+    attachments: Tuple[Attachment, ...] = ()  # of the person's
+    queued: bool = False  # the person's: waits for the turn's next step
+    unsent: bool = False  # the person's: dropped by a stop before it went
+    started: float = 0.0  # of a thought: when (time.monotonic)
+    seconds: Optional[float] = None  # of a thought: how long, once over
 
     def summary(self) -> str:
         """A call in a line: the tool, its arguments' values and how it went
@@ -158,6 +182,12 @@ class Item:
             done, total = self.progress
             return f"{head} → {done:g}/{total:g}" if total else f"{head} → {done:g}"
         return f"{head} → {self.state.value}"
+
+    def thought_title(self) -> str:
+        """A thought in a line: thinking now, or for how long it thought."""
+        if self.seconds is None:
+            return f"{THINKING}… {time.monotonic() - self.started:.0f} s"
+        return f"Thought for {self.seconds:.0f} s"
 
 
 def _shown(value: Any) -> str:
@@ -170,12 +200,56 @@ def _shown(value: Any) -> str:
     return text if len(text) <= SHOWN else text[: SHOWN - 1] + "…"
 
 
+def tokens(count: int) -> str:
+    """1234 -> 1.2k"""
+    if count < 1000:
+        return str(count)
+    return f"{count / 1000:.1f}k" if count < 100_000 else f"{count // 1000}k"
+
+
+@dataclass
+class Tokens:
+    """Tokens summed over steps; context: what the last step's model read
+    and wrote, the conversation's size as the model sees it."""
+
+    read: int = 0
+    written: int = 0
+    reasoning: int = 0
+    steps: int = 0
+    context: int = 0
+
+    def add(self, usage: Usage) -> None:
+        self.read += usage.prompt
+        self.written += usage.completion
+        self.reasoning += usage.reasoning
+        self.context = usage.prompt + usage.completion
+
+    def told(self) -> str:
+        """In a line: "4.2k in · 310 out (120 thinking)"."""
+        if not (self.read or self.written):
+            return ""
+        thinking = f" ({tokens(self.reasoning)} thinking)" if self.reasoning else ""
+        return f"{tokens(self.read)} in · {tokens(self.written)} out{thinking}"
+
+
 class _Turn:
     """What a turn tells, handed to the model's signals (queued: the turn
     runs in its own thread)."""
 
     def __init__(self, model: "AssistantModel", token: object):
         self.model, self.token = model, token
+
+    def asking(self) -> None:
+        self.model._asking.emit(self.token)
+
+    def taken(self, count: int) -> None:
+        self.model._taken.emit(self.token, count)
+
+    def thought(self, piece: str) -> None:
+        self.model._thought.emit(self.token, piece)
+
+    def usage(self, usage: Usage) -> None:
+        self.model._usage.emit(self.token, usage)
 
     def text(self, piece: str) -> None:
         self.model._text.emit(self.token, piece)
@@ -195,8 +269,14 @@ class AssistantModel(QObject):
     item_changed = Signal(int)
     cleared = Signal()
     busy_changed = Signal(bool)
+    phase_changed = Signal(str)  # what the turn does now; "" once it ended
+    usage_changed = Signal()  # the chat's tokens (usage, context_limit)
 
     # From the turn's thread, queued to the GUI thread: (turn, ...)
+    _asking = Signal(object)
+    _taken = Signal(object, int)
+    _thought = Signal(object, str)
+    _usage = Signal(object, object)
     _text = Signal(object, str)
     _called = Signal(object, object)
     _progress = Signal(object, str, object)
@@ -209,12 +289,22 @@ class AssistantModel(QObject):
         self.providers = providers
         self.items: List[Item] = []
         self.conversation = Conversation()
+        self.usage = Tokens()  # of the chat
+        self.phase = ""
         self._turn: Optional[object] = None
+        self._began = 0.0  # when the turn began (time.monotonic)
+        self._turn_usage = Tokens()
         self._answer: Optional[int] = None  # the item the model's words go to
+        self._thinking: Optional[int] = None  # the thought the model thinks now
         self._calls: Dict[str, int] = {}  # call id -> its item
+        self._queued: List[int] = []  # the person's items that wait, in order
         self._reach: Optional[Reach] = None
         self._reach_lock = threading.Lock()
         self._lab_changed = False  # the next turn reaches the lab anew
+        self._asking.connect(self._heard_asking)
+        self._taken.connect(self._heard_taken)
+        self._thought.connect(self._heard_thought)
+        self._usage.connect(self._heard_usage)
         self._text.connect(self._heard_text)
         self._called.connect(self._heard_call)
         self._progress.connect(self._heard_progress)
@@ -222,16 +312,38 @@ class AssistantModel(QObject):
         self._ended.connect(self._heard_end)
         session.station_changed.connect(self._another_lab)
         session.config_changed.connect(self._bench_changed)
+        providers.changed.connect(self.usage_changed)
 
     def busy(self) -> bool:
         return self._turn is not None
 
-    def send(self, text: str) -> None:
-        """The person's message: the model answers it with the bench's tools."""
+    def elapsed(self) -> float:
+        """Seconds the turn has run; 0 without one."""
+        return time.monotonic() - self._began if self.busy() else 0.0
+
+    def context_limit(self) -> Optional[int]:
+        """The tokens the chosen model takes, when known."""
+        provider = self.providers.chosen()
+        return provider.context if provider is not None else None
+
+    def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
+        """The person's message: the model answers it with the bench's tools.
+        While a turn runs it waits and joins at the turn's next step."""
         text = text.strip()
-        if not text or self.busy():
+        if not text and not attachments:
             return
-        self._add(Item(Kind.PERSON, text))
+        message = content(text, attachments)
+        index = self._add(
+            Item(Kind.PERSON, text, attachments=tuple(attachments), queued=self.busy())
+        )
+        if self.busy():
+            self._queued.append(index)
+            self.conversation.queue(message)
+            return
+        self._begin(message)
+
+    def _begin(self, message: Optional[Content]) -> None:
+        """A turn: the model answers message, then what waits."""
         provider = self.providers.chosen()
         if provider is None:
             self._add(Item(Kind.NOTE, NO_PROVIDER))
@@ -239,8 +351,10 @@ class AssistantModel(QObject):
         client = Client(provider, self.providers.key(provider.name))
         conversation = self.conversation
         token = conversation.begin()
-        self._turn, self._answer = token, None
+        self._turn, self._answer, self._thinking = token, None, None
+        self._began, self._turn_usage = time.monotonic(), Tokens()
         self.busy_changed.emit(True)
+        self._set_phase(THINKING)
         listener = _Turn(self, token)
         folder = self.session.workspace
         window = self.session.window  # what it shows goes to its own window
@@ -253,8 +367,8 @@ class AssistantModel(QObject):
                 self._ended.emit(token, Outcome.FAILED.value, str(e))
                 return
             outcome, why = conversation.say(
-                token, text, client, tools(lambda: folder.folder, lambda: window),
-                reach,
+                token, message, client,
+                tools(lambda: folder.folder, lambda: window), reach,
                 system_prompt, listener,
             )  # fmt: skip
             self._ended.emit(token, outcome.value, why)
@@ -262,7 +376,8 @@ class AssistantModel(QObject):
         threading.Thread(target=run, name="assistant", daemon=True).start()
 
     def stop(self) -> None:
-        """End the turn now: its calls without an answer are stopped."""
+        """End the turn now: its calls without an answer are stopped, what
+        waited is not sent."""
         if self._turn is None:
             return
         self.conversation.stop()
@@ -273,7 +388,9 @@ class AssistantModel(QObject):
         self.stop()
         self.conversation = Conversation()
         self.items.clear()
+        self.usage = Tokens()
         self.cleared.emit()
+        self.usage_changed.emit()
 
     def close(self) -> None:
         """The window closes: the turn stops, the assistant leaves the daemon."""
@@ -305,17 +422,53 @@ class AssistantModel(QObject):
         self.conversation.forget_bench()
 
     # What the turn told, in the GUI thread
+    def _heard_asking(self, token: object) -> None:
+        if token is self._turn:
+            self._turn_usage.steps += 1
+            self._set_phase(THINKING)
+
+    def _heard_taken(self, token: object, count: int) -> None:
+        if token is not self._turn:
+            return
+        taken, self._queued = self._queued[:count], self._queued[count:]
+        for index in taken:
+            self.items[index].queued = False
+            self.item_changed.emit(index)
+        self._answer = None  # the answer to it goes below it
+
+    def _heard_thought(self, token: object, piece: str) -> None:
+        if token is not self._turn:
+            return
+        if self._thinking is None:
+            self._answer = None
+            self._thinking = self._add(
+                Item(Kind.THOUGHT, state=State.RUNNING, started=time.monotonic())
+            )
+        self.items[self._thinking].text += piece
+        self.item_changed.emit(self._thinking)
+        self._set_phase(THINKING)
+
+    def _heard_usage(self, token: object, usage: Usage) -> None:
+        if token is not self._turn:
+            return
+        self._turn_usage.add(usage)
+        self.usage.add(usage)
+        self.usage_changed.emit()
+
     def _heard_text(self, token: object, piece: str) -> None:
         if token is not self._turn:
             return
+        self._thought_over(State.DONE)
         if self._answer is None:
             self._answer = self._add(Item(Kind.ANSWER))
         self.items[self._answer].text += piece
         self.item_changed.emit(self._answer)
+        self._set_phase(WRITING)
 
     def _heard_call(self, token: object, call: ToolCall) -> None:
         if token is not self._turn:
             return
+        self._thought_over(State.DONE)
         self._answer = None  # words after it go below it
         try:
             given = arguments(call)
@@ -324,6 +477,7 @@ class AssistantModel(QObject):
         self._calls[call.id] = self._add(
             Item(Kind.CALL, name=call.name, arguments=given, state=State.RUNNING)
         )
+        self._set_phase(f"{RUNNING} {call.name}")
 
     def _heard_progress(self, token: object, call: str, progress) -> None:
         if token is self._turn and call in self._calls:
@@ -342,11 +496,21 @@ class AssistantModel(QObject):
         if token is self._turn:
             self._end(Outcome(outcome), why)
 
+    def _thought_over(self, state: State) -> None:
+        if self._thinking is None:
+            return
+        item = self.items[self._thinking]
+        item.state, item.seconds = state, time.monotonic() - item.started
+        self.item_changed.emit(self._thinking)
+        self._thinking = None
+
     def _end(self, outcome: Outcome, why: str) -> None:
+        self._thought_over(State.STOPPED)
         for index in self._calls.values():
             self.items[index].state = State.STOPPED
             self.item_changed.emit(index)
         self._calls.clear()
+        seconds = time.monotonic() - self._began
         self._turn = self._answer = None
         note = {
             Outcome.STOPPED: "Stopped.",
@@ -355,7 +519,27 @@ class AssistantModel(QObject):
         }.get(outcome)
         if note:
             self._add(Item(Kind.NOTE, note))
+        steps = self._turn_usage.steps
+        told = [f"{seconds:.1f} s", f"{steps} step{'s' if steps != 1 else ''}"]
+        used = self._turn_usage.told()
+        self._add(Item(Kind.STATS, " · ".join(told + ([used] if used else []))))
+        if outcome is Outcome.ANSWERED and self._queued:
+            self._begin(None)  # written as it answered: it answers that too
+            if self.busy():
+                return
+        if self._queued:  # stopped or failed: what waited does not go
+            self.conversation.stop()
+            for index in self._queued:
+                self.items[index].queued, self.items[index].unsent = False, True
+                self.item_changed.emit(index)
+            self._queued.clear()
+        self._set_phase("")
         self.busy_changed.emit(False)
+
+    def _set_phase(self, phase: str) -> None:
+        if phase != self.phase:
+            self.phase = phase
+            self.phase_changed.emit(phase)
 
     def _add(self, item: Item) -> int:
         self.items.append(item)

@@ -19,6 +19,7 @@ from thzdaq_gui.settings import folder_key, settings
 MEASUREMENTS = "measurements"
 PROFILES = "profiles"
 SCRIPTS = "scripts"
+ATTACHMENTS = "attachments"  # files given to the assistant
 
 
 class Folders:

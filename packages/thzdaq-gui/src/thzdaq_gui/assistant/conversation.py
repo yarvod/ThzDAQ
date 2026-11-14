@@ -8,6 +8,10 @@ A turn answers one message of the person:
    the model as the tool's message;
 4. again, until the model answers with text alone, or MAX_STEPS steps.
 
+What the person writes while a turn runs waits (queue) and joins the
+conversation at the next step, as the model is asked again: the turn goes on
+with it, and a turn whose model answered goes on while something waits.
+
 A turn runs apart from the window (a call waits for a person, a measurement,
 the model). stop() ends it at once: from then on the turn adds nothing and
 tells nothing, and a call it made that has no answer yet is answered
@@ -24,11 +28,13 @@ from thzdaq_api import present
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.tools import Reach, Tool, by_name
 
+from thzdaq_gui.assistant.attachments import Content
 from thzdaq_gui.assistant.provider import (
     Client,
     Message,
     ProviderError,
     ToolCall,
+    Usage,
     tool,
 )
 
@@ -45,6 +51,18 @@ class Outcome(str, Enum):
 
 class Listener(Protocol):
     """What a turn tells as it goes, in its own thread."""
+
+    def asking(self) -> None:
+        """The model is asked: a step begins."""
+
+    def taken(self, count: int) -> None:
+        """The first count messages that waited joined the conversation."""
+
+    def thought(self, piece: str) -> None:
+        """A piece of what the model thinks before it answers."""
+
+    def usage(self, usage: Usage) -> None:
+        """The tokens a step took."""
 
     def text(self, piece: str) -> None:
         """A piece of the model's answer."""
@@ -72,6 +90,7 @@ class Conversation:
         # a listener may stop the turn as it hears it
         self._lock = threading.RLock()
         self._turn: Optional[object] = None  # the turn running
+        self._waiting: List[Content] = []  # the person's, for the next step
 
     def forget_bench(self) -> None:
         """The bench changed: the next turn tells the model it anew."""
@@ -86,11 +105,24 @@ class Conversation:
             self._turn = object()
             return self._turn
 
-    def stop(self) -> None:
+    def queue(self, content: Content) -> None:
+        """A message of the person while a turn runs: it joins at the next
+        step."""
+        with self._lock:
+            self._waiting.append(content)
+
+    def waiting(self) -> int:
+        """Messages that wait for the next step."""
+        with self._lock:
+            return len(self._waiting)
+
+    def stop(self) -> int:
         """End the turn running at once; a call without an answer is answered
-        STOPPED, so the next turn asks the model with whole messages."""
+        STOPPED, so the next turn asks the model with whole messages. What
+        waited is dropped: how many."""
         with self._lock:
             self._turn = None
+            dropped, self._waiting = len(self._waiting), []
             last = next(
                 (m for m in reversed(self.messages) if m["role"] == "assistant"), {}
             )
@@ -98,22 +130,23 @@ class Conversation:
             for call in last.get("tool_calls") or ():
                 if call["id"] not in answered:
                     self.messages.append(answer(call["id"], STOPPED))
+            return dropped
 
     def say(
         self,
         turn: object,
-        text: str,
+        content: Optional[Content],
         client: Client,
         tools: Sequence[Tool],
         reach: Reach,
         prompt: Callable[[Reach], str],
         listener: Listener,
     ) -> Tuple[Outcome, str]:
-        """Answer the person's text: how the turn ended and, when it failed,
-        why. prompt(reach) makes the system prompt when the bench is new to
-        the conversation."""
+        """Answer the person's message (None: only those that wait): how the
+        turn ended and, when it failed, why. prompt(reach) makes the system
+        prompt when the bench is new to the conversation."""
         try:
-            return self._say(turn, text, client, tools, reach, prompt, listener)
+            return self._say(turn, content, client, tools, reach, prompt, listener)
         except Stopped:
             return Outcome.STOPPED, ""
         finally:
@@ -121,8 +154,9 @@ class Conversation:
                 if self._turn is turn:
                     self._turn = None
 
-    def _say(self, turn, text, client, tools, reach, prompt, listener):
-        self._add(turn, {"role": "user", "content": text})
+    def _say(self, turn, content, client, tools, reach, prompt, listener):
+        if content is not None:
+            self._add(turn, {"role": "user", "content": content})
         try:
             if self.system is None:
                 self._set_system(turn, prompt(reach))
@@ -134,13 +168,24 @@ class Conversation:
         def heard(piece: str) -> None:
             self._tell(turn, listener.text, piece)
 
+        def thought(piece: str) -> None:
+            self._tell(turn, listener.thought, piece)
+
         for _ in range(self.max_steps):
+            self._take(turn, listener)
+            self._tell(turn, listener.asking)
             try:
-                reply = client.complete(self._asked(turn), offered, heard)
+                reply = client.complete(
+                    self._asked(turn), offered, heard, thought=thought
+                )
             except ProviderError as e:
                 return Outcome.FAILED, str(e)
             self._add(turn, reply.message())
+            if reply.usage is not None:
+                self._tell(turn, listener.usage, reply.usage)
             if not reply.calls:
+                if self.waiting():
+                    continue  # the person wrote meanwhile: it answers that too
                 return Outcome.ANSWERED, ""
             for call in reply.calls:
                 self._tell(turn, listener.called, call)
@@ -175,6 +220,15 @@ class Conversation:
             return chosen.call(reach, args, progress), False
         except LabError as e:
             return present.failure(e), True
+
+    def _take(self, turn: object, listener: Listener) -> None:
+        """What waited joins the conversation."""
+        with self._lock:
+            self._check(turn)
+            taken, self._waiting = self._waiting, []
+            self.messages += [{"role": "user", "content": c} for c in taken]
+            if taken:
+                listener.taken(len(taken))
 
     def _asked(self, turn: object) -> List[Message]:
         with self._lock:

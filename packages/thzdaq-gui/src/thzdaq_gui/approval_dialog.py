@@ -1,11 +1,17 @@
 """An agent asks a person: allow an operation (perhaps with another value) or
 not, with words the agent reads; or answer its question. One modal dialog at a
-time; one answered elsewhere closes."""
+time; one answered elsewhere closes.
+
+What it asks may be long (a script it writes, as the lines it changes; a
+raw command): then it shows in a box that scrolls both ways, in a fixed
+font, a change coloured by line. The dialog never outgrows the screen, and
+its answer and buttons stay in sight below."""
 
 from collections import deque
 from typing import Deque, Optional
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QSize, Qt
+from PySide6.QtGui import QColor, QFontDatabase, QSyntaxHighlighter, QTextCharFormat
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -14,13 +20,65 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QVBoxLayout,
     QWidget,
 )
 from thzdaq_api.approvals import Approval
 
 from thzdaq_gui import theme
+from thzdaq_gui.chat_widgets import ElidedLabel
 from thzdaq_gui.models.approvals import ApprovalsModel
+
+LINE = 240  # letters of a text shown as a line; longer: in a box
+WORD = 60  # letters of a word a line may hold; longer: in a box
+SCREEN = 0.85  # the share of the screen the dialog may take
+WIDTH = 560  # the dialog's least width
+
+
+def long(text: str) -> bool:
+    """Shown in a box that scrolls: lines, or more than a line holds."""
+    return "\n" in text or len(text) > LINE or any(len(w) > WORD for w in text.split())
+
+
+class ChangeColors(QSyntaxHighlighter):
+    """A change as its lines: added, removed, and where (@@)."""
+
+    def highlightBlock(self, text: str) -> None:
+        color = (
+            theme.GOOD if text.startswith("+")
+            else theme.BAD if text.startswith("-")
+            else theme.MUTED if text.startswith("@@")
+            else None
+        )  # fmt: skip
+        if color is not None:
+            found = QTextCharFormat()
+            found.setForeground(QColor(color))
+            self.setFormat(0, len(text), found)
+
+
+class TextBox(QPlainTextEdit):
+    """A long text to read: it scrolls both ways, as tall as its lines up to
+    what the screen leaves."""
+
+    def __init__(self, text: str, most: int, parent=None):
+        super().__init__(text, parent)
+        self.setReadOnly(True)
+        self.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        self.colors = ChangeColors(self.document())
+        lines = text.count("\n") + 1
+        self.wanted = QSize(
+            self.fontMetrics().horizontalAdvance("x") * min(120, longest(text)) + 32,
+            min(most, lines * self.fontMetrics().lineSpacing() + 16),
+        )
+
+    def sizeHint(self) -> QSize:
+        return self.wanted
+
+
+def longest(text: str) -> int:
+    return max((len(line) for line in text.splitlines()), default=0)
 
 
 class ApprovalDialog(QDialog):
@@ -35,13 +93,19 @@ class ApprovalDialog(QDialog):
         layout = QVBoxLayout(self)
         who = QLabel(f"{approval.origin} {'asks' if question else 'wants to'}:")
         who.setProperty("role", "muted")
-        title = QLabel(approval.title)
+        title = ElidedLabel(approval.title, mode=Qt.ElideMiddle)
         title.setProperty("role", "title")
-        text = QLabel(approval.text)
-        text.setWordWrap(True)
-        text.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        for widget in (who, title, text):
-            layout.addWidget(widget)
+        screen = parent.screen() if parent else QApplication.primaryScreen()
+        room = screen.availableGeometry()
+        if long(approval.text):
+            self.text: QWidget = TextBox(approval.text, int(room.height() * 0.6))
+        else:
+            self.text = QLabel(approval.text)
+            self.text.setWordWrap(True)
+            self.text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(who)
+        layout.addWidget(title)
+        layout.addWidget(self.text, 1)
         if approval.warning:
             warning = QLabel(approval.warning)
             warning.setWordWrap(True)
@@ -87,6 +151,12 @@ class ApprovalDialog(QDialog):
             self.check_confirm()
         model.closed.connect(self.closed_elsewhere)
         model.failed.connect(self.refused)
+        self.setMaximumSize(int(room.width() * SCREEN), int(room.height() * SCREEN))
+        wanted = self.sizeHint()
+        self.resize(
+            min(max(WIDTH, wanted.width()), self.maximumWidth()),
+            min(wanted.height(), self.maximumHeight()),
+        )
 
     def check_confirm(self, *_) -> None:
         """A dangerous step: allowed once its device is typed."""

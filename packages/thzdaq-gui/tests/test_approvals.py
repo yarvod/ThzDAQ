@@ -113,3 +113,24 @@ def test_closing_the_dialog_refuses(window, agent, wait):
     wait(lambda: "error" in done)
     thread.join(5)
     assert done["error"].code == ErrorCode.DENIED
+
+
+def test_a_long_ask_scrolls_in_a_dialog_that_fits_the_screen(window, agent, wait):
+    from PySide6.QtWidgets import QApplication
+    from thzdaq_gui.approval_dialog import SCREEN, TextBox
+
+    change = "@@ -1,2 +1,400 @@\n" + "\n".join(
+        f"+x_{i} = {i}  # " + "y" * 200 for i in range(400)
+    )
+    asked = agent.call(AskUser(question=change, timeout=0.05))
+    dialog = dialog_of(window, wait)
+    QApplication.processEvents()
+    assert isinstance(dialog.text, TextBox)
+    room = dialog.screen().availableGeometry()
+    assert dialog.height() <= room.height() * SCREEN
+    assert dialog.width() <= room.width() * SCREEN
+    assert dialog.text.verticalScrollBar().maximum() > 0
+    assert dialog.text.horizontalScrollBar().maximum() > 0
+    assert dialog.allow.isVisible() and dialog.words.isVisible()
+    dialog.allow.click()
+    assert agent.call(WaitAnswer(id=asked.id, timeout=5)).answer.allowed

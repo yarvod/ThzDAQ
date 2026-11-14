@@ -1,6 +1,7 @@
 """A model's server for the tests: OpenAI-compatible chat/completions on
 localhost that answers what a test scripted, streamed as servers stream
-(server-sent events) or whole. It keeps what it was asked."""
+(server-sent events) or whole, with what the model thought and the tokens it
+took; GET /models tells its model's context. It keeps what it was asked."""
 
 import json
 import threading
@@ -17,6 +18,14 @@ NO_TOOLS = (
 def says(text: str) -> Dict[str, Any]:
     """A reply in words."""
     return {"content": text}
+
+
+def thinks(thought: str, text: str) -> Dict[str, Any]:
+    """A reply in words after a thought, as a reasoning parser gives it."""
+    return {"reasoning_content": thought, "content": text}
+
+
+USAGE = {"prompt_tokens": 1200, "completion_tokens": 30, "total_tokens": 1230}
 
 
 def calls(*called: tuple) -> Dict[str, Any]:
@@ -46,11 +55,18 @@ class ModelServer:
         self.stream = True  # a streamed request is answered streamed
         self.held = threading.Event()  # cleared: the answer waits for it
         self.held.set()
+        self.context: Optional[int] = 32768  # what GET /models tells
         server = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
                 pass
+
+            def do_GET(self):
+                model = {"id": "qwen", "object": "model"}
+                if server.context is not None:
+                    model["max_model_len"] = server.context
+                self._json(200, {"object": "list", "data": [model]})
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -62,9 +78,11 @@ class ModelServer:
                 elif body.get("tools") and not server.takes_tools:
                     self._json(400, {"object": "error", "message": NO_TOOLS})
                 elif body.get("stream") and server.stream:
-                    self._stream(server.next())
+                    usage = (body.get("stream_options") or {}).get("include_usage")
+                    self._stream(server.next(), usage)
                 else:
-                    self._json(200, {"choices": [{"message": server.next()}]})
+                    reply = server.next()
+                    self._json(200, {"choices": [{"message": reply}], "usage": USAGE})
 
             def _json(self, status: int, found: Dict[str, Any]) -> None:
                 data = json.dumps(found).encode()
@@ -74,13 +92,18 @@ class ModelServer:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def _stream(self, reply: Dict[str, Any]) -> None:
+            def _stream(self, reply: Dict[str, Any], usage: bool) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
                 try:
-                    for delta in pieces(reply):
-                        chunk = {"choices": [{"index": 0, "delta": delta}]}
+                    chunks = [
+                        {"choices": [{"index": 0, "delta": delta}]}
+                        for delta in pieces(reply)
+                    ]
+                    if usage:
+                        chunks.append({"choices": [], "usage": USAGE})
+                    for chunk in chunks:
                         self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
                         self.wfile.flush()
                     self.wfile.write(b"data: [DONE]\n\n")
@@ -110,6 +133,9 @@ class ModelServer:
 def pieces(reply: Dict[str, Any]):
     """A reply in the pieces a server streams it in: its text a few letters
     at a time, a tool call's name first and its arguments in two halves."""
+    thought = reply.get("reasoning_content") or ""
+    for start in range(0, len(thought), 5):
+        yield {"reasoning_content": thought[start : start + 5]}
     text = reply.get("content") or ""
     for start in range(0, len(text), 5):
         yield {"content": text[start : start + 5]}
