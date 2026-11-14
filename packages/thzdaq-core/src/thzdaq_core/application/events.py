@@ -46,12 +46,26 @@ class EventBus:
     def subscribe(
         self, listener: Listener, since: Optional[int] = None
     ) -> Callable[[], None]:
-        with self._lock:
-            missed = [] if since is None else self._after(since)
-            self._listeners.append(listener)
-        for event in missed:
-            listener(event)
-        return lambda: self._unsubscribe(listener)
+        """listener hears the events after since, then each as it is
+        published. Another thread may publish while it is told what it
+        missed: that event waits until it is told, so it hears them in order
+        (it drops one older than what it heard, as a window does)."""
+        turn = threading.RLock()  # re-entrant: a listener may publish
+        turn.acquire()
+
+        def ordered(event: Event) -> None:
+            with turn:
+                listener(event)
+
+        try:
+            with self._lock:
+                missed = [] if since is None else self._after(since)
+                self._listeners.append(ordered)
+            for event in missed:
+                listener(event)
+        finally:
+            turn.release()
+        return lambda: self._unsubscribe(ordered)
 
     def wait(self, since: int, timeout: float) -> List[Event]:
         """The events after since, waiting up to timeout for one; Resync when

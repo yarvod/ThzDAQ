@@ -44,6 +44,29 @@ def test_a_client_behind_the_buffer_takes_a_new_snapshot():
     assert [event.seq for event in heard] == [4, 5]
 
 
+def test_what_a_listener_missed_comes_before_what_is_published_meanwhile():
+    """A run publishes from its own thread while a window that reconnects is
+    told what it missed: the newer event waits, or the window would take it
+    first and drop the older ones as already heard."""
+    import threading
+
+    bus = EventBus()
+    for _ in range(3):
+        bus.publish(Resync())
+    heard = []
+    meanwhile = threading.Thread(target=lambda: bus.publish(Resync()))
+
+    def listener(event):
+        heard.append(event.seq)
+        if len(heard) == 1:  # while what it missed is told
+            meanwhile.start()
+            meanwhile.join(0.2)  # published at once, unless it waits its turn
+
+    bus.subscribe(listener, since=0)
+    meanwhile.join(5)
+    assert heard == [1, 2, 3, 4]
+
+
 def test_one_poll_per_device_at_the_shortest_interval(lab):
     heard = []
     lab.subscribe(heard.append)
