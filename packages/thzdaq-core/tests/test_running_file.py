@@ -27,7 +27,9 @@ class Bench:
     def device_use(self, ref):
         return DeviceUse(ref)
 
-    def require(self, devices, requirements, pause, planned=(), told=None):
+    def require(
+        self, devices, requirements, pause, planned=(), told=None, changed=None
+    ):
         return {}
 
     def quantities(self, ref):

@@ -21,7 +21,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     IF_GHZ,
     Group,
     IFSweep,
-    restore_bias_on_exit,
     SettleTime,
 )
 
@@ -97,7 +96,6 @@ class ShotNoise(Procedure):
 
     def run(self, ctx) -> None:
         bias, detector, if_filter = ctx["bias"], ctx["detector"], ctx["if_filter"]
-        restore_bias_on_exit(ctx, bias)
         points = {}
         for point, voltage in ((1, self.voltage1), (2, self.voltage2)):
             points[point] = self._bias_point(ctx, bias, point, voltage)

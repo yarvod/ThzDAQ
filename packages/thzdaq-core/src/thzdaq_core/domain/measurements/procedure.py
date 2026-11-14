@@ -50,6 +50,10 @@ class Procedure:
     # How a slot uses its device while the run lasts (thzdaq_api.leases): read,
     # exclusive (it sweeps the device) or, unlisted, shared
     slot_modes: ClassVar[Mapping[str, str]] = {}
+    # Slots whose devices it leaves as it ends, setting them being what it is
+    # for (demagnetization leaves the coil at the centre); every other device
+    # it changes is set back as it ends
+    leaves: ClassVar[Tuple[str, ...]] = ()
     plots: ClassVar[Tuple[PlotInfo, ...]] = ()
     # Parameters used only while another has some value (shown_while): a form
     # shows them then; those of mixins and subclasses add up

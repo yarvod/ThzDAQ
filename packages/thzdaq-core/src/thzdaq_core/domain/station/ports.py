@@ -4,7 +4,7 @@ the guard every device is handed out in.
 An adapter delegates every attribute it doesn't override to the wrapped part.
 """
 
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Optional, Set, Tuple
 
 from thzdaq_instruments.quantities import Quantity
 
@@ -13,6 +13,13 @@ from thzdaq_core.domain.station.safety import Guard
 
 Pause = Callable[[float], None]  # waits so many seconds
 Told = Callable[[str, float], None]  # hears a quantity key and the value set
+# Hears, at a run's first change of a quantity, how to set it back
+Changed = Callable[[Callable[[], None]], None]
+# A port's own attributes: never looked up on the device it wraps
+PORT_ATTRIBUTES = (
+    "target", "guard", "setters", "pause", "setpoints", "told", "changed",
+    "changed_keys",
+)  # fmt: skip
 
 
 class PortAdapter:
@@ -81,6 +88,12 @@ class GuardedPort(PortAdapter):
     (read once when there is none yet), so a sweep costs no extra query. The
     ports of one device share it; each waits with its own pause (a run's stops
     on cancel), and a run's port tells the values it sets.
+
+    A run's port also tells, at the first change of each quantity, how to set
+    it back to what it was before (changed): the run does so as it ends, so a
+    measurement leaves the bench as it found it. A quantity whose value is not
+    known before (one that cannot be read, never set yet) stays as the run
+    leaves it.
     """
 
     def __init__(
@@ -91,6 +104,7 @@ class GuardedPort(PortAdapter):
         pause: Pause,
         setpoints: Optional[Dict[str, float]] = None,
         told: Optional[Told] = None,
+        changed: Optional[Changed] = None,
     ):
         super().__init__(target)
         self.guard = guard
@@ -98,13 +112,20 @@ class GuardedPort(PortAdapter):
         self.pause = pause
         self.setpoints: Dict[str, float] = {} if setpoints is None else setpoints
         self.told = told
+        self.changed = changed
+        self.changed_keys: Set[str] = set()  # those changed hears of already
 
-    def for_run(self, pause: Pause, told: Optional[Told] = None) -> "GuardedPort":
-        """The same device for a run: its ramps wait with the run's pause, and
-        told hears the values it sets."""
+    def for_run(
+        self,
+        pause: Pause,
+        told: Optional[Told] = None,
+        changed: Optional[Changed] = None,
+    ) -> "GuardedPort":
+        """The same device for a run: its ramps wait with the run's pause,
+        told hears the values it sets and changed how to set each back."""
         quantities = set(self.setters.values())
         return GuardedPort(
-            self.target, self.guard, quantities, pause, self.setpoints, told
+            self.target, self.guard, quantities, pause, self.setpoints, told, changed
         )
 
     def forget(self) -> None:
@@ -113,7 +134,7 @@ class GuardedPort(PortAdapter):
         self.setpoints.clear()
 
     def __getattr__(self, name: str) -> Any:
-        if name in ("target", "guard", "setters", "pause", "setpoints", "told"):
+        if name in PORT_ATTRIBUTES:
             raise AttributeError(name)
         value = getattr(self.target, name)
         quantity = self.setters.get(name)
@@ -135,6 +156,9 @@ class GuardedPort(PortAdapter):
     ) -> Any:
         key = quantity.key
         self.guard.check(quantity, value)
+        if self.changed is not None and key not in self.changed_keys:
+            self.changed_keys.add(key)
+            self._note_before(quantity)
         before = self._before(quantity) if self.guard.ramps(key) else None
         plain = getattr(self.target, quantity.setters[0])
         last = before
@@ -148,6 +172,15 @@ class GuardedPort(PortAdapter):
         if self.told is not None:
             self.told(key, value)
         return result
+
+    def _note_before(self, quantity: Quantity) -> None:
+        """Tell changed how to set quantity back to its value now, through
+        this port: checked and ramped as any change."""
+        before = self._before(quantity)
+        if before is None:
+            return
+        setter = getattr(self, quantity.setters[0])
+        self.changed(lambda: setter(before))
 
     def _before(self, quantity: Quantity) -> Optional[float]:
         """The setpoint now: the last one written, else read once."""

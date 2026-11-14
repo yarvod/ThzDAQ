@@ -66,6 +66,7 @@ class StationLike(Protocol):
         pause: Callable[[float], None],
         planned: Iterable[Tuple[str, str, Sequence[float]]] = (),
         told: Optional[Callable[[str, str, float], None]] = None,
+        changed: Optional[Callable[[str, Callable[[], None]], None]] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -136,15 +137,18 @@ class Context:
         procedure: Optional[Procedure] = None,
         written: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         total: Optional[int] = None,
+        cleanups: Optional[List[Callable[[], None]]] = None,
     ):
-        """written: told every record once the measurement holds it (its file)."""
+        """written: told every record once the measurement holds it (its file);
+        cleanups: what the run's end does, those its devices set back among
+        them, to which on_exit adds."""
         self.devices = devices
         self.measurement = measurement
         self.procedure = procedure
         self._emit = emit
         self._cancel = cancel_event
         self._written = written
-        self._cleanups: List[Callable[[], None]] = []
+        self._cleanups: List[Callable[[], None]] = [] if cleanups is None else cleanups
         self.done = 0
         self.total = total
 
@@ -336,10 +340,18 @@ class MeasurementRunner:
         refs = slot_devices(procedure, devices)
         self._cancel.clear()
         ramps = RampPause(self._cancel)
+        cleanups: List[Callable[[], None]] = []
+
+        def changed(slot: str, undo: Callable[[], None]) -> None:
+            """A device the run changes is set back as it ends, but those it
+            is for."""
+            if slot not in procedure.leaves:
+                cleanups.append(undo)
+
         # Fails before any file exists when a device is missing or unsuitable,
         # or the run would set it beyond its limits
         found = self.station.require(
-            refs, required, ramps, procedure.planned(), self._told
+            refs, required, ramps, procedure.planned(), self._told, changed
         )
         # The file keeps the plots it is drawn with from its start
         plots = procedure.active_plots(lambda slot: self.station.quantities(refs[slot]))
@@ -372,7 +384,7 @@ class MeasurementRunner:
 
         ctx = Context(
             found, measurement, self._emit, self._cancel, procedure, written,
-            procedure.estimate_steps(),
+            procedure.estimate_steps(), cleanups,
         )  # fmt: skip
         status, error = COMPLETED, None
         try:

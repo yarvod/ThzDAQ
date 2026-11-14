@@ -22,7 +22,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     BiasVoltage,
     FirstPointDelay,
     Group,
-    restore_bias_on_exit,
 )
 
 S_PARAMETERS = ("S11", "S21", "S12", "S22")
@@ -77,7 +76,6 @@ class SisReflection(Procedure):
 
     def run(self, ctx) -> None:
         bias, vna = ctx["bias"], ctx["vna"]
-        restore_bias_on_exit(ctx, bias)
         vna.set_frequency_range(self.frequency.start, self.frequency.stop)
         vna.set_points(self.frequency.points)
         vna.set_power(self.power)

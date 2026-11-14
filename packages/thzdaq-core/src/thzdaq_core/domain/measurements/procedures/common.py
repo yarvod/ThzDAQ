@@ -1,5 +1,5 @@
 """What procedures share: parameters (one definition, a default per procedure), the
-groups a form shows them in, axis labels of plots, bias handling, state restore,
+groups a form shows them in, axis labels of plots, bias handling,
 hot/cold checks."""
 
 import math
@@ -176,16 +176,6 @@ def set_bias(port, voltage: float, precise: bool = False) -> None:
         port.set_voltage_precise(voltage, max_iterations=PRECISE_ITERATIONS)
     else:
         port.set_voltage(voltage)
-
-
-def restore_bias_on_exit(ctx, port) -> None:
-    initial = port.get_voltage()
-    ctx.on_exit(lambda: port.set_voltage(initial))
-
-
-def restore_angle_on_exit(ctx, rotator) -> None:
-    initial = rotator.get_angle()
-    ctx.on_exit(lambda: rotator.rotate_to(initial))
 
 
 def load_problems(t_hot: float, t_cold: float) -> List[str]:

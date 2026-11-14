@@ -72,7 +72,9 @@ class CoupledStation:
             "load": self.chopper,
         }
 
-    def require(self, devices, requirements, pause, planned=(), told=None):
+    def require(
+        self, devices, requirements, pause, planned=(), told=None, changed=None
+    ):
         return {slot: self.ports[slot] for slot in requirements}
 
     def device_use(self, ref):
@@ -112,6 +114,50 @@ class TestRunner:
         )
         assert saved.parameters["voltage"] == {"start": 0.0, "stop": 5e-3, "points": 11}
 
+    def test_a_run_sets_back_every_device_it_changed(self, tmp_path):
+        from thzdaq_core.adapters.yaml_profiles import load_station
+        from thzdaq_core.domain.measurements.procedures import (
+            Demagnetize,
+            GridCurrentAngle,
+            PowerIF,
+        )
+
+        with Station(load_station(EXAMPLE), pause=time.sleep, simulate=True) as station:
+            yig = station["yig_filter_1:yig_1"]
+            yig.tune(7e9)
+            before = yig.get_frequency()
+            runner = MeasurementRunner(station, MeasurementStore(tmp_path))
+            done = runner.run(
+                PowerIF(frequency=(4e9, 6e9, 3), point_delay=0),
+                devices={
+                    "if_filter": "yig_filter_1:yig_1",
+                    "detector": "power_meter_1",
+                },
+            )
+            assert done.status == COMPLETED
+            assert done.records("power")[-1]["frequency_set"] == 6e9
+            assert yig.get_frequency() == pytest.approx(before)
+            # a grid and the bias it reads with
+            grid, sis1 = station["grid_1"], station["sis_bias_1"]
+            grid.rotate_to(15.0)
+            sis1.set_voltage(1e-3)
+            turned = runner.run(
+                GridCurrentAngle(angle=(0, 90, 4), grid_speed=1e6, settle_time=0),
+                devices={"grid": "grid_1", "bias": "sis_bias_1"},
+            )
+            assert turned.status == COMPLETED
+            assert grid.get_angle() == pytest.approx(15.0)
+            assert sis1.get_voltage() == pytest.approx(1e-3)
+            # what a run is for is left as it ends: the coil at the centre
+            coil = station["sis_coil_1"]
+            coil.set_current(2e-3)
+            demagnetized = runner.run(
+                Demagnetize(minimum=-3e-3, maximum=3e-3, step=1e-3, step_delay=0),
+                devices={"coil": "sis_coil_1"},
+            )
+            last = demagnetized.records("coil")[-1]["current"]
+            assert coil.get_current() == pytest.approx(last) != pytest.approx(2e-3)
+
     def test_cancel_runs_cleanup_and_marks_dataset(self, tmp_path):
         station = sis_station()
         recorder = Recorder(cancel_at=3)
@@ -137,7 +183,9 @@ class TestRunner:
                 raise RuntimeError("detector exploded")
 
         class AnyStation(CoupledStation):
-            def require(self, devices, requirements, pause, planned=(), told=None):
+            def require(
+                self, devices, requirements, pause, planned=(), told=None, changed=None
+            ):
                 return {"bias": SimChopper()}
 
         class BadObserver(RunObserver):

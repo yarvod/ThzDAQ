@@ -587,10 +587,12 @@ class Station:
         pause: Pause,
         planned: Iterable[Planned] = (),
         told: Optional[Callable[[str, str, float], None]] = None,
+        changed: Optional[Callable[[str, Callable[[], None]], None]] = None,
     ) -> Dict[str, GuardedPort]:
         """Devices for measurement slots, checked (check) and then opened.
         Their ramps wait with pause (a run's, which a cancel stops);
-        told(ref, key, value) hears what they set."""
+        told(ref, key, value) hears what they set, changed(slot, undo) how to
+        set back each quantity they change, at its first change."""
         self.check(devices, requirements, planned)
         found, problems = {}, []
         for slot in requirements:
@@ -601,7 +603,11 @@ class Station:
         if problems:
             raise StationError(f"{self.name}: " + "; ".join(problems))
         return {
-            slot: device.for_run(pause, told and functools.partial(told, devices[slot]))
+            slot: device.for_run(
+                pause,
+                told and functools.partial(told, devices[slot]),
+                changed and functools.partial(changed, slot),
+            )
             for slot, device in found.items()
         }
 

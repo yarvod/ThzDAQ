@@ -102,7 +102,6 @@ class IfBalance(IfSwitchProcedure):
         return pairs * len(SIDE_BANDS) * self.frequency.points
 
     def run(self, ctx) -> None:
-        self.start(ctx)
         detector, if_filter = ctx["detector"], ctx["if_filter"]
         for v1, v2 in product(self.sis1_voltages, self.sis2_voltages):
             ctx.check_cancel()
@@ -209,7 +208,6 @@ class PumpBalance(TwoSbProcedure):
         return self.frequency.points * self.sis1_voltage.points
 
     def run(self, ctx) -> None:
-        self.start(ctx)
         source = ctx[self.source]
         if self.silence_other:
             other = ctx[self.other]

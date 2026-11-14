@@ -56,8 +56,6 @@ class IVCurve(Procedure):
 
     def run(self, ctx) -> None:
         bias = ctx["bias"]
-        initial = bias.get_voltage()
-        ctx.on_exit(lambda: bias.set_voltage(initial))
         for index, voltage in enumerate(self.voltage.values()):
             ctx.check_cancel()
             bias.set_voltage(voltage)

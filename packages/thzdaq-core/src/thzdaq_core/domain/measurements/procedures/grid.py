@@ -9,7 +9,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     CURRENT_UA,
     GridAngle,
     GridSpeed,
-    restore_angle_on_exit,
     SettleTime,
 )
 
@@ -44,7 +43,6 @@ class GridCurrentAngle(Procedure):
 
     def run(self, ctx) -> None:
         grid, bias = ctx["grid"], ctx["bias"]
-        restore_angle_on_exit(ctx, grid)
         for angle in self.angle.values():
             ctx.check_cancel()
             travel = abs(angle - grid.get_angle())

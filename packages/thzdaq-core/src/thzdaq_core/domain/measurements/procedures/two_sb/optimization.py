@@ -87,7 +87,6 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
         return detector.read_power()
 
     def run(self, ctx) -> None:
-        self.start(ctx)
         self.prepare_lo(ctx)
         tone, load = ctx["test_tone"], ctx["load"]
         ctx.on_exit(load.to_cold)

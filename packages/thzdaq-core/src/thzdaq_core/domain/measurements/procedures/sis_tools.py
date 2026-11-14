@@ -17,6 +17,7 @@ from thzdaq_core.domain.sis.demagnetization import demagnetization_currents
 class Demagnetize(Procedure):
     name = DEMAGNETIZATION
     slot_modes = {"coil": EXCLUSIVE}
+    leaves = ("coil",)  # at the centre: what it is for
     title = "SIS demagnetization"
     description = (
         "Sweep the coil current over the full range, then swing it around the "
@@ -126,8 +127,6 @@ class CLCurve(Procedure):
 
     def run(self, ctx) -> None:
         coil, bias = ctx["coil"], ctx["bias"]
-        initial = coil.get_current()
-        ctx.on_exit(lambda: coil.set_current(initial))
         for current in self.coil_current.values():
             ctx.check_cancel()
             coil.set_current(current)

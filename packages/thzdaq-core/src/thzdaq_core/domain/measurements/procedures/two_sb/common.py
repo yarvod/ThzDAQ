@@ -47,7 +47,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     load_problems,
     LoadDelay,
     PointDelay,
-    restore_bias_on_exit,
     set_bias,
     warn_without_contrast,
 )
@@ -121,11 +120,6 @@ class TwoSbProcedure(Procedure):
         return {"sis1": BIAS, "sis2": BIAS}
 
     # Helpers for run()
-    def start(self, ctx) -> None:
-        """Call first in run(): remember the bias to restore."""
-        restore_bias_on_exit(ctx, ctx["sis1"])
-        restore_bias_on_exit(ctx, ctx["sis2"])
-
     def bias(self, ctx, voltage1: float, voltage2: float) -> None:
         set_bias(ctx["sis1"], voltage1, self.precise_bias)
         set_bias(ctx["sis2"], voltage2, self.precise_bias)

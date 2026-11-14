@@ -29,8 +29,6 @@ from thzdaq_core.domain.measurements.procedures.common import (
     HotLoad,
     load_problems,
     LoadDelay,
-    restore_angle_on_exit,
-    restore_bias_on_exit,
     SettleTime,
     warn_without_contrast,
 )
@@ -76,7 +74,6 @@ class PVCurve(Procedure):
 
     def run(self, ctx) -> None:
         bias, detector = ctx["bias"], ctx["detector"]
-        restore_bias_on_exit(ctx, bias)
         self._sweep(ctx, bias, detector)
 
     def _sweep(self, ctx, bias, detector, **labels):
@@ -175,13 +172,10 @@ class TnVoltage(PVCurve):
 
     def run(self, ctx) -> None:
         bias, detector = ctx["bias"], ctx["detector"]
-        restore_bias_on_exit(ctx, bias)
         load = ctx["load"] if self.hot_cold else None
         grid = ctx["grid"] if self.use_grid else None
         if load is not None:
             ctx.on_exit(load.to_cold)
-        if grid is not None:
-            restore_angle_on_exit(ctx, grid)
 
         for angle in self._angles():
             if grid is not None:

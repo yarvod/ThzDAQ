@@ -138,7 +138,6 @@ class SidebandRatio(LoMixin, SpectrumMixin, HotColdMixin, IfSwitchProcedure):
         return tones + noise
 
     def run(self, ctx) -> None:
-        self.start(ctx)
         self.prepare_lo(ctx)
         self.bias(ctx, self.sis1_voltage, self.sis2_voltage)
         ctx.record("bias", **self.read_bias(ctx))
@@ -229,7 +228,6 @@ class TwoSbNoise(LoMixin, HotColdMixin, IfSwitchProcedure):
         return len(side_bands(self.channels)) * 2 * self.frequency.points
 
     def run(self, ctx) -> None:
-        self.start(ctx)
         if self.tone_off:
             ctx["test_tone"].set_output(False)
         self.prepare_lo(ctx)
