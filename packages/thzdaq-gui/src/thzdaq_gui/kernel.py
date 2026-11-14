@@ -23,12 +23,15 @@ restart then starts a new kernel. A kernel that ends by itself is told
 """
 
 import asyncio
+import locale
 import logging
+import subprocess
+import tempfile
 import threading
 import uuid
 from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence
+from typing import Any, BinaryIO, Callable, Coroutine, Dict, List, Optional, Sequence
 
 from jupyter_client import AsyncKernelManager
 from jupyter_client.kernelspec import KernelSpec, KernelSpecManager
@@ -39,6 +42,7 @@ from traitlets import Instance
 logger = logging.getLogger(__name__)
 
 START_S = 60.0  # how long a kernel may take to answer after its start
+OUTPUT_BYTES = 32 * 1024  # the end of the process's output, when it fails
 NAME = "thzdaq"  # the kernel's name, as jupyter_client asks for one
 # Kinds of messages a kernel sends
 STREAM, RESULT, DISPLAY, ERROR, STATUS = (
@@ -83,6 +87,7 @@ class Kernel(QObject):
         self.manager: Optional[AsyncKernelManager] = None
         self.client = None
         self.tasks: List[asyncio.Task] = []
+        self.output: Optional[BinaryIO] = None
         self.ready = False  # in the loop: requests go to the kernel
         self.busy = False
         self.loop = asyncio.new_event_loop()
@@ -186,16 +191,24 @@ class Kernel(QObject):
             kernel_spec_manager=GivenSpec(spec=spec), kernel_name=NAME
         )
         try:
+            # Jupyter only redirects absent Windows streams for pythonw.exe;
+            # ThzDAQ.exe is windowed too. Give the child valid output handles
+            # and keep tracebacks from before Jupyter's channels open.
+            self.output = tempfile.TemporaryFile()
             await self.manager.start_kernel(
-                env=environment, cwd=str(folder), **host.windowless()
-            )
+                env=environment, cwd=str(folder),
+                stdout=self.output, stderr=subprocess.STDOUT, **host.windowless(),
+            )  # fmt: skip
             await self._connect()
         except (OSError, RuntimeError) as e:  # not started, or died at once
             await self._failed(e)
 
     async def _failed(self, error: Exception) -> None:
-        await self._end()
-        self.failed.emit(str(error) or type(error).__name__)
+        output = await self._end()
+        reason = str(error) or type(error).__name__
+        message = f"{reason}\n\n{output}" if output else reason
+        logger.error("The console's kernel did not start: %s", message)
+        self.failed.emit(message)
 
     async def _connect(self) -> None:
         """A client of the kernel that has started: once it answers, its
@@ -240,22 +253,45 @@ class Kernel(QObject):
         finally:  # the thread ends even when the kernel did not end well
             self.loop.stop()
 
-    async def _end(self) -> None:
+    async def _end(self) -> str:
         """The kernel ended, whether it runs, died or never started:
         jupyter_client interrupts it, asks it to end, then ends it. Once per
-        manager: its shutdown destroys its zmq context."""
+        manager: its shutdown destroys its zmq context. Returns the process's
+        output, once it has ended and no longer writes to it."""
         if self.manager is None:
-            return
+            return ""
         manager, self.manager = self.manager, None
         await self._disconnect()
-        await manager.shutdown_kernel()
+        try:
+            await manager.shutdown_kernel()
+        finally:
+            output = self._output_text()
+            if self.output is not None:
+                self.output.close()
+                self.output = None
+        return output
+
+    def _output_text(self) -> str:
+        if self.output is None:
+            return ""
+        size = self.output.seek(0, 2)
+        self.output.seek(max(0, size - OUTPUT_BYTES))
+        return (
+            self.output.read()
+            .decode(locale.getpreferredencoding(False), "replace")
+            .strip()
+        )
 
     async def _watch(self) -> None:
         """The kernel's process, until it ends by itself."""
         code = await self.manager.provisioner.wait()
         self.ready = False
         self._busy(False)
-        self.died.emit(f"exit code {code}")
+        reason = f"exit code {code}"
+        output = self._output_text()
+        message = f"{reason}\n\n{output}" if output else reason
+        logger.error("The console's kernel ended: %s", message)
+        self.died.emit(message)
 
     @staticmethod
     async def _read(channel, handle: Callable[[Dict[str, Any]], None]) -> None:

@@ -1,12 +1,14 @@
 """Check the kernel of a console as the window starts it, without a display:
 it starts, runs code, is interrupted, restarted and stopped. The kernel runs
 with this Python from sources, or with a build's thzdaq-cli (the release
-checks its build so):
+checks its build so). On Windows it starts without the standard output
+handles of a terminal, as the windowed ThzDAQ.exe does:
 
     uv run python check_console.py [dist/ThzDAQ/thzdaq-cli.exe]
 """
 
 import argparse
+import ctypes
 import os
 import sys
 import time
@@ -74,6 +76,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         "cli", nargs="?", help="a build's thzdaq-cli (default: sources)"
     )
     args = parser.parse_args(argv)
+    if sys.platform == "win32":
+        # Jupyter recognizes pythonw.exe, but not ThzDAQ.exe, as windowed.
+        # Remove the OS handles so a terminal cannot hide broken inheritance.
+        # Python's print still writes to this process's already open streams.
+        from _winapi import STD_ERROR_HANDLE, STD_OUTPUT_HANDLE
+
+        for handle in (STD_OUTPUT_HANDLE, STD_ERROR_HANDLE):
+            if not ctypes.windll.kernel32.SetStdHandle(handle, None):
+                raise ctypes.WinError()
     try:
         check(Path(args.cli).resolve() if args.cli else None)
     except Failed as e:

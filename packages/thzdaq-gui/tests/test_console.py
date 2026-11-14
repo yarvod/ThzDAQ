@@ -155,8 +155,14 @@ def test_the_kernel_starts_runs_is_interrupted_restarted_and_stopped(
         id = kernel.execute("kept")  # a new kernel: its names went
         wait(lambda: "finished" in kinds(id), START_S)
         assert kinds(id) == ["raised", "finished"]
-        kernel.execute("import os; os._exit(3)")
-        wait(lambda: ("died", "exit code 3") in told, START_S)
+        kernel.execute(
+            "import os, sys\n"
+            "print('fatal kernel error', file=sys.__stderr__, flush=True)\n"
+            "os._exit(3)"
+        )
+        wait(lambda: any(t[0] == "died" for t in told), START_S)
+        ended = next(t[1] for t in told if t[0] == "died")
+        assert ended.startswith("exit code 3") and "fatal kernel error" in ended
     finally:
         kernel.stop()
         assert kernel.join(15)
@@ -181,6 +187,29 @@ def test_a_kernel_that_does_not_start_is_told_and_stops(app, wait, command):
     wait(lambda: len(failed) == 2, START_S)
     kernel.stop()
     assert kernel.join(15)
+
+
+def test_a_kernel_startup_traceback_reaches_the_console_and_log(
+    app, wait, tmp_path, caplog
+):
+    from thzdaq_gui.kernel import Kernel
+
+    kernel = Kernel()
+    failed = []
+    kernel.failed.connect(failed.append)
+    command = [
+        sys.executable, "-c",
+        "raise RuntimeError('startup failed before channels opened')",
+        console.CONNECTION,
+    ]  # fmt: skip
+    try:
+        kernel.start(command, dict(os.environ), tmp_path)
+        wait(lambda: failed, START_S)
+        assert "RuntimeError: startup failed before channels opened" in failed[0]
+        assert failed[0] in caplog.text
+    finally:
+        kernel.stop()
+        assert kernel.join(15)
 
 
 def test_a_console_opens_with_the_bench_and_runs_what_waited(started, wait):
