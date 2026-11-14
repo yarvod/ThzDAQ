@@ -1055,6 +1055,37 @@ class TestMeasureAndData:
         assert again.devices.mapping()["bias"] == "sis_bias_2"
         assert again.form.values()["voltage"] == FAST_IV["voltage"]
 
+    def test_a_copy_and_the_details_keep_what_its_file_keeps(
+        self, window, session, wait, tmp_path, monkeypatch
+    ):
+        from thzdaq_gui.docks.data import DetailsDialog
+
+        box = window.measures.run("sis.current_vs_voltage")
+        box.form.set_values(FAST_IV)
+        finished = []
+        box.runner.finished.connect(finished.append)
+        window.runBar.controls.btnStart.click()
+        wait(lambda: finished and window.runBar.controls.btnStart.isEnabled())
+        kept = read_measurement(finished[0].metadata["path"])
+        assert kept.parameters and kept.station
+        window.dataWidget.table.selectRow(0)
+        copy = tmp_path / "copy.json"
+        monkeypatch.setattr(
+            "thzdaq_gui.folders.QFileDialog.getSaveFileName",
+            lambda *a: (str(copy), ""),
+        )
+        window.dataWidget.save_as()
+        saved = read_measurement(copy)
+        assert saved.parameters == kept.parameters
+        assert saved.station == kept.station
+        assert saved.tables["iv"].data == kept.tables["iv"].data
+        dialog = DetailsDialog(session.measurements.kept(0))
+        shown = dialog.view.model()
+        assert shown.value_at(("parameters",)) == kept.parameters
+        voltages = shown.value_at(("tables", "iv", "data", "voltage"))
+        assert voltages == kept.tables["iv"].data["voltage"]
+        dialog.close()
+
     def test_data_dock_opens_plots_and_exports(
         self, window, session, wait, tmp_path, monkeypatch
     ):

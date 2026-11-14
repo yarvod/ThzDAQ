@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QInputDialog,
     QMessageBox,
-    QPlainTextEdit,
     QTableView,
     QToolButton,
     QVBoxLayout,
@@ -32,35 +31,26 @@ from thzdaq_api.sessions import ScriptSource
 
 from thzdaq_gui import theme
 from thzdaq_gui.folders import MEASUREMENTS
+from thzdaq_gui.json_view import JsonView
 
 SCRIPT_TITLE = "The script of a measurement"
 
 
 class DetailsDialog(QDialog):
+    """All a measurement's file keeps, as a tree that folds: its parameters,
+    devices, station, results, plots, metadata and every table's data."""
+
     def __init__(self, measurement, parent=None):
         super().__init__(parent)
         self.setWindowTitle(
             f"{measurement.title or measurement.procedure} {measurement.id}"
         )
-        self.resize(640, 560)
-        data = measurement.to_dict()
-        # The data itself is in the tables; show their sizes, not every value
-        data["tables"] = {
-            name: {
-                "title": t.title,
-                "rows": len(t),
-                "columns": [c.label for c in t.columns],
-            }
-            for name, t in measurement.tables.items()
-        }
-        text = QPlainTextEdit(
-            json.dumps(json.loads(dumps(data)), indent=2, ensure_ascii=False)
-        )
-        text.setReadOnly(True)
+        self.resize(760, 640)
+        self.view = JsonView(json.loads(dumps(measurement.to_dict())))
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
-        layout.addWidget(text)
+        layout.addWidget(self.view)
         layout.addWidget(buttons)
 
 
@@ -160,13 +150,14 @@ class DataWidget(QWidget):
             self.plot_requested.emit(measurement)
 
     def save_as(self) -> None:
-        for measurement in self.selected():
+        for row in self.selected_rows():
+            measurement = self.model.measurement(row)
             name = f"{measurement.id}_{measurement.procedure.replace('.', '_')}.json"
             path = self.session.folders.save_path(
                 self, MEASUREMENTS, "Save measurement", name, "JSON (*.json)"
             )
             if path:
-                self.model.save_copy(measurement, path)
+                self.model.save_copy(row, path)
 
     def export(self) -> None:
         for measurement in self.selected():
@@ -207,8 +198,8 @@ class DataWidget(QWidget):
             )
 
     def details(self) -> None:
-        for measurement in self.selected()[:1]:
-            DetailsDialog(measurement, self).exec()
+        for row in self.selected_rows()[:1]:
+            DetailsDialog(self.model.kept(row), self).exec()
 
     def open_folder(self) -> None:
         root = self.session.data_root

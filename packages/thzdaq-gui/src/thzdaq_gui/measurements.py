@@ -230,6 +230,24 @@ class MeasurementsModel(QAbstractTableModel):
         self.add(measurement)
         return measurement
 
-    def save_copy(self, measurement: Measurement, path) -> Path:
+    def kept(self, row: int) -> Measurement:
+        """As its file keeps it: its parameters, its devices with their
+        settings, the station, its results, its plots and every record. The
+        window's own copy holds only what the run's events told (its records
+        and how it ended); one without a file, or whose file is gone, is that
+        copy. A running one's file tells what it holds so far and that it is
+        not over: its status and comment are those the window follows."""
+        item = self.measurement(row)
+        path = item.metadata.get("path")
+        if not path:
+            return item
+        try:
+            found = read_measurement(path)
+        except ValueError:  # gone, or no longer a measurement
+            return item
+        found.status, found.comment = item.status, item.comment
+        return found
+
+    def save_copy(self, row: int, path) -> Path:
         """A copy where a person chose (the daemon keeps the original)."""
-        return write_measurement(measurement, path)
+        return write_measurement(self.kept(row), path)
