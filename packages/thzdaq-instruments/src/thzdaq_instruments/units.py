@@ -1,0 +1,121 @@
+"""Unit convention: SI inside the library (Hz, V, A, K, s, Pa), power in dBm, angles in degrees.
+
+Scale factors convert UI values at the boundary: ``5 * GHZ`` -> Hz, ``hz / GHZ`` -> GHz.
+"""
+
+import math
+import re
+from typing import Tuple
+
+GHZ = 1e9
+MHZ = 1e6
+KHZ = 1e3
+
+MV = 1e-3
+UV = 1e-6
+MA = 1e-3
+UA = 1e-6
+
+
+# SI prefixes the UI offers, one table for every field, form and plot label
+SI_PREFIXES = (
+    ("p", 1e-12, "×10⁻¹²"),
+    ("n", 1e-9, "×10⁻⁹"),
+    ("µ", 1e-6, "×10⁻⁶"),
+    ("m", 1e-3, "×10⁻³"),
+    ("", 1.0, "×10⁰"),
+    ("k", 1e3, "×10³"),
+    ("M", 1e6, "×10⁶"),
+    ("G", 1e9, "×10⁹"),
+)
+# Units that take a prefix; others (dBm, dB, deg) are shown as they are
+PREFIXED_UNITS = ("Hz", "V", "A", "W", "s", "Pa", "Ohm", "K")
+# Kelvin stops at milli: nobody wants kK or µK on a cryostat readout
+UNIT_PREFIXES = {"K": ("m", "")}
+
+
+def prefixes_for(unit: str):
+    """(prefix, factor, note) choices for a unit; empty when it takes none."""
+    if unit not in PREFIXED_UNITS:
+        return ()
+    allowed = UNIT_PREFIXES.get(unit)
+    return tuple(p for p in SI_PREFIXES if allowed is None or p[0] in allowed)
+
+
+def prefix_factor(prefix: str) -> float:
+    for name, factor, _ in SI_PREFIXES:
+        if name == prefix:
+            return factor
+    raise ValueError(f"Unknown SI prefix {prefix!r}")
+
+
+def unit_scale(unit: str) -> Tuple[str, float]:
+    """A unit as people type it, as the SI unit and the factor to it: "mV" ->
+    ("V", 1e-3), "GHz" -> ("Hz", 1e9); one without a prefix stays ("dBm", 1.0)."""
+    typed = unit.strip().replace("u", "µ")
+    for base in PREFIXED_UNITS:
+        prefix = typed[: -len(base)]
+        if typed.endswith(base) and any(p[0] == prefix for p in prefixes_for(base)):
+            return base, prefix_factor(prefix)
+    return unit.strip(), 1.0
+
+
+def parse_value(text: str, unit: str) -> float:
+    """A value typed with its unit, to SI: "2.3mV" or "2.3 mV" for V -> 0.0023.
+
+    A bare number is SI already; units without prefixes (dBm, dB, deg) take
+    the number as it is; "u" stands for "µ".
+    """
+    match = re.fullmatch(
+        r"\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(\S*)\s*", text
+    )
+    if match is None:
+        raise ValueError(f"{text!r} is not a number")
+    number, suffix = float(match.group(1)), match.group(2).replace("u", "µ")
+    if not suffix:
+        return number
+    if suffix == unit:
+        return number
+    prefix = suffix[: -len(unit)] if unit and suffix.endswith(unit) else None
+    if prefix is None or not any(p[0] == prefix for p in prefixes_for(unit)):
+        expected = (
+            f"{unit} with an SI prefix" if prefixes_for(unit) else unit or "no unit"
+        )
+        raise ValueError(f"{text!r}: expected {expected}")
+    return number * prefix_factor(prefix)
+
+
+def format_value(value: float, unit: str) -> str:
+    """An SI value as people read it, with the prefix that keeps it from 1 to
+    999: 0.0023 V -> "2.3 mV"; parse_value reads it back."""
+    choices = prefixes_for(unit)
+    if not choices or value == 0:
+        return f"{value:.6g} {unit}".strip()
+    prefix, factor, _ = next(
+        (choice for choice in reversed(choices) if abs(value) >= choice[1]),
+        choices[0],
+    )
+    return f"{value / factor:.6g} {prefix}{unit}"
+
+
+def dbm_to_watt(dbm: float) -> float:
+    return 1e-3 * 10 ** (dbm / 10)
+
+
+def watt_to_dbm(watt: float) -> float:
+    if watt <= 0:
+        raise ValueError("Power must be positive to convert to dBm")
+    return 10 * math.log10(watt / 1e-3)
+
+
+ZERO_CELSIUS = 273.15  # K
+PSI = 6894.757293168  # Pa
+HPA = 100.0  # Pa
+
+
+def celsius_to_kelvin(celsius: float) -> float:
+    return celsius + ZERO_CELSIUS
+
+
+def kelvin_to_celsius(kelvin: float) -> float:
+    return kelvin - ZERO_CELSIUS

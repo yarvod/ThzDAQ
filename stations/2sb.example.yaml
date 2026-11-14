@@ -1,0 +1,71 @@
+# 2SB mixer bench. Copy to stations/<name>.yaml and adjust addresses, or edit it in Setup.
+# Check without hardware:  uv run thzdaq-station check stations/2sb.example.yaml --simulate
+#
+# Instrument ids name the kind of device; vendor and model are in driver and title.
+# Devices under an instrument are its parts you configure: SIS bias and coil on a
+# SIS block. Generators and supply channels are used as they are; the IF switch
+# and the YIG power channel are chosen in the 2SB measurements.
+version: 2
+name: 2sb
+description: Sideband separating SIS mixer bench
+instruments:
+  sis_block_1:
+    driver: scontel.sis_block
+    title: Scontel SIS block
+    connection: {kind: socket, host: 169.254.190.83, port: 9876, read_delay: 0.05, read_termination: null}
+    devices:
+      sis_bias_1:
+        kind: sis_bias
+        channel: DEV4
+        title: SIS1
+        settings: {offset_voltage: 3.3e-05, offset_current: 0.0}
+      sis_coil_1: {kind: sis_coil, channel: DEV3, title: SIS1 coil}
+      sis_bias_2:
+        kind: sis_bias
+        channel: DEV2
+        title: SIS2
+        settings: {offset_voltage: 0.0002, offset_current: -5.0e-07}
+      sis_coil_2: {kind: sis_coil, channel: DEV1, title: SIS2 coil}
+  signal_generator_1:
+    driver: agilent.e8247c
+    title: LO generator
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 19}
+    # Set on the generator (:FREQ:MULT): frequencies are at the mixer, after x18
+    settings: {frequency_multiplier: 18}
+    sim_options: {max_frequency: 50.0e9}
+  signal_generator_2:
+    driver: agilent.e8247c
+    title: Test tone generator
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 18}
+    # The generator multiplies internally (OEM head), so it takes mixer frequencies
+    sim_options: {max_frequency: 500.0e9}
+  power_supply_1:
+    driver: rigol.dp832a
+    title: IF switch supply
+    connection: {kind: socket, host: 169.254.0.14, port: 5555}
+  power_supply_2:
+    driver: rs.hmp2030
+    title: YIG supply
+    connection: {kind: socket, host: 169.254.0.30, port: 5025}
+  power_meter_1:
+    driver: rs.nrx
+    title: R&S NRX
+    connection: {kind: socket, host: 169.254.2.20, port: 5025}
+    options: {aperture_time: 0.05, averaging: false}
+  yig_filter_1:
+    driver: ni.yig
+    title: NI YIG
+    connection: {kind: http, host: 169.254.0.86, timeout: 5.0}
+  chopper_1:
+    driver: chopper.modbus
+    title: Chopper
+    connection: {kind: modbus_tcp, host: 169.254.54.24, port: 1111}
+  spectrum_analyzer_1:
+    driver: rs.fsek30
+    title: R&S FSEK 30
+    connection: {kind: prologix, host: 169.254.156.103, gpib: 20, read_delay: 0.01}
+  grid_1:
+    driver: arduino.grid
+    title: Wire grid
+    # No position readback: the program counts the angle and keeps it (state.json)
+    connection: {kind: http, host: 169.254.0.52, port: 80, timeout: 30.0}

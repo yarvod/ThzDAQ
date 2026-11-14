@@ -1,0 +1,43 @@
+[project]
+name = "thzdaq-daemon"
+version = "0.0.6b3"
+description = "ThzDAQ bench daemon: holds the instruments and serves the thzdaq-api contract"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "yarvod" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "psutil>=5.9",
+    "thzdaq-api==0.0.6b3",
+    "thzdaq-core==0.0.6b3",
+]
+
+[project.urls]
+Homepage = "https://github.com/yarvod/ThzDAQ"
+Documentation = "https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md"
+Issues = "https://github.com/yarvod/ThzDAQ/issues"
+Releases = "https://github.com/yarvod/ThzDAQ/releases"
+
+[project.scripts]
+thzdaq-daemon = "thzdaq_daemon.__main__:main"
+
+[tool.uv.sources]
+thzdaq-api = { workspace = true }
+thzdaq-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq_daemon"]

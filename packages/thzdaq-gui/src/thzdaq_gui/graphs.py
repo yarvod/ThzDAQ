@@ -1,0 +1,944 @@
+"""Graph docks: one per kind of curve (I-V, P-V, P-IF, ...), as in the old app.
+
+Measurements send their records to the graphs named by their PlotSpecs; every
+run adds its own curves ("#12 SIS b1d4 hot"). Any table column of any
+measurement in the Data dock can be added by hand as well (Add curve), with
+titles and units taken from the measurement's column descriptions.
+"""
+
+import bisect
+import html
+import math
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+
+import msgspec
+import numpy as np
+import pyqtgraph as pg
+from pyqtgraph.graphicsItems.GraphicsWidgetAnchor import GraphicsWidgetAnchor
+from PySide6 import QtGui
+from PySide6.QtCore import QEvent, QObject, QTimer, Signal
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QMessageBox,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
+from thzdaq_api.measurement_file import Column, Measurement
+from thzdaq_api.measurements import (
+    CAPTION_GAP,
+    PlotInfo,
+    ProcedureSummary,
+    unit_of,
+)
+from thzdaq_api.procedures import plot_for
+
+from thzdaq_gui import theme
+
+# Live curves are drawn at most this often, however fast records come: a
+# redraw per record (50 a second in a simulated P-V) kept the GUI thread
+# painting, and zoom or pan waited
+REDRAW_MS = 50
+# An antialiased pen wider than 1 px costs ~70 times more per paint
+CURVE_PEN_WIDTH = 1
+
+# Units shown with an SI prefix chosen by pyqtgraph (mV, uA, GHz)
+SI_UNITS = {"V", "A", "Hz", "s", "W", "Pa", "Ohm"}
+
+
+@dataclass
+class Axis:
+    label: str = ""
+    unit: str = ""  # SI unit when the axis auto-scales, else ""
+    scale: float = 1.0  # stored value / scale = shown value
+
+    @classmethod
+    def from_column(cls, column: Optional[Column]) -> "Axis":
+        if column is None:
+            return cls()
+        title = column.title or column.key
+        if column.unit in SI_UNITS:
+            return cls(title, column.unit)
+        return cls(column.label)
+
+
+def same_units(found: Tuple[str, str], other: Tuple[str, str]) -> bool:
+    """Axes of the same units; an axis without one goes with any."""
+    return all(a == b or not a or not b for a, b in zip(found, other))
+
+
+def _names_devices(measurement: Measurement) -> bool:
+    samples = measurement.tables.get("samples")
+    return samples is not None and samples.get_column("device") is not None
+
+
+def curve_name(measurement: Measurement, group: Tuple) -> str:
+    head = f"#{measurement.id}" if measurement.id else ""
+    devices = [use.title for use in measurement.devices.values() if use.title]
+    rest = " ".join(str(v) for v in group if v not in (None, ""))
+    if len(devices) == 1:
+        who = devices[0]
+    elif rest and _names_devices(measurement):
+        who = ""  # the group names the device (a monitor of several)
+    else:
+        who = measurement.title or measurement.procedure
+    return " ".join(part for part in (head.strip(), who, rest) if part)
+
+
+def plot_title(text: str) -> str:
+    """A graph's name as its plot shows it: the plot's title is HTML, where
+    the gap after the symbols of a caption would shrink to one space."""
+    return html.escape(text).replace(CAPTION_GAP, "&nbsp;" * len(CAPTION_GAP))
+
+
+def axis_text(axis: pg.AxisItem, value: float) -> str:
+    """A coordinate as its axis shows it: in the axis's SI prefix (mV of a
+    V axis), or in the unit its label names ("Voltage, mV")."""
+    unit = f"{axis.labelUnitPrefix}{axis.labelUnits}" or unit_of(axis.labelText)
+    return f"{value * axis.autoSIPrefixScale:.6g} {unit}".rstrip()
+
+
+class CursorTag(QObject):
+    """x, y (and z of a map) next to the mouse over a plot, in the units of
+    its axes; gone once the mouse leaves the plot's area."""
+
+    def __init__(
+        self,
+        view: pg.GraphicsView,
+        plot: pg.PlotItem,
+        z: Optional[Callable[[float, float], Optional[str]]] = None,
+    ):
+        """z(x, y): the text of the value there; None: nothing there."""
+        super().__init__(view)
+        self.plot = plot
+        self.z = z
+        self.label = pg.TextItem(
+            color=theme.TEXT, fill=pg.mkBrush(theme.PANEL), border=theme.BORDER
+        )
+        self.label.setZValue(1000)
+        self.label.hide()
+        plot.getViewBox().addItem(self.label, ignoreBounds=True)
+        view.scene().sigMouseMoved.connect(self.moved)
+        # Leaving the view moves nothing in its scene
+        view.viewport().installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Leave:
+            self.label.hide()
+        return False
+
+    def text(self) -> str:
+        return self.label.textItem.toPlainText() if self.label.isVisible() else ""
+
+    def moved(self, position) -> None:
+        box = self.plot.getViewBox()
+        area = box.sceneBoundingRect()
+        if not area.contains(position):
+            self.label.hide()
+            return
+        point = box.mapSceneToView(position)
+        lines = [
+            f"x = {axis_text(self.plot.getAxis('bottom'), point.x())}",
+            f"y = {axis_text(self.plot.getAxis('left'), point.y())}",
+        ]
+        z = self.z(point.x(), point.y()) if self.z is not None else None
+        if z is not None:
+            lines.append(f"z = {z}")
+        self.label.setText("\n".join(lines))
+        # Up and right of the mouse, turned inwards near the right and top edges
+        right = (position.x() - area.left()) > 0.7 * area.width()
+        top = (position.y() - area.top()) < 0.3 * area.height()
+        self.label.setAnchor((1 if right else 0, 0 if top else 1))
+        self.label.setPos(point)
+        self.label.show()
+
+
+class GraphWidget(QWidget):
+    """A line graph with curves from any measurements.
+
+    key names its dock and stays when a graph made with New graph… (custom)
+    is renamed; graphs of the procedures are keyed by their title, and show
+    their caption (PlotInfo.caption) where people read the name.
+    """
+
+    icon = "chart-line"  # of its dock
+    curves_changed = Signal()
+    add_curve_clicked = Signal(object)  # this graph
+    edit_clicked = Signal(object)
+    delete_clicked = Signal(object)
+
+    def __init__(
+        self,
+        title: str,
+        x: Axis,
+        y: Axis,
+        analysis=None,
+        key: Optional[str] = None,
+        custom: bool = False,
+        call: Optional[Callable[[Any], Any]] = None,
+        caption: str = "",
+        parent=None,
+    ):
+        """call: how the graph asks the lab (an analysis it offers)."""
+        super().__init__(parent)
+        self.title = title
+        self.caption = caption
+        self.key = key or title
+        self.custom = custom
+        self.x, self.y = x, y
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        bar = QHBoxLayout()
+        self.btnAdd = self._tool(
+            "plus", "Add a curve from a measurement", self.add_dialog
+        )
+        self.btnHidden = self._tool(
+            "eye-off-outline", "Remove hidden curves", self.remove_hidden
+        )
+        self.btnClear = self._tool(
+            "delete-sweep-outline", "Remove all curves", self.clear
+        )
+        self.btnRange = self._tool(
+            "fit-to-screen-outline", "Auto range", self.auto_range
+        )
+        for button in (self.btnAdd, self.btnHidden, self.btnClear, self.btnRange):
+            bar.addWidget(button)
+        bar.addStretch()
+        if custom:
+            self.btnEdit = self._tool(
+                "pencil-outline", "Rename the graph, axis labels",
+                lambda: self.edit_clicked.emit(self),
+            )  # fmt: skip
+            self.btnDelete = self._tool(
+                "delete-outline", "Delete the graph",
+                lambda: self.delete_clicked.emit(self),
+            )  # fmt: skip
+            bar.addWidget(self.btnEdit)
+            bar.addWidget(self.btnDelete)
+        layout.addLayout(bar)
+        self.plot = pg.PlotWidget()
+        item = self.plot.getPlotItem()
+        item.setTitle(plot_title(self.shown_title()), color=theme.ACCENT, size="11pt")
+        item.showGrid(x=True, y=True, alpha=0.25)
+        self._label("bottom", x)
+        self._label("left", y)
+        self.legend = item.addLegend(offset=(-10, 10), labelTextColor=theme.TEXT)
+        self.cursor = CursorTag(self.plot, item)
+        layout.addWidget(self.plot, 1)
+        # Curve key -> points in display units, and the plotted item
+        self.points: Dict[object, List[Tuple[float, float]]] = {}
+        self.items: Dict[object, pg.PlotDataItem] = {}
+        self.names: Dict[object, str] = {}
+        self.dirty = set()  # curves with points not drawn yet
+        self.draw_timer = QTimer(self)
+        self.draw_timer.setSingleShot(True)
+        self.draw_timer.setInterval(REDRAW_MS)
+        self.draw_timer.timeout.connect(self.flush)
+        self.analysis = None
+        if analysis == "iv":
+            from thzdaq_gui.iv_analysis import IVAnalysisBar
+
+            self.analysis = IVAnalysisBar(self, call)
+            layout.addWidget(self.analysis)
+
+    @classmethod
+    def of_plot(cls, spec: PlotInfo, call: Callable[[Any], Any]) -> "GraphWidget":
+        return cls(
+            spec.title,
+            Axis(spec.x_label, scale=spec.x_scale),
+            Axis(spec.y_label, scale=spec.y_scale),
+            analysis=spec.analysis,
+            call=call,
+            caption=spec.caption,
+        )
+
+    def shown_title(self) -> str:
+        """Its name as people read it."""
+        return self.caption or self.title
+
+    def _tool(self, icon_name: str, tip: str, slot) -> QToolButton:
+        button = QToolButton()
+        button.setIcon(theme.icon(icon_name))
+        button.setToolTip(tip)
+        button.clicked.connect(slot)
+        return button
+
+    def set_title(self, title: str) -> None:
+        self.title = title
+        self.plot.getPlotItem().setTitle(
+            plot_title(self.shown_title()), color=theme.ACCENT, size="11pt"
+        )
+
+    def set_axes(self, x: Axis, y: Axis) -> None:
+        self.x = Axis(x.label, x.unit, self.x.scale)
+        self.y = Axis(y.label, y.unit, self.y.scale)
+        self._label("bottom", self.x)
+        self._label("left", self.y)
+
+    def _label(self, side: str, axis: Axis) -> None:
+        if axis.unit:
+            self.plot.setLabel(side, axis.label, units=axis.unit)
+        else:
+            self.plot.setLabel(side, axis.label)
+
+    def free_color(self) -> str:
+        """The colour of a new curve: the first of the palette no curve here
+        has. Curves keep theirs, so a removed curve frees its colour for the
+        next one; by the count of curves a new one repeated a colour."""
+        used = [item.opts["pen"].color().name().lower() for item in self.items.values()]
+        free = [c for c in theme.COLORS if c.lower() not in used]
+        return free[0] if free else theme.COLORS[len(self.items) % len(theme.COLORS)]
+
+    def curve_label(self, key) -> str:
+        return self.names.get(key, "curve")
+
+    def append(
+        self, key, name: str, x: float, y: float, window: Optional[float] = None
+    ) -> bool:
+        """Add a point (stored units) to curve `key`, creating it if new.
+
+        window keeps only the points within that span of x before the newest
+        one (a long monitor); the measurement itself keeps everything.
+        """
+        if x is None or y is None:
+            return False
+        try:
+            point = (float(x) / self.x.scale, float(y) / self.y.scale)
+        except (TypeError, ValueError):
+            return False
+        if not all(math.isfinite(v) for v in point):
+            return False
+        points = self.points.setdefault(key, [])
+        points.append(point)
+        if window:
+            start = bisect.bisect_left(
+                points, point[0] - window / self.x.scale, key=lambda p: p[0]
+            )
+            del points[:start]
+        item = self.items.get(key)
+        if item is None:
+            color = self.free_color()
+            item = self.plot.plot(
+                [], [], pen=pg.mkPen(color, width=CURVE_PEN_WIDTH), symbol="o", symbolSize=5,
+                symbolBrush=color, symbolPen=None, name=name,
+            )  # fmt: skip
+            self.items[key] = item
+            self.names[key] = name
+            self.curves_changed.emit()
+        self.dirty.add(key)
+        if not self.draw_timer.isActive():
+            self.draw_timer.start()
+        return True
+
+    def flush(self) -> None:
+        """Draw the points the curves got since the last drawing."""
+        self.draw_timer.stop()
+        for key in self.dirty:
+            item, points = self.items.get(key), self.points.get(key)
+            if item is not None and points:
+                xs, ys = zip(*points)
+                item.setData(np.asarray(xs), np.asarray(ys))
+        self.dirty.clear()
+
+    def add_columns(
+        self,
+        measurement: Measurement,
+        table: str,
+        x: str,
+        y: str,
+        group_by=(),
+        where=(),
+    ) -> int:
+        """Whole columns of a measurement table; returns the number of curves.
+
+        A curve of this measurement already drawn (its live run, an earlier
+        Plot) is drawn again from the start, not continued: appending the
+        sweep once more joined its end back to its start.
+        """
+        data = measurement.tables.get(table)
+        if data is None:
+            return 0
+        keys = set()
+        for row in data.rows():
+            if any(row.get(k) != v for k, v in where):
+                continue
+            group = tuple(row.get(g) for g in group_by)
+            key = (measurement.id, table, x, y, group)
+            if key not in keys:
+                keys.add(key)
+                self.points.pop(key, None)
+            self.append(key, curve_name(measurement, group), row.get(x), row.get(y))
+        self.flush()  # a whole measurement: drawn at once
+        return len(keys)
+
+    def remove(self, key) -> None:
+        item = self.items.pop(key, None)
+        if item is not None:
+            self.plot.removeItem(item)
+        self.points.pop(key, None)
+        self.names.pop(key, None)
+        self.dirty.discard(key)
+        self.curves_changed.emit()
+
+    def remove_hidden(self) -> None:
+        for key, item in list(self.items.items()):
+            if not item.isVisible():
+                self.remove(key)
+
+    def clear(self) -> None:
+        for key in list(self.items):
+            self.remove(key)
+        if self.analysis is not None:
+            self.analysis.clear()
+
+    def auto_range(self) -> None:
+        self.plot.enableAutoRange()
+
+    def add_dialog(self) -> None:
+        self.add_curve_clicked.emit(self)
+
+
+def nearest(cells: List[float], value: float) -> Optional[int]:
+    """The index of the cell (centred on its value, a step wide) holding
+    value; None outside them all."""
+    step = cells[1] - cells[0] if len(cells) > 1 else 1.0
+    index = min(range(len(cells)), key=lambda i: abs(cells[i] - value))
+    return index if abs(cells[index] - value) <= step / 2 else None
+
+
+class MapGraphWidget(QWidget):
+    """z over an x/y grid (2SB bias optimization)."""
+
+    icon = "grid"
+
+    @classmethod
+    def of_plot(cls, spec: PlotInfo, call=None) -> "MapGraphWidget":
+        return cls(spec)
+
+    def __init__(self, spec: PlotInfo, parent=None):
+        super().__init__(parent)
+        self.title = spec.title
+        self.spec = spec
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        self.view = pg.GraphicsLayoutWidget()
+        plot = self.view.addPlot(title=plot_title(spec.shown_title()))
+        plot.setLabel("bottom", spec.x_label)
+        plot.setLabel("left", spec.y_label)
+        self.image = pg.ImageItem()
+        plot.addItem(self.image)
+        self.histogram = pg.HistogramLUTItem()
+        self.histogram.gradient.loadPreset("turbo")
+        self.histogram.setImageItem(self.image)
+        self.view.addItem(self.histogram)
+        layout.addWidget(self.view)
+        self.values: Dict[Tuple[float, float], float] = {}
+        self.cursor = CursorTag(self.view, plot, self.z_text)
+
+    def shown_title(self) -> str:
+        return self.spec.shown_title()
+
+    def z_text(self, x: float, y: float) -> Optional[str]:
+        """z of the cell under a point, with its unit; None off the cells."""
+        if not self.values:
+            return None
+        xs, ys, data = self.grid()
+        i, j = nearest(xs, x), nearest(ys, y)
+        if i is None or j is None or not math.isfinite(data[i, j]):
+            return None
+        return f"{data[i, j]:.6g} {self.spec.z_label}".rstrip()
+
+    def clear(self) -> None:
+        self.values.clear()
+        self.image.clear()
+
+    def add_record(self, record) -> None:
+        point = self.spec.point(record)
+        if point is None:
+            return
+        x, y, z = point
+        self.values[x, y] = z
+        self.redraw()
+
+    def grid(self):
+        xs = sorted({x for x, _ in self.values})
+        ys = sorted({y for _, y in self.values})
+        data = np.full((len(xs), len(ys)), np.nan)
+        for (x, y), z in self.values.items():
+            data[xs.index(x), ys.index(y)] = z
+        return xs, ys, data
+
+    def redraw(self) -> None:
+        xs, ys, data = self.grid()
+        finite = data[np.isfinite(data)]
+        if not finite.size:
+            return
+        low, high = float(finite.min()), float(finite.max())
+        if low == high:
+            low, high = low - 0.5, high + 0.5
+        self.image.setImage(data, levels=(low, high), autoLevels=False)
+        step_x = xs[1] - xs[0] if len(xs) > 1 else 1.0
+        step_y = ys[1] - ys[0] if len(ys) > 1 else 1.0
+        transform = QtGui.QTransform()
+        transform.translate(xs[0] - step_x / 2, ys[0] - step_y / 2)
+        transform.scale(step_x, step_y)
+        self.image.setTransform(transform)
+
+
+def release_anchors(scene) -> None:
+    """Disconnect anchored items (a legend with an offset) from their parent.
+
+    An anchored legend gets its parent's geometryChanged connected to one of
+    its own methods. When the plot is deleted with that connection alive, the
+    garbage collector later frees the legend's wrapper and corrupts memory in
+    PySide 6.8 (a crash at a random later allocation, like PYSIDE-1919).
+    The attributes are private to pyqtgraph's GraphicsWidgetAnchor (0.13.7).
+    """
+    if scene is None:
+        return
+    for item in scene.items():
+        if not isinstance(item, GraphicsWidgetAnchor):
+            continue
+        parent = getattr(item, "_GraphicsWidgetAnchor__parent", None)
+        slot = getattr(item, "_GraphicsWidgetAnchor__geometryChanged", None)
+        if parent is None or slot is None:
+            continue
+        try:
+            parent.geometryChanged.disconnect(slot)
+        except (RuntimeError, TypeError):
+            pass
+        item._GraphicsWidgetAnchor__parent = None
+
+
+def close_views(widget: QWidget) -> None:
+    """Close the pyqtgraph views inside a widget before it is deleted."""
+    for view in widget.findChildren(pg.GraphicsView):
+        if not getattr(view, "closed", False):
+            release_anchors(view.scene())
+            view.close()
+
+
+def close_plots() -> None:
+    """Close every pyqtgraph view before the application quits.
+
+    pyqtgraph disconnects all known views on quit; views deleted with their
+    docks before that make it warn "Failed to disconnect ... destroyed()".
+    """
+    from pyqtgraph.Qt import isQObjectAlive
+
+    for view in list(pg.ViewBox.AllViews):
+        if isQObjectAlive(view):
+            release_anchors(view.scene())
+            view.close()
+    pg.ViewBox.AllViews.clear()
+    pg.ViewBox.NamedViews.clear()
+
+
+def graph_type(spec: Optional[PlotInfo]) -> type:
+    """What draws a plot: z over x and y, else curves (also of no plot)."""
+    return MapGraphWidget if spec is not None and spec.kind == "map" else GraphWidget
+
+
+def graph_for_spec(spec: PlotInfo, call: Callable[[Any], Any]):
+    return graph_type(spec).of_plot(spec, call)
+
+
+class GraphHub(QObject):
+    """Owns the graph widgets by title and routes records to them.
+
+    The main window puts each graph into a dock; graph_created lets it add
+    docks for graphs made later (New graph).
+    """
+
+    graph_created = Signal(object)  # GraphWidget or MapGraphWidget
+    raise_requested = Signal(object)  # show this graph's dock in front
+    show_requested = Signal(object)  # open this graph's dock if closed
+    run_requested = Signal(list)  # graphs of a run starting: all on screen
+    graph_renamed = Signal(object)  # a custom graph, its new title
+    graph_removed = Signal(object)  # a custom graph to delete
+    custom_changed = Signal()  # the custom graphs to remember
+    titles_added = Signal(list)  # graphs of procedures new to the catalog
+
+    def __init__(
+        self,
+        procedures: Iterable[ProcedureSummary],
+        call: Callable[[Any], Any],
+        parent=None,
+    ):
+        """procedures: the catalog (list_procedures): their plots are the graphs;
+        call: the lab's, for what graphs ask (an analysis)."""
+        super().__init__(parent)
+        self.call = call
+        self.graphs: Dict[str, QWidget] = {}
+        self.specs: Dict[str, PlotInfo] = {}
+        self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
+        self.plots: Dict[str, Tuple[PlotInfo, ...]] = {}
+        self._map_runs = {}  # title -> measurement id shown in this map
+        self.set_procedures(procedures)
+
+    def set_procedures(self, procedures: Iterable[ProcedureSummary]) -> None:
+        """The catalog as it is now (the bench's own measurements come and
+        go): graphs of plots new to it are told."""
+        before = set(self.titles())
+        self.plots = {procedure.name: procedure.plots for procedure in procedures}
+        for plots in self.plots.values():
+            for spec in plots:
+                self.specs.setdefault(spec.title, spec)
+        added = [title for title in self.titles() if title not in before]
+        if added:
+            self.titles_added.emit(added)
+
+    def units_of(self, title: str) -> Optional[Tuple[str, str]]:
+        """The units of the axes of a graph of the window, by its title;
+        None: no such graph."""
+        spec = self.specs.get(title)
+        if spec is not None:
+            return spec.units()
+        widget = self.graphs.get(title)
+        if isinstance(widget, GraphWidget):
+            return tuple(a.unit or unit_of(a.label) for a in (widget.x, widget.y))
+        return None
+
+    def route(
+        self, specs: Iterable[PlotInfo], told: Callable[[str], None]
+    ) -> Tuple[PlotInfo, ...]:
+        """Plots as they are drawn here: one into a graph of the window
+        (into) goes there when the window has it with the same units, else
+        into a graph of its own, and told(why)."""
+        routed = []
+        for spec in specs:
+            target = None if spec.into is None else self.units_of(spec.into)
+            if spec.into is None or spec.into == spec.title:
+                routed.append(spec)
+            elif target is None:
+                told(f"{spec.title}: no graph {spec.into!r} here, drawn in its own")
+                routed.append(spec)
+            elif not same_units(spec.units(), target):
+                told(
+                    f"{spec.title}: its units {spec.units()} are not those of"
+                    f" {spec.into!r} {target}, drawn in a graph of its own"
+                )
+                routed.append(spec)
+            else:
+                # Drawn into another graph: that graph's caption is shown
+                routed.append(
+                    msgspec.structs.replace(spec, title=spec.into, caption="")
+                )
+        return tuple(routed)
+
+    def plots_of(self, procedure: str) -> Tuple[PlotInfo, ...]:
+        """The plots of a procedure; none for one this bench does not know."""
+        return self.plots.get(procedure, ())
+
+    def register_plots(self, specs) -> None:
+        """A run may declare plots not present in the procedure catalog."""
+        for spec in specs:
+            self.specs.setdefault(spec.title, spec)
+
+    def clear_measurement(self, measurement: Measurement) -> None:
+        """Replace a run from a snapshot without appending its points twice."""
+        for widget in self.graphs.values():
+            if isinstance(widget, MapGraphWidget):
+                if self._map_runs.get(widget.title) == measurement.id:
+                    widget.clear()
+            else:
+                for key in list(widget.points):
+                    if key[0] == measurement.id:
+                        widget.remove(key)
+
+    def titles(self) -> List[str]:
+        return list(self.specs) + [t for t in self.graphs if t not in self.specs]
+
+    def graph(self, title: str) -> QWidget:
+        if title not in self.graphs:
+            spec = self.specs.get(title)
+            if spec is not None:
+                widget = graph_for_spec(spec, self.call)
+            else:
+                widget = GraphWidget(title, Axis(), Axis())
+            self._add(widget)
+        return self.graphs[title]
+
+    def shown_title(self, title: str) -> str:
+        """The name people read of a graph, built or not (its caption)."""
+        spec = self.specs.get(title)
+        if spec is not None:
+            return spec.shown_title()
+        widget = self.graphs.get(title)
+        return widget.shown_title() if widget is not None else title
+
+    def type_of(self, title: str) -> type:
+        """What draws a graph, built or not (the icon of its dock)."""
+        return graph_type(self.specs.get(title))
+
+    def _add(self, widget) -> None:
+        if isinstance(widget, GraphWidget):
+            widget.add_curve_clicked.connect(self._add_curve)
+        self.graphs[widget.title] = widget
+        self.graph_created.emit(widget)
+
+    def _add_curve(self, widget) -> None:
+        if self.add_curve_request is not None:
+            self.add_curve_request(widget)
+
+    def close(self) -> None:
+        """Delete graphs not owned by docks (tests, a hub without a window)."""
+        for widget in self.graphs.values():
+            if widget.parent() is None:
+                close_views(widget)
+                widget.deleteLater()
+        self.graphs.clear()
+
+    def raise_graph(self, title: str) -> None:
+        self.raise_requested.emit(self.graph(title))
+
+    def show_graph(self, title: str) -> None:
+        """On screen, without taking the front from another graph."""
+        self.show_requested.emit(self.graph(title))
+
+    def show_run(self, titles: List[str]) -> None:
+        """Graphs a run fills, each in front of its own tab group."""
+        self.run_requested.emit([self.graph(title) for title in titles])
+
+    def _check_free(self, title: str) -> str:
+        title = title.strip()
+        if not title:
+            raise ValueError("The graph needs a title")
+        if title in self.graphs or title in self.specs:
+            raise ValueError(f"Graph {title!r} exists")
+        return title
+
+    def new_graph(
+        self, title: str, key: Optional[str] = None, x: str = "", y: str = ""
+    ) -> GraphWidget:
+        """A graph of the user's own (New graph…), renamed and deleted at will."""
+        title = self._check_free(title)
+        if key is None:
+            used = {getattr(w, "key", "") for w in self.graphs.values()}
+            key = next(
+                f"custom{n}" for n in range(1, 10000) if f"custom{n}" not in used
+            )
+        widget = GraphWidget(title, Axis(x), Axis(y), key=key, custom=True)
+        widget.edit_clicked.connect(self._edit)
+        widget.delete_clicked.connect(self.graph_removed)
+        self._add(widget)
+        self.custom_changed.emit()
+        return widget
+
+    def custom_graphs(self) -> List[dict]:
+        return [
+            {"key": w.key, "title": w.title, "x": w.x.label, "y": w.y.label}
+            for w in self.graphs.values()
+            if getattr(w, "custom", False)
+        ]
+
+    def rename(self, widget: GraphWidget, title: str) -> None:
+        if title.strip() != widget.title:
+            title = self._check_free(title)
+            del self.graphs[widget.title]
+            widget.set_title(title)
+            self.graphs[title] = widget
+            self.graph_renamed.emit(widget)
+        self.custom_changed.emit()
+
+    def remove(self, widget: GraphWidget) -> None:
+        """Forget a custom graph; the window deletes its dock."""
+        if self.graphs.get(widget.title) is widget and widget.custom:
+            del self.graphs[widget.title]
+            self.custom_changed.emit()
+
+    def _edit(self, widget: GraphWidget) -> None:
+        dialog = GraphDialog(widget)
+        while dialog.exec() == QDialog.Accepted:
+            try:
+                self.rename(widget, dialog.title.text())
+            except ValueError as e:
+                QMessageBox.warning(dialog, "Graph", str(e))
+                continue
+            widget.set_axes(
+                Axis(dialog.x.text().strip()), Axis(dialog.y.text().strip())
+            )
+            self.custom_changed.emit()
+            return
+
+    def feed(
+        self,
+        measurement: Measurement,
+        specs,
+        table: str,
+        record,
+        window: Optional[float] = None,
+    ) -> List[str]:
+        """A live record of a running measurement; returns the graphs it reached."""
+        reached = []
+        for spec in specs:
+            if spec.table != table or not spec.accepts(record):
+                continue
+            widget = self.graph(spec.title)
+            if isinstance(widget, MapGraphWidget):
+                self._map_runs[spec.title] = measurement.id
+                widget.add_record(record)
+                reached.append(spec.title)
+                continue
+            group = spec.group_key(record)
+            key = (measurement.id, spec.table, spec.x, spec.y, group)
+            if widget.append(
+                key, curve_name(measurement, group), record.get(spec.x),
+                record.get(spec.y), window,
+            ):  # fmt: skip
+                reached.append(spec.title)
+        return reached
+
+    def show_measurement(self, measurement: Measurement, specs) -> List[str]:
+        """Plot a whole (saved) measurement in its graphs; returns their titles."""
+        shown = []
+        for spec in specs:
+            if spec.table not in measurement.tables:
+                continue
+            widget = self.graph(spec.title)
+            if isinstance(widget, MapGraphWidget):
+                self._map_runs[spec.title] = measurement.id
+                widget.clear()
+                for record in measurement.records(spec.table):
+                    widget.add_record(record)
+            else:
+                widget.add_columns(
+                    measurement, spec.table, spec.x, spec.y, spec.group_by,
+                    spec.where,
+                )  # fmt: skip
+            shown.append(spec.title)
+        return shown
+
+    def show_monitor(self, quantities) -> List[str]:
+        """The time graphs of quantities a device dock plots, on screen as a
+        run's are: each in front of its own group (I-t and V-t of a SIS
+        bias side by side)."""
+        titles = list(dict.fromkeys(plot_for(quantity) for quantity in quantities))
+        self.show_run(titles)
+        return titles
+
+    def monitor_value(
+        self,
+        device: str,
+        title: str,
+        quantity,
+        t: float,
+        value,
+        window: Optional[float] = None,
+    ) -> Optional[str]:
+        """A value read in a device dock; returns its graph if it was plotted."""
+        graph_title = plot_for(quantity)
+        widget = self.graph(graph_title)
+        name = f"{title} {quantity.title}"
+        if widget.append(("monitor", device, quantity.key), name, t, value, window):
+            return graph_title
+        return None
+
+
+class GraphDialog(QDialog):
+    """Title and axis labels of a custom graph."""
+
+    def __init__(self, graph: GraphWidget, parent=None):
+        super().__init__(parent or graph)
+        self.setWindowTitle(f"Graph {graph.title}")
+        form = QFormLayout()
+        self.title = QLineEdit(graph.title)
+        self.x = QLineEdit(graph.x.label)
+        self.y = QLineEdit(graph.y.label)
+        self.x.setPlaceholderText("from the first curve")
+        self.y.setPlaceholderText("from the first curve")
+        form.addRow("Title", self.title)
+        form.addRow("X axis", self.x)
+        form.addRow("Y axis", self.y)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+
+
+class AddCurveDialog(QDialog):
+    """Pick a measurement, its table and the columns for x and y."""
+
+    def __init__(
+        self, measurements: List[Measurement], graph: GraphWidget, parent=None
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(f"Add curve to {graph.title}")
+        self.measurements = [m for m in measurements if m.tables]
+        self.graph = graph
+        form = QFormLayout()
+        self.measurement = QComboBox()
+        for m in self.measurements:
+            self.measurement.addItem(
+                f"{m.id}  {m.title or m.procedure}  {m.comment}", m
+            )
+        self.table = QComboBox()
+        self.x = QComboBox()
+        self.y = QComboBox()
+        self.group = QComboBox()
+        form.addRow("Measurement", self.measurement)
+        form.addRow("Table", self.table)
+        form.addRow("X", self.x)
+        form.addRow("Y", self.y)
+        form.addRow("Separate curves by", self.group)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept_choice)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        self.measurement.currentIndexChanged.connect(self.fill_tables)
+        self.table.currentIndexChanged.connect(self.fill_columns)
+        self.fill_tables()
+
+    def current(self) -> Optional[Measurement]:
+        return self.measurement.currentData()
+
+    def fill_tables(self) -> None:
+        self.table.clear()
+        m = self.current()
+        if m is None:
+            return
+        for name, table in m.tables.items():
+            self.table.addItem(f"{table.title or name} ({len(table)} rows)", name)
+
+    def fill_columns(self) -> None:
+        m, name = self.current(), self.table.currentData()
+        for combo in (self.x, self.y, self.group):
+            combo.clear()
+        self.group.addItem("—", None)
+        if m is None or name is None:
+            return
+        for column in m.tables[name].columns:
+            for combo in (self.x, self.y, self.group):
+                combo.addItem(column.label, column.key)
+        if self.y.count() > 1:
+            self.y.setCurrentIndex(1)
+
+    def accept_choice(self) -> None:
+        m, name = self.current(), self.table.currentData()
+        if m is None or name is None:
+            self.reject()
+            return
+        x, y, group = (
+            self.x.currentData(),
+            self.y.currentData(),
+            self.group.currentData(),
+        )
+        table = m.tables[name]
+        if not self.graph.items and not self.graph.x.label:
+            self.graph.x = Axis.from_column(table.get_column(x))
+            self.graph.y = Axis.from_column(table.get_column(y))
+            self.graph._label("bottom", self.graph.x)
+            self.graph._label("left", self.graph.y)
+        if not self.graph.add_columns(m, name, x, y, (group,) if group else ()):
+            QMessageBox.information(self, "Add curve", "No points to plot")
+        self.accept()

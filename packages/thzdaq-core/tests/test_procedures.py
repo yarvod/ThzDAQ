@@ -1,0 +1,473 @@
+import time
+import math
+
+import pytest
+from thzdaq_analysis.noise import noise_temperature
+from thzdaq_analysis.two_sb import sideband_rejection
+from thzdaq_api.measurement_file import COMPLETED, DeviceUse
+from thzdaq_core.domain.errors import ProcedureError
+from thzdaq_core.application.runner import MeasurementRunner
+from thzdaq_core.domain.measurements.catalog import get_procedure
+from thzdaq_core.domain.measurements.procedures import (
+    GridCurrentAngle,
+    IFNoise,
+    IfBalance,
+    PowerIF,
+    PumpBalance,
+    PVCurve,
+    ShotNoise,
+    SidebandRatio,
+    SisReflection,
+    TwoSbNoise,
+    TnVoltage,
+    TwoSbOptimization,
+)
+from thzdaq_instruments.sim import (
+    SimChopper,
+    SimNetworkAnalyzer,
+    SimPowerMeter,
+    SimPowerSupply,
+    SimRotator,
+    SimSignalGenerator,
+    SimSisBlock,
+    SimYigFilter,
+)
+
+LO = 223e9
+FAST = {"switch_delay": 0, "precise_bias": False}
+FAST_NOISE = {**FAST, "load_delay": 0, "point_delay": 0}
+
+
+class Bench:
+    """Coupled simulators of a 2SB receiver.
+
+    Noise: hot -30 dBm, cold -32 dBm (+0.5 dB in the lower channel).
+    Test tone: -20 dBm in the wanted channel, -40 dBm in the image (20 dB SRR).
+    """
+
+    def __init__(self):
+        self.chopper = SimChopper()
+        # IF switch: a supply channel, output on = upper sideband (the default)
+        self.switch = SimPowerSupply().channel(2)
+        # LO generator with its x18 multiplier set: frequencies at the mixer
+        self.lo = SimSignalGenerator(max_frequency=50e9, frequency_multiplier=18)
+        self.tone = SimSignalGenerator(max_frequency=400e9)
+        self.lo.set_frequency(LO)
+        block = SimSisBlock()
+        self.ports = {
+            "sis1": block.channel("DEV4"),
+            "sis2": block.channel("DEV2"),
+            "bias": block.channel("DEV4"),
+            "lo": self.lo,
+            "test_tone": self.tone,
+            "if_selector": self.switch,
+            "detector": SimPowerMeter(model=self.power),
+            "if_filter": SimYigFilter().channel("yig_1"),
+            "load": self.chopper,
+            "spectrum": self,
+            "vna": SimNetworkAnalyzer(),
+            "grid": SimRotator(),
+        }
+
+    def power(self) -> float:
+        channel = "upper" if self.switch.get_output() else "lower"
+        if self.tone.get_output():
+            tone_side = (
+                "upper"
+                if self.tone.get_frequency() > self.lo.get_frequency()
+                else "lower"
+            )
+            return -20.0 if tone_side == channel else -40.0
+        base = -30.0 if self.chopper.position == "hot" else -32.0
+        return base + (0.5 if channel == "lower" else 0.0)
+
+    # Spectrum analyzer port: the tone peak follows the same model
+    def set_center_frequency(self, frequency):
+        ...
+
+    def set_span(self, span):
+        ...
+
+    def set_resolution_bandwidth(self, bandwidth):
+        ...
+
+    def set_video_bandwidth(self, bandwidth):
+        ...
+
+    def read_peak(self):
+        return 0.0, self.power()
+
+    def read_trace(self):
+        ...
+
+    # StationLike
+    def require(self, devices, requirements, pause, planned=(), told=None):
+        return {slot: self.ports[slot] for slot in requirements}
+
+    def device_use(self, ref):
+        return DeviceUse(ref)
+
+    def quantities(self, ref):
+
+        return []
+
+    def snapshot(self, refs=None):
+        return {"station": {"name": "sim 2sb bench"}}
+
+
+def run(procedure, bench=None, **devices):
+    bench = bench or Bench()
+    dataset = MeasurementRunner(bench).run(procedure, devices=devices)
+    assert dataset.status == COMPLETED, dataset.error
+    return dataset, bench
+
+
+class TestSisProcedures:
+    def test_pv_reads_the_power_with_the_bias(self):
+        procedure = PVCurve(voltage=(1e-3, 4e-3, 4), settle_time=0, first_point_delay=0)
+        dataset, _ = run(procedure)
+        records = dataset.records("pv")
+        assert len(records) == 4 and set(records[0]) == {
+            "voltage_set",
+            "voltage",
+            "current",
+            "power",
+        }
+        assert set(procedure.slots()) == {"bias", "detector"}
+        assert "hot_cold" not in PVCurve.parameters()
+
+    def test_tn_v_with_hot_cold_and_grid(self):
+        procedure = TnVoltage(
+            voltage=(1e-3, 4e-3, 4),
+            hot_cold=True,
+            use_grid=True,
+            angle=(0, 30, 2),
+            settle_time=0,
+            first_point_delay=0,
+            load_delay=0,
+            grid_speed=1e6,
+        )
+        dataset, bench = run(procedure)
+        assert len(dataset.records("pv")) == 2 * 2 * 4
+        y = dataset.records("y_factor")
+        assert len(y) == 8 and y[0]["y_factor"] == pytest.approx(2.0)
+        assert y[0]["noise_temperature"] == pytest.approx(noise_temperature(-30, -32))
+        assert bench.ports["grid"].get_angle() == 0  # restored
+        assert bench.chopper.position == "cold"
+        assert set(procedure.slots()) == {"bias", "detector", "load", "grid"}
+
+    def test_tn_v_needs_the_load(self):
+        assert "load" in TnVoltage().slots()
+        assert "load" not in TnVoltage(hot_cold=False).slots()
+        assert "load" not in PVCurve().slots()
+
+    def test_tn_v_uses_load_and_grid_parameters_only_when_on(self):
+        procedure = TnVoltage(hot_cold=False)
+        assert not procedure.used("t_hot") and not procedure.used("angle")
+        assert procedure.used("voltage")
+        assert TnVoltage(use_grid=True).used("grid_speed")
+        # A grid angle not used is not checked against the grid's limits
+        assert [slot for slot, *_ in procedure.planned()] == ["bias"]
+
+    def test_reflection_records_traces(self):
+        procedure = SisReflection(
+            voltage=(0, 3e-3, 3),
+            frequency=(2e9, 4e9, 5),
+            s_parameters=("S11", "S21"),
+            samples=2,
+            averaging_time=0,
+            first_point_delay=0,
+        )
+        dataset, bench = run(procedure)
+        traces = dataset.records("trace")
+        assert len(traces) == 3 * 2 * 2 and len(traces[0]["values"]) == 5
+        assert {t["parameter"] for t in traces} == {"S11", "S21"}
+        assert dataset.results["frequency"][-1] == 4e9
+        assert bench.ports["vna"].averaging == 1
+        assert dataset.records("summary")[0]["magnitude_db"] == pytest.approx(
+            20 * math.log10(1 / 3), abs=1e-6
+        )
+
+    def test_grid_current_angle(self):
+        dataset, bench = run(
+            GridCurrentAngle(angle=(0, 90, 4), grid_speed=1e6, settle_time=0)
+        )
+        assert [r["angle"] for r in dataset.records("ia")] == [0, 30, 60, 90]
+        assert bench.ports["grid"].get_angle() == 0
+
+    def test_shot_noise_fits_resistance(self):
+        procedure = ShotNoise(
+            voltage1=15e-3,
+            voltage2=20e-3,
+            resistance_points=5,
+            frequency=(4e9, 5e9, 3),
+            settle_time=0,
+            point_delay=0,
+        )
+        dataset, _ = run(procedure)
+        # Above the gap the simulated SIS is 20 Ohm || 500 Ohm
+        assert dataset.results["rd1"] == pytest.approx(1 / (1 / 20 + 1 / 500), rel=1e-3)
+        assert len(dataset.records("noise")) == 3
+        # Constant simulated IF power: no contrast between points
+        assert math.isnan(dataset.records("noise")[0]["amplifier_temperature"])
+
+
+class TestTwoSb:
+    def test_if_balance(self):
+        procedure = IfBalance(
+            sis1_voltages=(5e-3, 6e-3), sis2_voltages=(5e-3,), frequency=(4e9, 5e9, 3),
+            point_delay=0, **FAST,
+        )  # fmt: skip
+        dataset, _ = run(procedure)
+        power = dataset.records("power")
+        assert len(power) == 2 * 2 * 3
+        assert {r["bias"] for r in power} == {"5.00/5.00 mV", "6.00/5.00 mV"}
+        lower = [r["power"] for r in power if r["channel"] == "lower"]
+        assert lower[0] == pytest.approx(-31.5)
+
+    def test_pump_balance_rf(self):
+        procedure = PumpBalance(
+            source="test_tone", frequency=(220e9, 221e9, 2),
+            sis1_voltage=(2.4e-3, 2.6e-3, 3), sis2_voltage=(2.4e-3, 2.6e-3, 3),
+            bias_delay=0, measure_power=True,
+        )  # fmt: skip
+        dataset, bench = run(procedure)
+        assert len(dataset.records("pump")) == 6
+        assert bench.lo.get_output() is False and bench.lo.get_power() == -80
+        assert bench.tone.get_output() is False  # switched off on exit
+        assert set(procedure.slots()) == {"sis1", "sis2", "test_tone", "lo", "detector"}
+
+    def test_pump_balance_checks_paired_sweeps(self):
+        with pytest.raises(ProcedureError, match="same number"):
+            PumpBalance(sis2_voltage=(2e-3, 3e-3, 5)).validate()
+
+    @pytest.mark.parametrize("detector", ["power_meter", "spectrum"])
+    def test_srr_with_y_factor(self, detector):
+        procedure = SidebandRatio(
+            lo_frequency=LO, frequency=(4e9, 6e9, 5), chunk_size=2, detector=detector,
+            retune_delay=0, averages=2, **FAST_NOISE,
+        )  # fmt: skip
+        dataset, bench = run(procedure)
+        ratio = dataset.records("ratio")
+        assert len(ratio) == 2 * 5
+        assert all(r["power_difference"] == pytest.approx(20.0) for r in ratio)
+        noise = dataset.records("noise")
+        assert {r["channel"] for r in noise} == {"upper", "lower"}
+        assert noise[0]["y_factor"] == pytest.approx(2.0)
+        assert bench.tone.get_output() is False and bench.chopper.position == "cold"
+        assert bench.ports["sis1"].get_voltage() == 0.0  # bias restored
+        roles = procedure.slots()
+        assert ("spectrum" in roles) == (detector == "spectrum")
+
+    def test_srr_without_y_factor_needs_no_load(self):
+        procedure = SidebandRatio(measure_y_factor=False, set_lo=False)
+        assert {"load", "lo"}.isdisjoint(procedure.slots())
+
+    def test_tn_both_channels(self):
+        procedure = TwoSbNoise(frequency=(4e9, 5e9, 2), tone_off=True, **FAST_NOISE)
+        dataset, bench = run(procedure)
+        noise = dataset.records("noise")
+        lower = [r for r in noise if r["channel"] == "lower"]
+        assert len(noise) == 4
+        assert lower[0]["noise_temperature"] == pytest.approx(
+            noise_temperature(-29.5, -31.5)
+        )
+        assert bench.lo.get_frequency() == pytest.approx(263e9)
+
+    def test_optimization_maps(self):
+        procedure = TwoSbOptimization(
+            lo_frequency=LO, if_frequency=5e9,
+            sis1_voltage=(2.1e-3, 2.2e-3, 2), sis2_voltage=(2.1e-3, 2.3e-3, 3),
+            tone_delay=0, **FAST_NOISE,
+        )  # fmt: skip
+        dataset, _ = run(procedure)
+        maps = dataset.records("map")
+        assert len(maps) == 6
+        expected = sideband_rejection(-30, -32, -29.5, -31.5, -20, -40, -40, -20)
+        assert maps[0]["srr_upper"] == pytest.approx(expected[0])
+        assert maps[0]["srr_lower"] == pytest.approx(expected[1])
+        assert maps[0]["tn_upper"] == pytest.approx(noise_temperature(-30, -32))
+        spec = TwoSbOptimization.plots[0]
+        assert spec.point(maps[0]) == pytest.approx((2.1, 2.1, maps[0]["tn_upper"]))
+
+
+def test_all_registered_procedures_have_valid_defaults():
+    for name in [
+        "sis.current_vs_voltage", "sis.power_vs_voltage",
+        "sis.noise_temperature_vs_voltage", "sis.reflection_vs_frequency",
+        "if.amplifier_noise_vs_voltage", "sis.current_vs_grid_angle",
+        "if.noise_temperature_vs_frequency", "if.power_vs_frequency",
+        "two_sb.if_balance", "two_sb.lo_rf_balance", "two_sb.sideband_ratio",
+        "two_sb.noise_temperature", "two_sb.bias_optimization",
+    ]:  # fmt: skip
+        procedure = get_procedure(name)()
+        procedure.validate()
+        assert procedure.slots()
+        assert procedure.estimate_steps() > 0
+        for spec in procedure.plots:
+            assert spec.table and spec.x and spec.y
+
+
+def test_if_switch_polarity_is_a_parameter():
+    """With switch_on="lower" the same channel off routes the upper sideband."""
+    bench = Bench()
+    procedure = TwoSbNoise(
+        frequency=(4e9, 5e9, 2), channels="upper", switch_on="lower", set_lo=False,
+        **FAST_NOISE,
+    )  # fmt: skip
+    seen = []
+    original = bench.switch.set_output
+    bench.switch.set_output = lambda value: (seen.append(value), original(value))
+    run(procedure, bench)
+    assert seen and seen[0] is False
+
+
+def test_if_switch_parameters_only_where_the_switch_is_used():
+    from thzdaq_core.domain.measurements.catalog import get_procedure
+
+    for name in (
+        "two_sb.if_balance",
+        "two_sb.sideband_ratio",
+        "two_sb.noise_temperature",
+        "two_sb.bias_optimization",
+    ):
+        parameters = get_procedure(name).parameters()
+        assert "switch_on" in parameters and "switch_delay" in parameters
+    pump = get_procedure("two_sb.lo_rf_balance")
+    assert "switch_on" not in pump.parameters()
+    assert "if_selector" not in pump().slots()
+
+
+class TestActivePlots:
+    """Plots a run fills, known at Start: a viewer opens just these."""
+
+    @staticmethod
+    def titles(procedure, quantities=None):
+        return [p.title for p in procedure.active_plots(quantities)]
+
+    def test_loads_bring_y_factor_and_noise(self):
+        assert self.titles(get_procedure("sis.power_vs_voltage")()) == ["P-V", "I-V"]
+        tn = get_procedure("sis.noise_temperature_vs_voltage")
+        assert self.titles(tn(hot_cold=False)) == ["P-V", "I-V"]
+        assert self.titles(tn()) == ["P-V", "I-V", "Y-V", "Tn-V"]
+        srr = get_procedure("two_sb.sideband_ratio")
+        assert self.titles(srr(measure_y_factor=False)) == ["Test tone P-IF", "SRR-IF"]
+        assert "Tn-IF" in self.titles(srr())
+
+    def test_monitor_graphs_follow_the_units(self):
+        from pathlib import Path
+
+        from thzdaq_core.domain.station.station import Station
+        from thzdaq_core.adapters.yaml_profiles import load_station
+
+        example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
+        station = Station(load_station(example), pause=time.sleep)
+        monitor = get_procedure("monitor.values_vs_time")(
+            watch=("power_meter_1", "sis_bias_1/voltage", "sis_coil_1")
+        )
+        assert self.titles(monitor, station.quantities) == ["P-t", "V-t", "Coil-t"]
+        # Without the devices nothing is left out
+        assert self.titles(monitor) == [p.title for p in monitor.plots]
+
+
+class TestHotColdContrast:
+    def test_the_log_says_why_tn_is_missing(self):
+        from thzdaq_core.application.runner import RunObserver
+
+        class Logs(RunObserver):
+            def __init__(self):
+                self.lines = []
+
+            def on_log(self, message):
+                self.lines.append(message)
+
+        bench = Bench()
+        hot_at_first_angle = bench.power
+        # The first angle: the load never switched, hot reads like cold
+        bench.power = lambda: (
+            -32.0 if bench.ports["grid"].get_angle() == 0 else hot_at_first_angle()
+        )
+        procedure = TnVoltage(
+            voltage=(1e-3, 4e-3, 4), hot_cold=True, use_grid=True, angle=(0, 30, 2),
+            settle_time=0, first_point_delay=0, load_delay=0, grid_speed=1e6,
+        )  # fmt: skip
+        bench.ports["detector"].model = bench.power
+        logs = Logs()
+        dataset = MeasurementRunner(bench, observers=[logs]).run(procedure)
+        assert dataset.status == COMPLETED
+        assert logs.lines == [
+            "angle 0 deg: hot is not above cold at any point (Y <= 0 dB), no Tn: "
+            "did the load switch?"
+        ]
+
+    def test_a_simulated_detector_sees_the_simulated_load(self):
+        from pathlib import Path
+
+        from thzdaq_core.domain.station.station import Station
+        from thzdaq_core.adapters.yaml_profiles import load_station
+        from thzdaq_instruments.sim.power_meter import T_RECEIVER
+
+        example = Path(__file__).parents[3] / "stations" / "2sb.example.yaml"
+        with Station(load_station(example), pause=time.sleep, simulate=True) as station:
+            detector = station.instrument("power_meter_1")
+            alone = detector.read_power()  # no load open: as the profile says
+            chopper = station.instrument("chopper_1")
+            chopper.to_cold()
+            cold = detector.read_power()
+            chopper.to_hot()
+            hot = detector.read_power()
+        assert cold == alone
+        assert noise_temperature(hot, cold) == pytest.approx(T_RECEIVER)
+
+
+class TestIFScans:
+    def test_power_if_sweeps_the_yig_without_loads(self):
+        procedure = PowerIF(frequency=(4e9, 6e9, 3), point_delay=0)
+        dataset, bench = run(procedure)
+        power = dataset.records("power")
+        assert [r["frequency_set"] for r in power] == [4e9, 5e9, 6e9]
+        assert all(r["power"] == pytest.approx(bench.power()) for r in power)
+        assert "load" not in power[0] and set(procedure.slots()) == {
+            "detector",
+            "if_filter",
+        }
+        assert procedure.estimate_steps() == 3
+        assert [p.title for p in procedure.active_plots()] == ["P-IF"]
+
+    def test_tn_if_scans_hot_and_cold(self):
+        procedure = IFNoise(frequency=(4e9, 5e9, 2), point_delay=0, load_delay=0)
+        dataset, bench = run(procedure)
+        assert [r["load"] for r in dataset.records("power")] == ["cold"] * 2 + [
+            "hot"
+        ] * 2
+        noise = dataset.records("noise")
+        assert noise[0]["noise_temperature"] == pytest.approx(
+            noise_temperature(-30, -32)
+        )
+        assert bench.chopper.position == "cold"
+
+
+class TestShownIf:
+    def test_spectrum_settings_only_with_the_spectrum_analyzer(self):
+        conditions = SidebandRatio.conditions()
+        for name in ("resolution_bandwidth", "video_bandwidth", "span"):
+            assert [c.parameter for c in conditions[name]] == ["detector"]
+        assert not SidebandRatio().used("span")
+        assert SidebandRatio(detector="spectrum").used("span")
+        assert not SidebandRatio(measure_y_factor=False).used("t_hot")
+        # Always hot/cold: no condition
+        assert "t_hot" not in TwoSbNoise.conditions()
+
+    def test_a_condition_on_no_parameter_is_refused(self):
+        from thzdaq_core.domain.measurements.procedure import Procedure
+        from thzdaq_core.domain.parameters import FloatParameter, When
+
+        with pytest.raises(ProcedureError, match="shown_if"):
+
+            class Broken(Procedure):
+                shown_if = {"x": When("missing", (True,))}
+                x = FloatParameter("X", default=1.0)
+
+    def test_no_yig_power_in_2sb(self):
+        for cls in (IfBalance, SidebandRatio, TwoSbNoise, TwoSbOptimization):
+            assert "control_yig_power" not in cls.parameters()

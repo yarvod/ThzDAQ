@@ -1,0 +1,307 @@
+"""Devices of the bench: what they are, what they read and what can be set."""
+
+import math
+from typing import Dict, Optional, Sequence, Tuple, Union
+
+import msgspec
+
+from thzdaq_api.operation import Operation, Rights
+
+Value = Union[bool, int, float, str, None]
+
+# Kinds of devices nobody configures: an instrument and its fixed channel
+INSTRUMENT = "instrument"
+CHANNEL = "channel"
+
+# Axes of traces: the power of a spectrum, the magnitude of an S-parameter
+POWER_DBM = "Power, dBm"
+S_DB = "|S|, dB"
+
+
+class Prefix(msgspec.Struct, frozen=True):
+    """An SI prefix a value is shown and typed in: ("G", 1e9, "×10⁹")."""
+
+    name: str
+    factor: float
+    note: str
+
+
+def shown(value: Value, unit: str = "", prefixes: Sequence[Prefix] = ()) -> str:
+    """A value as people read it: an SI number with the prefix that keeps it
+    from 1 to 999 ("2.3 mV"), a switch as on or off. The daemon reads it back
+    in a text with its unit."""
+    if value is None:
+        return "--"
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if not isinstance(value, (int, float)):
+        return f"{value} {unit}".strip()
+    if not prefixes or value == 0 or not math.isfinite(value):
+        return f"{value:.6g} {unit}".strip()
+    ascending = sorted(prefixes, key=lambda p: p.factor)
+    prefix = next(
+        (p for p in reversed(ascending) if abs(value) >= p.factor), ascending[0]
+    )
+    return f"{value / prefix.factor:.6g} {prefix.name}{unit}"
+
+
+class QuantityInfo(msgspec.Struct, frozen=True):
+    """A value a device reads or takes, in SI units (power in dBm, angles in deg).
+    minimum and maximum bound what it takes: its own range, the passport of the
+    instrument and the bench limits together."""
+
+    key: str
+    title: str
+    unit: str = ""
+    kind: str = "float"  # float, int, bool or text
+    readable: bool = True
+    settable: bool = False
+    persistent: bool = False  # configuration of the instrument, kept in the profile
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    choices: Tuple[str, ...] = ()  # the values a text quantity takes
+    # A soft range of the bench inside minimum..maximum: beyond it, ask first
+    warn_minimum: Optional[float] = None
+    warn_maximum: Optional[float] = None
+    step: Optional[float] = None  # the largest change in one command: more in steps
+    rate: Optional[float] = None  # units per second at most between the steps
+    danger: str = ""  # what may go wrong when it is set, shown first; empty when safe
+    prefixes: Tuple[Prefix, ...] = ()  # to show it in; none for dBm, dB, deg
+
+    @property
+    def label(self) -> str:
+        """As a form names it: "Power, dBm"."""
+        return f"{self.title}, {self.unit}" if self.unit else self.title
+
+
+class DeviceInfo(msgspec.Struct, frozen=True):
+    """A device: an instrument, its fixed channel or a device configured on it."""
+
+    ref: str  # the id measurements and operations name it by
+    title: str
+    instrument: str  # the instrument it is or belongs to
+    driver: str  # of that instrument, as the profile names it
+    kind: str  # instrument, channel, or the configured kind (sis_bias)
+    type: str  # what device it is: the configured kind, else the instrument's type
+    capabilities: Tuple[str, ...]
+    channel: Optional[str] = None
+    configured: bool = False
+    raw: bool = False  # its instrument takes raw commands (raw_command)
+
+
+class ArgumentInfo(msgspec.Struct, frozen=True):
+    """An argument of an action, in SI units; without a default it is required."""
+
+    key: str
+    title: str
+    unit: str = ""
+    kind: str = "float"  # float, int, bool or text
+    default: Value = None
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    choices: Tuple[str, ...] = ()
+    prefixes: Tuple[Prefix, ...] = ()
+
+
+class ActionInfo(msgspec.Struct, frozen=True):
+    """What a device does on request beyond setting a quantity (turn to the hot
+    load, read a trace)."""
+
+    key: str
+    title: str
+    arguments: Tuple[ArgumentInfo, ...] = ()
+    danger: str = ""  # what may go wrong, shown before it runs; empty when safe
+    changes: bool = True  # false for a read: a running measurement is not disturbed
+    help: str = ""
+
+
+class DeviceDescription(msgspec.Struct, frozen=True):
+    device: DeviceInfo
+    quantities: Tuple[QuantityInfo, ...]
+    actions: Tuple[ActionInfo, ...] = ()
+    # What a configured device keeps in the profile (a SIS bias's offsets)
+    settings: Tuple[QuantityInfo, ...] = ()
+
+
+class Trace(msgspec.Struct, frozen=True):
+    """A trace versus frequency (Hz): the power (dBm) of a spectrum analyzer, or
+    the complex S-parameter of a network analyzer as real and imaginary parts."""
+
+    frequency: Tuple[float, ...]
+    values: Tuple[float, ...]  # dBm, or the real part
+    imaginary: Optional[Tuple[float, ...]] = None
+    parameter: str = ""  # S21
+
+    def label(self) -> str:
+        """The axis of its values: the power, or the magnitude in dB."""
+        return POWER_DBM if self.imaginary is None else S_DB
+
+
+class Reading(msgspec.Struct, frozen=True):
+    ref: str
+    values: Dict[str, Value]
+
+
+class QuantityValue(msgspec.Struct, frozen=True):
+    ref: str
+    key: str
+    value: Value
+
+
+class ActionResult(msgspec.Struct, frozen=True):
+    ref: str
+    action: str
+    result: Union[Value, Trace] = None
+
+
+class SafeValue(msgspec.Struct, frozen=True):
+    """A value of the safe state as it went: set, or why not."""
+
+    ref: str
+    key: str
+    value: Value
+    error: str = ""  # empty when it was set
+
+
+class Poll(msgspec.Struct, frozen=True):
+    id: int  # to cancel it
+    ref: str
+    interval: float
+
+
+# Raw commands: what a driver does not wrap yet, sent as typed
+QUERY_MARK = "?"  # in a command that asks and changes nothing
+UNCHECKED = "Limits and the bench protection do not check a raw command"
+
+
+def raw_query(command: str) -> bool:
+    """A raw command that asks and changes nothing: it has a ?. Any other is a
+    write, also one whose answer is read."""
+    return QUERY_MARK in command
+
+
+def raw_question(instrument: str, command: str) -> str:
+    """What a person confirms before a raw write."""
+    return f"{UNCHECKED}. Send {command!r} to {instrument}?"
+
+
+class RawReply(msgspec.Struct, frozen=True):
+    """What a raw command got: the instrument's answer (None when none was
+    read) and, after a write, the devices whose values are unknown until
+    they are read again."""
+
+    instrument: str
+    command: str
+    answer: Optional[str] = None
+    unknown: Tuple[str, ...] = ()
+
+
+class ListDevices(Operation[Tuple[DeviceInfo, ...]]):
+    """Every device of the bench: its instruments, their fixed channels and the
+    devices configured on them (a SIS bias on a SIS block)."""
+
+
+class DescribeDevice(Operation[DeviceDescription]):
+    """A device with its quantities: what it reads and what can be set, with
+    units and limits."""
+
+    ref: str
+
+
+class ReadDevice(Operation[Reading]):
+    """Read a device: every readable quantity, or the listed keys. Values are
+    in SI units (power in dBm). session: the number of the script's session the
+    read belongs to (the device joins it)."""
+
+    ref: str
+    keys: Optional[Tuple[str, ...]] = None
+    session: Optional[int] = None
+
+
+class SetQuantity(Operation[QuantityValue]):
+    """Set a quantity of a device. A number is in SI units; a text may carry
+    its unit ("2.3mV", "223 GHz"); switches take true or false. Returns the
+    value set, in SI units. A value outside the limits of the device is refused
+    (out_of_limits) before anything is sent; a change larger than the bench
+    step goes in steps at the bench rate. A device a running measurement sweeps
+    is refused (conflict) unless share is true; the measurements using it
+    record the change. session: the number of the script's session the set
+    belongs to: its devices are its own, and the session tells what it sets."""
+
+    rights = Rights.SET
+    ref: str
+    key: str
+    value: Union[bool, int, float, str]
+    share: bool = False
+    session: Optional[int] = None
+
+
+class CallAction(Operation[ActionResult]):
+    """Make a device do something beyond setting a quantity: turn the load to
+    hot or cold, start or stop the chopper rotation, set up an analyzer and read
+    its trace. describe_device lists the actions of a device with their
+    arguments; numbers are in SI units, a text may carry its unit ("12 Hz"). A
+    device a running measurement sweeps is refused (conflict) unless share is
+    true, except for reads; the measurements using it record the call.
+    session: the number of the script's session the call belongs to."""
+
+    rights = Rights.SET
+    ref: str
+    action: str
+    arguments: Dict[str, Union[bool, int, float, str]] = msgspec.field(
+        default_factory=dict
+    )
+    share: bool = False
+    session: Optional[int] = None
+
+
+class RawCommand(Operation[RawReply]):
+    """Send an instrument a command as it is typed, for what its driver does
+    not wrap yet; instrument is its id in the profile (get_station), not a
+    device on it. A command with ? is a query: its answer is read and
+    returned. Any other is a write that neither the limits nor the bench
+    protection check: a person confirms it, a script needs a person's yes or
+    allow raw:<instrument> at its start, agents may never write. answer: read
+    the answer of a write too (a query without ?). The command waits its turn
+    in the instrument's lane and holds its link, so measurements and polls go
+    on. A write to an instrument a device of which a running measurement
+    sweeps is refused (conflict) unless share is true; the measurements using
+    its devices record it, and its devices are read again. session: the
+    number of the script's session the command belongs to."""
+
+    rights = Rights.RAW_WRITE
+    instrument: str
+    command: str
+    answer: bool = False
+    share: bool = False
+    session: Optional[int] = None
+
+    @property
+    def query(self) -> bool:
+        return raw_query(self.command)
+
+
+class SafeState(Operation[Tuple[SafeValue, ...]]):
+    """Set every device of the profile's safe state to its safe value, in steps
+    where the bench limits ask for them. A device that fails, or that a running
+    measurement sweeps (unless share is true), does not stop the others: each
+    value says how it went."""
+
+    rights = Rights.STOP
+    share: bool = False
+
+
+class SubscribePoll(Operation[Poll]):
+    """Read a device every `interval` seconds (all readable quantities, or the
+    listed keys); readings come as values events. The daemon polls a device
+    once, at the shortest interval its subscribers ask for."""
+
+    ref: str
+    interval: float
+    keys: Optional[Tuple[str, ...]] = None
+
+
+class CancelPoll(Operation[None]):
+    """Stop a poll started by subscribe_poll."""
+
+    id: int

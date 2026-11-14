@@ -1,0 +1,214 @@
+from thzdaq_api.devices import POWER_DBM
+from thzdaq_api.leases import EXCLUSIVE, READ
+from thzdaq_api.procedures import NOISE_TEMPERATURE_VS_VOLTAGE, POWER_VS_VOLTAGE
+from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
+from thzdaq_instruments.units import MV, UA
+
+from thzdaq_analysis.noise import match_hot_cold, noise_temperature
+from thzdaq_core.domain.parameters import (
+    BoolParameter,
+    IntParameter,
+    shown_while,
+    When,
+)
+from thzdaq_api.measurements import PlotInfo, plot_caption
+from thzdaq_core.domain.measurements.procedure import Procedure
+from thzdaq_core.domain.measurements.procedures.common import (
+    IV_CAPTION,
+    BIAS,
+    CURRENT_UA,
+    TN_K,
+    VOLTAGE_MV,
+    Y_DB,
+    BiasVoltage,
+    ColdLoad,
+    FirstPointDelay,
+    GridAngle,
+    GridSpeed,
+    Group,
+    HotLoad,
+    load_problems,
+    LoadDelay,
+    restore_angle_on_exit,
+    restore_bias_on_exit,
+    SettleTime,
+    warn_without_contrast,
+)
+
+
+def pv_plots(group_by=()):
+    return (
+        PlotInfo(
+            "pv", "P-V", "pv", "voltage", "power",
+            x_label=VOLTAGE_MV, y_label=POWER_DBM, x_scale=MV, group_by=group_by,
+            caption=plot_caption("P–V", "IF power (bias voltage)"),
+        ),
+        PlotInfo(
+            "iv", "I-V", "pv", "voltage", "current",
+            x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
+            group_by=group_by, analysis="iv", caption=IV_CAPTION,
+        ),
+    )  # fmt: skip
+
+
+class PVCurve(Procedure):
+    name = POWER_VS_VOLTAGE
+    slot_modes = {"bias": EXCLUSIVE, "detector": READ}
+    title = "SIS P-V measurement"
+    description = "Sweep the bias and read the IF power at every point."
+    guide = (
+        "IF power against bias on one load: where the mixer gives IF power, and "
+        "where it is flat enough to work. Pump the mixer first (LO on, a pumped I-V "
+        "shows photon steps) and suppress the Josephson current. Sweep the same "
+        "range as the I-V; the power over the first photon step below the gap is "
+        "the working region. For the noise temperature take "
+        f"{NOISE_TEMPERATURE_VS_VOLTAGE}, which does this on both loads."
+    )
+    requires = {"bias": BIAS, "detector": PowerDetector}
+    plots = pv_plots()
+
+    voltage = BiasVoltage((0.0, 7e-3, 351))
+    settle_time = SettleTime(0.01)
+    first_point_delay = FirstPointDelay(0.5)
+
+    def estimate_steps(self) -> int:
+        return self.voltage.points
+
+    def run(self, ctx) -> None:
+        bias, detector = ctx["bias"], ctx["detector"]
+        restore_bias_on_exit(ctx, bias)
+        self._sweep(ctx, bias, detector)
+
+    def _sweep(self, ctx, bias, detector, **labels):
+        """One bias sweep; labels (angle, load) go into every record."""
+        points = []
+        for index, voltage_set in enumerate(self.voltage.values()):
+            ctx.check_cancel()
+            bias.set_voltage(voltage_set)
+            ctx.sleep(self.first_point_delay if index == 0 else self.settle_time)
+            reading = bias.measure()
+            power = detector.read_power()
+            ctx.record(
+                "pv",
+                **labels,
+                voltage_set=voltage_set,
+                voltage=reading.voltage,
+                current=reading.current,
+                power=power,
+            )
+            points.append((reading.voltage, power))
+            ctx.progress()
+        return points
+
+
+HOT_COLD_ON = When("hot_cold", (True,))
+GRID_ON = When("use_grid", (True,))
+
+
+class TnVoltage(PVCurve):
+    name = NOISE_TEMPERATURE_VS_VOLTAGE
+    title = "SIS Tn-V"
+    description = (
+        "P-V with the hot and the cold load: Y-factor and noise temperature "
+        "versus bias; optionally at several grid angles."
+    )
+    guide = (
+        "Receiver noise temperature against bias by the Y-factor: a P-V on the hot "
+        "load, then on the cold one, matched point by point. Pump the mixer and "
+        "suppress the Josephson current first; give t_hot and t_cold as the loads "
+        "really are (room temperature and liquid nitrogen as a rule). The lowest Tn "
+        "on the first photon step below the gap is the bias to work at. With "
+        "use_grid the grid turns to each angle in turn: Tn against the LO power the "
+        "grid lets through."
+    )
+    plots = pv_plots(("angle", "load")) + (
+        PlotInfo(
+            "y_factor", "Y-V", "y_factor", "voltage", "y_factor",
+            x_label=VOLTAGE_MV, y_label=Y_DB, x_scale=MV, group_by=("angle",),
+            caption=plot_caption("Y–V", "Y-factor (bias voltage)"),
+        ),
+        PlotInfo(
+            "tn", "Tn-V", "y_factor", "voltage", "noise_temperature",
+            x_label=VOLTAGE_MV, y_label=TN_K, x_scale=MV, group_by=("angle",),
+            caption=plot_caption("Tn–V", "Noise temperature (bias voltage)"),
+        ),
+    )  # fmt: skip
+    shown_if = {
+        **shown_while(HOT_COLD_ON, "load_delay", "t_hot", "t_cold", "match_window"),
+        **shown_while(GRID_ON, "angle", "grid_speed"),
+    }
+
+    hot_cold = BoolParameter("Hot/cold loads", default=True, group=Group.HOT_COLD)
+    load_delay = LoadDelay(2.0)
+    t_hot = HotLoad()
+    t_cold = ColdLoad()
+    match_window = IntParameter(
+        "Hot/cold match window", default=10, minimum=1, group=Group.HOT_COLD,
+        help="Cold points around the same index searched for the nearest voltage",
+    )  # fmt: skip
+    use_grid = BoolParameter("Rotate grid", default=False, group=Group.GRID)
+    angle = GridAngle((0.0, 90.0, 10), max_points=1000)
+    grid_speed = GridSpeed()
+
+    def active_plots(self, quantities=None):
+        if self.hot_cold:
+            return self.plots
+        return tuple(p for p in self.plots if p.table != "y_factor")
+
+    def slots(self):
+        slots = dict(self.requires)
+        if self.hot_cold:
+            slots["load"] = LoadSwitch
+        if self.use_grid:
+            slots["grid"] = Rotator
+        return slots
+
+    def check(self):
+        return load_problems(self.t_hot, self.t_cold) if self.hot_cold else []
+
+    def _angles(self):
+        return self.angle.values() if self.use_grid else [None]
+
+    def estimate_steps(self) -> int:
+        loads = 2 if self.hot_cold else 1
+        return len(self._angles()) * loads * self.voltage.points
+
+    def run(self, ctx) -> None:
+        bias, detector = ctx["bias"], ctx["detector"]
+        restore_bias_on_exit(ctx, bias)
+        load = ctx["load"] if self.hot_cold else None
+        grid = ctx["grid"] if self.use_grid else None
+        if load is not None:
+            ctx.on_exit(load.to_cold)
+        if grid is not None:
+            restore_angle_on_exit(ctx, grid)
+
+        for angle in self._angles():
+            if grid is not None:
+                travel = abs(angle - grid.get_angle())
+                grid.rotate_to(angle)
+                ctx.sleep(travel / self.grid_speed)
+            sweeps = {}
+            for state in ("hot", "cold") if load is not None else (None,):
+                if state is not None:
+                    getattr(load, f"to_{state}")()
+                    ctx.sleep(self.load_delay)
+                sweeps[state] = self._sweep(
+                    ctx, bias, detector, angle=angle, load=state
+                )
+            if load is not None:
+                temperatures = []
+                for voltage, hot, cold in match_hot_cold(
+                    sweeps["hot"], sweeps["cold"], self.match_window
+                ):
+                    tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
+                    temperatures.append(tn)
+                    ctx.record(
+                        "y_factor",
+                        angle=angle,
+                        voltage=voltage,
+                        y_factor=hot - cold,
+                        noise_temperature=tn,
+                    )
+                where = f"angle {angle:g} deg" if grid is not None else "hot/cold"
+                warn_without_contrast(ctx, temperatures, where)

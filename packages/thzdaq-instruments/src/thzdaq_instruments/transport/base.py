@@ -1,0 +1,391 @@
+import logging
+import threading
+import time
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from dataclasses import dataclass, fields, replace
+from typing import Callable, Iterator, Optional
+from urllib.parse import quote, unquote
+
+from thzdaq_instruments.errors import (
+    ConfigurationError,
+    InstrumentConnectionError,
+    InstrumentTimeoutError,
+)
+
+logger = logging.getLogger(__name__)
+
+SOCKET = "socket"
+SERIAL = "serial"
+PROLOGIX = "prologix"  # Prologix GPIB-Ethernet
+PROLOGIX_USB = "prologix_usb"
+VISA = (
+    "visa"  # any VISA resource: NI/Keysight GPIB adapters, USBTMC, LXI (pyvisa extra)
+)
+# Not line based: drivers open their own clients, the pool doesn't share them
+HTTP = "http"
+MODBUS_TCP = "modbus_tcp"
+MODBUS_RTU = "modbus_rtu"
+MESSAGE_KINDS = (SOCKET, SERIAL, PROLOGIX, PROLOGIX_USB, VISA)
+KINDS = MESSAGE_KINDS + (HTTP, MODBUS_TCP, MODBUS_RTU)
+
+# How people name each kind, and the fields of ConnectionSpec it uses, in form order
+KIND_TITLES = {
+    SOCKET: "TCP socket",
+    PROLOGIX: "Prologix GPIB-Ethernet",
+    PROLOGIX_USB: "Prologix GPIB-USB",
+    SERIAL: "Serial (COM)",
+    VISA: "VISA",
+    HTTP: "HTTP",
+    MODBUS_TCP: "Modbus TCP",
+    MODBUS_RTU: "Modbus RTU",
+}
+KIND_FIELDS = {
+    SOCKET: ("host", "port", "timeout", "read_delay"),
+    PROLOGIX: ("host", "port", "gpib", "timeout", "read_delay"),
+    PROLOGIX_USB: ("serial_port", "gpib", "timeout", "read_delay"),
+    SERIAL: ("serial_port", "baudrate", "timeout", "read_delay"),
+    VISA: ("resource", "timeout", "read_delay"),
+    HTTP: ("host", "port", "timeout"),
+    MODBUS_TCP: ("host", "port", "timeout"),
+    MODBUS_RTU: ("serial_port", "baudrate", "timeout"),
+}
+
+PROLOGIX_DEFAULT_PORT = 1234
+PROLOGIX_HOST = "169.254.156.103"  # the GPIB-Ethernet adapter of the bench
+
+
+@dataclass(frozen=True)
+class ConnectionSpec:
+    """Where and how an instrument is connected."""
+
+    kind: str
+    host: Optional[str] = None
+    port: Optional[int] = None
+    serial_port: Optional[str] = None
+    gpib: Optional[int] = None
+    resource: Optional[str] = None  # VISA resource, e.g. "GPIB0::19::INSTR"
+    timeout: float = 2.0  # s
+    read_delay: float = 0.0  # s, pause between write and read in query()
+    baudrate: int = 9600
+    write_termination: str = "\n"
+    # None - legacy mode: one chunk per read, for devices without a terminator
+    read_termination: Optional[str] = "\n"
+
+    def __post_init__(self):
+        if self.kind not in KINDS:
+            raise ConfigurationError(f"Unknown connection kind {self.kind!r}")
+        if self.kind in (SOCKET, PROLOGIX, HTTP, MODBUS_TCP):
+            if not self.host:
+                raise ConfigurationError(f"{self.kind} connection requires host")
+            if self.port is None:
+                if self.kind in (SOCKET, MODBUS_TCP):
+                    raise ConfigurationError(f"{self.kind} connection requires port")
+                if self.kind == PROLOGIX:
+                    object.__setattr__(self, "port", PROLOGIX_DEFAULT_PORT)
+        if self.kind in (SERIAL, PROLOGIX_USB, MODBUS_RTU) and not self.serial_port:
+            raise ConfigurationError(f"{self.kind} connection requires serial_port")
+        if self.kind == VISA and not self.resource:
+            raise ConfigurationError("visa connection requires resource")
+        if self.is_prologix and (self.gpib is None or not 0 <= self.gpib <= 30):
+            raise ConfigurationError("Prologix connection requires GPIB address 0..30")
+        if self.timeout <= 0:
+            raise ConfigurationError("timeout must be positive")
+
+    @property
+    def is_prologix(self) -> bool:
+        return self.kind in (PROLOGIX, PROLOGIX_USB)
+
+    @property
+    def is_message_based(self) -> bool:
+        return self.kind in MESSAGE_KINDS
+
+    @property
+    def link_key(self) -> tuple:
+        """Identifies the physical connection shared by instruments."""
+        if self.kind in (SOCKET, PROLOGIX, MODBUS_TCP):
+            return ("tcp", self.host, int(self.port))
+        if self.kind == HTTP:
+            return ("http", self.host, self.port)
+        if self.kind == VISA:
+            return ("visa", self.resource)
+        return ("serial", self.serial_port)
+
+    def with_gpib(self, gpib: int) -> "ConnectionSpec":
+        return replace(self, gpib=gpib)
+
+
+# A connection as one line of text (a script's instrument(...)): its kind by a
+# scheme, its address after it, any other field as a query
+SCHEMES = {
+    "tcp": SOCKET,
+    "prologix": PROLOGIX,
+    "prologix-usb": PROLOGIX_USB,
+    "serial": SERIAL,
+    "visa": VISA,
+    "http": HTTP,
+    "modbus-tcp": MODBUS_TCP,
+    "modbus-rtu": MODBUS_RTU,
+}
+URL_EXAMPLES = (
+    "tcp://169.254.0.50:5025",
+    "prologix://169.254.156.103/19",
+    "serial://COM3?baudrate=115200",
+    "visa://GPIB0::19::INSTR",
+)
+_INTS = ("port", "gpib", "baudrate")
+_FLOATS = ("timeout", "read_delay")
+_NONE = "none"  # read_termination=none: one chunk per read
+
+
+def _field(name: str, text: str):
+    if name in _INTS:
+        return int(text)
+    if name in _FLOATS:
+        return float(text)
+    return None if text.lower() == _NONE else text
+
+
+def _host(address: str) -> dict:
+    """host[:port]"""
+    host, colon, port = address.partition(":")
+    return {"host": host, **({"port": port} if colon else {})}
+
+
+def parse_connection(text: str) -> ConnectionSpec:
+    """A connection from its line: tcp://host:port, prologix://host[:port]/gpib,
+    prologix-usb://COM3/gpib, serial://COM3 (serial:///dev/ttyUSB0),
+    visa://<resource>, http://host[:port], modbus-tcp://host:port,
+    modbus-rtu://COM3; other fields after ?, as ?timeout=5&baudrate=115200."""
+    scheme, separator, rest = text.strip().partition("://")
+    kind = SCHEMES.get(scheme.lower()) if separator else None
+    if kind is None:
+        raise ConfigurationError(
+            f"{text!r} is no connection: write it as {', '.join(URL_EXAMPLES)}"
+            f" ({', '.join(SCHEMES)})"
+        )
+    address, _, query = rest.partition("?")
+    if kind in (PROLOGIX, PROLOGIX_USB):
+        address, slash, gpib = address.rpartition("/")
+        if not slash:
+            raise ConfigurationError(
+                f"{text!r}: name the GPIB address after /, as {URL_EXAMPLES[1]}"
+            )
+    given = {}
+    if kind in (SOCKET, HTTP, MODBUS_TCP):
+        given = _host(address)
+    elif kind == PROLOGIX:
+        given = {**_host(address), "gpib": gpib}
+    elif kind == PROLOGIX_USB:
+        given = {"serial_port": address, "gpib": gpib}
+    elif kind == VISA:
+        given = {"resource": address}
+    else:
+        given = {"serial_port": address}
+    for pair in filter(None, query.split("&")):
+        name, _, value = pair.partition("=")
+        given[name] = unquote(value)
+    known = {item.name for item in fields(ConnectionSpec)} - {"kind"}
+    unknown = sorted(set(given) - known)
+    if unknown:
+        raise ConfigurationError(
+            f"{text!r}: no connection field {', '.join(unknown)}"
+            f" (fields: {', '.join(sorted(known))})"
+        )
+    try:
+        values = {name: _field(name, value) for name, value in given.items()}
+    except ValueError as e:
+        raise ConfigurationError(f"{text!r}: {e}") from None
+    return ConnectionSpec(kind, **values)
+
+
+def connection_url(spec: ConnectionSpec) -> str:
+    """The line parse_connection reads back as the same connection."""
+    scheme = next(name for name, kind in SCHEMES.items() if kind == spec.kind)
+    if spec.kind in (SOCKET, HTTP, MODBUS_TCP, PROLOGIX):
+        default = PROLOGIX_DEFAULT_PORT if spec.kind == PROLOGIX else None
+        address = spec.host + (f":{spec.port}" if spec.port != default else "")
+    elif spec.kind == VISA:
+        address = spec.resource
+    else:
+        address = spec.serial_port
+    if spec.is_prologix:
+        address += f"/{spec.gpib}"
+    shown = {"host", "port", "serial_port", "resource", "gpib"}
+    query = [
+        f"{item.name}={quote(_NONE if value is None else str(value), safe='')}"
+        for item in fields(ConnectionSpec)
+        if item.name not in shown | {"kind"}
+        for value in (getattr(spec, item.name),)
+        if value != item.default
+    ]
+    return f"{scheme}://{address}" + (f"?{'&'.join(query)}" if query else "")
+
+
+def serial_or_gateway(
+    serial_port: Optional[str], host: Optional[str], port: int
+) -> ConnectionSpec:
+    """A serial line at 9600 baud with CR line ends: a port of this computer, or a
+    serial-to-Ethernet gateway when a host is given."""
+    common = dict(write_termination="\r", read_termination="\r", timeout=2.0)
+    if host:
+        return ConnectionSpec(SOCKET, host=host, port=port, **common)
+    return ConnectionSpec(SERIAL, serial_port=serial_port, baudrate=9600, **common)
+
+
+class Link(ABC):
+    """Physical line-oriented connection (TCP socket, serial port)."""
+
+    # May be closed while unused and reopened on the next command (TCP). A
+    # serial port is kept: opening it resets an Arduino.
+    idle_closable = False
+
+    def __init__(self):
+        # Reentrant: a transport holds it for a whole query or transaction
+        self.lock = threading.RLock()
+        # Set after a timeout or a lost connection: the next use reconnects, so a
+        # late answer is never read as the answer to the next command
+        self.broken = False
+        # Closed for being unused (TransportPool.close_idle): the next use reopens
+        self.idle = False
+        self.last_used = time.monotonic()
+
+    def reset(self) -> None:
+        """Reconnect: close, open, drop whatever was buffered."""
+        self.close()
+        self.open()
+        self.broken = False
+        self.idle = False
+
+    def abort(self) -> None:
+        """Break a read blocked in another thread; the next use reconnects.
+
+        Does not take the lock on purpose: the blocked thread holds it.
+        """
+        self.broken = True
+        self._abort()
+
+    def _abort(self) -> None:
+        pass
+
+    @property
+    @abstractmethod
+    def is_open(self) -> bool:
+        ...
+
+    @abstractmethod
+    def open(self) -> None:
+        ...
+
+    @abstractmethod
+    def close(self) -> None:
+        ...
+
+    @abstractmethod
+    def write_line(self, line: str) -> None:
+        ...
+
+    @abstractmethod
+    def read_line(self) -> str:
+        ...
+
+
+class Transport(ABC):
+    """Command level access to one instrument over a (possibly shared) link.
+
+    Every write/read/query holds the link lock, so instruments sharing a link
+    (e.g. several GPIB devices behind one Prologix) never interleave commands.
+    """
+
+    def __init__(
+        self,
+        link: Link,
+        read_delay: float = 0.0,
+        on_close: Optional[Callable[[], None]] = None,
+    ):
+        self.link = link
+        self.read_delay = read_delay
+        self._on_close = on_close
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _check_open(self):
+        if self._closed:
+            raise InstrumentConnectionError("Transport is closed")
+
+    def _prepare(self) -> None:
+        self._check_open()
+        if self.link.broken or self.link.idle:
+            if self.link.broken:
+                logger.warning(f"{self.link!r}: reconnecting after an error")
+            else:
+                logger.info(f"{self.link!r}: reopening after a pause")
+            self.link.reset()
+            self._after_reset()
+
+    def _after_reset(self) -> None:
+        """Re-establish what the link state held (Prologix setup, address)."""
+
+    @contextmanager
+    def _guarded(self):
+        try:
+            yield
+        except (InstrumentTimeoutError, InstrumentConnectionError):
+            if not self._closed:  # this transport closed: the shared link is fine
+                self.link.broken = True
+            raise
+        finally:
+            self.link.last_used = time.monotonic()
+
+    def write(self, command: str) -> None:
+        with self.link.lock, self._guarded():
+            self._prepare()
+            self._write(command)
+
+    def read(self) -> str:
+        with self.link.lock, self._guarded():
+            self._prepare()
+            return self._read()
+
+    def query(self, command: str) -> str:
+        with self.link.lock, self._guarded():
+            self._prepare()
+            self._write(command)
+            if self.read_delay:
+                time.sleep(self.read_delay)
+            return self._read()
+
+    @contextmanager
+    def transaction(self) -> Iterator["Transport"]:
+        """Keep the link for several commands that must not be interleaved."""
+        with self.link.lock, self._guarded():
+            self._prepare()
+            yield self
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._on_close is not None:
+            self._on_close()
+
+    @abstractmethod
+    def _write(self, command: str) -> None:
+        ...
+
+    @abstractmethod
+    def _read(self) -> str:
+        ...
+
+
+class MessageTransport(Transport):
+    """Instrument talking directly over the link."""
+
+    def _write(self, command: str) -> None:
+        self.link.write_line(command)
+
+    def _read(self) -> str:
+        return self.link.read_line()

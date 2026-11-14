@@ -1,0 +1,622 @@
+import os
+import threading
+
+import numpy as np
+import pytest
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
+from thzdaq_api.measurement_file import CANCELLED, COMPLETED, Measurement
+from thzdaq_api.measurements import SlotInfo
+from thzdaq_core.application.describe import procedure_info
+from thzdaq_core.domain.parameters import Sweep
+from thzdaq_core.domain.measurements.procedures import (
+    IFNoise,
+    IfBalance,
+    IVCurve,
+    PVCurve,
+    SidebandRatio,
+    SisReflection,
+    TnVoltage,
+    TwoSbOptimization,
+)
+from thzdaq_gui.forms import DeviceSlotsForm, ParameterForm
+from thzdaq_gui.graphs import (
+    AddCurveDialog,
+    Axis,
+    GraphHub,
+    GraphWidget,
+    MapGraphWidget,
+)
+from thzdaq_gui.workers import DeviceWorker
+
+FAST_IV = {"voltage": Sweep(0, 5e-3, 6), "settle_time": 0.0, "first_point_delay": 0.0}
+BIAS = ("VoltageSource", "VoltageCurrentMeter")
+
+
+def form_of(procedure_class) -> ParameterForm:
+    """A form of the parameters as the lab describes them."""
+    form = ParameterForm()
+    form.set_parameters(procedure_info(procedure_class()).parameters)
+    return form
+
+
+class TestForms:
+    def test_defaults_roundtrip_through_widgets(self, app):
+        form = form_of(SidebandRatio)
+        assert (
+            SidebandRatio.from_json(form.values()).to_json()
+            == SidebandRatio().to_json()
+        )
+
+    def test_edit_in_display_units(self, app):
+        form = form_of(SidebandRatio)
+        form.set_values(
+            {
+                "frequency": {"start": 4e9, "stop": 6e9, "points": 5},
+                "detector": "spectrum",
+            }
+        )
+        start = form.editors["frequency"].widget.layout().itemAt(0).widget()
+        assert start.value() == pytest.approx(4.0) and start.suffix() == " GHz"
+        procedure = SidebandRatio.from_json(form.values())
+        assert procedure.frequency == Sweep(4e9, 6e9, 5)
+        assert "spectrum" in procedure.slots()
+        points = form.editors["frequency"].widget.layout().itemAt(2).widget()
+        assert points.maximum() == SidebandRatio.frequency.max_points
+
+    def test_fields_show_only_while_their_condition_holds(self, app):
+        form = form_of(SidebandRatio)
+        assert form.shown("frequency") and not form.shown("span")
+        detector = form.editors["detector"].widget
+        detector.setCurrentIndex(detector.findData("spectrum"))  # as a person picks
+        assert all(form.shown(n) for n in ("span", "resolution_bandwidth", "averages"))
+        form.set_values({"detector": "power_meter", "measure_y_factor": False})
+        assert not form.shown("span") and not form.shown("t_hot")
+
+    def test_a_group_with_every_field_hidden_hides_its_line(self, app):
+        from thzdaq_api.measurements import Condition, ParameterInfo
+
+        when_on = (Condition("on", (True,)),)
+        form = ParameterForm()
+        form.set_parameters(
+            [
+                ParameterInfo("on", "On", "bool", default=False),
+                ParameterInfo(
+                    "x", "X", "float", default=1.0, group="G", shown_if=when_on
+                ),
+            ]
+        )
+        header, names = form.headers["G"]
+        assert names == ["x"] and not form.layout_.isRowVisible(header)
+        form.editors["on"].widget.setChecked(True)
+        assert form.layout_.isRowVisible(header) and form.shown("x")
+
+    def test_parameters_are_grouped_under_lines(self, app):
+        form = form_of(TnVoltage)
+        order = [
+            form.layout_.itemAt(row, form.layout_.ItemRole.LabelRole).widget().toolTip()
+            for row in range(form.layout_.rowCount())
+            if form.layout_.itemAt(row, form.layout_.ItemRole.LabelRole) is not None
+        ]
+        assert order[0] == "voltage"
+        assert order.index("hot_cold") < order.index("t_hot")
+        assert order.index("use_grid") < order.index("angle")
+        assert list(form.headers) == ["Bias", "Timing", "Hot/cold", "Grid"]
+        assert not form.shown("angle")
+        form.editors["use_grid"].widget.setChecked(True)
+        assert form.shown("angle") and form.shown("grid_speed")
+
+    def test_lo_switch_above_its_frequency_and_if_switch_a_choice(self, app):
+        form = form_of(SidebandRatio)
+        rows = {
+            name: form.layout_.getWidgetPosition(editor.widget)[0]
+            for name, editor in form.editors.items()
+        }
+        assert rows["set_lo"] < rows["lo_frequency"]
+        # What decides whether others are shown leads its group
+        assert rows["measure_y_factor"] < rows["t_hot"]
+        switch = form.editors["switch_on"].widget
+        assert [switch.itemData(i) for i in range(switch.count())] == ["upper", "lower"]
+        assert "control_yig_power" not in form.editors
+
+    def test_arrows_change_the_digit_at_the_cursor(self, app):
+        from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
+
+        spin = CompactDoubleSpinBox()
+        spin.setDecimals(2)
+        spin.setRange(-1e6, 1e6)
+        spin.setSuffix(" mV")
+
+        def step(value, offset, steps=1):
+            """Cursor `offset` characters from the decimal point, then step."""
+            spin.setValue(value)
+            text = spin.lineEdit().text()
+            spin.lineEdit().setCursorPosition(
+                text.index(spin.locale().decimalPoint()) + offset
+            )
+            spin.stepBy(steps)
+            return spin.value()
+
+        assert step(123.45, 0) == pytest.approx(124.45)  # 123|.45
+        assert step(123.45, -1) == pytest.approx(133.45)  # 12|3.45
+        assert step(123.45, 1) == pytest.approx(123.55)  # 123.|45
+        assert step(123.45, 2) == pytest.approx(123.55)  # 123.4|5
+        assert step(123.45, 3, -1) == pytest.approx(123.44)  # 123.45|
+        # The cursor stays on the ones when the number gets longer or crosses 0
+        assert step(99.5, 0) == pytest.approx(100.5)
+        text = spin.lineEdit().text()
+        assert spin.lineEdit().cursorPosition() == text.index(
+            spin.locale().decimalPoint()
+        )
+        assert step(0.5, 0, -1) == pytest.approx(-0.5)
+        text = spin.lineEdit().text()
+        assert text.index(spin.locale().decimalPoint()) == (
+            spin.lineEdit().cursorPosition()
+        )
+        whole = CompactSpinBox()
+        whole.setRange(1, 100001)
+        whole.setValue(351)
+        whole.lineEdit().setCursorPosition(1)  # 3|51
+        whole.stepBy(1)
+        assert whole.value() == 451
+
+    def test_multi_choice_and_lists_typed(self, app):
+        form = form_of(SisReflection)
+        form.set_values({"s_parameters": ["S21", "S12"]})
+        assert form.values()["s_parameters"] == ["S21", "S12"]
+        form = form_of(IfBalance)
+        line = form.editors["sis1_voltages"].widget
+        assert line.text() == "5, 6"  # mV
+        line.setText("4.5; 6 7")
+        assert form.values()["sis1_voltages"] == [4.5e-3, 6e-3, 7e-3]
+        # Only numbers are checked here; the lab checks the rest
+        line.setText("4.5, x")
+        with pytest.raises(ValueError, match="SIS1 voltages"):
+            form.values()
+
+    def test_changes_are_signalled(self, app):
+        form = form_of(TnVoltage)
+        changed = []
+        form.changed.connect(lambda: changed.append(1))
+        form.editors["hot_cold"].widget.setChecked(False)
+        assert changed
+
+    def test_device_slots_offer_only_suitable_devices(self, session):
+        slots = DeviceSlotsForm()
+        slots.set_slots(
+            [
+                SlotInfo("sis1", "SIS 1", BIAS, "sis_bias"),
+                SlotInfo("sis2", "SIS 2", BIAS, "sis_bias"),
+                SlotInfo("detector", "Detector", ("PowerDetector",)),
+            ],
+            session.devices(),
+            preferred={"sis2": "sis_bias_1"},
+        )
+        combo = slots.combos["sis1"]
+        assert [combo.itemData(i) for i in range(combo.count())] == [
+            "sis_bias_1", "sis_bias_2",
+        ]  # fmt: skip
+        # A preferred device wins, the other slot takes the next free one
+        assert slots.mapping() == {
+            "sis1": "sis_bias_2", "sis2": "sis_bias_1", "detector": "power_meter_1",
+        }  # fmt: skip
+        assert combo.itemText(0) == "SIS1" and slots.unmapped() == []
+
+
+class TestWorkers:
+    def test_device_worker_delivers_in_gui_thread(self, app, wait):
+        worker = DeviceWorker()
+        results, errors = [], []
+        worker.submit(lambda: threading.current_thread().name, results.append)
+        worker.submit(lambda: 1 / 0, None, errors.append)
+        wait(lambda: results and errors)
+        assert results == ["lane"] and isinstance(errors[0], ZeroDivisionError)
+        worker.stop()
+
+    def test_instruments_do_not_wait_for_each_other(self, app, wait):
+        """A slow power meter must not hold the SIS monitor."""
+        import time as _time
+
+        worker = DeviceWorker()
+        release = threading.Event()
+        done = []
+        worker.submit(lambda: release.wait(5), done.append, None, "NRX", key="nrx")
+        wait(lambda: worker.current == "NRX")
+        started = _time.monotonic()
+        worker.submit(lambda: "sis", done.append, None, "SIS", key="sis_block_1")
+        wait(lambda: "sis" in done)
+        assert _time.monotonic() - started < 1 and worker.current == "NRX"
+        release.set()
+        wait(lambda: True in done)
+        worker.stop()
+
+    def test_jobs_of_one_instrument_keep_their_order(self, app, wait):
+        import time as _time
+
+        worker = DeviceWorker()
+        order = []
+        worker.submit(lambda: _time.sleep(0.05) or order.append(1), key="sis")
+        worker.submit(lambda: order.append(2), key="sis")
+        wait(lambda: len(order) == 2)
+        assert order == [1, 2]
+        worker.stop()
+
+    def test_unhandled_job_error_is_signalled(self, app, wait):
+        worker = DeviceWorker()
+        messages = []
+        worker.error.connect(messages.append)
+        worker.submit(lambda: 1 / 0)
+        wait(lambda: messages)
+        assert "ZeroDivisionError" in messages[0]
+        worker.stop()
+
+    def test_a_run_streams_records_and_saves_json(self, session, wait):
+        runner = session.run_model()
+        records, finished = [], []
+        runner.record.connect(lambda table, record: records.append(table))
+        runner.finished.connect(finished.append)
+        runner.start(
+            CURRENT_VS_VOLTAGE, IVCurve(**FAST_IV).to_json(), {"bias": "sis_bias_1"}
+        )
+        wait(lambda: finished)
+        measurement = finished[0]
+        assert measurement.status == COMPLETED and records == ["iv"] * 6
+        assert measurement.metadata["path"].endswith(".json")
+        assert os.path.exists(measurement.metadata["path"])
+        assert measurement.devices["bias"].title == "SIS1"
+        assert not runner.running
+
+    def test_a_run_reports_a_missing_device(self, session, wait):
+        runner = session.run_model()
+        failures = []
+        runner.failed.connect(failures.append)
+        runner.start(
+            CURRENT_VS_VOLTAGE, IVCurve(**FAST_IV).to_json(), {"bias": "nowhere"}
+        )
+        wait(lambda: failures)
+        assert "nowhere" in failures[0] and not runner.running
+
+    def test_a_run_is_cancelled(self, session, wait):
+        runner = session.run_model()
+        finished = []
+        runner.finished.connect(finished.append)
+        slow = IVCurve(
+            voltage=Sweep(0, 5e-3, 1000), settle_time=0.05, first_point_delay=0
+        )
+        runner.start(CURRENT_VS_VOLTAGE, slow.to_json(), {"bias": "sis_bias_1"})
+        wait(lambda: runner.run is not None)
+        runner.cancel()
+        wait(lambda: finished)
+        assert finished[0].status == CANCELLED
+
+
+def iv_measurement(number=1) -> Measurement:
+    measurement = Measurement(
+        "sis.current_vs_voltage", title="SIS I-V curve", id=number
+    )
+    for v in (1e-3, 2e-3, 3e-3):
+        measurement.append("iv", {"voltage": v, "current": v / 20})
+    return measurement
+
+
+@pytest.fixture
+def hub(app, session):
+    hub = GraphHub(session.procedures(), session.call)
+    yield hub
+    hub.close()
+    app.processEvents()
+
+
+class TestGraphs:
+    def test_hub_has_a_graph_per_curve_kind(self, hub):
+        titles = hub.titles()
+        assert {"I-V", "P-V", "Y-V", "Tn-V", "P-IF", "P-t", "I-CL"} <= set(titles)
+        assert len(titles) == len(set(titles))
+        assert isinstance(hub.graph("Tn upper"), MapGraphWidget)
+        assert hub.graph("I-V").analysis is not None
+
+    def test_live_records_make_one_curve_per_run_and_group(self, hub):
+        run = Measurement("if.noise_temperature_vs_frequency", title="IF noise", id=7)
+        for load, power in (("cold", -32.0), ("hot", -30.0)):
+            for f in (4e9, 5e9):
+                record = {"frequency": f, "load": load, "power": power}
+                hub.feed(run, IFNoise.plots, "power", record)
+        hub.feed(
+            run,
+            IFNoise.plots,
+            "noise",
+            {"frequency": 4e9, "noise_temperature": float("nan")},
+        )
+        graph = hub.graph("P-IF")
+        assert len(graph.items) == 2
+        hot = next(k for k in graph.items if k[-1] == ("hot",))
+        graph.flush()  # live points are drawn on a timer
+        xs, ys = graph.items[hot].getData()
+        assert list(xs) == [4.0, 5.0] and list(ys) == [-30.0, -30.0]
+        assert graph.curve_label(hot) == "#7 IF noise hot"
+        assert hub.graph("Tn-IF").items == {}  # NaN is not drawn
+
+    def test_live_points_are_drawn_on_a_timer_not_per_record(self, hub, wait):
+        """A redraw per record (50 a second, a thick antialiased pen) kept the
+        GUI thread painting: zoom and pan waited for the measurement."""
+        from thzdaq_gui.graphs import CURVE_PEN_WIDTH
+
+        run = Measurement("sis.power_vs_voltage", title="SIS P-V measurement", id=3)
+        graph = hub.graph("P-V")
+        record = {"voltage": 1e-3, "current": 1e-5, "power": -30.0}
+        hub.feed(run, PVCurve.plots, "pv", record)
+        (item,) = graph.items.values()
+        drawn = []
+        item.setData = lambda *a, **k: drawn.append(len(a[0]))
+        for i in range(2, 101):
+            hub.feed(run, PVCurve.plots, "pv", {**record, "voltage": i * 1e-3})
+        assert drawn == []  # nothing per record...
+        wait(lambda: drawn)
+        assert drawn == [100]  # ... all points at once
+        assert item.opts["pen"].width() == CURVE_PEN_WIDTH == 1
+
+    def test_map_graph_grid(self, hub):
+        run = Measurement("two_sb.bias_optimization")
+        for v1, v2, tn in (
+            (2.1e-3, 2.1e-3, 40.0),
+            (2.1e-3, 2.2e-3, 50.0),
+            (2.2e-3, 2.1e-3, 60.0),
+        ):
+            record = {"sis1_voltage_set": v1, "sis2_voltage_set": v2, "tn_upper": tn}
+            hub.feed(run, TwoSbOptimization.plots, "map", record)
+        xs, ys, data = hub.graph("Tn upper").grid()
+        assert xs == pytest.approx([2.1, 2.2]) and data[0, 1] == 50.0
+        assert np.isnan(data[1, 1])
+
+    def test_saved_measurement_and_manual_curves(self, hub):
+        measurement = iv_measurement()
+        assert hub.show_measurement(measurement, IVCurve.plots) == ["I-V"]
+        graph = hub.graph("I-V")
+        (key,) = graph.items
+        assert list(graph.items[key].getData()[0]) == pytest.approx([1, 2, 3])  # mV
+        custom = GraphWidget("Custom", Axis(), Axis())
+        hub.graphs["Custom"] = custom  # deleted with the hub
+        dialog = AddCurveDialog([measurement], custom)
+        dialog.x.setCurrentIndex(dialog.x.findData("voltage"))
+        dialog.y.setCurrentIndex(dialog.y.findData("current"))
+        dialog.accept_choice()
+        assert len(custom.items) == 1 and custom.x.unit == "V" and custom.y.unit == "A"
+        custom.items[next(iter(custom.items))].setVisible(False)
+        custom.remove_hidden()
+        assert custom.items == {}
+
+    def test_plotting_a_measurement_again_keeps_one_curve_per_group(self, hub):
+        """Live curves plotted again from Data got the sweep appended a second
+        time: a line from the end back to the start under every curve."""
+        run = Measurement("sis.noise_temperature_vs_voltage", title="SIS Tn-V", id=12)
+        for angle in (2.0, 5.75):
+            for v in (1.7e-3, 2.2e-3, 2.78e-3):
+                record = {"angle": angle, "load": "hot", "voltage": v,
+                          "current": v / 20, "power": -30.0}  # fmt: skip
+                run.append("pv", record)
+                hub.feed(run, TnVoltage.plots, "pv", record)
+        hub.show_measurement(run, TnVoltage.plots)  # Plot in Data
+        hub.show_measurement(run, TnVoltage.plots)  # and once more
+        graph = hub.graph("P-V")
+        assert len(graph.items) == 2
+        for key, item in graph.items.items():
+            xs, _ = item.getData()
+            assert list(xs) == pytest.approx([1.7, 2.2, 2.78]), key
+
+    def test_monitor_values(self, hub):
+        from thzdaq_instruments.quantities import Quantity
+
+        power = Quantity("power", "Power", "dBm", get=lambda t: 0)
+        angle = Quantity("angle", "Angle", "deg", get=lambda t: 0)
+        for t, p in ((0, -30.0), (1, -31.0)):
+            assert hub.monitor_value("power_meter_1", "NRX", power, t, p) == "P-t"
+        assert hub.monitor_value("x", "X", angle, 0, 1.0) == "Value-t"
+        assert hub.monitor_value("x", "X", angle, 1, None) is None
+        graph = hub.graph("P-t")
+        assert list(graph.items) == [("monitor", "power_meter_1", "power")]
+        key = ("monitor", "power_meter_1", "power")
+        assert graph.curve_label(key) == "NRX Power"
+
+    def test_plot_window_keeps_the_last_part(self, hub):
+        graph = hub.graph("P-t")
+        for t in range(100):
+            graph.append("c", "c", t, -30.0, window=10)
+        assert [x for x, _ in graph.points["c"]] == list(range(89, 100))
+        for t in range(100, 103):
+            graph.append("c", "c", t, -30.0)
+        assert len(graph.points["c"]) == 14  # no window: nothing dropped
+
+
+def test_deleted_graphs_survive_garbage_collection(app):
+    """A plot deleted with its legend still anchored corrupted memory on the
+    next gc.collect() (random crashes of the test run and the app)."""
+    import gc
+
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from thzdaq_gui.graphs import close_views
+
+    for _ in range(20):
+        graph = GraphWidget("P-t", Axis(), Axis())
+        for t in range(3):
+            graph.append("c", "c", t, -30.0)
+        legend = graph.legend
+        close_views(graph)
+        assert legend._GraphicsWidgetAnchor__parent is None  # anchor released
+        graph.deleteLater()
+        del graph, legend
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
+
+
+def test_device_worker_reports_how_long_a_job_waits(app, wait):
+    import time as _time
+
+    worker = DeviceWorker()
+    assert worker.busy_for() == 0
+    done = []
+    worker.submit(lambda: _time.sleep(0.3), done.append, None, "Rigol 1")
+    wait(lambda: worker.busy_for() > 0.1)
+    assert worker.current == "Rigol 1" and worker.started_at is not None
+    wait(lambda: done)
+    assert worker.busy_for() == 0 and worker.current is None
+    worker.stop()
+
+
+def test_app_icon_has_a_drawing_for_every_size(app):
+    from thzdaq_gui import theme
+
+    icon = theme.app_icon()
+    sizes = sorted(size.width() for size in icon.availableSizes())
+    assert sizes == list(theme.APP_ICON_SIZES)
+    # Pixel art: the small sizes are drawn, not scaled down from a big picture
+    pixmap = icon.pixmap(16, 16).toImage()
+    assert pixmap.width() == 16 and pixmap.pixelColor(8, 0).alpha() == 255
+
+
+def test_fields_are_as_tall_as_buttons(app):
+    from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton
+
+    from thzdaq_gui.forms import CompactDoubleSpinBox, CompactSpinBox
+
+    combo = QComboBox()
+    combo.addItem("GHz")
+    fields = (CompactDoubleSpinBox(), CompactSpinBox(), combo, QLineEdit())
+    button = QPushButton("Set")
+    for widget in (*fields, button):
+        widget.ensurePolished()
+    heights = {type(w).__name__: w.sizeHint().height() for w in (*fields, button)}
+    assert len(set(heights.values())) == 1, heights
+
+
+def test_a_compact_spin_box_shows_its_whole_value(app):
+    from thzdaq_gui.forms import CompactDoubleSpinBox
+
+    spin = CompactDoubleSpinBox()
+    spin.setDecimals(6)
+    spin.setRange(-1e15, 1e15)
+    spin.setSuffix(" mV")
+    spin.setValue(-1234.5)
+    spin.resize(spin.sizeHint())
+    spin.show()
+    app.processEvents()
+    edit = spin.lineEdit()
+    assert edit.fontMetrics().horizontalAdvance(edit.text()) < edit.width()
+    spin.hide()
+
+
+def test_arrows_are_drawn_in_the_theme_colors():
+    from pathlib import Path
+
+    from thzdaq_gui import theme
+
+    colors = {"normal": theme.TEXT, "hover": theme.ACCENT, "disabled": theme.MUTED}
+    for direction in ("up", "down"):
+        for state, color in colors.items():
+            path = Path(theme.ARROWS) / f"{direction}-{state}.svg"
+            assert f'stroke="{color}"' in path.read_text(encoding="utf-8")
+
+
+QUIT = """
+import qtawesome as qta
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
+from thzdaq_gui import theme
+
+app = QApplication([])
+theme.apply(app)
+theme.icon("chart-line").pixmap(16, 16)
+QTimer.singleShot(0, app.quit)
+app.exec()
+print(len(qta._instance().icon_cache))
+"""
+
+
+def test_no_icon_outlives_the_application(tmp_path):
+    """qtawesome keeps the icons it made; Python frees them at its own exit,
+    after the application, and a QIcon freed then crashes (SIGBUS)."""
+    import subprocess
+    import sys
+
+    script = tmp_path / "quit.py"
+    script.write_text(QUIT, encoding="utf-8")
+    done = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split()[-1] == "0"  # icons kept after quit
+
+
+class TestDockBody:
+    def test_built_on_first_open_and_kept_while_closed(self, app):
+        from PySide6.QtWidgets import QLabel
+        from thzdaq_gui.docks.body import DockBody
+
+        made = []
+
+        def factory():
+            made.append(QLabel("content"))
+            return made[-1]
+
+        body = DockBody(factory)
+        assert not body.built and made == []
+        body.set_open(True)
+        assert body.attached and made[0].parent() is body
+        body.set_open(False)
+        content = made[0]
+        assert content.parent() is None and not content.isVisible()
+        assert body.text() == "content"  # reaches the content while detached
+        body.set_open(True)
+        assert len(made) == 1 and body.attached
+        body.replace(factory)
+        assert len(made) == 2 and body.attached and body.content() is made[1]
+        body.dispose()
+        assert not body.built
+
+
+def test_the_session_calls_its_lab_and_hears_its_events_in_the_gui_thread(
+    session, wait
+):
+    import threading
+
+    from thzdaq_api.devices import SetQuantity
+
+    heard = []
+    session.bridge.quantity_set.connect(
+        lambda body: heard.append((body, threading.current_thread()))
+    )
+    session.lab.call(SetQuantity(ref="sis_bias_1", key="voltage_set", value="1 mV"))
+    wait(lambda: heard)
+    (body, thread), *_ = heard
+    assert (body.ref, body.origin) == ("sis_bias_1", "gui")
+    assert thread is threading.main_thread()
+
+
+def test_the_app_works_with_a_daemon_it_starts(app, tmp_path, profile, monkeypatch):
+    """No daemon runs: the app starts the simulator's daemon (a process of its
+    own), opens the window on its profile, and stops it on quitting: nothing
+    else needed it."""
+    import time
+
+    from thzdaq_api import host
+    from thzdaq_gui.app import main
+
+    monkeypatch.setenv(host.DIR_ENV, str(tmp_path / "daemon"))
+    monkeypatch.chdir(tmp_path)  # the daemon's home: its daemon.json goes there
+    files = host.DaemonFiles.of(simulate=True)
+    try:
+        code = main(
+            ["--simulate", "--station", str(profile), "--workspace", str(tmp_path)]
+            + ["--quit-after", "0", "--settings", str(tmp_path / "settings.ini")]
+        )
+        assert code == 0
+        deadline = time.monotonic() + 10
+        while host.read_host(files) is not None and time.monotonic() < deadline:
+            time.sleep(0.1)  # the daemon is another process: look again
+        assert host.read_host(files) is None
+        log = files.log.read_text(encoding="utf-8")
+        assert "Serving on port" in log and "Stopping" in log  # told by the window
+    finally:
+        host.kill(simulate=True)

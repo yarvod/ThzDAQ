@@ -1,0 +1,134 @@
+name: Build and release
+
+# Push a tag vX.Y.Z (release.py does it) to publish a Windows x64 build that
+# the application finds in Help -> Check for updates, and the packages on PyPI
+# (thzdaq and thzdaq-*, one version: X.Y.Z-beta.N is the pre-release X.Y.ZbN).
+# Run it by hand to get the build and the packages as workflow artifacts only.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: test
+    runs-on: windows-2022
+    env:
+      ASSET: ThzDAQ_Windows_x64_${{ github.ref_name }}.zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Check the version against the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          uv sync --locked
+          uv run python -c "import sys; from thzdaq_gui.version import __version__ as v; sys.exit(0 if 'v' + v == '${{ github.ref_name }}' else f'version.py has {v}, tag is ${{ github.ref_name }}')"
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          if (-not (Test-Path dist\ThzDAQ\updater.exe)) { throw "updater.exe is missing" }
+          $p = Start-Process dist\ThzDAQ\ThzDAQ.exe -ArgumentList '--quit-after', '5' -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "ThzDAQ.exe did not quit" }
+          if ($p.ExitCode -ne 0) { throw "ThzDAQ.exe exited with $($p.ExitCode)" }
+          # thzdaq-cli.exe starts the build's daemon (ThzDAQ.exe --serve), asks it, stops it
+          $cli = "dist\ThzDAQ\thzdaq-cli.exe"
+          foreach ($action in "start", "status", "stop") {
+            & $cli --simulate daemon $action
+            if ($LASTEXITCODE -ne 0) { throw "thzdaq-cli daemon $action exited with $LASTEXITCODE" }
+          }
+          # A console's kernel as the window starts it, run by the build's thzdaq-cli
+          uv run python check_console.py $cli
+          if ($LASTEXITCODE -ne 0) { throw "the console's kernel does not work in the build" }
+          # What scripts import, imported by the build's thzdaq-cli run-script
+          uv run python check_scripts.py $cli
+          if ($LASTEXITCODE -ne 0) { throw "the build's Python lacks what scripts import" }
+
+      - name: Archive
+        run: Compress-Archive -Path dist\ThzDAQ -DestinationPath $env:ASSET
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ThzDAQ_Windows_x64
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+  packages:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Build
+        run: uv build --all-packages --no-sources -o dist/packages
+
+      # Clean environments from the wheels: thzdaq alone without numpy, thzdaq[all]
+      - name: Check
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: >-
+          uv run --locked --package thzdaq-api
+          python check_packages.py dist/packages --tag "$TAG"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-packages
+          path: dist/packages/*
+          if-no-files-found: error
+
+  release:
+    needs: [build, packages]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ThzDAQ_Windows_x64
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: ThzDAQ_Windows_x64_${{ github.ref_name }}.zip
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          # release.py --again builds a tag again: the new zip replaces the old one
+          overwrite_files: true
+
+  # Published with the account's API token (secret PYPI_API_TOKEN): PyPI lets
+  # only three projects wait for a trusted publisher at once, and there are nine
+  pypi:
+    needs: [build, packages]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-packages
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # A version on PyPI never changes: release.py --again rebuilds the
+          # zip, PyPI keeps the packages it got first
+          skip-existing: true

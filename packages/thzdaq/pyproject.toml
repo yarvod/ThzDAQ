@@ -1,0 +1,55 @@
+[project]
+name = "thzdaq"
+version = "0.0.6b3"
+description = "ThzDAQ: SIS mixer bench control and measurements (command, client library, extras)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "yarvod" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "thzdaq-api==0.0.6b3",
+    "thzdaq-cli==0.0.6b3",
+]
+
+[project.urls]
+Homepage = "https://github.com/yarvod/ThzDAQ"
+Documentation = "https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md"
+Issues = "https://github.com/yarvod/ThzDAQ/issues"
+Releases = "https://github.com/yarvod/ThzDAQ/releases"
+
+[project.optional-dependencies]
+analysis = ["thzdaq-analysis==0.0.6b3"]
+daemon = ["thzdaq-daemon==0.0.6b3"]
+gui = ["thzdaq-gui==0.0.6b3"]
+mcp = ["thzdaq-mcp==0.0.6b3"]
+all = [
+    "thzdaq-analysis==0.0.6b3",
+    "thzdaq-daemon==0.0.6b3",
+    "thzdaq-gui==0.0.6b3",
+    "thzdaq-mcp==0.0.6b3",
+]
+
+[tool.uv.sources]
+thzdaq-analysis = { workspace = true }
+thzdaq-api = { workspace = true }
+thzdaq-cli = { workspace = true }
+thzdaq-daemon = { workspace = true }
+thzdaq-gui = { workspace = true }
+thzdaq-mcp = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thzdaq"]

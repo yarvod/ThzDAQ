@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: windows-2022
+    # A test that hangs fails the run in minutes instead of hours
+    timeout-minutes: 45
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.1
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Check the lock file
+        run: uv lock --check
+
+      - name: Architecture boundaries
+        run: uv run lint-imports
+
+      - name: Tests
+        # The root pytest config distributes tests across up to six worker processes.
+        # --timeout fails a hung test with its stack (a thread: Windows has no SIGALRM);
+        # -vv names the active test even if it hangs; --durations tells where the time goes
+        run: uv run pytest -vv -p no:faulthandler --timeout=240 --timeout-method=thread --durations=30

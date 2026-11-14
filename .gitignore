@@ -8,7 +8,18 @@ dist
 *.log
 *.DS_Store
 *.spec
-dumps
+!ThzDAQ.spec
 *.ipynb
-*meas*.json
 .env
+/data/
+# What a daemon run from sources keeps between runs
+/daemon.json
+/daemon-sim.json
+# Window layout and perspectives of a local run
+/settings.ini
+# What a daemon run from sources keeps of instruments (a grid's angle)
+/state.json
+/state-sim.json
+# The program's own measurements and the profiles' previous versions
+/measurements/
+stations/.history/

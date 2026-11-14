@@ -1,0 +1,81 @@
+"""What agents may do, by the rights a call needs: allow, ask (a person allows
+it first) or deny. The daemon keeps the table in its settings; a person changes
+it in the window (the Daemon dock) or with thzdaq daemon settings.
+
+Some answers stay whatever the table says: agents never change the profile,
+answer for a person or write raw commands, a dangerous step is always asked,
+and a set an agent may do alone is still asked for a jump ×10 or a value
+beyond warn_min..warn_max.
+
+A script has the rights of whoever started it. An agent's script goes by this
+table as its agent does. A person's script, and a console of a window (code a
+person types), go by PERSON_SCRIPTS: it changes
+the bench within its limits as the person would in a dock, and what a dock
+confirms (a dangerous step, a jump or a value beyond the warn range, another's
+sweep, a raw write, a change of the profile) waits for a person, unless the
+person allowed it at the script's start (thzdaq script start --allow).
+"""
+
+from enum import Enum
+from typing import Mapping
+
+from thzdaq_api.operation import Rights
+
+
+class Decision(str, Enum):
+    ALLOW = "allow"
+    ASK = "ask"
+    DENY = "deny"
+
+
+# What agents may do until a person changes it
+AGENTS: Mapping[Rights, Decision] = {
+    Rights.READ: Decision.ALLOW,
+    Rights.STOP: Decision.ALLOW,
+    Rights.SET: Decision.ASK,
+    Rights.RUN: Decision.ASK,
+    Rights.DAEMON: Decision.ASK,
+    Rights.STATION: Decision.DENY,
+    Rights.ANSWER: Decision.DENY,
+    Rights.RAW_QUERY: Decision.ASK,
+    Rights.RAW_WRITE: Decision.DENY,
+    Rights.LIBRARY: Decision.ASK,
+}
+
+# What nobody changes: an agent could raise its own limits or rights, stand
+# for the person it asks, or change an instrument past every limit
+FIXED: Mapping[Rights, Decision] = {
+    Rights.STATION: Decision.DENY,
+    Rights.ANSWER: Decision.DENY,
+    Rights.RAW_WRITE: Decision.DENY,
+}
+
+# What a script a person started, or a console, may do: what the person does in a dock goes
+# at once, what a dock confirms waits for a person (a call that may harm the
+# bench is asked besides, as an agent's)
+PERSON_SCRIPTS: Mapping[Rights, Decision] = {
+    Rights.READ: Decision.ALLOW,
+    Rights.STOP: Decision.ALLOW,
+    Rights.SET: Decision.ALLOW,
+    Rights.RUN: Decision.ALLOW,
+    Rights.DAEMON: Decision.ASK,
+    Rights.STATION: Decision.ASK,
+    Rights.ANSWER: Decision.DENY,
+    Rights.RAW_QUERY: Decision.ALLOW,
+    Rights.RAW_WRITE: Decision.ASK,
+    Rights.LIBRARY: Decision.ALLOW,
+}
+
+# What a call of each rights does, for the person who chooses
+MEANS: Mapping[Rights, str] = {
+    Rights.READ: "look at devices, measurements and the daemon",
+    Rights.SET: "set a quantity, run a device action",
+    Rights.RUN: "start measurements, comment on them",
+    Rights.STOP: "end measurements, bring devices to their safe state",
+    Rights.DAEMON: "change the daemon's settings, stop or restart it",
+    Rights.STATION: "change the profile and what agents may do",
+    Rights.ANSWER: "answer for a person what waits for one",
+    Rights.RAW_QUERY: "ask an instrument a raw command (with ?)",
+    Rights.RAW_WRITE: "send an instrument a raw command that no limit checks",
+    Rights.LIBRARY: "write the bench's own measurements (scripts of measurements/)",
+}

@@ -1,1 +1,0 @@
-from .sumitomoF70TabWidget import SumitomoF70TabWidget
