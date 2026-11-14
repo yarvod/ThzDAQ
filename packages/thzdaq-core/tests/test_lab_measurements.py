@@ -3,8 +3,10 @@
 from pathlib import Path
 
 import pytest
+from thzdaq_api import present
 from lab_helpers import bodies, wait_for
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.measurement_file import read_measurement
 from thzdaq_api.events import (
     MeasurementFinished,
     MeasurementProgress,
@@ -201,6 +203,11 @@ def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
     voltage = next(c for c in iv.columns if c.key == "voltage_set")
     assert (voltage.unit, voltage.minimum, voltage.maximum) == ("V", 0.0, 2e-3)
     assert "m" in {p.name for p in voltage.prefixes}
+    # what it was run with, as its file keeps it: agents read it too
+    assert summary.parameters == read_measurement(summary.run.path).parameters
+    assert summary.parameters["settle_time"] == FAST_IV["settle_time"]
+    told = present.summary(summary)
+    assert "parameters (SI): " in told and "settle_time = " in told
     with pytest.raises(LabError) as caught:
         lab.call(SummarizeMeasurement(id=99999))
     assert caught.value.code == ErrorCode.NOT_FOUND

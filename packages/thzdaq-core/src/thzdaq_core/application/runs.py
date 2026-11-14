@@ -123,7 +123,8 @@ class _Run(RunObserver):
                 table_summary(self.measurement.tables[table], count)
                 for table, count in self._published.items()
             )
-        return measurement_summary(self.info(), tables, self.measurement.results)
+        m = self.measurement
+        return measurement_summary(self.info(), tables, m.results, m.parameters)
 
     def _publish(self, body) -> None:
         self._seq = self.events.publish(body).seq

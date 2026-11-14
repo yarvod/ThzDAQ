@@ -5,6 +5,7 @@ Values travel in SI (power in dBm); each is shown with the prefix that keeps
 it from 1 to 999 ("2.3 mV"), as the daemon reads it back when it is typed.
 """
 
+import json
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from thzdaq_api.approvals import UserAnswer
@@ -287,6 +288,11 @@ def column(c: ColumnSummary) -> str:
 
 def summary(found: MeasurementSummary) -> str:
     parts = [run(found.run)]
+    if found.parameters:
+        parts.append(
+            "parameters (SI): "
+            + ", ".join(f"{k} = {given(v)}" for k, v in found.parameters.items())
+        )
     for table in found.tables:
         parts.append(f"table {table.name} ({table.title or table.name}): "
                      f"{table.records} records")  # fmt: skip
@@ -302,6 +308,13 @@ def summary(found: MeasurementSummary) -> str:
             + ", ".join(f"{k} ({n} values)" for k, n in found.series.items())
         )
     return "\n".join(parts)
+
+
+def given(value) -> str:
+    """A parameter as a run took it: a number shown short, others as JSON."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return shown(value)
+    return json.dumps(value, ensure_ascii=False)
 
 
 def answer(found: UserAnswer) -> str:

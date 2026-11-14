@@ -400,10 +400,12 @@ class TableSummary(msgspec.Struct, frozen=True):
 class MeasurementSummary(msgspec.Struct, frozen=True):
     """What a measurement holds, without its arrays: each table with its number
     of records and the range of each column, the results that are single
-    values, and the length of those that are lists (the file has them)."""
+    values, and the length of those that are lists (the file has them). Its
+    parameters as the run took them, in SI (describe_procedure gives units)."""
 
     run: RunInfo
     tables: Tuple[TableSummary, ...]
+    parameters: Dict[str, Any] = {}
     results: Dict[str, Value] = {}
     series: Dict[str, int] = {}  # a list result -> its length
 

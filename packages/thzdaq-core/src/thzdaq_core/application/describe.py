@@ -227,6 +227,7 @@ def measurement_summary(
     run: measurements.RunInfo,
     tables: Tuple[measurements.TableSummary, ...],
     results: Mapping[str, Any],
+    parameters: Mapping[str, Any],
 ) -> measurements.MeasurementSummary:
     """Results as single values; a list (a fitted curve) only by its length."""
     given = dict(results)  # the run's thread may add one meanwhile
@@ -234,6 +235,7 @@ def measurement_summary(
     return measurements.MeasurementSummary(
         run=run,
         tables=tables,
+        parameters=dict(parameters),
         results={k: v for k, v in given.items() if isinstance(v, single)},
         series={
             k: len(v)
