@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-mcp"
-version = "0.0.6b3"
+version = "0.0.6b4"
 description = "ThzDAQ MCP server: the bench's tools for agents (Claude Code, Codex), a client of the daemon"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=2.3,<2.4",
-    "thzdaq-api==0.0.6b3",
+    "thzdaq-api==0.0.6b4",
 ]
 
 # thzdaq mcp: the command line serves it when this package is installed

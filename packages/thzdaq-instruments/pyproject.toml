@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-instruments"
-version = "0.0.6b3"
+version = "0.0.6b4"
 description = "Laboratory instrument drivers, transports and simulators for ThzDAQ"
 readme = "README.md"
 requires-python = ">=3.11"

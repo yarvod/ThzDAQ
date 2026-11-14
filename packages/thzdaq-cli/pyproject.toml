@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-cli"
-version = "0.0.6b3"
+version = "0.0.6b4"
 description = "ThzDAQ command line: a client of the bench daemon"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "thzdaq-api==0.0.6b3",
+    "thzdaq-api==0.0.6b4",
 ]
 
 [project.urls]
