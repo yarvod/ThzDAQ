@@ -77,7 +77,11 @@ from thzdaq_gui.measure_forms import MeasureForms
 from thzdaq_gui.graphs import GraphHub, close_plots
 from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
-from thzdaq_gui.models.assistant import AssistantModel, ProvidersModel
+from thzdaq_gui.models.assistant import (
+    AssistantModel,
+    InstructionsModel,
+    ProvidersModel,
+)
 from thzdaq_gui.models.hints import HintsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
 from thzdaq_gui.guide import WindowGuide
@@ -160,7 +164,9 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
-        self.assistant = AssistantModel(session, self.providers, self)
+        self.assistant = AssistantModel(
+            session, self.providers, InstructionsModel(self), self
+        )
         self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()
         self.build_toolbar()

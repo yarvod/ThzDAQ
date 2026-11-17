@@ -86,6 +86,7 @@ class Conversation:
         self.max_steps = max_steps
         self.messages: List[Message] = []  # after the system prompt
         self.system: Optional[str] = None  # None: made at the next turn
+        self._forgotten = 0  # forget_bench counts: a prompt made before is not kept
         # What a turn tells is told under it, so nothing is told once stopped;
         # a listener may stop the turn as it hears it
         self._lock = threading.RLock()
@@ -93,9 +94,11 @@ class Conversation:
         self._waiting: List[Content] = []  # the person's, for the next step
 
     def forget_bench(self) -> None:
-        """The bench changed: the next turn tells the model it anew."""
+        """The bench or the person's instructions changed: the next turn
+        makes the system prompt anew; a turn running keeps its own."""
         with self._lock:
             self.system = None
+            self._forgotten += 1
 
     def begin(self) -> object:
         """A turn starts; what it adds and tells carries this token."""
@@ -157,9 +160,12 @@ class Conversation:
     def _say(self, turn, content, client, tools, reach, prompt, listener):
         if content is not None:
             self._add(turn, {"role": "user", "content": content})
+        with self._lock:  # the turn keeps the prompt it begins with
+            system, forgotten = self.system, self._forgotten
         try:
-            if self.system is None:
-                self._set_system(turn, prompt(reach))
+            if system is None:
+                system = prompt(reach)
+                self._set_system(turn, system, forgotten)
         except LabError as e:
             return Outcome.FAILED, f"the bench cannot be asked: {e}"
         found = by_name(tuple(tools))
@@ -176,7 +182,7 @@ class Conversation:
             self._tell(turn, listener.asking)
             try:
                 reply = client.complete(
-                    self._asked(turn), offered, heard, thought=thought
+                    self._asked(turn, system), offered, heard, thought=thought
                 )
             except ProviderError as e:
                 return Outcome.FAILED, str(e)
@@ -230,15 +236,17 @@ class Conversation:
             if taken:
                 listener.taken(len(taken))
 
-    def _asked(self, turn: object) -> List[Message]:
+    def _asked(self, turn: object, system: str) -> List[Message]:
         with self._lock:
             self._check(turn)
-            return [{"role": "system", "content": self.system}] + list(self.messages)
+            return [{"role": "system", "content": system}] + list(self.messages)
 
-    def _set_system(self, turn: object, prompt: str) -> None:
+    def _set_system(self, turn: object, prompt: str, forgotten: int) -> None:
+        """Kept for the next turns unless forgotten while it was made."""
         with self._lock:
             self._check(turn)
-            self.system = prompt
+            if forgotten == self._forgotten:
+                self.system = prompt
 
     def _add(self, turn: object, message: Message) -> None:
         with self._lock:

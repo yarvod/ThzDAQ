@@ -66,6 +66,8 @@ EDITOR = "workspaces/editor"  # the program a workspace opens in without VS Code
 # The assistant's model servers (JSON, keys apart: the keyring) and the one chosen
 ASSISTANT_PROVIDERS = "assistant/providers"
 ASSISTANT_PROVIDER = "assistant/provider"
+# The person's instructions to the assistant, added to its built-in prompt
+ASSISTANT_INSTRUCTIONS = "assistant/instructions"
 
 
 def procedure_key(procedure: str) -> str:

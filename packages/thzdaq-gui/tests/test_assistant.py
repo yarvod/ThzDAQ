@@ -15,7 +15,14 @@ from thzdaq_api.origins import ASSISTANT, ASSISTANT_CLIENT
 from thzdaq_api.tools import Reach, tools
 from thzdaq_gui.assistant.conversation import STOPPED, Conversation, Outcome
 from thzdaq_gui.assistant.keys import SERVICE, Keys
-from thzdaq_gui.assistant.prompt import system_prompt
+from thzdaq_gui.assistant.prompt import (
+    BENCH,
+    INSTRUCTIONS,
+    INSTRUCTIONS_RANK,
+    MADE_HERE,
+    built_in,
+    system_prompt,
+)
 from thzdaq_gui.assistant.provider import Client, Provider, ProviderError
 
 BIAS = {"ref": "sis_bias_1", "key": "voltage_set", "value": "1 mV"}
@@ -267,8 +274,49 @@ def test_the_prompt_is_made_once_and_again_when_the_bench_changed(model, client,
     assert model.asked[2]["messages"][0]["content"] == "prompt 2"
 
 
+def systems(model):
+    """The system prompt of each request the model had."""
+    return [asked["messages"][0]["content"] for asked in model.asked]
+
+
+def test_a_turn_keeps_its_prompt_when_the_bench_changes_as_it_runs(
+    model, client, reach
+):
+    conversation = Conversation()
+    made = []
+
+    def prompt(reach):
+        made.append(f"prompt {len(made) + 1}")
+        return made[-1]
+
+    class Forgets(Heard):
+        def called(self, call):
+            super().called(call)
+            conversation.forget_bench()  # between the turn's steps
+
+    model.replies = [calls(("list_devices", {})), says("Two."), says("Hi.")]
+    talk(conversation, client, reach, heard=Forgets(), prompt=prompt)
+    talk(conversation, client, reach, prompt=prompt)
+    assert systems(model) == ["prompt 1", "prompt 1", "prompt 2"]
+
+
+def test_a_prompt_made_as_the_bench_changed_is_not_kept(model, client, reach):
+    conversation = Conversation()
+    made = []
+
+    def prompt(reach):
+        made.append(f"prompt {len(made) + 1}")
+        if len(made) == 1:
+            conversation.forget_bench()  # while the daemon is asked
+        return made[-1]
+
+    talk(conversation, client, reach, prompt=prompt)
+    talk(conversation, client, reach, prompt=prompt)
+    assert systems(model) == ["prompt 1", "prompt 2"]
+
+
 def test_the_prompt_tells_the_rules_the_bench_and_its_procedures(reach):
-    prompt = system_prompt(reach)
+    prompt = system_prompt(reach, " \n")  # blank: no instructions
     assert prompt.startswith("# ThzDAQ: the assistant in the window")
     assert guides.section(guides.AGENTS, guides.RULES) in prompt
     assert guides.section(guides.AGENTS, guides.OWN_MEASUREMENT) in prompt
@@ -276,6 +324,22 @@ def test_the_prompt_tells_the_rules_the_bench_and_its_procedures(reach):
     assert "\nsis.current_vs_voltage: SIS I-V curve. " in prompt
     assert "Slots: bias." in prompt
     assert "Connections:" in prompt
+    assert INSTRUCTIONS not in prompt
+
+
+def test_the_persons_instructions_go_after_the_rules_before_the_bench(reach):
+    prompt = system_prompt(reach, "Answer in Russian.\n")
+    rules = guides.section(guides.AGENTS, guides.RULES)
+    mine = f"{INSTRUCTIONS}\n\n{INSTRUCTIONS_RANK}\n\nAnswer in Russian.\n\n{BENCH}"
+    assert f"{rules}\n\n{mine}\n" in prompt
+
+
+def test_the_built_in_prompt_marks_what_each_conversation_makes():
+    shown = built_in()
+    assert shown.startswith("# ThzDAQ: the assistant in the window")
+    rules = guides.section(guides.AGENTS, guides.RULES)
+    own = guides.section(guides.AGENTS, guides.OWN_MEASUREMENT)
+    assert shown.endswith(f"{rules}\n\n{MADE_HERE}\n\n{own}")
 
 
 def test_test_says_whether_the_server_takes_tools(model, client):

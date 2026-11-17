@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from thzdaq_gui import theme
 from thzdaq_gui.assistant.attachments import Attachment, AttachmentError, Kind as Given
 from thzdaq_gui.chat_widgets import Chip, ElidedLabel, Fold, MessageView
-from thzdaq_gui.docks.providers import ProvidersDialog
+from thzdaq_gui.docks.assistant_settings import TITLE as SETTINGS, AssistantSettings
 from thzdaq_gui.folders import ATTACHMENTS
 from thzdaq_gui.models.assistant import (
     AssistantModel,
@@ -299,7 +299,7 @@ class AssistantWidget(QWidget):
         self.providerBox.activated.connect(
             lambda index: model.providers.choose(self.providerBox.itemText(index))
         )
-        settings = self._button("cog-outline", "Model servers…", self.edit)
+        settings = self._button("cog-outline", f"{SETTINGS}…", self.edit)
         new = self._button("chat-plus-outline", "New chat", model.new_chat)
         top = QHBoxLayout()
         top.addWidget(self.providerBox, 1)
@@ -519,7 +519,7 @@ class AssistantWidget(QWidget):
         self.model.send(text, attached)
 
     def edit(self) -> None:
-        ProvidersDialog(self.model.providers, self).exec()
+        AssistantSettings(self.model.providers, self.model.instructions, self).exec()
 
     def add(self, index: int) -> None:
         widget = item_widget(self.model.items[index])

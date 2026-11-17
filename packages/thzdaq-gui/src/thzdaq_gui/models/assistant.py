@@ -1,5 +1,6 @@
-"""The assistant of the window: its model servers (ProvidersModel) and its chat
-(AssistantModel), on QtCore.
+"""The assistant of the window: its model servers (ProvidersModel), the
+person's instructions to it (InstructionsModel) and its chat (AssistantModel),
+on QtCore.
 
 A turn of the chat runs in a thread of its own (it waits for the model, for
 the bench, for the person's consent); what it tells waits in one queue that
@@ -47,7 +48,12 @@ from thzdaq_gui.assistant.provider import (
     ToolCall,
     Usage,
 )
-from thzdaq_gui.settings import ASSISTANT_PROVIDER, ASSISTANT_PROVIDERS, settings
+from thzdaq_gui.settings import (
+    ASSISTANT_INSTRUCTIONS,
+    ASSISTANT_PROVIDER,
+    ASSISTANT_PROVIDERS,
+    settings,
+)
 
 NO_PROVIDER = "Add the server of a model first (the gear above)"
 SHOWN = 40  # letters of an argument a card's line shows
@@ -139,6 +145,24 @@ class ProvidersModel(QObject):
         )
         if self._chosen is not None:
             kept.setValue(ASSISTANT_PROVIDER, self._chosen)
+        self.changed.emit()
+
+
+class InstructionsModel(QObject):
+    """The person's instructions to the assistant: one text in the program's
+    settings, the same in every workspace. They add to the built-in prompt
+    (prompt.system_prompt), they never replace its rules."""
+
+    changed = Signal()
+
+    def instructions(self) -> str:
+        """As the person wrote them; empty: none."""
+        return settings().value(ASSISTANT_INSTRUCTIONS) or ""
+
+    def set_instructions(self, text: str) -> None:
+        if text == self.instructions():
+            return
+        settings().setValue(ASSISTANT_INSTRUCTIONS, text)
         self.changed.emit()
 
 
@@ -280,10 +304,17 @@ class AssistantModel(QObject):
     # From a turn's thread, queued to the GUI thread: the queue was empty
     _arrived = Signal()
 
-    def __init__(self, session, providers: ProvidersModel, parent=None):
+    def __init__(
+        self,
+        session,
+        providers: ProvidersModel,
+        instructions: InstructionsModel,
+        parent=None,
+    ):
         super().__init__(parent)
         self.session = session
         self.providers = providers
+        self.instructions = instructions
         self.items: List[Item] = []
         self.conversation = Conversation()
         self.usage = Tokens()  # of the chat
@@ -306,7 +337,8 @@ class AssistantModel(QObject):
         self._closed = False
         self._arrived.connect(self._take_told)
         session.station_changed.connect(self._another_lab)
-        session.config_changed.connect(self._bench_changed)
+        session.config_changed.connect(self._prompt_changed)
+        instructions.changed.connect(self._prompt_changed)
         providers.changed.connect(self.usage_changed)
 
     def busy(self) -> bool:
@@ -353,6 +385,10 @@ class AssistantModel(QObject):
         listener = _Turn(self, token)
         folder = self.session.workspace
         window = self.session.window  # what it shows goes to its own window
+        instructions = self.instructions.instructions()
+
+        def prompt(reach: Reach) -> str:
+            return system_prompt(reach, instructions)
 
         def run() -> None:
             try:
@@ -364,7 +400,7 @@ class AssistantModel(QObject):
             outcome, why = conversation.say(
                 token, message, client,
                 tools(lambda: folder.folder, lambda: window), reach,
-                system_prompt, listener,
+                prompt, listener,
             )  # fmt: skip
             listener.ended(outcome, why)
 
@@ -429,10 +465,11 @@ class AssistantModel(QObject):
     def _another_lab(self) -> None:
         with self._reach_lock:
             self._lab_changed = True
-        self._bench_changed()
+        self._prompt_changed()
 
-    def _bench_changed(self) -> None:
-        """The model hears of the bench anew at the next turn."""
+    def _prompt_changed(self) -> None:
+        """The bench or the person's instructions changed: the next turn makes
+        the system prompt anew (a turn running keeps its own)."""
         self.conversation.forget_bench()
 
     # What a turn told: queued in its thread, taken in the GUI thread

@@ -1,15 +1,13 @@
-"""The model servers of the assistant: a list, the form of the chosen one (name,
-URL, model, key, temperature, the tokens its model takes) and Test, which
-asks the server whether it answers and takes tools, and fills in the tokens
-when the server tells them. A view of ProvidersModel: Save hands it the
-form."""
+"""The model servers of the assistant, a page of its settings: a list, the form
+of the chosen one (name, URL, model, key, temperature, the tokens its model
+takes) and Test, which asks the server whether it answers and takes tools,
+and fills in the tokens when the server tells them. A view of ProvidersModel:
+Save hands it the form."""
 
 from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
@@ -26,18 +24,15 @@ from thzdaq_gui import theme
 from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.models.assistant import ProvidersModel
 
-TITLE = "Assistant: model servers"
 NEW = "New server"
 NO_TEMPERATURE = -0.1  # the spin box's special value: the server's own
 MAX_CONTEXT = 10_000_000  # tokens
 
 
-class ProvidersDialog(QDialog):
+class ProvidersPage(QWidget):
     def __init__(self, providers: ProvidersModel, parent=None):
         super().__init__(parent)
         self.providers = providers
-        self.setWindowTitle(TITLE)
-        self.resize(640, 360)
         self.editing: Optional[str] = None  # the name of the one in the form
 
         self.list = QListWidget()
@@ -106,14 +101,9 @@ class ProvidersDialog(QDialog):
         self.form = QWidget()
         self.form.setLayout(right)
 
-        body = QHBoxLayout()
+        body = QHBoxLayout(self)
         body.addLayout(left, 1)
         body.addWidget(self.form, 2)
-        close = QDialogButtonBox(QDialogButtonBox.Close)
-        close.rejected.connect(self.reject)
-        layout = QVBoxLayout(self)
-        layout.addLayout(body, 1)
-        layout.addWidget(close)
 
         providers.tested.connect(self.show_test)
         providers.context_found.connect(self.show_context)

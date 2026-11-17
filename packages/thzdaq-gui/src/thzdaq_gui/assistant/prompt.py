@@ -1,9 +1,12 @@
 """The system prompt of the assistant: its role and the rules (thzdaq_api.guides),
-then the bench as it is now: the profile, the devices with their capabilities,
-the connections, the procedures in short with their slots, and how a
-measurement of the bench's own is written. It is made for each conversation
-and again when the bench changes; details the model asks with its tools
+the person's instructions (they add to the rules, never replace them), then the
+bench as it is now: the profile, the devices with their capabilities, the
+connections, the procedures in short with their slots, and how a measurement
+of the bench's own is written. It is made for each conversation and again when
+the bench or the instructions change; details the model asks with its tools
 (describe_device, describe_procedure)."""
+
+from typing import Sequence
 
 from thzdaq_api import guides, present
 from thzdaq_api.devices import ListDevices
@@ -12,9 +15,18 @@ from thzdaq_api.measurements import DescribeProcedure, ListProcedures, Procedure
 from thzdaq_api.station import GetStation, ListConnections
 from thzdaq_api.tools import Reach
 
+INSTRUCTIONS = "## The person's instructions"
+INSTRUCTIONS_RANK = (
+    "They add to the rules above; where they contradict them, the rules hold."
+)
 BENCH = "## The bench now"
 PROCEDURES = "## Procedures"
 SIMULATED = "simulated: the instruments are simulators, nothing real changes"
+# Where the built-in prompt shown to the person has what each conversation makes
+MADE_HERE = (
+    "[Made for each conversation: the person's instructions, the bench now"
+    " and the procedures]"
+)
 
 
 def procedure_line(reach: Reach, summary: ProcedureSummary) -> str:
@@ -30,7 +42,25 @@ def procedure_line(reach: Reach, summary: ProcedureSummary) -> str:
     return f"{line} Slots: {slots or present.NOTHING}."
 
 
-def system_prompt(reach: Reach) -> str:
+def instructions_section(instructions: str) -> str:
+    """The person's instructions under their heading; empty without any."""
+    text = instructions.strip()
+    return f"{INSTRUCTIONS}\n\n{INSTRUCTIONS_RANK}\n\n{text}" if text else ""
+
+
+def _joined(made: Sequence[str]) -> str:
+    """The fixed parts in order with what a conversation made between them
+    (an empty part left out)."""
+    parts = (
+        guides.guide(guides.ASSISTANT).strip(),
+        guides.section(guides.AGENTS, guides.RULES),
+        *made,
+        guides.section(guides.AGENTS, guides.OWN_MEASUREMENT),
+    )
+    return "\n\n".join(part for part in parts if part)
+
+
+def system_prompt(reach: Reach, instructions: str) -> str:
     """LabError when the daemon cannot be asked."""
     station = reach.call(GetStation())
     where = station.path or "not saved"
@@ -46,12 +76,12 @@ def system_prompt(reach: Reach) -> str:
     procedures = [PROCEDURES] + [
         procedure_line(reach, p) for p in reach.call(ListProcedures())
     ]
-    return "\n\n".join(
-        (
-            guides.guide(guides.ASSISTANT).strip(),
-            guides.section(guides.AGENTS, guides.RULES),
-            "\n".join(bench),
-            "\n".join(procedures),
-            guides.section(guides.AGENTS, guides.OWN_MEASUREMENT),
-        )
+    return _joined(
+        (instructions_section(instructions), "\n".join(bench), "\n".join(procedures))
     )
+
+
+def built_in() -> str:
+    """The built-in prompt as the person reads it: its fixed parts in order,
+    one line where each conversation adds its own."""
+    return _joined((MADE_HERE,))

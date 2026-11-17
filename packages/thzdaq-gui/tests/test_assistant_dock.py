@@ -11,10 +11,12 @@ import pytest
 from lab_helpers import Window
 from model_server import USAGE, calls, says, thinks
 from thzdaq_gui.assistant.keys import SERVICE
+from thzdaq_gui.assistant.prompt import BENCH, INSTRUCTIONS, INSTRUCTIONS_RANK
 from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.models.assistant import (
     NO_PROVIDER,
     AssistantModel,
+    InstructionsModel,
     Kind,
     ProvidersModel,
     State,
@@ -36,11 +38,13 @@ def shot(widget, name: str) -> None:
 
 @pytest.fixture(autouse=True)
 def no_servers(app):
-    """The settings outlive a test: the servers a test added go with it."""
+    """The settings outlive a test: the servers and the instructions a test
+    added go with it."""
     yield
     providers = ProvidersModel()
     for provider in providers.all():
         providers.remove(provider.name)
+    InstructionsModel().set_instructions("")
 
 
 @pytest.fixture
@@ -51,8 +55,13 @@ def providers(model):
 
 
 @pytest.fixture
-def assistant(session, providers):
-    assistant = AssistantModel(session, providers)
+def instructions(app):
+    return InstructionsModel()
+
+
+@pytest.fixture
+def assistant(session, providers, instructions):
+    assistant = AssistantModel(session, providers, instructions)
     yield assistant
     assistant.close()
 
@@ -169,8 +178,8 @@ def test_stop_ends_the_turn_while_a_call_waits(assistant, model, person, wait):
     ]  # fmt: skip
 
 
-def test_without_a_server_it_says_to_add_one(session, app):
-    assistant = AssistantModel(session, ProvidersModel())
+def test_without_a_server_it_says_to_add_one(session, instructions):
+    assistant = AssistantModel(session, ProvidersModel(), instructions)
     assistant.send("hello")
     assert assistant.items[-1].text == NO_PROVIDER and not assistant.busy()
 
@@ -196,6 +205,28 @@ def test_another_profile_is_told_to_the_model_at_the_next_turn(
     first, again = (asked["messages"][0]["content"] for asked in model.asked)
     assert first == again  # made anew: the same bench, the same prompt
     assert assistant.conversation.system == first
+
+
+def test_the_persons_instructions_are_kept_and_go_from_the_next_turn(
+    assistant, instructions, model, wait
+):
+    changed = []
+    instructions.changed.connect(lambda: changed.append(True))
+    model.replies = [calls(("list_devices", {})), says("Two."), says("Привет.")]
+    model.held.clear()  # the turn waits for the model's first answer
+    assistant.send("which?")
+    wait(lambda: model.asked)
+    instructions.set_instructions("Answer in Russian.")
+    instructions.set_instructions("Answer in Russian.")  # the same: no change
+    assert changed == [True]
+    assert InstructionsModel().instructions() == "Answer in Russian."
+    model.held.set()
+    wait(lambda: not assistant.busy())
+    assistant.send("hello")
+    wait(lambda: not assistant.busy())
+    first, step, turn = (asked["messages"][0]["content"] for asked in model.asked)
+    assert first == step and INSTRUCTIONS not in first  # the turn kept its own
+    assert f"{INSTRUCTIONS_RANK}\n\nAnswer in Russian.\n\n{BENCH}" in turn
 
 
 def test_the_dock_shows_messages_and_folded_cards(assistant, model, person, wait):
@@ -294,11 +325,12 @@ def test_a_folded_cards_body_is_made_when_it_is_unfolded(app):
     assert card.thought.text() == "first second third"
 
 
-def test_the_dialog_saves_a_server_and_tests_it(providers, model, wait):
-    from thzdaq_gui.docks.providers import ProvidersDialog
+def test_the_dialog_saves_a_server_and_tests_it(providers, instructions, model, wait):
+    from thzdaq_gui.docks.assistant_settings import AssistantSettings
 
-    dialog = ProvidersDialog(providers)
-    dialog.show()
+    settings = AssistantSettings(providers, instructions)
+    settings.show()
+    dialog = settings.servers
     assert dialog.list.count() == 1 and dialog.key.text() == "secret"
     dialog.add()
     dialog.url.setText(model.url)
@@ -320,8 +352,47 @@ def test_the_dialog_saves_a_server_and_tests_it(providers, model, wait):
     dialog.test()
     wait(lambda: dialog.testButton.isEnabled())
     assert dialog.result.text() == "qwen answers and calls tools"
-    shot(dialog, "assistant_providers")
-    dialog.close()
+    shot(settings, "assistant_providers")
+    settings.close()
+
+
+def test_the_dialog_edits_the_instructions_over_the_built_in_prompt(instructions):
+    from thzdaq_api import guides
+    from thzdaq_gui.assistant.prompt import MADE_HERE
+    from thzdaq_gui.docks.assistant_settings import (
+        INSTRUCTIONS as TAB,
+        TITLE,
+        AssistantSettings,
+    )
+
+    settings = AssistantSettings(ProvidersModel(), instructions)
+    settings.show()
+    assert settings.windowTitle() == TITLE
+    settings.tabs.setCurrentWidget(settings.instructions)
+    assert settings.tabs.tabText(settings.tabs.currentIndex()) == TAB
+    page = settings.instructions
+    assert page.editor.toPlainText() == "" and not page.saveButton.isEnabled()
+    page.editor.setPlainText("Answer in Russian.")
+    assert page.saveButton.isEnabled() and page.revertButton.isEnabled()
+    page.saveButton.click()
+    assert instructions.instructions() == "Answer in Russian."
+    assert not page.saveButton.isEnabled() and not page.revertButton.isEnabled()
+    page.editor.setPlainText("Answer in French.")
+    page.revertButton.click()
+    assert page.editor.toPlainText() == "Answer in Russian."
+    assert instructions.instructions() == "Answer in Russian."
+    assert not page.builtIn.expanded()  # folded: secondary to the editor
+    view = page.builtInView
+    heading = next(
+        line
+        for line in guides.guide(guides.ASSISTANT).splitlines()
+        if line.startswith("# ")
+    )
+    assert view.isReadOnly() and view.toPlainText().startswith(heading)
+    assert MADE_HERE in view.toPlainText()
+    page.builtIn.set_expanded(True)
+    shot(settings, "assistant_instructions")
+    settings.close()
 
 
 def test_a_cards_line_cuts_a_long_argument():
