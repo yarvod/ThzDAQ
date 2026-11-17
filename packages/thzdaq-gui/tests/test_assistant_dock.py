@@ -3,6 +3,8 @@ model on the simulated bench with a model's server on localhost, the dock
 and the dialog of the servers."""
 
 import os
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -202,6 +204,67 @@ def test_the_dock_shows_messages_and_folded_cards(assistant, model, person, wait
     assert widget.providerBox.currentText() == "local"
     shot(widget, "assistant_dock")
     widget.close()
+
+
+def test_what_streams_while_the_window_is_busy_comes_as_one_change(
+    assistant, model, wait
+):
+    """Pieces that came while the window was busy change each item once: a
+    long answer never piles up work for the window."""
+    model.replies = [thinks("hmm " * 50, "word " * 200)]  # 40 + 200 pieces
+    changed = []
+    assistant.item_changed.connect(changed.append)
+    assistant.send("talk")
+    deadline = time.monotonic() + 5
+    while len(assistant.conversation.messages) < 2:  # the reply is whole
+        assert time.monotonic() < deadline
+        time.sleep(0.005)  # the window's thread does not turn meanwhile
+    wait(lambda: not assistant.busy())
+    thought, answer = 1, 2
+    assert kinds(assistant) == [Kind.PERSON, Kind.THOUGHT, Kind.ANSWER]
+    assert assistant.items[answer].text == "word " * 200
+    assert changed.count(answer) <= 1 and changed.count(thought) <= 1
+
+
+def test_the_window_does_not_wait_while_a_turn_reaches_the_bench(
+    assistant, session, model, wait, monkeypatch
+):
+    """The turn reaches the daemon in its own thread; another lab chosen in
+    the window meanwhile is only marked, never waited for."""
+    reached = session.assistant_lab
+    asked, let_go = threading.Event(), threading.Event()
+
+    def slow():
+        asked.set()
+        let_go.wait(5)
+        return reached()
+
+    monkeypatch.setattr(session, "assistant_lab", slow)
+    threading.Timer(2.0, let_go.set).start()  # ends the test if it waits
+    assistant.send("hello")
+    assert asked.wait(5)
+    began = time.monotonic()
+    session.station_changed.emit()
+    took = time.monotonic() - began
+    let_go.set()
+    wait(lambda: not assistant.busy())
+    assert took < 1.0
+
+
+def test_a_folded_cards_body_is_made_when_it_is_unfolded(app):
+    from thzdaq_gui.docks.assistant import ThoughtCard
+    from thzdaq_gui.models.assistant import Item
+
+    item = Item(Kind.THOUGHT, text="first", state=State.RUNNING, started=1.0)
+    card = ThoughtCard(item)
+    item.text += " second"
+    card.show_item(item)
+    assert card.thought is None  # nothing laid out while folded
+    card.set_expanded(True)
+    assert card.thought.text() == "first second"
+    item.text += " third"
+    card.show_item(item)
+    assert card.thought.text() == "first second third"
 
 
 def test_the_dialog_saves_a_server_and_tests_it(providers, model, wait):

@@ -7,7 +7,7 @@ the assistant works, what is sent joins at its next step. A view of
 AssistantModel."""
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QKeyEvent
@@ -143,16 +143,25 @@ class CallCard(Fold):
 
     def __init__(self, item: Item, parent=None):
         super().__init__(expanded=False, parent=parent)
+        self.arguments: Optional[MessageView] = None  # made when unfolded
+        self.answer: Optional[MessageView] = None
+        self._shown: Dict[str, Any] = {}
+        self.item = item
+        self.show_item(item)
+
+    def build(self) -> None:
         self.arguments = MessageView(markdown=True)
         self.answer = MessageView(markdown=False, mono=True)
         self.addWidget(self.arguments)
         self.addWidget(self.answer)
-        self._shown: Dict[str, Any] = {}
-        self.show_item(item)
+        self.show_item(self.item)
 
     def show_item(self, item: Item) -> None:
+        self.item = item
         self.setTitle(item.summary())
         self.set_icon(*STATE_ICONS[item.state])
+        if not self.built():
+            return
         if item.arguments != self._shown:
             self._shown = dict(item.arguments)
             self.arguments.show_text(arguments_text(item.arguments))
@@ -166,19 +175,26 @@ class ThoughtCard(Fold):
 
     def __init__(self, item: Item, parent=None):
         super().__init__(expanded=False, parent=parent)
+        self.thought: Optional[MessageView] = None  # made when unfolded
+        self.titleLabel.set_color(theme.MUTED)
+        self.item = item
+        self.show_item(item)
+
+    def build(self) -> None:
         self.thought = MessageView(markdown=False)
         self.thought.set_color(theme.MUTED)
         self.addWidget(self.thought)
-        self.titleLabel.set_color(theme.MUTED)
-        self.show_item(item)
+        self.show_item(self.item)
 
     def show_item(self, item: Item) -> None:
+        self.item = item
         self.setTitle(item.thought_title())
         running = item.state is State.RUNNING
         self.set_icon(
             "head-lightbulb-outline", theme.ACCENT if running else theme.MUTED
         )
-        self.thought.show_text(item.text)
+        if self.built():
+            self.thought.show_text(item.text)
 
 
 class Bubble(QFrame):
@@ -419,14 +435,15 @@ class AssistantWidget(QWidget):
         self.tick()
 
     def tick(self) -> None:
-        """What the turn does and for how long; a thought's seconds."""
+        """What the turn does and for how long; the seconds of the thought
+        the model thinks now."""
         model = self.model
         phase = model.phase
         self.phaseLabel.setText(f"{phase}… {model.elapsed():.0f} s" if phase else "")
         self.phaseLabel.setVisible(bool(phase))
-        for index, item in enumerate(model.items):
-            if item.kind is Kind.THOUGHT and item.state is State.RUNNING:
-                self.shown[index].show_item(item)
+        thinking = model.thinking()
+        if thinking is not None:
+            self.shown[thinking].show_item(model.items[thinking])
 
     def show_usage(self) -> None:
         used = self.model.usage

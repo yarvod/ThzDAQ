@@ -2,10 +2,13 @@
 (AssistantModel), on QtCore.
 
 A turn of the chat runs in a thread of its own (it waits for the model, for
-the bench, for the person's consent); what it tells comes back to the GUI
-thread as queued signals of the model, which owns the chat's items. Stop
-ends the turn at once (Conversation.stop): what was still on its way from
-the stopped turn is dropped.
+the bench, for the person's consent); what it tells waits in one queue that
+the GUI thread takes whole, woken by a queued signal when the queue was
+empty. The model owns the chat's items: however many pieces came meanwhile,
+each item changed is told once per take, so a model that writes faster than
+the window draws never piles work up for it. Stop ends the turn at once
+(Conversation.stop): what was still on its way from the stopped turn is
+dropped.
 
 What the person sends while a turn runs waits and joins at the turn's next
 step (queued, then sent). The model tells what the turn does now (phase:
@@ -22,7 +25,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from PySide6.QtCore import QObject, Signal
 from thzdaq_api.errors import LabError
@@ -233,35 +236,37 @@ class Tokens:
 
 
 class _Turn:
-    """What a turn tells, handed to the model's signals (queued: the turn
-    runs in its own thread)."""
+    """What a turn tells, from its thread into the model's queue."""
 
     def __init__(self, model: "AssistantModel", token: object):
         self.model, self.token = model, token
 
     def asking(self) -> None:
-        self.model._asking.emit(self.token)
+        self.model._tell(self.token, self.model._heard_asking)
 
     def taken(self, count: int) -> None:
-        self.model._taken.emit(self.token, count)
+        self.model._tell(self.token, self.model._heard_taken, count)
 
     def thought(self, piece: str) -> None:
-        self.model._thought.emit(self.token, piece)
+        self.model._tell(self.token, self.model._heard_thought, piece)
 
     def usage(self, usage: Usage) -> None:
-        self.model._usage.emit(self.token, usage)
+        self.model._tell(self.token, self.model._heard_usage, usage)
 
     def text(self, piece: str) -> None:
-        self.model._text.emit(self.token, piece)
+        self.model._tell(self.token, self.model._heard_text, piece)
 
     def called(self, call: ToolCall) -> None:
-        self.model._called.emit(self.token, call)
+        self.model._tell(self.token, self.model._heard_call, call)
 
     def progress(self, call: str, done: float, total: Optional[float]) -> None:
-        self.model._progress.emit(self.token, call, (done, total))
+        self.model._tell(self.token, self.model._heard_progress, call, (done, total))
 
     def answered(self, call: str, text: str, failed: bool) -> None:
-        self.model._answered.emit(self.token, call, text, failed)
+        self.model._tell(self.token, self.model._heard_answer, call, text, failed)
+
+    def ended(self, outcome: Outcome, why: str) -> None:
+        self.model._tell(self.token, self.model._end, outcome, why)
 
 
 class AssistantModel(QObject):
@@ -272,16 +277,8 @@ class AssistantModel(QObject):
     phase_changed = Signal(str)  # what the turn does now; "" once it ended
     usage_changed = Signal()  # the chat's tokens (usage, context_limit)
 
-    # From the turn's thread, queued to the GUI thread: (turn, ...)
-    _asking = Signal(object)
-    _taken = Signal(object, int)
-    _thought = Signal(object, str)
-    _usage = Signal(object, object)
-    _text = Signal(object, str)
-    _called = Signal(object, object)
-    _progress = Signal(object, str, object)
-    _answered = Signal(object, str, str, bool)
-    _ended = Signal(object, str, str)
+    # From a turn's thread, queued to the GUI thread: the queue was empty
+    _arrived = Signal()
 
     def __init__(self, session, providers: ProvidersModel, parent=None):
         super().__init__(parent)
@@ -298,18 +295,16 @@ class AssistantModel(QObject):
         self._thinking: Optional[int] = None  # the thought the model thinks now
         self._calls: Dict[str, int] = {}  # call id -> its item
         self._queued: List[int] = []  # the person's items that wait, in order
+        # What turns told, waiting for the GUI thread: (turn, handler, args)
+        self._told: List[Tuple[object, Callable[..., None], tuple]] = []
+        self._told_lock = threading.Lock()
+        self._changed: Set[int] = set()  # items changed, told at the end of a take
+        # The bench as the assistant; the lock only guards these, never a wait
         self._reach: Optional[Reach] = None
         self._reach_lock = threading.Lock()
         self._lab_changed = False  # the next turn reaches the lab anew
-        self._asking.connect(self._heard_asking)
-        self._taken.connect(self._heard_taken)
-        self._thought.connect(self._heard_thought)
-        self._usage.connect(self._heard_usage)
-        self._text.connect(self._heard_text)
-        self._called.connect(self._heard_call)
-        self._progress.connect(self._heard_progress)
-        self._answered.connect(self._heard_answer)
-        self._ended.connect(self._heard_end)
+        self._closed = False
+        self._arrived.connect(self._take_told)
         session.station_changed.connect(self._another_lab)
         session.config_changed.connect(self._bench_changed)
         providers.changed.connect(self.usage_changed)
@@ -364,14 +359,14 @@ class AssistantModel(QObject):
                 reach = self._reached()
             except LabError as e:
                 conversation.stop()
-                self._ended.emit(token, Outcome.FAILED.value, str(e))
+                listener.ended(Outcome.FAILED, str(e))
                 return
             outcome, why = conversation.say(
                 token, message, client,
                 tools(lambda: folder.folder, lambda: window), reach,
                 system_prompt, listener,
             )  # fmt: skip
-            self._ended.emit(token, outcome.value, why)
+            listener.ended(outcome, why)
 
         threading.Thread(target=run, name="assistant", daemon=True).start()
 
@@ -382,6 +377,11 @@ class AssistantModel(QObject):
             return
         self.conversation.stop()
         self._end(Outcome.STOPPED, "")
+        self._show_changes()
+
+    def thinking(self) -> Optional[int]:
+        """The item of the thought the model thinks now; None without one."""
+        return self._thinking
 
     def new_chat(self) -> None:
         """Forget the conversation (a turn running is stopped)."""
@@ -396,21 +396,35 @@ class AssistantModel(QObject):
         """The window closes: the turn stops, the assistant leaves the daemon."""
         self.stop()
         with self._reach_lock:
-            if self._reach is not None:
-                self._reach.close()
-                self._reach = None
+            self._closed = True
+            reach, self._reach = self._reach, None
+        if reach is not None:
+            reach.close()
 
     def _reached(self) -> Reach:
         """The bench as the assistant: reached once, again after the window
-        took another lab (in the turn's thread: it may wait for the daemon)."""
+        took another lab. In the turn's thread, and outside the lock: it may
+        wait for the daemon, the GUI thread only marks another lab."""
         with self._reach_lock:
-            if self._lab_changed and self._reach is not None:
-                self._reach.close()
-                self._reach = None
-            self._lab_changed = False
-            if self._reach is None:
-                self._reach = Reach(self.session.assistant_lab())
-            return self._reach
+            stale = self._reach if self._lab_changed else None
+            if self._lab_changed:
+                self._reach, self._lab_changed = None, False
+            reach = self._reach
+        if stale is not None:
+            stale.close()
+        if reach is not None:
+            return reach
+        reach = Reach(self.session.assistant_lab())
+        with self._reach_lock:
+            if self._closed:
+                extra = reach  # the window closed meanwhile
+            elif self._reach is None:
+                self._reach, extra = reach, None
+            else:  # a stopped turn reached it meanwhile
+                reach, extra = self._reach, reach
+        if extra is not None:
+            extra.close()
+        return reach
 
     def _another_lab(self) -> None:
         with self._reach_lock:
@@ -421,53 +435,66 @@ class AssistantModel(QObject):
         """The model hears of the bench anew at the next turn."""
         self.conversation.forget_bench()
 
-    # What the turn told, in the GUI thread
-    def _heard_asking(self, token: object) -> None:
-        if token is self._turn:
-            self._turn_usage.steps += 1
-            self._set_phase(THINKING)
+    # What a turn told: queued in its thread, taken in the GUI thread
+    def _tell(self, token: object, heard: Callable[..., None], *told: Any) -> None:
+        with self._told_lock:
+            woken = not self._told  # an empty queue: nobody takes it yet
+            self._told.append((token, heard, told))
+        if woken:
+            self._arrived.emit()
 
-    def _heard_taken(self, token: object, count: int) -> None:
-        if token is not self._turn:
-            return
+    def _take_told(self) -> None:
+        """All that waits, then each item changed told once."""
+        with self._told_lock:
+            told, self._told = self._told, []
+        for token, heard, given in told:
+            if token is self._turn:  # asked each time: an end may begin a turn
+                heard(*given)
+        self._show_changes()
+
+    def _change(self, index: int) -> None:
+        self._changed.add(index)
+
+    def _show_changes(self) -> None:
+        changed, self._changed = sorted(self._changed), set()
+        for index in changed:
+            self.item_changed.emit(index)
+
+    def _heard_asking(self) -> None:
+        self._turn_usage.steps += 1
+        self._set_phase(THINKING)
+
+    def _heard_taken(self, count: int) -> None:
         taken, self._queued = self._queued[:count], self._queued[count:]
         for index in taken:
             self.items[index].queued = False
-            self.item_changed.emit(index)
+            self._change(index)
         self._answer = None  # the answer to it goes below it
 
-    def _heard_thought(self, token: object, piece: str) -> None:
-        if token is not self._turn:
-            return
+    def _heard_thought(self, piece: str) -> None:
         if self._thinking is None:
             self._answer = None
             self._thinking = self._add(
                 Item(Kind.THOUGHT, state=State.RUNNING, started=time.monotonic())
             )
         self.items[self._thinking].text += piece
-        self.item_changed.emit(self._thinking)
+        self._change(self._thinking)
         self._set_phase(THINKING)
 
-    def _heard_usage(self, token: object, usage: Usage) -> None:
-        if token is not self._turn:
-            return
+    def _heard_usage(self, usage: Usage) -> None:
         self._turn_usage.add(usage)
         self.usage.add(usage)
         self.usage_changed.emit()
 
-    def _heard_text(self, token: object, piece: str) -> None:
-        if token is not self._turn:
-            return
+    def _heard_text(self, piece: str) -> None:
         self._thought_over(State.DONE)
         if self._answer is None:
             self._answer = self._add(Item(Kind.ANSWER))
         self.items[self._answer].text += piece
-        self.item_changed.emit(self._answer)
+        self._change(self._answer)
         self._set_phase(WRITING)
 
-    def _heard_call(self, token: object, call: ToolCall) -> None:
-        if token is not self._turn:
-            return
+    def _heard_call(self, call: ToolCall) -> None:
         self._thought_over(State.DONE)
         self._answer = None  # words after it go below it
         try:
@@ -479,36 +506,34 @@ class AssistantModel(QObject):
         )
         self._set_phase(f"{RUNNING} {call.name}")
 
-    def _heard_progress(self, token: object, call: str, progress) -> None:
-        if token is self._turn and call in self._calls:
+    def _heard_progress(self, call: str, progress) -> None:
+        if call in self._calls:
             self.items[self._calls[call]].progress = progress
-            self.item_changed.emit(self._calls[call])
+            self._change(self._calls[call])
 
-    def _heard_answer(self, token: object, call: str, text: str, failed: bool):
-        if token is not self._turn or call not in self._calls:
+    def _heard_answer(self, call: str, text: str, failed: bool) -> None:
+        if call not in self._calls:
             return
         index = self._calls.pop(call)
         item = self.items[index]
         item.text, item.state = text, State.REFUSED if failed else State.DONE
-        self.item_changed.emit(index)
-
-    def _heard_end(self, token: object, outcome: str, why: str) -> None:
-        if token is self._turn:
-            self._end(Outcome(outcome), why)
+        self._change(index)
 
     def _thought_over(self, state: State) -> None:
         if self._thinking is None:
             return
         item = self.items[self._thinking]
         item.state, item.seconds = state, time.monotonic() - item.started
-        self.item_changed.emit(self._thinking)
+        self._change(self._thinking)
         self._thinking = None
 
     def _end(self, outcome: Outcome, why: str) -> None:
+        """The turn ended (told by it, or stopped here); its items changed
+        are told by whoever called."""
         self._thought_over(State.STOPPED)
         for index in self._calls.values():
             self.items[index].state = State.STOPPED
-            self.item_changed.emit(index)
+            self._change(index)
         self._calls.clear()
         seconds = time.monotonic() - self._began
         self._turn = self._answer = None
@@ -531,7 +556,7 @@ class AssistantModel(QObject):
             self.conversation.stop()
             for index in self._queued:
                 self.items[index].queued, self.items[index].unsent = False, True
-                self.item_changed.emit(index)
+                self._change(index)
             self._queued.clear()
         self._set_phase("")
         self.busy_changed.emit(False)
