@@ -26,6 +26,17 @@ class Prefix(msgspec.Struct, frozen=True):
     note: str
 
 
+def prefix_for(value: float, prefixes: Sequence[Prefix]) -> Optional[Prefix]:
+    """The prefix that keeps a number from 1 to 999 (the smallest one for a
+    smaller number); None without prefixes, for 0 and for a number not finite."""
+    if not prefixes or value == 0 or not math.isfinite(value):
+        return None
+    ascending = sorted(prefixes, key=lambda p: p.factor)
+    return next(
+        (p for p in reversed(ascending) if abs(value) >= p.factor), ascending[0]
+    )
+
+
 def shown(value: Value, unit: str = "", prefixes: Sequence[Prefix] = ()) -> str:
     """A value as people read it: an SI number with the prefix that keeps it
     from 1 to 999 ("2.3 mV"), a switch as on or off. The daemon reads it back
@@ -36,12 +47,9 @@ def shown(value: Value, unit: str = "", prefixes: Sequence[Prefix] = ()) -> str:
         return "on" if value else "off"
     if not isinstance(value, (int, float)):
         return f"{value} {unit}".strip()
-    if not prefixes or value == 0 or not math.isfinite(value):
+    prefix = prefix_for(value, prefixes)
+    if prefix is None:
         return f"{value:.6g} {unit}".strip()
-    ascending = sorted(prefixes, key=lambda p: p.factor)
-    prefix = next(
-        (p for p in reversed(ascending) if abs(value) >= p.factor), ascending[0]
-    )
     return f"{value / prefix.factor:.6g} {prefix.name}{unit}"
 
 

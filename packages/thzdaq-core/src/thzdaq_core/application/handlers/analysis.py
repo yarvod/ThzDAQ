@@ -1,7 +1,8 @@
 """Operations of analysis: the contract is in SI units, thzdaq_analysis in the
 units of the plots (mV, µA); its defaults stay its own."""
 
-from typing import Any, Dict, Optional, Tuple
+import math
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from thzdaq_analysis.iv import (
     IVAnalysisConfig,
@@ -15,6 +16,7 @@ from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_instruments.units import MV, UA
 
 from thzdaq_core.application.handlers import Handler
+from thzdaq_core.application.runs import Runs
 
 SLOPE = UA / MV  # µA/mV -> A/V
 
@@ -76,15 +78,70 @@ def iv_analysis(result: IVResistanceAnalysis) -> api.IVAnalysis:
     )
 
 
+def analyzed(
+    voltage: Sequence[float], current: Sequence[float], options: api.IVOptions
+) -> api.IVAnalysis:
+    """An I-V curve in SI (a point not finite is left out); LabError
+    INVALID_ARGUMENTS says what the analysis could not take."""
+    try:
+        analyzer = NumpyIVAnalyzerFactory().create(iv_parameters(options))
+        result = analyzer.analyze([v / MV for v in voltage], [i / UA for i in current])
+    except ValueError as e:
+        raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
+    return iv_analysis(result)
+
+
+def number(value: Any) -> float:
+    """A recorded value as the analysis takes it: not a number (a missing or
+    a text value) as NaN, which it leaves out."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return math.nan
+
+
 class AnalyzeIv(Handler[api.AnalyzeIv, api.IVAnalysis]):
     operation = api.AnalyzeIv
 
     def handle(self, args, origin):
-        try:
-            analyzer = NumpyIVAnalyzerFactory().create(iv_parameters(args.options))
-            result = analyzer.analyze(
-                [v / MV for v in args.voltage], [i / UA for i in args.current]
-            )
-        except ValueError as e:
-            raise LabError(ErrorCode.INVALID_ARGUMENTS, str(e)) from None
-        return iv_analysis(result)
+        return analyzed(args.voltage, args.current, args.options)
+
+
+class AnalyzeMeasurementIv(Handler[api.AnalyzeMeasurementIv, api.MeasurementIv]):
+    """The curve by its plot: the one the measurement draws for this analysis
+    in the table asked for (any table when none is), else the usual keys."""
+
+    operation = api.AnalyzeMeasurementIv
+
+    def __init__(self, runs: Runs):
+        self.runs = runs
+
+    def handle(self, args, origin):
+        found = self.runs.published(args.id)
+        plot = next(
+            (
+                p
+                for p in found.plots
+                if p.analysis == api.IV and args.table in (None, p.table)
+            ),
+            None,
+        )
+        table, records = found.table(args.table or (plot.table if plot else None))
+        keys = (
+            args.voltage or (plot.x if plot else api.VOLTAGE),
+            args.current or (plot.y if plot else api.CURRENT),
+        )
+        voltage, current = (
+            [number(v) for v in table.data[column.key][:records]]
+            for column in found.columns(table, keys)
+        )
+        points = sum(
+            math.isfinite(v) and math.isfinite(i) for v, i in zip(voltage, current)
+        )
+        return api.MeasurementIv(
+            id=found.run.id,
+            table=table.name,
+            voltage=keys[0],
+            current=keys[1],
+            points=points,
+            analysis=analyzed(voltage, current, args.options),
+        )

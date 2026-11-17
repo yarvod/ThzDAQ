@@ -10,7 +10,7 @@ from thzdaq_api.scripts import RUN
 
 from thzdaq_core.application.approvals import Ask
 from thzdaq_core.application.custom import CustomRuns
-from thzdaq_core.application.describe import procedure_info
+from thzdaq_core.application.describe import measurement_rows, procedure_info
 from thzdaq_core.application.devices import DeviceAccess
 from thzdaq_core.application.handlers import Handler
 from thzdaq_core.application.policy import Policy
@@ -184,6 +184,25 @@ class SummarizeMeasurement(Handler[api.SummarizeMeasurement, api.MeasurementSumm
 
     def handle(self, args, origin):
         return self.runs.summary(args.id)
+
+
+class ReadMeasurement(Handler[api.ReadMeasurement, api.MeasurementRows]):
+    operation = api.ReadMeasurement
+
+    def __init__(self, runs: Runs):
+        self.runs = runs
+
+    def handle(self, args, origin):
+        if not 2 <= args.limit <= api.MAX_ROWS:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"limit must be 2..{api.MAX_ROWS} rows",
+                "a longer table is thinned to it evenly",
+            )
+        found = self.runs.published(args.id)
+        table, records = found.table(args.table)
+        columns = found.columns(table, args.columns)
+        return measurement_rows(found.run, table, records, columns, args.limit)
 
 
 class CancelMeasurement(Handler[api.CancelMeasurement, api.RunInfo]):

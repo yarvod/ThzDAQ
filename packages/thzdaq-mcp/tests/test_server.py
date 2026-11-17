@@ -64,7 +64,8 @@ async def test_the_tools_are_the_chosen_operations_of_the_catalog(connect):
         listed = (await client.list_tools()).tools
     names = {tool.name for tool in listed}
     assert {"list_devices", "set_quantity", "start_measurement", "wait_measurement",
-            "summarize_measurement", "ask_user"} <= names  # fmt: skip
+            "summarize_measurement", "read_measurement", "analyze_measurement_iv",
+            "ask_user"} <= names  # fmt: skip
     for tool in listed:
         op = catalog.operation(tool.name)
         assert tool.description == catalog.description(op)
@@ -98,6 +99,28 @@ async def test_a_measurement_is_started_waited_for_and_summarized(
     assert "voltage_set (Voltage setpoint, V) 0 V..2 mV" in told
     (run,) = lab_as("test").call(ListRuns())
     assert run.path.startswith(str(tmp_path / "data"))  # the agent's folder
+
+
+async def test_an_agent_reads_a_runs_records_and_has_its_iv_curve_analysed(
+    connect, window
+):
+    async with connect() as client:
+        run_id = await started(
+            client, window, {**iv(0), "typed": {**FAST, "voltage": "0:7:36"}}
+        )
+        await client.call_tool("wait_measurement", {"id": run_id, "timeout": 10})
+        read = await client.call_tool(
+            "read_measurement",
+            {"id": run_id, "columns": ["voltage_set", "current"], "limit": 5},
+        )
+        analysed = await client.call_tool("analyze_measurement_iv", {"id": run_id})
+    rows = text(read).splitlines()
+    assert rows[0].endswith("table iv: 5 of 36 records, every 9th and the last")
+    assert rows[1] == "voltage_set [mV],current [µA]"
+    assert [row.split(",")[0] for row in rows[2:]] == ["0", "1.8", "3.6", "5.4", "7"]
+    told = text(analysed)
+    assert not analysed.is_error and "table iv (voltage, current; 36 points)" in told
+    assert "Rn = " in told and " Ω" in told and "gap " in told
 
 
 async def test_progress_is_told_while_waiting(connect, window):

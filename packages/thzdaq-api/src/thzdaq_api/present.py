@@ -5,12 +5,16 @@ Values travel in SI (power in dBm); each is shown with the prefix that keeps
 it from 1 to 999 ("2.3 mV"), as the daemon reads it back when it is typed.
 """
 
+import csv
+import io
 import json
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
+from thzdaq_api.analysis import MeasurementIv
 from thzdaq_api.approvals import UserAnswer
 from thzdaq_api.custom import CustomCheck, CustomLibrary, CustomText
 from thzdaq_api.daemon import DaemonStatus
+from thzdaq_api.data import decode_values
 from thzdaq_api.devices import (
     ActionInfo,
     ActionResult,
@@ -21,12 +25,14 @@ from thzdaq_api.devices import (
     RawReply,
     Trace,
     Value,
+    prefix_for,
     shown,
 )
 from thzdaq_api.errors import LabError
 from thzdaq_api.measurement_file import RUNNING
 from thzdaq_api.measurements import (
     ColumnSummary,
+    MeasurementRows,
     MeasurementSummary,
     ParameterInfo,
     ProcedureInfo,
@@ -37,6 +43,7 @@ from thzdaq_api.station import ConnectionInfo
 from thzdaq_api.ui import FieldState, FormState, WindowState
 
 NOTHING = "none"
+MILLI, MICRO = 1e-3, 1e-6  # an I-V curve is read in mV and µA
 
 
 def failure(error: LabError) -> str:
@@ -307,6 +314,74 @@ def summary(found: MeasurementSummary) -> str:
             "in the file: "
             + ", ".join(f"{k} ({n} values)" for k, n in found.series.items())
         )
+    return "\n".join(parts)
+
+
+def ordinal(n: int) -> str:
+    """18 -> "18th", 2 -> "2nd", 11 -> "11th"."""
+    ending = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else ending}"
+
+
+def scale(c: ColumnSummary) -> Tuple[str, float]:
+    """The unit a column is shown in and its factor: the prefix of its
+    largest value ("mV", 1e-3); its own unit for one without prefixes."""
+    ends = [abs(end) for end in (c.minimum, c.maximum) if end is not None]
+    prefix = prefix_for(max(ends), c.prefixes) if ends else None
+    return (f"{prefix.name}{c.unit}", prefix.factor) if prefix else (c.unit, 1.0)
+
+
+def cell(value, factor: float) -> str:
+    """A recorded value in a row: a number short, in the unit of its column."""
+    value = decode_values(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float, complex)):
+        return shown(value)
+    if isinstance(value, int) and factor == 1.0:
+        return f"{value}"
+    return f"{value / factor:.6g}"
+
+
+def records(found: MeasurementRows) -> str:
+    """A table as CSV: a header with the unit of each column (the prefix of
+    its largest value), then the rows."""
+    run, shown_rows = found.run, len(found.rows)
+    so_far = " so far" if run.status == RUNNING else ""
+    told = f"{shown_rows} records{so_far}"
+    if found.step > 1:
+        told = f"{shown_rows} of {found.records} records{so_far}, every "
+        told += ordinal(found.step)
+        if (found.records - 1) % found.step:
+            told += " and the last"
+    scales = [scale(c) for c in found.columns]
+    out = io.StringIO()
+    rows = csv.writer(out, lineterminator="\n")
+    rows.writerow(
+        f"{c.key} [{unit}]" if unit else c.key
+        for c, (unit, _) in zip(found.columns, scales)
+    )
+    for row in found.rows:
+        rows.writerow(cell(v, factor) for v, (_, factor) in zip(row, scales))
+    head = f"#{run.id} {run.title} ({run.status}), table {found.table}: {told}"
+    return f"{head}\n{out.getvalue().rstrip()}"
+
+
+def iv(found: MeasurementIv) -> str:
+    """Rn, Rj, Q and the gap in the units of a SIS I-V curve: Ω, mV, µA."""
+    result, gap = found.analysis, found.analysis.gap
+    low, high = result.rn.voltage_range
+    parts = [
+        f"#{found.id} I-V, table {found.table} ({found.voltage}, {found.current}; "
+        f"{found.points} points):",
+        f"Rn = {result.rn.resistance:.4g} Ω (fit {low / MILLI:.4g}..{high / MILLI:.4g}"
+        f" mV, R² = {result.r_squared:.4f})",
+        f"Rj = {result.rj.resistance:.4g} Ω (tangent at "
+        f"{result.rj.point[0] / MILLI:.4g} mV)",
+        f"Q = Rj/Rn = {result.q:.4g}",
+        "no current step found: gap_from and gap_to narrow the search"
+        if gap is None
+        else f"gap {gap.voltage / MILLI:.4g} mV, current step "
+        f"{gap.current_step / MICRO:.4g} µA",
+    ]
     return "\n".join(parts)
 
 

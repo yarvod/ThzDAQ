@@ -6,6 +6,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, 
 
 from thzdaq_api import devices as api
 from thzdaq_api import measurements, station as station_api
+from thzdaq_api.data import encode_values
 from thzdaq_api.measurement_file import Column, Table
 from thzdaq_instruments.actions import Action, Argument
 from thzdaq_instruments.errors import ConfigurationError
@@ -220,6 +221,28 @@ def table_summary(table: Table, records: int) -> measurements.TableSummary:
             column_summary(column, table.data.get(column.key, [])[:records])
             for column in list(table.columns)  # a run may add one meanwhile
         ),
+    )
+
+
+def measurement_rows(
+    run: measurements.RunInfo,
+    table: Table,
+    records: int,
+    columns: Sequence[Column],
+    limit: int,
+) -> measurements.MeasurementRows:
+    """Its first records (those published) of the columns given, thinned to
+    at most limit; each column with the range of all of them."""
+    step, kept = measurements.thinned(records, limit)
+    values = [table.data.get(column.key, [])[:records] for column in columns]
+    return measurements.MeasurementRows(
+        run=run,
+        table=table.name,
+        title=table.title,
+        columns=tuple(column_summary(c, v) for c, v in zip(columns, values)),
+        rows=tuple(tuple(encode_values(v[i]) for v in values) for i in kept),
+        records=records,
+        step=step,
     )
 
 

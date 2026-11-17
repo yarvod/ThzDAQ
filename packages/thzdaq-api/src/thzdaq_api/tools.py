@@ -6,12 +6,14 @@ get the same set.
 
 The set is chosen: an agent looks at the bench, sets and calls with a person's
 consent, asks an instrument a raw query with a person's consent, runs
-measurements and follows them, reads, checks and (with a person's consent)
-writes the bench's own measurements, asks the person, and shows the person
-where things are in the window (opens, fills a form, highlights). It does not edit the profile,
-answer for a person, write raw commands or stop the daemon (those are a
-person's, and the daemon would refuse them anyway), nor take what it cannot
-use (polls, streams of records).
+measurements and follows them, reads their records (thinned to what a model
+reads) and has the daemon analyse an I-V curve, reads, checks and (with a
+person's consent) writes the bench's own measurements, asks the person, and
+shows the person where things are in the window (opens, fills a form,
+highlights). It does not edit the profile, answer for a person, write raw
+commands or stop the daemon (those are a person's, and the daemon would
+refuse them anyway), nor take what it cannot use (polls, streams of records,
+arrays to analyse: the daemon has them already).
 
 A tool is called in a thread of its own and waits as its operation does (for a
 person, for a measurement); a client that must not wait runs it apart.
@@ -34,6 +36,7 @@ from typing import (
 import msgspec
 
 from thzdaq_api import (
+    analysis,
     approvals,
     catalog,
     custom,
@@ -255,6 +258,8 @@ def tools(
         Start(workspace),
         Wait(measurements.WaitMeasurement),
         Plain(measurements.SummarizeMeasurement, present.summary),
+        Plain(measurements.ReadMeasurement, present.records),
+        Plain(analysis.AnalyzeMeasurementIv, present.iv),
         Plain(measurements.CancelMeasurement, present.run),
         Plain(measurements.ListRuns, present.runs),
         Plain(custom.ListCustom, present.library),

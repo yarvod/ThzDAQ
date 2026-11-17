@@ -1,8 +1,13 @@
 """Analysis as operations: the daemon computes, in SI units, for every client."""
 
 import pytest
-from thzdaq_api.analysis import AnalyzeIv, IVOptions
+from thzdaq_api import present
+from thzdaq_api.analysis import AnalyzeIv, AnalyzeMeasurementIv, IVOptions
 from thzdaq_api.errors import ErrorCode, LabError
+from thzdaq_api.measurement_file import read_measurement
+from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
+from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
+from thzdaq_api.sessions import EndSession, RecordSession, StartSession
 from thzdaq_instruments.sim import SimSisBlock
 
 
@@ -34,6 +39,59 @@ def test_options_narrow_the_search_in_volts(lab):
         )
     )
     assert result.rn.voltage_range[0] >= 5e-3 - 1e-9
+
+
+def test_a_measurements_iv_curve_is_analysed_on_every_record(lab):
+    run = lab.call(
+        StartMeasurement(
+            procedure=CURRENT_VS_VOLTAGE,
+            devices={"bias": "sis_bias_1"},
+            typed={"voltage": "0:7:71", "settle_time": "0", "first_point_delay": "0"},
+        )
+    )
+    info = lab.call(WaitMeasurement(id=run.id, timeout=10))
+    saved = read_measurement(info.path)
+    # Its table and columns are those of the plot it offers the analysis on
+    found = lab.call(AnalyzeMeasurementIv(id=run.id))
+    assert (found.table, found.voltage, found.current, found.points) == (
+        "iv",
+        "voltage",
+        "current",
+        71,
+    )
+    assert found.analysis == lab.call(
+        AnalyzeIv(
+            voltage=tuple(saved.column("iv", "voltage")),
+            current=tuple(saved.column("iv", "current")),
+        )
+    )
+    told = present.iv(found)
+    assert "table iv (voltage, current; 71 points)" in told
+    assert f"Rn = {found.analysis.rn.resistance:.4g} Ω" in told
+    assert f"gap {found.analysis.gap.voltage * 1e3:.4g} mV" in told
+    narrowed = lab.call(
+        AnalyzeMeasurementIv(id=run.id, options=IVOptions(rn_from=5e-3))
+    )
+    assert narrowed.analysis.rn.voltage_range[0] >= 5e-3 - 1e-9
+
+
+def test_a_curve_without_its_plot_is_found_by_its_table_and_the_usual_keys(lab):
+    voltage, current, _ = simulated_iv()
+    run = lab.call(StartSession(title="iv by hand"))
+    rows = tuple({"voltage": v, "current": i} for v, i in zip(voltage, current))
+    lab.call(RecordSession(id=run.id, table="sweep", rows=rows))
+    lab.call(RecordSession(id=run.id, table="notes", rows=({"text": "pumped"},)))
+    with pytest.raises(LabError) as caught:  # which of its two tables?
+        lab.call(AnalyzeMeasurementIv(id=run.id))
+    assert caught.value.code == ErrorCode.INVALID_ARGUMENTS
+    assert caught.value.hint == "tables: sweep (351 records), notes (1 records)"
+    found = lab.call(AnalyzeMeasurementIv(id=run.id, table="sweep"))
+    assert found.points == 351
+    assert found.analysis == lab.call(AnalyzeIv(voltage=voltage, current=current))
+    with pytest.raises(LabError) as caught:
+        lab.call(AnalyzeMeasurementIv(id=run.id, table="sweep", current="i"))
+    assert caught.value.code == ErrorCode.NOT_FOUND
+    lab.call(EndSession(id=run.id))
 
 
 @pytest.mark.parametrize(

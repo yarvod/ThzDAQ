@@ -111,6 +111,33 @@ def test_a_message_is_answered_with_the_benchs_tools(assistant, model, wait):
     assert assistant.items[2].text == "The bias is **0 V**."
 
 
+def test_the_model_reads_a_measurements_records_itself(assistant, model, connect, wait):
+    from thzdaq_api.measurements import StartMeasurement, WaitMeasurement
+    from thzdaq_api.procedures import CURRENT_VS_VOLTAGE
+
+    lab = connect(True)
+    typed = {"voltage": "0:2:11", "settle_time": "0", "first_point_delay": "0"}
+    run = lab.call(
+        StartMeasurement(
+            procedure=CURRENT_VS_VOLTAGE, devices={"bias": "sis_bias_1"}, typed=typed
+        )
+    )
+    assert lab.call(WaitMeasurement(id=run.id, timeout=10)).status == "completed"
+    model.replies = [
+        calls(("read_measurement", {"id": run.id, "columns": ["current"], "limit": 4})),
+        says("The current rises with the bias."),
+    ]
+    assistant.send("how does the current go?")
+    wait(lambda: len(model.asked) == 2 and not assistant.busy())
+    card = assistant.items[1]
+    assert card.state == State.DONE and card.summary().endswith("→ done")
+    head, header, *rows = card.text.splitlines()
+    assert head.endswith("table iv: 4 of 11 records, every 4th and the last")
+    assert header == "current [µA]" and len(rows) == 4
+    told = model.asked[1]["messages"][-1]
+    assert told["role"] == "tool" and told["content"] == card.text
+
+
 def test_a_refusal_shows_on_its_card(assistant, model, person, wait):
     model.replies = [calls(("set_quantity", BIAS)), says("As you say.")]
     assistant.send("set 1 mV")

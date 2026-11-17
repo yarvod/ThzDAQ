@@ -9,6 +9,10 @@ from thzdaq_api.operation import Operation
 
 Point = Tuple[float, float]  # (V, A)
 
+IV = "iv"  # the analysis a plot of an I-V curve offers (PlotInfo.analysis)
+# The record keys of a curve whose measurement has no plot of it
+VOLTAGE, CURRENT = "voltage", "current"
+
 
 class IVOptions(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Where the I-V analysis looks, in volts; an unset field keeps the
@@ -59,4 +63,32 @@ class AnalyzeIv(Operation[IVAnalysis]):
 
     voltage: Tuple[float, ...]
     current: Tuple[float, ...]
+    options: IVOptions = IVOptions()
+
+
+class MeasurementIv(msgspec.Struct, frozen=True):
+    """The I-V analysis of a measurement and the curve it was made on: the
+    table, its columns of voltage and current, the points that have both."""
+
+    id: int
+    table: str
+    voltage: str
+    current: str
+    points: int
+    analysis: IVAnalysis
+
+
+class AnalyzeMeasurementIv(Operation[MeasurementIv]):
+    """Analyze the SIS I-V curve of a running or ended measurement, every
+    record of it, in the daemon: Rn, Rj, Q, the gap voltage and the current
+    step, as analyze_iv finds them, without passing the points. The table and
+    the columns of voltage and current default to the curve the measurement
+    draws for this analysis (sis.current_vs_voltage: table iv, columns voltage
+    and current); without one, its only table and the columns voltage and
+    current. options narrow where each value is searched, in volts."""
+
+    id: int
+    table: Optional[str] = None
+    voltage: Optional[str] = None
+    current: Optional[str] = None
     options: IVOptions = IVOptions()

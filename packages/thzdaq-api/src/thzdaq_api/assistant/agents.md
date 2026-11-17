@@ -40,7 +40,16 @@ do is seen in the window, and what you change waits for the person's consent.
    Share it (`share: true`) only when the person agrees: both measurements note it.
 8. **Data.** Measurements of this folder go to its `data/` as JSON
    (`data/<date>/<number>_<procedure>.json`); `thzdaq show <file>` tells what one holds.
-   Read the file to analyse it; never pass arrays through tools.
+   Look at the data yourself, a measurement the daemon knows (`list_runs`) by its number:
+   - `summarize_measurement(id)` first: its tables, the range of each column with its
+     unit, its results.
+   - `read_measurement(id, table, columns, limit)` for the columns you need: the records
+     in SI as CSV, a header with the units; a longer table comes thinned evenly from its
+     first record to its last (`limit` 200, at most 2000), and the answer says how.
+   - `analyze_measurement_iv(id)` for an I-V curve: the daemon finds Rn, Rj, Q, the gap
+     voltage and the current step on every record of it; points never pass through you.
+   - The file or a script only for heavy processing: fits over every record of a long
+     table, several measurements together, a measurement the daemon no longer knows.
 9. **Ask in words** when the plan is unclear: `ask_user(question, options)` shows the
    question in the window; still waiting after `timeout`, `wait_answer(id)` waits on.
 10. **Raw commands** go to an instrument as typed, for what its driver does not wrap
@@ -83,6 +92,8 @@ do is seen in the window, and what you change waits for the person's consent.
 | `list_procedures`, `describe_procedure` | what the bench measures and how a run would go |
 | `start_measurement` | start a procedure; a person allows it |
 | `wait_measurement`, `summarize_measurement` | follow a run, what it holds so far |
+| `read_measurement(id, table, columns, limit)` | a run's records in SI, thinned to `limit` rows |
+| `analyze_measurement_iv(id)` | Rn, Rj, Q and the gap of a run's I-V curve, found by the daemon |
 | `cancel_measurement`, `list_runs` | stop a run; the runs of the daemon |
 | `list_custom`, `read_custom` | the bench's own measurements: their scripts |
 | `check_custom(script, text)` | what is wrong with a script, by line; the form it declares |
@@ -110,7 +121,11 @@ profile; connections only by their kind) and `thzdaq://guide/<topic>` (this guid
    `#12 SIS I-V curve (sis.current_vs_voltage): running, 0/351 steps`.
 4. `wait_measurement(id=12, timeout=60)` until `completed` → the summary: table `iv`, 351
    records, `voltage` and `current` with their ranges, the file.
-5. Read the file to find the gap, Rn and the rest.
+5. `analyze_measurement_iv(id=12)` → Rn, Rj, Q = Rj/Rn, the gap voltage and the current
+   step, in Ω, mV and µA.
+6. `read_measurement(id=12, columns=["voltage", "current"], limit=100)` → the curve
+   itself, to see where it bends or what the photon steps look like; narrow the
+   analysis with `options` (`rn_from`, `gap_from`, ... in volts) if a value looks off.
 
 ## The command line
 

@@ -14,11 +14,13 @@ from thzdaq_api.events import (
     MeasurementStarted,
 )
 from thzdaq_api.measurements import (
+    MAX_ROWS,
     CancelMeasurement,
     DescribeProcedure,
     GetRunSnapshot,
     ListProcedures,
     ListRuns,
+    ReadMeasurement,
     StartMeasurement,
     SummarizeMeasurement,
     WaitMeasurement,
@@ -213,6 +215,62 @@ def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
     assert caught.value.code == ErrorCode.NOT_FOUND
 
 
+def test_a_measurements_records_are_read_in_si_and_thinned_evenly(lab):
+    run = lab.call(
+        StartMeasurement(
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
+        )
+    )
+    assert ended(lab, run.id).status == "completed"
+    saved = read_measurement(lab.call(ListRuns())[0].path)
+
+    whole = lab.call(ReadMeasurement(id=run.id))  # its only table, every column
+    assert (whole.table, whole.records, whole.step) == ("iv", 11, 1)
+    keys = [c.key for c in whole.columns]
+    assert keys == ["voltage_set", "voltage", "current"]
+    assert [c.unit for c in whole.columns] == ["V", "V", "A"]
+    assert [list(column) for column in zip(*whole.rows)] == [
+        saved.column("iv", key) for key in keys
+    ]
+
+    # 11 records in 4 rows: every 4th from the first (0, 4, 8) and the last
+    thin = lab.call(ReadMeasurement(id=run.id, columns=("voltage_set",), limit=4))
+    assert (thin.records, thin.step) == (11, 4)
+    assert [row[0] for row in thin.rows] == pytest.approx([0, 0.8e-3, 1.6e-3, 2e-3])
+    told = present.records(thin)
+    assert "table iv: 4 of 11 records, every 4th and the last" in told
+    assert told.splitlines()[1:] == ["voltage_set [mV]", "0", "0.8", "1.6", "2"]
+
+
+@pytest.mark.parametrize(
+    "read, code, there",
+    [
+        (dict(limit=1), ErrorCode.INVALID_ARGUMENTS, ""),
+        (dict(limit=MAX_ROWS + 1), ErrorCode.INVALID_ARGUMENTS, ""),
+        (dict(table="pv"), ErrorCode.NOT_FOUND, "tables: iv (11 records)"),
+        (
+            dict(columns=("voltage", "power")),
+            ErrorCode.NOT_FOUND,
+            "columns: voltage_set, voltage, current",
+        ),
+    ],
+)
+def test_what_cannot_be_read_is_named_with_what_there_is(lab, read, code, there):
+    run = lab.call(
+        StartMeasurement(
+            procedure=CURRENT_VS_VOLTAGE,
+            parameters=FAST_IV,
+            devices={"bias": "sis_bias_1"},
+        )
+    )
+    ended(lab, run.id)
+    with pytest.raises(LabError) as caught:
+        lab.call(ReadMeasurement(id=run.id, **read))
+    assert caught.value.code == code and there in caught.value.hint
+
+
 @pytest.mark.parametrize(
     "start, code",
     [
@@ -231,6 +289,7 @@ def test_a_summary_tells_the_records_and_ranges_without_arrays(lab):
             ErrorCode.INVALID_ARGUMENTS,
         ),
         (WaitMeasurement(id=999), ErrorCode.NOT_FOUND),
+        (ReadMeasurement(id=999), ErrorCode.NOT_FOUND),
         (WaitMeasurement(id=1, timeout=61), ErrorCode.INVALID_ARGUMENTS),
     ],
 )

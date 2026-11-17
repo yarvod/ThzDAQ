@@ -15,9 +15,20 @@ the snapshot knows it too.
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
-from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import msgspec
 from thzdaq_api.data import encode_values
@@ -50,7 +61,14 @@ from thzdaq_core.application.runner import MeasurementRunner, RunObserver, slot_
 from thzdaq_core.application.values import KnownValues
 from thzdaq_core.application.ports import ProfileRepository
 from thzdaq_core.application.workspaces import Workspaces
-from thzdaq_api.measurement_file import CONFLICTS, PROFILE, RUNNING, Measurement
+from thzdaq_api.measurement_file import (
+    CONFLICTS,
+    PROFILE,
+    RUNNING,
+    Column,
+    Measurement,
+    Table,
+)
 from thzdaq_api.workspace import profile_name
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.leases import Lease, LeaseConflict, Leases
@@ -60,6 +78,63 @@ BATCH_S = 0.05  # records travel in batches of about this long
 SET_EVERY_S = 0.1  # what a run sets is told at most this often per quantity
 KEPT = 100  # runs that ended, remembered for ListRuns and wait
 STRENGTH = (READ, SHARED, EXCLUSIVE)  # a device in two slots: the stronger use
+
+
+@dataclass(frozen=True)
+class Published:
+    """What a run has published: how it stands, the plots it fills and its
+    tables, each with the number of its records told. A running one appends
+    to its tables meanwhile: read no further than that number."""
+
+    run: RunInfo
+    plots: Tuple[PlotInfo, ...]
+    tables: Mapping[str, Tuple[Table, int]]
+
+    def _known(self) -> str:
+        told = ", ".join(
+            f"{name} ({n} records)" for name, (_, n) in self.tables.items()
+        )
+        return f"tables: {told}"
+
+    def table(self, name: Optional[str]) -> Tuple[Table, int]:
+        """The table named, or its only one; LabError naming those it has."""
+        number = f"measurement #{self.run.id}"
+        if not self.tables:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No records in {number} yet",
+                "wait_measurement, then ask again",
+            )
+        if name is None and len(self.tables) == 1:
+            (found,) = self.tables.values()
+            return found
+        if name is None:
+            raise LabError(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"{number.capitalize()} has several tables: name one",
+                self._known(),
+            )
+        if name not in self.tables:
+            raise LabError(
+                ErrorCode.NOT_FOUND, f"No table {name!r} in {number}", self._known()
+            )
+        return self.tables[name]
+
+    def columns(self, table: Table, keys: Sequence[str]) -> Tuple[Column, ...]:
+        """The columns of one of its tables by their keys, every one when none
+        is given; LabError naming those it has."""
+        known = {column.key: column for column in list(table.columns)}
+        if not keys:
+            return tuple(known.values())
+        for key in keys:
+            if key not in known:
+                raise LabError(
+                    ErrorCode.NOT_FOUND,
+                    f"No column {key!r} in table {table.name} of "
+                    f"measurement #{self.run.id}",
+                    f"columns: {', '.join(known)}",
+                )
+        return tuple(known[key] for key in keys)
 
 
 class _Run(RunObserver):
@@ -116,15 +191,23 @@ class _Run(RunObserver):
             }
             return RunSnapshot(self._visible, self._plots, rows, self._seq)
 
+    def published(self) -> Published:
+        with self._snapshot_lock:
+            tables = {
+                table: (self.measurement.tables[table], count)
+                for table, count in self._published.items()
+            }
+            plots = self._plots
+        return Published(self.info(), plots, tables)
+
     def summary(self) -> MeasurementSummary:
         """What it published so far, without the arrays."""
-        with self._snapshot_lock:
-            tables = tuple(
-                table_summary(self.measurement.tables[table], count)
-                for table, count in self._published.items()
-            )
+        found = self.published()
+        tables = tuple(
+            table_summary(table, count) for table, count in found.tables.values()
+        )
         m = self.measurement
-        return measurement_summary(self.info(), tables, m.results, m.parameters)
+        return measurement_summary(found.run, tables, m.results, m.parameters)
 
     def _publish(self, body) -> None:
         self._seq = self.events.publish(body).seq
@@ -486,6 +569,9 @@ class Runs:
 
     def summary(self, run_id: int) -> MeasurementSummary:
         return self._run(run_id).summary()
+
+    def published(self, run_id: int) -> Published:
+        return self._run(run_id).published()
 
     def all(self) -> Tuple[RunInfo, ...]:
         with self._lock:

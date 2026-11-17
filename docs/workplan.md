@@ -76,17 +76,22 @@ issue: ассистент сам читает данные измерений и
 
 ## Этап 1. Ассистент читает данные измерений сам
 
-- [ ] Операция `ReadMeasurement` в `thzdaq_api/measurements.py`: измерение по id (бегущее или
+Сделано (сессия stage1-data): `read_measurement` отвечает CSV с единицами в заголовке и строкой
+вида «3 of 3510 records, every 18th and the last»; `analyze_measurement_iv` — Rn, Rj, Q, щель и
+скачок тока; общий `prefix_for` в `devices.py`, `Published` в `runs.py` (сводка и чтение берут
+опубликованное из одного места), константа `IV` вместо строки `"iv"` в процедурах.
+
+- [x] Операция `ReadMeasurement` в `thzdaq_api/measurements.py`: измерение по id (бегущее или
   законченное, из его файла), таблица, нужные колонки, диапазон по колонке, не больше N строк
   (по умолчанию 200, потолок около 2 000) с равномерным прореживанием; значения в SI, единицы в
   заголовке. Обработчик в `thzdaq_core/application/handlers/measurements.py`, в `assembly.py` и
   `catalog.py`.
-- [ ] Инструмент `read_measurement` в `thzdaq_api/tools.py` с компактным ответом
+- [x] Инструмент `read_measurement` в `thzdaq_api/tools.py` с компактным ответом
   (`present.table`: CSV-подобные строки, заголовок с единицами, сколько строк пропущено). Он же
   появится у Claude Code и Codex через `thzdaq mcp`.
-- [ ] `analyze_iv` как инструмент по id измерения и колонкам напряжения и тока (модель не гоняет
+- [x] `analyze_measurement_iv` как инструмент по id измерения и колонкам напряжения и тока (модель не гоняет
   массивы через контекст): анализ считает демон.
-- [ ] Гайды: правило 8 в `agents.md` («Read the file to analyse it; never pass arrays through
+- [x] Гайды: правило 8 в `agents.md` («Read the file to analyse it; never pass arrays through
   tools») и абзац о данных в `assistant.md` («You cannot read its file») переписать: сначала
   `summarize_measurement`, потом `read_measurement` нужных колонок; файл или скрипт — для тяжёлой
   обработки.

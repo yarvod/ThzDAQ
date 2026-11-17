@@ -1,3 +1,4 @@
+from thzdaq_api.analysis import IV
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import NOISE_TEMPERATURE_VS_VOLTAGE, POWER_VS_VOLTAGE
@@ -44,7 +45,7 @@ def pv_plots(group_by=()):
         PlotInfo(
             "iv", "I-V", "pv", "voltage", "current",
             x_label=VOLTAGE_MV, y_label=CURRENT_UA, x_scale=MV, y_scale=UA,
-            group_by=group_by, analysis="iv", caption=IV_CAPTION,
+            group_by=group_by, analysis=IV, caption=IV_CAPTION,
         ),
     )  # fmt: skip
 

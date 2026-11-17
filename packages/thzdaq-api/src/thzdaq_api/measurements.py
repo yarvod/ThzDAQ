@@ -418,6 +418,52 @@ class SummarizeMeasurement(Operation[MeasurementSummary]):
     id: int
 
 
+ROWS = 200  # the records read_measurement gives unless asked for another number
+MAX_ROWS = 2000  # the most it gives at once
+
+
+def thinned(records: int, limit: int) -> Tuple[int, List[int]]:
+    """Which of so many records to give when at most limit (2 or more) may go:
+    every step-th from the first, and the last; (step, their indices)."""
+    if records <= limit:
+        return 1, list(range(records))
+    step = -(-(records - 1) // (limit - 1))  # rounded up
+    kept = list(range(0, records, step))
+    if kept[-1] != records - 1:
+        kept.append(records - 1)
+    return step, kept
+
+
+class MeasurementRows(msgspec.Struct, frozen=True):
+    """Records of one table of a measurement, each row its values in the order
+    of columns, in SI, encoded as records travel (a number not finite as
+    {"__float__": "nan"}, a complex one as {"__complex__": [re, im]}). Of a
+    table longer than asked, every step-th record from the first, and the last
+    (thinned); records counts them all."""
+
+    run: RunInfo
+    table: str
+    title: str
+    columns: Tuple[ColumnSummary, ...]
+    rows: Tuple[Tuple[Any, ...], ...]
+    records: int
+    step: int = 1
+
+
+class ReadMeasurement(Operation[MeasurementRows]):
+    """The records of a running or ended measurement, to look at its data
+    yourself: one table (when none is named, its only one), the columns named
+    (none: every one), at most limit rows (up to 2000). A longer table is
+    thinned evenly from its first record to its last. Values are in SI with
+    the unit of each column; summarize_measurement tells the tables and the
+    columns first."""
+
+    id: int
+    table: Optional[str] = None
+    columns: Tuple[str, ...] = ()
+    limit: int = ROWS
+
+
 class SetComment(Operation[None]):
     """The comment of a measurement, by its file: a running one keeps it and
     saves it with its data; a file that ended is written with it."""

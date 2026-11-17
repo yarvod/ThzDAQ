@@ -1,3 +1,4 @@
+from thzdaq_api.analysis import IV
 from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.procedures import CURRENT_VS_COIL_CURRENT, CURRENT_VS_VOLTAGE
 from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
@@ -42,7 +43,7 @@ class IVCurve(Procedure):
             y_label=CURRENT_UA,
             x_scale=MV,
             y_scale=UA,
-            analysis="iv",
+            analysis=IV,
             caption=IV_CAPTION,
         ),
     )
