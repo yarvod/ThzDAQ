@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 TEXT_BYTES = 256 * 1024  # a longer text file goes by its path
 IMAGE_BYTES = 20 * 1024 * 1024  # what servers take at most, about
 PASTED = "pasted.png"
+DATA, BASE64 = "data:", ";base64,"  # an image within a message: data:<mime>;base64,…
 
 Content = Union[str, List[Dict[str, Any]]]  # a message's, as servers take it
 
@@ -82,8 +83,20 @@ class Attachment:
         encoded = base64.b64encode(self.data).decode("ascii")
         return {
             "type": "image_url",
-            "image_url": {"url": f"data:{self.mime};base64,{encoded}"},
+            "image_url": {"url": f"{DATA}{self.mime}{BASE64}{encoded}"},
         }
+
+    @staticmethod
+    def of_part(part: Dict[str, Any]) -> Optional["Attachment"]:
+        """The image a part of a message carries (part()); None for a part
+        that carries none of its own (words, an image by its address)."""
+        if part.get("type") != "image_url":
+            return None
+        url = part.get("image_url", {}).get("url", "")
+        mime, base64_, encoded = url[len(DATA) :].partition(BASE64)
+        if not url.startswith(DATA) or not base64_:
+            return None
+        return Attachment.image(base64.b64decode(encoded), mime=mime)
 
 
 def text_of(data: bytes) -> Optional[str]:

@@ -21,14 +21,20 @@ thinking, writing, running a tool), how long it runs, what the model thought
 (a card that folds), and the tokens: of each turn, of the chat, and how much
 of the model's context the conversation fills.
 
-The conversation is not kept: it ends with the window, while the
-measurements it started go on in the daemon.
+A mode's chat keeps its conversations (Chat.chats, open, rename): the
+model lists those of the window's workspace for the mode shown (history,
+searched by title), opens one in place of the one shown (a turn running is
+stopped first) and renames one. An opened conversation comes back as its
+chat tells it again (chat.Replay), gathered in the chat's thread and handed
+to the GUI thread whole through the same queue: one take, the items made by
+the handlers that make a live turn's. What the person sends meanwhile waits
+for it. The measurements a conversation started go on in the daemon.
 """
 
 import json
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -40,23 +46,27 @@ from thzdaq_gui.assistant.chat import (
     Call,
     Chat,
     Choice,
+    Kept,
     Outcome,
     Said,
     Unready,
     Used,
 )
+from thzdaq_gui.assistant.history import Shelf
 from thzdaq_gui.assistant.keys import Keys
 from thzdaq_gui.assistant.provider import Client, Provider, ProviderError
 from thzdaq_gui.settings import (
     ASSISTANT_INSTRUCTIONS,
     ASSISTANT_PROVIDER,
     ASSISTANT_PROVIDERS,
+    chats_dir,
     settings,
 )
 
 SHOWN = 40  # letters of an argument a card's line shows
 # What a turn does now
 THINKING, WRITING, RUNNING = "Thinking", "Writing", "Running"
+THOUGHT = "Thought"  # a thought over, how long not known
 
 
 class ProvidersModel(QObject):
@@ -195,8 +205,10 @@ class Item:
     attachments: Tuple[Attachment, ...] = ()  # of the person's
     queued: bool = False  # the person's: waits for the turn's next step
     unsent: bool = False  # the person's: dropped by a stop before it went
-    started: float = 0.0  # of a thought: when (time.monotonic)
-    seconds: Optional[float] = None  # of a thought: how long, once over
+    # Of a thought: when it began, of one thought as the chat runs
+    # (time.monotonic); how long it took, once over, when known
+    started: Optional[float] = None
+    seconds: Optional[float] = None
 
     def summary(self) -> str:
         """A call in a line: the tool, its arguments' values and how it went
@@ -210,9 +222,14 @@ class Item:
 
     def thought_title(self) -> str:
         """A thought in a line: thinking now, or for how long it thought."""
+        if self.state is State.RUNNING:
+            since = self.started
+            return f"{THINKING}…" + (
+                "" if since is None else f" {time.monotonic() - since:.0f} s"
+            )
         if self.seconds is None:
-            return f"{THINKING}… {time.monotonic() - self.started:.0f} s"
-        return f"Thought for {self.seconds:.0f} s"
+            return THOUGHT
+        return f"{THOUGHT} for {self.seconds:.0f} s"
 
 
 def _shown(value: Any) -> str:
@@ -223,6 +240,29 @@ def _shown(value: Any) -> str:
         return ",".join(_shown(v) for v in value)
     text = " ".join(str(value).split())
     return text if len(text) <= SHOWN else text[: SHOWN - 1] + "…"
+
+
+def ago(when: float, now: float) -> str:
+    """How long ago, in words (seconds since the epoch): "5 min ago"."""
+    seconds = max(now - when, 0)
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60:.0f} min ago"
+    if seconds < 86400:
+        return f"{seconds // 3600:.0f} h ago"
+    if seconds < 2 * 86400:
+        return "yesterday"
+    if seconds < 7 * 86400:
+        return f"{seconds // 86400:.0f} days ago"
+    year = "" if time.localtime(when).tm_year == time.localtime(now).tm_year else " %Y"
+    return time.strftime(f"%d %b{year}", time.localtime(when))
+
+
+def matching(chats: Sequence[Kept], search: str) -> List[Kept]:
+    """The chats whose title holds what is searched, whatever the case."""
+    found = search.strip().casefold()
+    return [chat for chat in chats if found in chat.title.casefold()]
 
 
 def tokens(count: int) -> str:
@@ -266,8 +306,9 @@ def built_in_chat(
     session, providers: ProvidersModel, instructions: InstructionsModel
 ) -> BuiltInChat:
     """The built-in assistant, a mode of the chat: its models are the servers
-    of the settings, told when they change."""
-    chat = BuiltInChat(session, providers, instructions)
+    of the settings, told when they change; its conversations are kept in the
+    program's data."""
+    chat = BuiltInChat(session, providers, instructions, Shelf(chats_dir()))
     providers.changed.connect(chat.servers_changed)
     return chat
 
@@ -325,11 +366,79 @@ class _Watch:
         self.model._tell(self, self.model._models_changed, self.mode)
 
 
+class _Opening:
+    """A kept conversation as its chat tells it again (chat.Replay): what it
+    tells is gathered in the chat's thread and handed to the GUI thread whole
+    once all of it was told, heard while this is the mode's opening. What the
+    person sends meanwhile waits here."""
+
+    def __init__(self, model: "AssistantModel", mode: "Mode"):
+        self.model, self.mode = model, mode
+        self.told: List[Tuple[Callable[..., None], tuple]] = []  # chat's thread
+        self.held: List[Tuple[str, Tuple[Attachment, ...]]] = []  # GUI thread
+
+    def heard(self) -> bool:
+        return self.mode.opening is self
+
+    def began(self, said: Optional[Said]) -> None:
+        self.told.append((self.mode._replayed_began, (said,)))
+
+    def said(self, said: Said) -> None:
+        self.told.append((self.mode._replayed_said, (said,)))
+
+    def asking(self) -> None:
+        self.told.append((self.mode._heard_asking, ()))
+
+    def taken(self, count: int) -> None:
+        self.told.append((self.mode._heard_taken, (count,)))
+
+    def thought(self, piece: str, seconds: Optional[float] = None) -> None:
+        self.told.append((self.mode._heard_thought, (piece, seconds)))
+
+    def text(self, piece: str) -> None:
+        self.told.append((self.mode._heard_text, (piece,)))
+
+    def called(self, call: Call) -> None:
+        self.told.append((self.mode._heard_call, (call,)))
+
+    def progress(self, call: str, done: float, total: Optional[float]) -> None:
+        self.told.append((self.mode._heard_progress, (call, (done, total))))
+
+    def answered(self, call: str, text: str, failed: bool) -> None:
+        self.told.append((self.mode._heard_answer, (call, text, failed)))
+
+    def usage(self, used: Used) -> None:
+        self.told.append((self.mode._heard_usage, (used,)))
+
+    def ended(
+        self, outcome: Outcome, why: str, seconds: Optional[float] = None
+    ) -> None:
+        self.told.append((self.mode._replayed_end, (outcome, why, seconds)))
+
+    def opened(self, why: str = "") -> None:
+        self.model._tell(self, self.mode._opened, self, why)
+
+
+class _Listing:
+    """The kept conversations a mode's chat found, from its thread: heard
+    while this is the mode's last listing."""
+
+    def __init__(self, model: "AssistantModel", mode: "Mode"):
+        self.model, self.mode = model, mode
+
+    def heard(self) -> bool:
+        return self.mode.listing is self
+
+    def __call__(self, chats: Sequence[Kept]) -> None:
+        self.model._tell(self, self.mode._found, tuple(chats))
+
+
 class Mode:
     """A chat of the dock: its backend (Chat), its items, its tokens and the
-    turn it runs. What its turns tell comes through the model's queue; what
-    changed it tells the model, which tells the dock while this is the mode
-    shown (a mode chosen is shown anew, whole)."""
+    turn it runs; the conversations it keeps (history) and the one it opens.
+    What its turns tell comes through the model's queue; what changed it
+    tells the model, which tells the dock while this is the mode shown (a
+    mode chosen is shown anew, whole)."""
 
     def __init__(self, model: "AssistantModel", chat: Chat):
         self.model = model
@@ -345,6 +454,9 @@ class Mode:
         self._thinking: Optional[int] = None  # the thought the model thinks now
         self._calls: Dict[str, int] = {}  # call id -> its item
         self._queued: List[int] = []  # the person's items that wait, in order
+        self.history: Tuple[Kept, ...] = ()  # of the workspace, as listed last
+        self.listing: Optional[_Listing] = None  # asked last
+        self.opening: Optional[_Opening] = None  # a kept one being told again
         chat.watch(_Watch(model, self))
 
     def busy(self) -> bool:
@@ -361,6 +473,9 @@ class Mode:
     def send(self, text: str, attachments: Sequence[Attachment]) -> None:
         text = text.strip()
         if not text and not attachments:
+            return
+        if self.opening is not None:  # it goes once the chat opened
+            self.opening.held.append((text, tuple(attachments)))
             return
         said = Said(text, tuple(attachments))
         index = self._add(
@@ -396,11 +511,54 @@ class Mode:
 
     def new_chat(self) -> None:
         self.stop()
+        self.opening = None
         self.chat.new_chat()
+        self._clear()
+
+    def current(self) -> Optional[str]:
+        """The id of the conversation shown; None before its first message."""
+        kept = self.chat.current()
+        return kept.id if kept is not None else None
+
+    def find_chats(self, workspace) -> None:
+        """List the conversations kept for the workspace (history, told by
+        history_changed once found)."""
+        self.listing = _Listing(self.model, self)
+        self.chat.chats(workspace, self.listing)
+
+    def open(self, chat: Kept) -> None:
+        """Show a kept conversation and go on with it; a turn running is
+        stopped first, what is sent meanwhile goes once it opened."""
+        if self.opening is None and self.current() == chat.id:
+            return  # shown already
+        held = self.opening.held if self.opening is not None else []
+        self.stop()
+        self.opening = _Opening(self.model, self)
+        self.opening.held = held
+        self.chat.open(chat, self.opening)
+        self._clear()
+
+    def rename(self, chat: Kept, title: str) -> None:
+        title = " ".join(title.split())
+        if not title or title == chat.title:
+            return
+        self.chat.rename(chat, title)
+        self.history = tuple(
+            replace(kept, title=title) if kept.id == chat.id else kept
+            for kept in self.history
+        )
+        self.model._emit_shown(self, self.model.history_changed)
+
+    def _clear(self) -> None:
         self.items.clear()
+        self._queued.clear()
         self.usage, self.last = Tokens(), Tokens()
         self.model._emit_shown(self, self.model.cleared)
         self.model._emit_shown(self, self.model.usage_changed)
+
+    def _found(self, chats: Tuple[Kept, ...]) -> None:
+        self.history = chats
+        self.model._emit_shown(self, self.model.history_changed)
 
     def close(self) -> None:
         self.stop()
@@ -410,7 +568,7 @@ class Mode:
     def _heard_asking(self) -> None:
         self.last.steps += 1
         self.usage.steps += 1
-        self._set_phase(THINKING)
+        self._doing(THINKING)
 
     def _heard_taken(self, count: int) -> None:
         taken, self._queued = self._queued[:count], self._queued[count:]
@@ -419,15 +577,20 @@ class Mode:
             self._change(index)
         self._answer = None  # the answer to it goes below it
 
-    def _heard_thought(self, piece: str) -> None:
+    def _heard_thought(self, piece: str, seconds: Optional[float] = None) -> None:
+        """seconds: how long the whole thought took, of one told again."""
         if self._thinking is None:
             self._answer = None
+            began = time.monotonic() if self.turn is not None else None
             self._thinking = self._add(
-                Item(Kind.THOUGHT, state=State.RUNNING, started=time.monotonic())
+                Item(Kind.THOUGHT, state=State.RUNNING, started=began)
             )
-        self.items[self._thinking].text += piece
+        item = self.items[self._thinking]
+        item.text += piece
+        if seconds is not None:
+            item.seconds = seconds
         self._change(self._thinking)
-        self._set_phase(THINKING)
+        self._doing(THINKING)
 
     def _heard_usage(self, used: Used) -> None:
         self.last.add(used)
@@ -440,7 +603,7 @@ class Mode:
             self._answer = self._add(Item(Kind.ANSWER))
         self.items[self._answer].text += piece
         self._change(self._answer)
-        self._set_phase(WRITING)
+        self._doing(WRITING)
 
     def _heard_call(self, call: Call) -> None:
         self._thought_over(State.DONE)
@@ -453,7 +616,7 @@ class Mode:
                 state=State.RUNNING,
             )
         )
-        self._set_phase(f"{RUNNING} {call.name}")
+        self._doing(f"{RUNNING} {call.name}")
 
     def _heard_progress(self, call: str, progress) -> None:
         if call in self._calls:
@@ -472,20 +635,36 @@ class Mode:
         if self._thinking is None:
             return
         item = self.items[self._thinking]
-        item.state, item.seconds = state, time.monotonic() - item.started
+        item.state = state
+        if item.seconds is None and item.started is not None:
+            item.seconds = time.monotonic() - item.started
         self._change(self._thinking)
         self._thinking = None
 
     def _end(self, outcome: Outcome, why: str) -> None:
         """The turn ended (told by it, or stopped here); its items changed
         are told by whoever called."""
+        self.turn = None
+        self._close(outcome, why, time.monotonic() - self._began)
+        if outcome is Outcome.ANSWERED and self._queued:
+            self._begin(None)  # written as it answered: it answers that too
+            if self.busy():
+                return
+        if self._queued:  # stopped or failed: what waited does not go
+            self.chat.stop()
+            self._unsent()
+        self._set_phase("")
+        self.model._emit_shown(self, self.model.busy_changed, False)
+
+    def _close(self, outcome: Outcome, why: str, seconds: Optional[float]) -> None:
+        """The items of a turn over: its thought and calls ended, a note when
+        it did not answer, how long it took (when known) and its tokens."""
         self._thought_over(State.STOPPED)
         for index in self._calls.values():
             self.items[index].state = State.STOPPED
             self._change(index)
         self._calls.clear()
-        seconds = time.monotonic() - self._began
-        self.turn = self._answer = None
+        self._answer = None
         steps = self.last.steps
         note = {
             Outcome.STOPPED: "Stopped.",
@@ -494,21 +673,56 @@ class Mode:
         }.get(outcome)
         if note:
             self._add(Item(Kind.NOTE, note))
-        told = [f"{seconds:.1f} s", f"{steps} step{'s' if steps != 1 else ''}"]
+        told = [f"{seconds:.1f} s"] if seconds is not None else []
+        told.append(f"{steps} step{'s' if steps != 1 else ''}")
         used = self.last.told()
         self._add(Item(Kind.STATS, " · ".join(told + ([used] if used else []))))
-        if outcome is Outcome.ANSWERED and self._queued:
-            self._begin(None)  # written as it answered: it answers that too
-            if self.busy():
-                return
-        if self._queued:  # stopped or failed: what waited does not go
-            self.chat.stop()
-            for index in self._queued:
-                self.items[index].queued, self.items[index].unsent = False, True
-                self._change(index)
-            self._queued.clear()
-        self._set_phase("")
-        self.model._emit_shown(self, self.model.busy_changed, False)
+
+    def _unsent(self) -> None:
+        """What waited does not go."""
+        for index in self._queued:
+            self.items[index].queued, self.items[index].unsent = False, True
+            self._change(index)
+        self._queued.clear()
+
+    # A kept conversation told again, in the GUI thread
+    def _opened(self, opening: _Opening, why: str) -> None:
+        """All of it at once, by the handlers of a live turn; then what was
+        sent meanwhile goes."""
+        self.opening = None
+        for heard, given in opening.told:
+            heard(*given)
+        self._unsent()  # it waited as the program closed
+        if why:
+            self._add(Item(Kind.NOTE, why))
+        self.model._emit_shown(self, self.model.usage_changed)
+        for text, attachments in opening.held:
+            self.send(text, attachments)
+
+    def _replayed_began(self, said: Optional[Said]) -> None:
+        self._answer = self._thinking = None
+        self.last = Tokens()
+        if said is not None:
+            self._add(Item(Kind.PERSON, said.text, attachments=said.attachments))
+
+    def _replayed_said(self, said: Said) -> None:
+        self._queued.append(
+            self._add(
+                Item(Kind.PERSON, said.text, attachments=said.attachments, queued=True)
+            )
+        )
+
+    def _replayed_end(
+        self, outcome: Outcome, why: str, seconds: Optional[float]
+    ) -> None:
+        self._close(outcome, why, seconds)
+        if outcome is not Outcome.ANSWERED:
+            self._unsent()
+
+    def _doing(self, phase: str) -> None:
+        """What the turn running does now; a turn told again does nothing now."""
+        if self.turn is not None:
+            self._set_phase(phase)
 
     def _set_phase(self, phase: str) -> None:
         if phase != self.phase:
@@ -536,6 +750,7 @@ class AssistantModel(QObject):
     usage_changed = Signal()  # the tokens (usage, last_usage, context_limit)
     models_changed = Signal()  # the models offered, the one chosen
     mode_changed = Signal()  # another mode shown: all of it anew
+    history_changed = Signal()  # the kept conversations listed, or one renamed
 
     # Turns told something, from their threads or this one: the queue was empty
     _arrived = Signal()
@@ -564,6 +779,7 @@ class AssistantModel(QObject):
         self.mode = self.modes[0]  # the one shown
         session.station_changed.connect(self._another_lab)
         session.config_changed.connect(self._prompt_changed)
+        session.workspace.changed.connect(self._another_workspace)
         instructions.changed.connect(self._prompt_changed)
 
     # The mode shown
@@ -621,6 +837,29 @@ class AssistantModel(QObject):
         """Forget the conversation (a turn running is stopped)."""
         self.mode.new_chat()
 
+    # The conversations the mode shown keeps, of the window's workspace
+    def find_chats(self) -> None:
+        """List them anew: history_changed once found."""
+        self.mode.find_chats(self.session.workspace.folder)
+
+    def chats(self, search: str = "") -> List[Kept]:
+        """As listed last, the newest first; those whose title holds search."""
+        return matching(self.mode.history, search)
+
+    def current_chat(self) -> Optional[str]:
+        """The id of the conversation shown; None before its first message."""
+        return self.mode.current()
+
+    def open_chat(self, id: str) -> None:
+        """Show a listed conversation in place of the one shown and go on
+        with it (a turn running is stopped first)."""
+        chat = next(chat for chat in self.mode.history if chat.id == id)
+        self.mode.open(chat)
+
+    def rename_chat(self, id: str, title: str) -> None:
+        chat = next(chat for chat in self.mode.history if chat.id == id)
+        self.mode.rename(chat, title)
+
     def show_mode(self, index: int) -> None:
         """Show another mode; a turn it or the one shown before runs goes on."""
         mode = self.modes[index]
@@ -634,6 +873,14 @@ class AssistantModel(QObject):
         """The window closes: the turns stop, the chats leave the daemon."""
         for mode in self.modes:
             mode.close()
+
+    def _another_workspace(self) -> None:
+        """The conversations listed are of another workspace now."""
+        for mode in self.modes:
+            mode.history = ()
+            if mode.listing is not None:  # listed before: listed again
+                mode.find_chats(self.session.workspace.folder)
+        self.history_changed.emit()
 
     def _another_lab(self) -> None:
         for mode in self.modes:

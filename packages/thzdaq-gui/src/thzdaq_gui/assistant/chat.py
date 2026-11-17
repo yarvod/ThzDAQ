@@ -14,11 +14,20 @@ began last).
 A chat also offers its models (Choice), the one chosen, and how many tokens
 of context the chosen one takes when that is known; watch() hears when
 these change.
+
+A chat keeps its conversations, each under an id, in the workspace it began
+in (Kept): it lists them, opens one to go on with it, and renames one. An
+opened one is told again the way its turns told it (Replay, a Listener with
+the turns' beginnings and the person's messages), so it comes back into the
+view model by the path a live turn takes. The built-in chat keeps them as
+files of the program (history.py); Codex keeps its own sessions and replays
+one as it loads.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Protocol, Sequence, Tuple
 
 from thzdaq_gui.assistant.attachments import Attachment
@@ -71,6 +80,17 @@ class Choice:
     tip: str = ""
 
 
+@dataclass(frozen=True)
+class Kept:
+    """A conversation a chat keeps: its id, its title, when a turn of it
+    ended last (seconds since the epoch), and the workspace it is kept for."""
+
+    id: str
+    title: str
+    updated: float
+    workspace: Path
+
+
 class Listener(Protocol):
     """What a turn tells as it goes, from the chat's thread."""
 
@@ -107,6 +127,32 @@ class Listener(Protocol):
     # built-in chat changes the bench only, whose consent the daemon asks.
 
 
+class Replay(Listener, Protocol):
+    """What a kept conversation tells as it is opened (Chat.open), from the
+    chat's thread: each turn as it went, begun with what the person said,
+    then what it told as a live turn tells it (pieces whole, no progress),
+    with the person's messages that came while it ran, and its end. Last,
+    opened(). How long a thought or a turn took is told when it was kept."""
+
+    def began(self, said: Optional[Said]) -> None:
+        """A turn begins, with what the person said (None: with what waited)."""
+
+    def said(self, said: Said) -> None:
+        """The person said this while the turn ran: it waited for its next
+        step (taken) or was dropped by its end."""
+
+    def thought(self, piece: str, seconds: Optional[float] = None) -> None:
+        """What the model thought; seconds: how long, when it was kept."""
+
+    def ended(
+        self, outcome: Outcome, why: str, seconds: Optional[float] = None
+    ) -> None:
+        """The turn is over; seconds: how long it took, when it was kept."""
+
+    def opened(self, why: str = "") -> None:
+        """All of it was told; why: what of it could not be read."""
+
+
 class Unready(Exception):
     """A chat cannot start a turn now (no model's server yet): why, in words
     for the person."""
@@ -135,7 +181,27 @@ class Chat(ABC):
 
     @abstractmethod
     def new_chat(self) -> None:
-        """Forget the conversation (its turn was stopped first)."""
+        """Forget the conversation (its turn was stopped first); the next
+        message begins another one, kept under an id of its own."""
+
+    @abstractmethod
+    def current(self) -> Optional[Kept]:
+        """The conversation going on, as kept; None before its first message."""
+
+    @abstractmethod
+    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
+        """The conversations kept for a workspace, the newest first, told to
+        found from a thread of the chat. Never waits."""
+
+    @abstractmethod
+    def open(self, chat: Kept, replay: Replay) -> None:
+        """Go on with a kept conversation (its turn running was stopped
+        first): it is told again to replay from a thread of the chat, and
+        the next turn makes its prompt anew. Never waits."""
+
+    @abstractmethod
+    def rename(self, chat: Kept, title: str) -> None:
+        """Give a kept conversation another title. Never waits."""
 
     @abstractmethod
     def close(self) -> None:

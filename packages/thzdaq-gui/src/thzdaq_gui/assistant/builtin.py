@@ -7,11 +7,16 @@ again after the window took another lab: the GUI thread only marks that, and
 the lock that guards the reach is never held while the daemon is asked. The
 system prompt is made with the person's instructions as they were when the
 turn began.
+
+Its conversations are kept as files of the program (history.Shelf): a new
+one from its first message, in the workspace of the window then, each turn
+once it ended or was stopped (history.Recorder).
 """
 
 import threading
+from dataclasses import replace
 from pathlib import Path
-from typing import Callable, Optional, Protocol, Sequence
+from typing import Callable, List, Optional, Protocol, Sequence
 
 from thzdaq_api.errors import LabError
 from thzdaq_api.lab import Lab
@@ -21,12 +26,15 @@ from thzdaq_gui.assistant.attachments import content
 from thzdaq_gui.assistant.chat import (
     Chat,
     Choice,
+    Kept,
     Listener,
     Outcome,
+    Replay,
     Said,
     Unready,
 )
 from thzdaq_gui.assistant.conversation import Conversation
+from thzdaq_gui.assistant.history import Recorder, Shelf
 from thzdaq_gui.assistant.prompt import system_prompt
 from thzdaq_gui.assistant.provider import Client, Provider
 
@@ -77,11 +85,21 @@ class Window(Protocol):
 class BuiltInChat(Chat):
     title = TITLE
 
-    def __init__(self, session: Window, servers: Servers, instructions: Instructions):
+    def __init__(
+        self,
+        session: Window,
+        servers: Servers,
+        instructions: Instructions,
+        shelf: Shelf,
+    ):
         self.session = session
         self.servers = servers
         self.instructions = instructions
+        self.shelf = shelf  # where its conversations are kept
         self.conversation = Conversation()
+        self._kept: Optional[Kept] = None  # the conversation, once it began
+        self._recorder: Optional[Recorder] = None  # of the turn last begun
+        self._unkept: List[Said] = []  # said once that turn was kept: the next one's
         self._changed: Callable[[], None] = lambda: None
         # The bench as the assistant; the lock only guards these, never a wait
         self._reach: Optional[Reach] = None
@@ -96,8 +114,16 @@ class BuiltInChat(Chat):
         client = Client(provider, self.servers.key(provider.name))
         message = None if said is None else content(said.text, said.attachments)
         conversation = self.conversation
+        count = conversation.count()
         token = conversation.begin()
         folder = self.session.workspace
+        if self._kept is None:
+            self._kept = self.shelf.new(folder.folder, said)
+        listener = self._recorder = Recorder(
+            self.shelf, self._kept, said, self._unkept, listener,
+            lambda: conversation.since(count),
+        )  # fmt: skip
+        self._unkept = []
         window = self.session.window  # what it shows goes to its own window
         instructions = self.instructions.instructions()
 
@@ -122,12 +148,38 @@ class BuiltInChat(Chat):
 
     def queue(self, said: Said) -> None:
         self.conversation.queue(content(said.text, said.attachments))
+        if self._recorder is None or not self._recorder.said(said):
+            self._unkept.append(said)
 
     def stop(self) -> None:
         self.conversation.stop()
+        if self._recorder is not None:
+            self._recorder.finish(Outcome.STOPPED, "")
+        self._unkept = []  # dropped with what waited
 
     def new_chat(self) -> None:
-        self.conversation = Conversation()
+        self._go_on(Conversation(), None)
+
+    def current(self) -> Optional[Kept]:
+        return self._kept
+
+    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
+        self.shelf.chats(workspace, found)
+
+    def open(self, chat: Kept, replay: Replay) -> None:
+        conversation = Conversation()  # its prompt is made anew
+        self._go_on(conversation, chat)
+        self.shelf.open(chat, conversation.restore, replay)
+
+    def rename(self, chat: Kept, title: str) -> None:
+        if self._kept is not None and self._kept.id == chat.id:
+            self._kept = replace(self._kept, title=title)
+        self.shelf.rename(chat, title)
+
+    def _go_on(self, conversation: Conversation, chat: Optional[Kept]) -> None:
+        """Another conversation from now on (its turn was stopped)."""
+        self.conversation, self._kept = conversation, chat
+        self._recorder, self._unkept = None, []
 
     def close(self) -> None:
         """The assistant leaves the daemon."""

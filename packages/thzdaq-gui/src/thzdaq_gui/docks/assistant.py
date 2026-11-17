@@ -1,5 +1,6 @@
 """The assistant's chat: its modes as tabs on top (the built-in assistant;
-each a chat of its own) with New chat and the settings; the messages
+each a chat of its own) with History (a page of the dock: the chats kept in
+the workspace, chat_history.py), New chat and the settings; the messages
 (Markdown that wraps to the dock's width; what the model thought and each
 tool call a card folded to its line); what the turn does now and for how
 long, beside a thin bar of how much of the model's context the chat fills
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QScrollArea,
     QSizePolicy,
+    QStackedWidget,
     QTabBar,
     QToolButton,
     QVBoxLayout,
@@ -42,6 +44,7 @@ from thzdaq_gui.chat_widgets import (
     grouped,
 )
 from thzdaq_gui.docks.assistant_settings import TITLE as SETTINGS, AssistantSettings
+from thzdaq_gui.docks.chat_history import HistoryPage
 from thzdaq_gui.folders import ATTACHMENTS
 from thzdaq_gui.models.assistant import (
     AssistantModel,
@@ -57,6 +60,7 @@ QUEUED = "queued: goes in at the next step"
 UNSENT = "not sent: the turn was stopped"
 NO_MODEL = "no model yet"
 USAGE_TIP = "Tokens of the last answer and of this chat"
+HISTORY_TIP = "History: the chats of this workspace"
 UNKNOWN = "—"  # tokens the model's server did not tell
 INPUT_LINES = (3, 10)  # the input's height in lines, least and most
 STATE_ICONS = {  # of a call: its icon and colour
@@ -366,14 +370,18 @@ class AssistantWidget(QWidget):
         for mode in model.modes:
             self.modeTabs.addTab(mode.title)
         self.modeTabs.currentChanged.connect(model.show_mode)
-        self.newButton = self._button("chat-plus-outline", "New chat", model.new_chat)
+        self.historyButton = QToolButton()  # down: the chats kept in the chat's place
+        self.historyButton.setIcon(theme.icon("history"))
+        self.historyButton.setToolTip(HISTORY_TIP)
+        self.historyButton.setCheckable(True)
+        self.historyButton.toggled.connect(self.show_history)
+        self.newButton = self._button("chat-plus-outline", "New chat", self.new_chat)
         self.settingsButton = self._button("cog-outline", f"{SETTINGS}…", self.edit)
         top = QHBoxLayout()
         top.setSpacing(2)
         top.addWidget(self.modeTabs)
         top.addStretch()
-        # The chat's history, a page of this dock, will come first here
-        for button in (self.newButton, self.settingsButton):
+        for button in (self.historyButton, self.newButton, self.settingsButton):
             top.addWidget(button)
 
         self.column = QVBoxLayout()
@@ -469,15 +477,28 @@ class AssistantWidget(QWidget):
         bottom.addWidget(self.stopButton)
         bottom.addWidget(self.sendButton)
 
+        # The chat, and the chats kept in its place while History is down:
+        # the chat's widgets stay as they are meanwhile
+        self.chatPage = QWidget()
+        page = QVBoxLayout(self.chatPage)
+        page.setContentsMargins(0, 0, 0, 0)
+        page.setSpacing(4)
+        page.addWidget(self.scroll, 1)
+        page.addLayout(status)
+        page.addWidget(self.attachments)
+        page.addWidget(self.input)
+        page.addLayout(bottom)
+        self.historyPage = HistoryPage(model)
+        self.historyPage.chosen.connect(self.open_chat)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.chatPage)
+        self.pages.addWidget(self.historyPage)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         layout.addLayout(top)
-        layout.addWidget(self.scroll, 1)
-        layout.addLayout(status)
-        layout.addWidget(self.attachments)
-        layout.addWidget(self.input)
-        layout.addLayout(bottom)
+        layout.addWidget(self.pages, 1)
 
         model.added.connect(self.add)
         model.item_changed.connect(self.change)
@@ -499,8 +520,11 @@ class AssistantWidget(QWidget):
 
     def show_mode(self) -> None:
         """The mode shown, all of it anew: its messages (a widget each), its
-        turn, its tokens and its models."""
+        turn, its tokens and its models; its chats kept, while History is
+        down."""
         self.modeTabs.setCurrentIndex(self.model.modes.index(self.model.mode))
+        if self.historyButton.isChecked():
+            self.model.find_chats()
         self.clear()
         self._follow = True
         for index in range(len(self.model.items)):
@@ -606,6 +630,27 @@ class AssistantWidget(QWidget):
 
     def edit(self) -> None:
         AssistantSettings(self.model.providers, self.model.instructions, self).exec()
+
+    # The chats kept
+    def show_history(self, shown: bool) -> None:
+        """The chats of the workspace in place of the chat (listed anew), or
+        the chat again."""
+        if shown:
+            self.model.find_chats()
+            self.historyPage.show_chats()
+            self.pages.setCurrentWidget(self.historyPage)
+            self.historyPage.search.setFocus()
+        else:
+            self.pages.setCurrentWidget(self.chatPage)
+
+    def open_chat(self, id: str) -> None:
+        self.historyButton.setChecked(False)
+        self._follow = True
+        self.model.open_chat(id)
+
+    def new_chat(self) -> None:
+        self.historyButton.setChecked(False)
+        self.model.new_chat()
 
     def add(self, index: int) -> None:
         widget = item_widget(self.model.items[index])

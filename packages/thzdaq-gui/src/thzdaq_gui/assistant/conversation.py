@@ -61,6 +61,22 @@ class Conversation:
         self._turn: Optional[object] = None  # the turn running
         self._waiting: List[Content] = []  # the person's, for the next step
 
+    def restore(self, messages: Sequence[Message]) -> None:
+        """The messages of a conversation kept before, to go on with it: the
+        next turn adds to them, with a system prompt made anew."""
+        with self._lock:
+            self.messages = list(messages)
+
+    def count(self) -> int:
+        """Messages so far: a turn's begin with since()."""
+        with self._lock:
+            return len(self.messages)
+
+    def since(self, count: int) -> List[Message]:
+        """The messages added after the first count."""
+        with self._lock:
+            return self.messages[count:]
+
     def forget_bench(self) -> None:
         """The bench or the person's instructions changed: the next turn
         makes the system prompt anew; a turn running keeps its own."""

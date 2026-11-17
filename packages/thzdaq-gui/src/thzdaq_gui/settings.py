@@ -11,13 +11,18 @@ on Linux), outside the program folder, so updates never touch them:
 Files (measurements, dumps, station profiles) live next to the program and
 the updater keeps them. --settings FILE uses an INI file instead (portable
 setups, tests).
+
+What the program keeps of its own apart from any workspace (the assistant's
+chats) is in the system's place for programs' data, under the same scope
+(e.g. ~/Library/Application Support/ThzDAQ/ThzDAQ-dev), or beside the INI
+file of --settings.
 """
 
 import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QStandardPaths
 from thzdaq_api.host import frozen, program_dir
 from thzdaq_api.measurements import DATA
 from thzdaq_api.procedures import former_names
@@ -136,3 +141,17 @@ def data_dir() -> Path:
 
 def stations_dir() -> Path:
     return app_dir() / "stations"
+
+
+def own_data_dir() -> Path:
+    """What the program keeps of its own, apart from its folder and any
+    workspace."""
+    if _file is not None:
+        return Path(_file).parent
+    found = QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation)
+    return Path(found) / ORGANIZATION / scope()
+
+
+def chats_dir() -> Path:
+    """The assistant's conversations, a folder per workspace."""
+    return own_data_dir() / "chats"

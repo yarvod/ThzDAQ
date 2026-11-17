@@ -13,7 +13,7 @@ from lab_helpers import Window
 from model_server import USAGE, calls, says, thinks
 from PySide6.QtCore import Qt
 from thzdaq_gui.assistant.builtin import NO_PROVIDER
-from thzdaq_gui.assistant.chat import Call, Chat, Choice, Outcome, Said, Used
+from thzdaq_gui.assistant.chat import Call, Chat, Choice, Kept, Outcome, Said, Used
 from thzdaq_gui.assistant.keys import SERVICE
 from thzdaq_gui.assistant.prompt import BENCH, INSTRUCTIONS, INSTRUCTIONS_RANK
 from thzdaq_gui.assistant.provider import Provider
@@ -582,6 +582,11 @@ class FakeChat(Chat):
         self.chosen = "small"
         self.limit: Optional[int] = None
         self.changed = None
+        self.kept: List[Kept] = []  # what chats() finds, for any workspace
+        self.listed: List[Path] = []  # the workspaces asked for
+        self.shown: Optional[Kept] = None  # current()
+        self.replay = None  # the replay of the chat opened last
+        self.renamed: List[tuple] = []
 
     def start(self, said, listener):
         self.started.append(said)
@@ -595,6 +600,20 @@ class FakeChat(Chat):
 
     def new_chat(self):
         self.queued.clear()
+        self.shown = None
+
+    def current(self):
+        return self.shown
+
+    def chats(self, workspace, found):
+        self.listed.append(workspace)
+        found(list(self.kept))
+
+    def open(self, chat, replay):
+        self.shown, self.replay = chat, replay
+
+    def rename(self, chat, title):
+        self.renamed.append((chat.id, title))
 
     def close(self):
         pass
