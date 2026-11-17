@@ -6,20 +6,24 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 from lab_helpers import Window
 from model_server import USAGE, calls, says, thinks
+from PySide6.QtCore import Qt
+from thzdaq_gui.assistant.builtin import NO_PROVIDER
+from thzdaq_gui.assistant.chat import Call, Chat, Choice, Outcome, Said, Used
 from thzdaq_gui.assistant.keys import SERVICE
 from thzdaq_gui.assistant.prompt import BENCH, INSTRUCTIONS, INSTRUCTIONS_RANK
 from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.models.assistant import (
-    NO_PROVIDER,
     AssistantModel,
     InstructionsModel,
     Kind,
     ProvidersModel,
     State,
+    built_in_chat,
 )
 
 BIAS = {"ref": "sis_bias_1", "key": "voltage_set", "value": "1 mV"}
@@ -59,9 +63,15 @@ def instructions(app):
     return InstructionsModel()
 
 
+def built_in(session, providers, instructions):
+    """The chat of the window with its built-in mode."""
+    chat = built_in_chat(session, providers, instructions)
+    return AssistantModel(session, providers, instructions, [chat])
+
+
 @pytest.fixture
 def assistant(session, providers, instructions):
-    assistant = AssistantModel(session, providers, instructions)
+    assistant = built_in(session, providers, instructions)
     yield assistant
     assistant.close()
 
@@ -72,6 +82,11 @@ def person(connect):
     window = Window(connect(True))
     yield window
     window.stop()
+
+
+def conversation(assistant):
+    """The built-in chat's conversation with the model."""
+    return assistant.mode.chat.conversation
 
 
 def kinds(assistant):
@@ -172,14 +187,14 @@ def test_stop_ends_the_turn_while_a_call_waits(assistant, model, person, wait):
     assistant.send("and now?")
     wait(lambda: not assistant.busy())
     assert said(assistant).text == "Ready."
-    messages = assistant.conversation.messages
+    messages = conversation(assistant).messages
     assert [m["role"] for m in messages] == [
         "user", "assistant", "tool", "user", "assistant",
     ]  # fmt: skip
 
 
 def test_without_a_server_it_says_to_add_one(session, instructions):
-    assistant = AssistantModel(session, ProvidersModel(), instructions)
+    assistant = built_in(session, ProvidersModel(), instructions)
     assistant.send("hello")
     assert assistant.items[-1].text == NO_PROVIDER and not assistant.busy()
 
@@ -191,7 +206,7 @@ def test_a_new_chat_forgets_the_conversation(assistant, model, wait):
     assistant.cleared.connect(lambda: cleared.append(True))
     assistant.new_chat()
     assert cleared and not assistant.items
-    assert not assistant.conversation.messages
+    assert not conversation(assistant).messages
 
 
 def test_another_profile_is_told_to_the_model_at_the_next_turn(
@@ -204,7 +219,7 @@ def test_another_profile_is_told_to_the_model_at_the_next_turn(
     wait(lambda: not assistant.busy())
     first, again = (asked["messages"][0]["content"] for asked in model.asked)
     assert first == again  # made anew: the same bench, the same prompt
-    assert assistant.conversation.system == first
+    assert conversation(assistant).system == first
 
 
 def test_the_persons_instructions_are_kept_and_go_from_the_next_turn(
@@ -259,7 +274,7 @@ def test_the_dock_shows_messages_and_folded_cards(assistant, model, person, wait
     cards[1].set_expanded(True)
     assert "too high for this junction" in cards[1].answer.text()
     assert widget.input.toPlainText() == ""
-    assert widget.providerBox.currentText() == "local"
+    assert widget.modelBox.currentText() == "local"
     shot(widget, "assistant_dock")
     widget.close()
 
@@ -274,7 +289,7 @@ def test_what_streams_while_the_window_is_busy_comes_as_one_change(
     assistant.item_changed.connect(changed.append)
     assistant.send("talk")
     deadline = time.monotonic() + 5
-    while len(assistant.conversation.messages) < 2:  # the reply is whole
+    while len(conversation(assistant).messages) < 2:  # the reply is whole
         assert time.monotonic() < deadline
         time.sleep(0.005)  # the window's thread does not turn meanwhile
     wait(lambda: not assistant.busy())
@@ -463,7 +478,7 @@ def test_what_is_sent_while_it_works_joins_at_the_next_step(assistant, model, wa
     model.held.set()
     wait(lambda: not assistant.busy())
     assert not queued.queued and not queued.unsent
-    roles = [m["role"] for m in assistant.conversation.messages]
+    roles = [m["role"] for m in conversation(assistant).messages]
     assert roles == ["user", "assistant", "tool", "user", "assistant"]
     assert model.asked[1]["messages"][-1]["content"] == "and say how many"
     assert [i.kind for i in assistant.items].count(Kind.STATS) == 1  # one turn
@@ -492,7 +507,7 @@ def test_stop_does_not_send_what_waits(assistant, model, wait):
     model.held.set()
     waited = [i for i in assistant.items if i.kind is Kind.PERSON][1]
     assert waited.unsent and not waited.queued and not assistant.busy()
-    assert assistant.conversation.waiting() == 0
+    assert conversation(assistant).waiting() == 0
 
 
 def test_files_and_images_go_with_a_message(assistant, model, wait, tmp_path):
@@ -549,9 +564,256 @@ def test_the_dock_wraps_long_words_and_attaches_what_is_pasted(assistant, model,
     assert card.minimumSizeHint().width() <= 320
     answer = [b for b in widget.findChildren(Bubble) if b.label.markdown][0]
     assert answer.label.height() > 3 * answer.label.fontMetrics().lineSpacing()
-    assert (
-        "%" not in widget.usageLabel.text()
-        and "context 1.2k" in widget.usageLabel.text()
-    )
+    assert widget.contextBar.toolTip() == "Context 1 230"  # its limit not known
     shot(widget, "assistant_narrow")
+    widget.close()
+
+
+class FakeChat(Chat):
+    """A chat whose turns the test tells: the view model knows a backend only
+    through chat.Chat and chat.Listener."""
+
+    def __init__(self, title: str = "Fake"):
+        self.title = title
+        self.started: List[Optional[Said]] = []
+        self.queued: List[Said] = []
+        self.stopped = 0
+        self.turn = None  # the listener of the last turn started
+        self.chosen = "small"
+        self.limit: Optional[int] = None
+        self.changed = None
+
+    def start(self, said, listener):
+        self.started.append(said)
+        self.turn = listener
+
+    def queue(self, said):
+        self.queued.append(said)
+
+    def stop(self):
+        self.stopped += 1
+
+    def new_chat(self):
+        self.queued.clear()
+
+    def close(self):
+        pass
+
+    def lab_changed(self):
+        pass
+
+    def prompt_changed(self):
+        pass
+
+    def models(self):
+        return (Choice("small", "Small"), Choice("large", "Large", "more context"))
+
+    def model(self):
+        return self.chosen
+
+    def choose(self, model):
+        self.chosen = model
+        self.changed()
+
+    def context_limit(self):
+        return self.limit
+
+    def watch(self, changed):
+        self.changed = changed
+
+
+@pytest.fixture
+def fake(session, providers, instructions):
+    chat = FakeChat()
+    assistant = AssistantModel(session, providers, instructions, [chat])
+    yield chat, assistant
+    assistant.close()
+
+
+def test_what_a_chat_tells_becomes_the_items_of_its_mode(fake, wait):
+    chat, assistant = fake
+    busy = []
+    assistant.busy_changed.connect(busy.append)
+    assistant.send("hello")
+    assert chat.started == [Said("hello")] and assistant.busy()
+    turn = chat.turn
+
+    def tell():  # from the chat's own thread
+        turn.asking()
+        turn.thought("hmm")
+        turn.called(Call("c1", "read_device", {"ref": "sis_bias_1"}))
+        turn.progress("c1", 1, 2)
+        turn.answered("c1", "sis_bias_1: 0 V", False)
+        turn.text("It is ")
+        turn.text("0 V.")
+        turn.usage(Used(100, 10, 4, 110))
+        turn.ended(Outcome.ANSWERED, "")
+
+    told = threading.Thread(target=tell)
+    told.start()
+    told.join()
+    assert kinds(assistant) == [Kind.PERSON]  # told, not taken yet
+    wait(lambda: not assistant.busy())
+    assert kinds(assistant) == [Kind.PERSON, Kind.THOUGHT, Kind.CALL, Kind.ANSWER]
+    thought, call, answer = assistant.items[1:4]
+    assert thought.text == "hmm" and thought.state is State.DONE
+    assert call.summary() == "read_device sis_bias_1 → done"
+    assert call.text == "sis_bias_1: 0 V" and answer.text == "It is 0 V."
+    assert assistant.items[-1].text.endswith(
+        " s · 1 step · 100 in · 10 out (4 thinking)"
+    )
+    assert busy == [True, False]
+
+
+def test_stop_drops_what_the_stopped_turn_tells_after(fake, app):
+    chat, assistant = fake
+    assistant.send("hello")
+    stopped = chat.turn
+    stopped.text("half")
+    app.processEvents()
+    assistant.stop()
+    assert chat.stopped == 1 and not assistant.busy()
+    assert said(assistant).text == "Stopped."
+    stopped.text(" and more")
+    stopped.called(Call("c1", "list_devices"))
+    stopped.ended(Outcome.ANSWERED, "")
+    assistant.send("again")
+    assert chat.started == [Said("hello"), Said("again")]
+    stopped.text("late")  # while another turn runs
+    chat.turn.text("Anew.")
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    answers = [i.text for i in assistant.items if i.kind is Kind.ANSWER]
+    assert answers == ["half", "Anew."] and Kind.CALL not in kinds(assistant)
+
+
+def test_what_is_sent_during_a_turn_is_queued_to_the_chat_and_joins(fake, app):
+    chat, assistant = fake
+    assistant.send("one")
+    assistant.send("two")
+    assistant.send("three")
+    assert chat.queued == [Said("two"), Said("three")] and len(chat.started) == 1
+    two, three = assistant.items[1:3]
+    assert two.queued and three.queued
+    chat.turn.taken(1)  # "two" joined the turn's next step
+    chat.turn.text("One and two.")
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    # "three" came as it answered: a turn of its own answers what waits
+    assert chat.started == [Said("one"), None] and assistant.busy()
+    assert not two.queued and three.queued
+    chat.turn.taken(1)
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    assert not three.queued and not assistant.busy()
+    assistant.send("four")
+    assistant.send("five")
+    chat.turn.ended(Outcome.FAILED, "the server is gone")
+    app.processEvents()
+    five = assistant.items[-3]
+    assert five.text == "five" and five.unsent and not five.queued
+    assert said(assistant).text == "the server is gone"
+    assert chat.stopped == 1  # what waited in the chat is dropped
+
+
+def test_each_mode_is_a_chat_of_its_own_shown_anew_whole(
+    session, providers, instructions, app, monkeypatch
+):
+    from thzdaq_gui.docks import assistant as dock
+
+    first, second = FakeChat("First"), FakeChat("Second")
+    assistant = AssistantModel(session, providers, instructions, [first, second])
+    widget = dock.AssistantWidget(assistant)
+    tabs = widget.modeTabs
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["First", "Second"]
+    assistant.send("to the first")
+    first.turn.text("First answers.")
+    first.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    assert len(widget.shown) == len(assistant.items) == 3
+    tabs.setCurrentIndex(1)
+    assert assistant.mode.chat is second and not widget.shown
+    assistant.send("to the second")
+    assert second.started == [Said("to the second")]
+    assert first.started == [Said("to the first")]
+    assert not widget.stopButton.isHidden()  # the second one works
+    made = []
+    item_widget = dock.item_widget
+    monkeypatch.setattr(
+        dock, "item_widget", lambda item: made.append(item) or item_widget(item)
+    )
+    tabs.setCurrentIndex(0)
+    assert made == assistant.items  # a widget per item, once
+    assert len(widget.shown) == 3 and widget.stopButton.isHidden()
+    second.turn.text("Second answers.")  # its mode is not shown
+    app.processEvents()
+    assert len(widget.shown) == 3 and len(made) == 3
+    tabs.setCurrentIndex(1)
+    assert [i.kind for i in assistant.items] == [Kind.PERSON, Kind.ANSWER]
+    assert widget.shown[1].label.text() == "Second answers."
+    assert not widget.stopButton.isHidden()
+    assistant.close()
+    widget.close()
+
+
+def test_the_model_selector_shows_a_modes_models_and_chooses_one(fake, app):
+    from thzdaq_gui.docks.assistant import AssistantWidget
+
+    chat, assistant = fake
+    widget = AssistantWidget(assistant)
+    box = widget.modelBox
+    assert [box.itemText(i) for i in range(box.count())] == ["Small", "Large"]
+    assert box.currentText() == "Small"
+    box.activated.emit(1)
+    assert chat.chosen == "large"
+    app.processEvents()
+    assert box.currentText() == "Large" and box.toolTip() == "more context"
+    widget.close()
+
+
+def test_the_model_selector_chooses_a_server(assistant, providers, model, app):
+    from thzdaq_gui.docks.assistant import AssistantWidget
+
+    providers.save(Provider("vllm", model.url, "qwen-large", None, 32768), "other")
+    widget = AssistantWidget(assistant)
+    box = widget.modelBox
+    assert [box.itemText(i) for i in range(box.count())] == ["local", "vllm"]
+    assert box.currentText() == "local"
+    assert box.itemData(1, Qt.ToolTipRole) == f"qwen-large at {model.url}"
+    box.activated.emit(1)
+    assert providers.chosen().name == "vllm" and assistant.context_limit() == 32768
+    app.processEvents()
+    assert box.currentText() == "vllm"
+    widget.close()
+
+
+def test_the_context_bar_and_the_usage_popup_tell_the_tokens(fake, app):
+    from thzdaq_gui.docks.assistant import UNKNOWN, AssistantWidget
+
+    chat, assistant = fake
+    widget = AssistantWidget(assistant)
+    assert widget.contextBar.toolTip() == "Context 0"
+    widget.usageButton.menu().aboutToShow.emit()
+    assert widget.usageView.told() == [[UNKNOWN, UNKNOWN]] * 2
+    assistant.send("one")
+    chat.turn.usage(Used(1200, 30, 0, 1230))
+    chat.turn.usage(Used(1300, 40, 10, 1340))
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    assert widget.contextBar.toolTip() == "Context 1 340"
+    chat.limit = 272000  # the model's limit is told
+    chat.changed()
+    app.processEvents()
+    assert widget.contextBar.toolTip() == "Context 1 340 / 272 000"
+    assistant.send("two")
+    chat.turn.usage(Used(46200, 100, 0, 46300))
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    widget.usageButton.menu().aboutToShow.emit()
+    assert widget.usageView.told() == [
+        ["46 200", "100"],
+        ["48 700", "170 (10 thinking)"],
+    ]
+    assert widget.contextBar.toolTip() == "Context 46 300 / 272 000"
+    shot(widget, "assistant_usage")
     widget.close()

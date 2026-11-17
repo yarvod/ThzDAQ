@@ -78,3 +78,27 @@ def test_text_that_is_not_a_continuation_is_shown_anew(app):
     view.show_text("First answer.\n\nWith two paragraphs.")
     view.show_text("Another.")
     assert view.text() == "Another."
+
+
+def test_the_context_bar_tells_its_tokens_and_lights_up_on_hover_or_focus(app):
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QEnterEvent, QFocusEvent
+    from PySide6.QtWidgets import QApplication
+    from thzdaq_gui.chat_widgets import ContextBar
+
+    bar = ContextBar()
+    bar.show_context(46200, 272000)
+    assert bar.toolTip() == "Context 46 200 / 272 000" and not bar.isTextVisible()
+    assert bar.value() == round(1000 * 46200 / 272000)
+    assert not bar.highlighted()
+    at = QPointF(1, 1)
+    QApplication.sendEvent(bar, QEnterEvent(at, at, at))
+    assert bar.highlighted()
+    QApplication.sendEvent(bar, QEvent(QEvent.Leave))
+    assert not bar.highlighted()
+    QApplication.sendEvent(bar, QFocusEvent(QEvent.FocusIn))
+    assert bar.highlighted()
+    QApplication.sendEvent(bar, QFocusEvent(QEvent.FocusOut))
+    assert not bar.highlighted()
+    bar.show_context(1230, None)  # the model's limit not known
+    assert bar.toolTip() == "Context 1 230" and bar.value() == 0

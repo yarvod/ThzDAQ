@@ -1,10 +1,12 @@
-"""The assistant's chat: the model server chosen, the messages (Markdown that
-wraps to the dock's width; what the model thought and each tool call a card
-folded to its line), what the turn does now and for how long, the tokens of
-the chat and how much of the model's context it fills, the input with what
-is attached (files, images; Ctrl+V and dropping too), Send and Stop. While
-the assistant works, what is sent joins at its next step. A view of
-AssistantModel."""
+"""The assistant's chat: its modes as tabs on top (the built-in assistant;
+each a chat of its own) with New chat and the settings; the messages
+(Markdown that wraps to the dock's width; what the model thought and each
+tool call a card folded to its line); what the turn does now and for how
+long, beside a thin bar of how much of the model's context the chat fills
+and the tokens in a popup; the input with what is attached (files, images;
+Ctrl+V and dropping too), and under it the mode's model, Send and Stop.
+While the assistant works, what is sent joins at its next step. A view of
+AssistantModel, of the mode it shows."""
 
 import json
 from typing import Any, Dict, List, Optional
@@ -14,20 +16,31 @@ from PySide6.QtGui import QImage, QKeyEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
+    QLabel,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QScrollArea,
     QSizePolicy,
+    QTabBar,
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from thzdaq_gui import theme
 from thzdaq_gui.assistant.attachments import Attachment, AttachmentError, Kind as Given
-from thzdaq_gui.chat_widgets import Chip, ElidedLabel, Fold, MessageView
+from thzdaq_gui.chat_widgets import (
+    Chip,
+    ContextBar,
+    ElidedLabel,
+    Fold,
+    MessageView,
+    grouped,
+)
 from thzdaq_gui.docks.assistant_settings import TITLE as SETTINGS, AssistantSettings
 from thzdaq_gui.folders import ATTACHMENTS
 from thzdaq_gui.models.assistant import (
@@ -35,13 +48,16 @@ from thzdaq_gui.models.assistant import (
     Item,
     Kind,
     State,
-    tokens,
+    Tokens,
 )
 
 PLACEHOLDER = "Ask the assistant (Enter sends, Shift+Enter: a new line)"
 BUSY_PLACEHOLDER = "Write more: it joins at the assistant's next step (Enter)"
 QUEUED = "queued: goes in at the next step"
 UNSENT = "not sent: the turn was stopped"
+NO_MODEL = "no model yet"
+USAGE_TIP = "Tokens of the last answer and of this chat"
+UNKNOWN = "—"  # tokens the model's server did not tell
 INPUT_LINES = (3, 10)  # the input's height in lines, least and most
 STATE_ICONS = {  # of a call: its icon and colour
     State.RUNNING: ("progress-clock", theme.ACCENT),
@@ -283,28 +299,82 @@ def item_widget(item: Item) -> QWidget:
     return Bubble(item)
 
 
+class UsageView(QWidget):
+    """The tokens in and out of the last answer and of the chat, as the
+    model's server told them (— where it told none); out with what of it
+    the model thought."""
+
+    ROWS = ("Last answer", "This chat")
+    COLUMNS = ("In", "Out")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(10, 8, 10, 8)
+        grid.setHorizontalSpacing(14)
+        for column, title in enumerate(self.COLUMNS, 1):
+            grid.addWidget(self._label(title, theme.MUTED), 0, column, Qt.AlignRight)
+        self.cells: Dict[tuple, QLabel] = {}
+        for row, title in enumerate(self.ROWS, 1):
+            grid.addWidget(self._label(title, theme.MUTED), row, 0)
+            for column in range(1, len(self.COLUMNS) + 1):
+                self.cells[row, column] = self._label("", theme.TEXT)
+                grid.addWidget(self.cells[row, column], row, column, Qt.AlignRight)
+
+    @staticmethod
+    def _label(text: str, color: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(f"color: {color};")
+        return label
+
+    def show_usage(self, last: Tokens, chat: Tokens) -> None:
+        for row, used in enumerate((last, chat), 1):
+            written = grouped(used.written)
+            if used.reasoning:
+                written += f" ({grouped(used.reasoning)} thinking)"
+            told = (grouped(used.read), written) if used.known() else (UNKNOWN,) * 2
+            for column, text in enumerate(told, 1):
+                self.cells[row, column].setText(text)
+
+    def told(self) -> List[List[str]]:
+        """The rows as shown: in and out of the last answer, of the chat."""
+        return [
+            [self.cells[row, column].text() for column in range(1, 3)]
+            for row in range(1, 3)
+        ]
+
+
 class AssistantWidget(QWidget):
     def __init__(self, model: AssistantModel, parent=None):
         super().__init__(parent)
         self.model = model
-        self.shown: List[QWidget] = []  # a widget per item of the model
+        self.shown: List[QWidget] = []  # a widget per item of the mode shown
         self.attached: List[Attachment] = []  # for the next message
 
-        self.providerBox = QComboBox()
-        self.providerBox.setToolTip("The model's server")
-        self.providerBox.setSizeAdjustPolicy(
-            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        # On top: the modes on the left, the chat's actions on the right
+        self.modeTabs = QTabBar()
+        self.modeTabs.setObjectName("modes")
+        self.modeTabs.setDrawBase(False)
+        self.modeTabs.setExpanding(False)
+        self.modeTabs.setStyleSheet(
+            "#modes::tab { background: transparent; border: none;"
+            f" padding: 3px 10px; color: {theme.MUTED}; }}"
+            f"#modes::tab:selected {{ color: {theme.TEXT};"
+            f" border-bottom: 2px solid {theme.ACCENT}; }}"
+            f"#modes::tab:hover {{ color: {theme.TEXT}; }}"
         )
-        self.providerBox.setMinimumContentsLength(6)
-        self.providerBox.activated.connect(
-            lambda index: model.providers.choose(self.providerBox.itemText(index))
-        )
-        settings = self._button("cog-outline", f"{SETTINGS}…", self.edit)
-        new = self._button("chat-plus-outline", "New chat", model.new_chat)
+        for mode in model.modes:
+            self.modeTabs.addTab(mode.title)
+        self.modeTabs.currentChanged.connect(model.show_mode)
+        self.newButton = self._button("chat-plus-outline", "New chat", model.new_chat)
+        self.settingsButton = self._button("cog-outline", f"{SETTINGS}…", self.edit)
         top = QHBoxLayout()
-        top.addWidget(self.providerBox, 1)
-        top.addWidget(settings)
-        top.addWidget(new)
+        top.setSpacing(2)
+        top.addWidget(self.modeTabs)
+        top.addStretch()
+        # The chat's history, a page of this dock, will come first here
+        for button in (self.newButton, self.settingsButton):
+            top.addWidget(button)
 
         self.column = QVBoxLayout()
         self.column.setContentsMargins(4, 4, 4, 4)
@@ -323,7 +393,7 @@ class AssistantWidget(QWidget):
         bar.valueChanged.connect(self._followed)
         self._follow = True  # at the bottom: new messages stay in sight
 
-        # What the turn does now, and the tokens
+        # What the turn does now; the context the chat fills and its tokens
         self.spinner = QToolButton()
         self.spinner.setAutoRaise(True)
         self.spinner.setEnabled(True)
@@ -332,19 +402,28 @@ class AssistantWidget(QWidget):
         self.spinner.setIcon(self._spin.icon)
         self.phaseLabel = ElidedLabel()
         self.phaseLabel.set_color(theme.ACCENT)
-        self.usageLabel = ElidedLabel()
-        self.usageLabel.set_color(theme.MUTED)
-        self.usageLabel.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.contextBar = QProgressBar()
-        self.contextBar.setFixedSize(48, 6)
-        self.contextBar.setTextVisible(False)
-        self.contextBar.setRange(0, 1000)
+        self.contextBar = ContextBar()
+        self.contextBar.setFixedWidth(72)
+        self.usageView = UsageView()
+        usage = QMenu(self)
+        shown = QWidgetAction(usage)
+        shown.setDefaultWidget(self.usageView)
+        usage.addAction(shown)
+        usage.aboutToShow.connect(self.show_tokens)
+        self.usageButton = QToolButton()
+        self.usageButton.setAutoRaise(True)
+        self.usageButton.setIcon(theme.icon("counter", theme.MUTED))
+        self.usageButton.setToolTip(USAGE_TIP)
+        self.usageButton.setPopupMode(QToolButton.InstantPopup)
+        self.usageButton.setStyleSheet("QToolButton::menu-indicator { image: none; }")
+        self.usageButton.setMenu(usage)
         status = QHBoxLayout()
         status.setSpacing(4)
         status.addWidget(self.spinner)
         status.addWidget(self.phaseLabel, 1)
-        status.addWidget(self.usageLabel, 1)
+        status.addStretch()  # takes the room while the phase is hidden
         status.addWidget(self.contextBar, 0, Qt.AlignVCenter)
+        status.addWidget(self.usageButton)
         self.ticker = QTimer(self)  # the seconds of the turn, while it runs
         self.ticker.setInterval(1000)
         self.ticker.timeout.connect(self.tick)
@@ -365,26 +444,39 @@ class AssistantWidget(QWidget):
         self.input.submitted.connect(self.send)
         self.input.image_given.connect(self.attach_image)
         self.input.files_given.connect(self.attach_files)
+
+        # Under the input: the model that answers, what to attach, Stop, Send
+        self.modelBox = QComboBox()
+        self.modelBox.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.modelBox.setMinimumContentsLength(6)
+        self.modelBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.modelBox.setMaximumWidth(220)
+        self.modelBox.activated.connect(
+            lambda index: model.choose_model(self.modelBox.itemData(index))
+        )
         self.attachButton = self._button(
             "paperclip", "Attach files or images (or paste, or drop them)", self.pick
         )
         self.sendButton = self._button("send", "Send (Enter)", self.send_typed)
         self.stopButton = self._button("stop", "Stop the assistant", model.stop)
-        buttons = QVBoxLayout()
-        buttons.setSpacing(2)
-        buttons.addStretch()
-        for button in (self.attachButton, self.stopButton, self.sendButton):
-            buttons.addWidget(button)
         bottom = QHBoxLayout()
-        bottom.addWidget(self.input, 1)
-        bottom.addLayout(buttons)
+        bottom.setSpacing(2)
+        bottom.addWidget(self.modelBox, 1)
+        bottom.addWidget(self.attachButton)
+        bottom.addStretch()
+        bottom.addWidget(self.stopButton)
+        bottom.addWidget(self.sendButton)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
         layout.addLayout(top)
         layout.addWidget(self.scroll, 1)
         layout.addLayout(status)
         layout.addWidget(self.attachments)
+        layout.addWidget(self.input)
         layout.addLayout(bottom)
 
         model.added.connect(self.add)
@@ -393,12 +485,9 @@ class AssistantWidget(QWidget):
         model.busy_changed.connect(self.show_busy)
         model.phase_changed.connect(lambda phase: self.tick())
         model.usage_changed.connect(self.show_usage)
-        model.providers.changed.connect(self.show_providers)
-        self.show_providers()
-        self.show_busy(model.busy())
-        self.show_usage()
-        for index in range(len(model.items)):
-            self.add(index)
+        model.models_changed.connect(self.show_models)
+        model.mode_changed.connect(self.show_mode)
+        self.show_mode()
 
     @staticmethod
     def _button(icon: str, tip: str, slot) -> QToolButton:
@@ -408,20 +497,28 @@ class AssistantWidget(QWidget):
         button.clicked.connect(slot)
         return button
 
-    def show_providers(self) -> None:
-        chosen = self.model.providers.chosen()
-        self.providerBox.clear()
-        for provider in self.model.providers.all():
-            self.providerBox.addItem(f"{provider.name}", provider.name)
-            self.providerBox.setItemData(
-                self.providerBox.count() - 1,
-                f"{provider.model} at {provider.url}",
-                Qt.ToolTipRole,
-            )
-        if chosen is not None:
-            self.providerBox.setCurrentIndex(self.providerBox.findData(chosen.name))
-        else:
-            self.providerBox.setPlaceholderText("no model server yet")
+    def show_mode(self) -> None:
+        """The mode shown, all of it anew: its messages (a widget each), its
+        turn, its tokens and its models."""
+        self.modeTabs.setCurrentIndex(self.model.modes.index(self.model.mode))
+        self.clear()
+        self._follow = True
+        for index in range(len(self.model.items)):
+            self.add(index)
+        self.show_busy(self.model.busy())
+        self.show_usage()
+        self.show_models()
+
+    def show_models(self) -> None:
+        box = self.modelBox
+        box.clear()
+        for choice in self.model.models():
+            box.addItem(choice.title, choice.id)
+            box.setItemData(box.count() - 1, choice.tip, Qt.ToolTipRole)
+        chosen = self.model.chosen_model()
+        box.setCurrentIndex(box.findData(chosen) if chosen is not None else -1)
+        box.setPlaceholderText(NO_MODEL)
+        box.setToolTip(box.currentData(Qt.ToolTipRole) or "")
 
     def show_busy(self, busy: bool) -> None:
         self.stopButton.setVisible(busy)
@@ -446,25 +543,14 @@ class AssistantWidget(QWidget):
             self.shown[thinking].show_item(model.items[thinking])
 
     def show_usage(self) -> None:
-        used = self.model.usage
-        limit = self.model.context_limit()
-        context = ""
-        if used.context:
-            context = f"context {tokens(used.context)}"
-            if limit:
-                context += f" / {tokens(limit)} ({100 * used.context / limit:.0f}%)"
-        told = " · ".join(filter(None, (context, used.told())))
-        self.usageLabel.setText(told)
-        self.usageLabel.setToolTip(
-            f"The conversation fills {used.context} tokens of the model's context"
-            + (f" of {limit}" if limit else " (its size: the model server's Test)")
-            + f".\nThis chat: {used.read} tokens read, {used.written} written"
-            + (f" ({used.reasoning} thinking)" if used.reasoning else "")
-            + f", in {used.steps or 0} steps."
+        self.contextBar.show_context(
+            self.model.usage.context, self.model.context_limit()
         )
-        self.contextBar.setVisible(bool(limit and used.context))
-        if limit:
-            self.contextBar.setValue(min(1000, int(1000 * used.context / limit)))
+        if self.usageView.isVisible():
+            self.show_tokens()
+
+    def show_tokens(self) -> None:
+        self.usageView.show_usage(self.model.last_usage, self.model.usage)
 
     # What goes with the next message
     def pick(self) -> None:

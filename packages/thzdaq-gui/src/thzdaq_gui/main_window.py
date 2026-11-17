@@ -81,6 +81,7 @@ from thzdaq_gui.models.assistant import (
     AssistantModel,
     InstructionsModel,
     ProvidersModel,
+    built_in_chat,
 )
 from thzdaq_gui.models.hints import HintsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
@@ -164,9 +165,12 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
+        # The chat's modes: the built-in assistant
+        instructions = InstructionsModel(self)
         self.assistant = AssistantModel(
-            session, self.providers, InstructionsModel(self), self
-        )
+            session, self.providers, instructions,
+            [built_in_chat(session, self.providers, instructions)], self,
+        )  # fmt: skip
         self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()
         self.build_toolbar()

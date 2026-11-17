@@ -1,7 +1,8 @@
 """Widgets of a chat in a narrow dock, where nothing may widen it: text that
 wraps anywhere and is as tall as it is (MessageView), a line cut to its width
-(ElidedLabel), a card that folds to such a line (Fold), and what is attached
-to a message (Chip).
+(ElidedLabel), a card that folds to such a line (Fold), what is attached to a
+message (Chip), and how much of the model's context the chat fills
+(ContextBar).
 
 A message the model writes grows piece by piece: MessageView adds what came
 to what it shows rather than showing it all anew, so an answer costs the
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QSizePolicy,
     QTextBrowser,
     QToolButton,
@@ -409,3 +411,68 @@ class Chip(QFrame):
             remove.setToolTip("Remove")
             remove.clicked.connect(self.removed)
             line.addWidget(remove)
+
+
+def grouped(count: int) -> str:
+    """46200 -> "46 200": a count of tokens, its thousands apart."""
+    return f"{count:,}".replace(",", " ")
+
+
+class ContextBar(QProgressBar):
+    """How much of the model's context the conversation fills: a thin bar
+    without words. Hovered or focused it lights up; its tooltip tells the
+    tokens ("Context 46 200 / 272 000", the used ones alone while the
+    model's limit is not known)."""
+
+    LINE = 4  # the bar's height; the rest of the widget's is room to hover
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTextVisible(False)
+        self.setRange(0, 1000)
+        self.setFixedHeight(3 * self.LINE)
+        self.setFocusPolicy(Qt.TabFocus)
+        self._hovered = self._focused = False
+        self._light()
+        self.show_context(0, None)
+
+    def show_context(self, used: int, limit: Optional[int]) -> None:
+        self.setValue(min(1000, round(1000 * used / limit)) if limit else 0)
+        told = f"Context {grouped(used)}" + (f" / {grouped(limit)}" if limit else "")
+        self.setToolTip(told)
+        self.setAccessibleName(told)
+
+    def highlighted(self) -> bool:
+        return self._hovered or self._focused
+
+    def enterEvent(self, event) -> None:
+        super().enterEvent(event)
+        self._hovered = True
+        self._light()
+
+    def leaveEvent(self, event) -> None:
+        super().leaveEvent(event)
+        self._hovered = False
+        self._light()
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        self._focused = True
+        self._light()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        self._focused = False
+        self._light()
+
+    def _light(self) -> None:
+        track, chunk = (
+            (theme.BORDER, theme.ACCENT)
+            if self.highlighted()
+            else (theme.PANEL, theme.MUTED)
+        )
+        self.setStyleSheet(
+            f"QProgressBar {{ background: {track}; border: none; border-radius: 2px;"
+            f" min-height: 0px; margin: {self.LINE}px 0px; }}"
+            f"QProgressBar::chunk {{ background: {chunk}; border-radius: 2px; }}"
+        )

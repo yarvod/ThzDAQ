@@ -17,18 +17,21 @@ the model). stop() ends it at once: from then on the turn adds nothing and
 tells nothing, and a call it made that has no answer yet is answered
 "stopped". What the call asked of the bench goes on: a run it started runs,
 a dialog it opened still waits for the person.
+
+What a turn does is told as the chat's events (chat.Listener); how it ended
+is what say() returns. builtin.py runs it as a chat of the dock.
 """
 
 import json
 import threading
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from thzdaq_api import present
 from thzdaq_api.errors import ErrorCode, LabError
 from thzdaq_api.tools import Reach, Tool, by_name
 
 from thzdaq_gui.assistant.attachments import Content
+from thzdaq_gui.assistant.chat import Call, Listener, Outcome, Used
 from thzdaq_gui.assistant.provider import (
     Client,
     Message,
@@ -40,41 +43,6 @@ from thzdaq_gui.assistant.provider import (
 
 MAX_STEPS = 20  # questions to the model in one turn
 STOPPED = "stopped by the person before it answered"
-
-
-class Outcome(str, Enum):
-    ANSWERED = "answered"  # the model answered in words
-    STOPPED = "stopped"  # the person stopped it
-    STEPS = "steps"  # it took MAX_STEPS steps without an answer
-    FAILED = "failed"  # the model's server or the daemon failed
-
-
-class Listener(Protocol):
-    """What a turn tells as it goes, in its own thread."""
-
-    def asking(self) -> None:
-        """The model is asked: a step begins."""
-
-    def taken(self, count: int) -> None:
-        """The first count messages that waited joined the conversation."""
-
-    def thought(self, piece: str) -> None:
-        """A piece of what the model thinks before it answers."""
-
-    def usage(self, usage: Usage) -> None:
-        """The tokens a step took."""
-
-    def text(self, piece: str) -> None:
-        """A piece of the model's answer."""
-
-    def called(self, call: ToolCall) -> None:
-        """A tool call starts."""
-
-    def progress(self, call: str, done: float, total: Optional[float]) -> None:
-        """How far a call is (a measurement waited for)."""
-
-    def answered(self, call: str, text: str, failed: bool) -> None:
-        """What a call answered; failed: refused or wrong."""
 
 
 class Stopped(Exception):
@@ -188,13 +156,13 @@ class Conversation:
                 return Outcome.FAILED, str(e)
             self._add(turn, reply.message())
             if reply.usage is not None:
-                self._tell(turn, listener.usage, reply.usage)
+                self._tell(turn, listener.usage, used(reply.usage))
             if not reply.calls:
                 if self.waiting():
                     continue  # the person wrote meanwhile: it answers that too
                 return Outcome.ANSWERED, ""
             for call in reply.calls:
-                self._tell(turn, listener.called, call)
+                self._tell(turn, listener.called, shown(call))
                 told, failed = self._call(turn, call, found, reach, listener)
                 self._add(turn, answer(call.id, told))
                 self._tell(turn, listener.answered, call.id, told, failed)
@@ -265,6 +233,23 @@ class Conversation:
 
 def answer(call: str, text: str) -> Message:
     return {"role": "tool", "tool_call_id": call, "content": text}
+
+
+def shown(call: ToolCall) -> Call:
+    """A call as the chat shows it: arguments that do not read show none (the
+    model reads why in the call's answer)."""
+    try:
+        given = arguments(call)
+    except LabError:
+        given = {}
+    return Call(call.id, call.name, given)
+
+
+def used(usage: Usage) -> Used:
+    """A step's tokens; the conversation fills what the model read and wrote."""
+    return Used(
+        usage.prompt, usage.completion, usage.reasoning, usage.prompt + usage.completion
+    )
 
 
 def arguments(call: ToolCall) -> Dict[str, Any]:
