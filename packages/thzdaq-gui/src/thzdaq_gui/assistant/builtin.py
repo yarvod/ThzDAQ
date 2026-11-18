@@ -1,6 +1,7 @@
 """The built-in assistant as a chat of the dock (chat.Chat): a conversation
-(conversation.py) with the model's server chosen (provider.py) and the
-bench's tools (thzdaq_api.tools), reached as the assistant. No Qt.
+(conversation.py) with the model's server chosen (provider.py), the bench's
+tools (thzdaq_api.tools), reached as the assistant, and its own: images made
+by the server's image model, when it has one (images.py). No Qt.
 
 A turn runs in a thread of its own. The bench is reached there, once, and
 again after the window took another lab: the GUI thread only marks that, and
@@ -16,7 +17,7 @@ once it ended or was stopped (history.Recorder).
 import threading
 from dataclasses import replace
 from pathlib import Path
-from typing import Callable, List, Optional, Protocol, Sequence
+from typing import Callable, List, Optional, Protocol, Sequence, Tuple
 
 from thzdaq_api.errors import LabError
 from thzdaq_api.lab import Lab
@@ -33,8 +34,9 @@ from thzdaq_gui.assistant.chat import (
     Said,
     Unready,
 )
-from thzdaq_gui.assistant.conversation import Conversation
+from thzdaq_gui.assistant.conversation import Conversation, Tool
 from thzdaq_gui.assistant.history import Recorder, Shelf
+from thzdaq_gui.assistant.images import GenerateImage
 from thzdaq_gui.assistant.prompt import system_prompt
 from thzdaq_gui.assistant.provider import Client, Provider
 
@@ -112,6 +114,7 @@ class BuiltInChat(Chat):
         if provider is None:
             raise Unready(NO_PROVIDER)
         client = Client(provider, self.servers.key(provider.name))
+        own: Tuple[Tool, ...] = (GenerateImage(client),) if provider.image_model else ()
         message = None if said is None else content(said.text, said.attachments)
         conversation = self.conversation
         count = conversation.count()
@@ -140,7 +143,7 @@ class BuiltInChat(Chat):
             outcome, why = conversation.say(
                 token, message, client,
                 tools(lambda: folder.folder, lambda: window), reach,
-                prompt, listener,
+                prompt, listener, own,
             )  # fmt: skip
             listener.ended(outcome, why)
 

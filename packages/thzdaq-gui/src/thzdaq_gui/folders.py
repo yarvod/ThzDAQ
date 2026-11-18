@@ -20,6 +20,7 @@ MEASUREMENTS = "measurements"
 PROFILES = "profiles"
 SCRIPTS = "scripts"
 ATTACHMENTS = "attachments"  # files given to the assistant
+IMAGES = "images"  # images the assistant showed, saved
 
 
 class Folders:

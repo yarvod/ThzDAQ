@@ -5,13 +5,15 @@ folder and a hash of its path, and in it a folder per conversation:
 
     <workspace>/<id>/chat.jsonl   a line of its version, then a line per turn
     <workspace>/<id>/meta.json    its title, when it began, when a turn ended last
-    <workspace>/<id>/<hash>.png   each image attached, once, by the hash of its bytes
+    <workspace>/<id>/<hash>.png   each image attached or shown, once, by the hash
+                                  of its bytes
 
 A turn's line keeps what the person said, what the turn told (pieces joined,
-no progress, how long each thought took), how it ended and how long it took,
-and the messages it added for the model: enough to tell it again the way it
-was told (chat.Replay), so the view model shows it as it was shown, and to go
-on with it. An image is a file in both, never a copy within the line.
+no progress, how long each thought took, the images it showed), how it ended
+and how long it took, and the messages it added for the model: enough to
+tell it again the way it was told (chat.Replay), so the view model shows it
+as it was shown, and to go on with it. An image is a file in both, never a
+copy within the line.
 
 A turn is kept once it ended or was stopped (Recorder), never piece by piece.
 One thread of the shelf reads and writes, in the order asked: a conversation
@@ -36,7 +38,16 @@ from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 
 from thzdaq_gui.assistant.attachments import Attachment, Kind
-from thzdaq_gui.assistant.chat import Call, Kept, Listener, Outcome, Replay, Said, Used
+from thzdaq_gui.assistant.chat import (
+    Call,
+    Image,
+    Kept,
+    Listener,
+    Outcome,
+    Replay,
+    Said,
+    Used,
+)
 from thzdaq_gui.assistant.provider import Message
 
 logger = logging.getLogger(__name__)
@@ -188,6 +199,10 @@ class Recorder:
         self._keep(["answered", call, text, failed])
         self.listener.answered(call, text, failed)
 
+    def image(self, image: Image) -> None:
+        self._keep(["image", image], over=True)
+        self.listener.image(image)
+
     def usage(self, used: Used) -> None:
         # cached last: a line kept before it was told reads without it
         told = [used.read, used.written, used.reasoning, used.context, used.cached]
@@ -294,10 +309,24 @@ def _part_of(kept: Dict[str, Any], images: _Images) -> Dict[str, Any]:
     return Attachment.image(images.read(kept["image"]), mime=kept["mime"]).part()
 
 
+def _shown(image: Image, images: _Images) -> Dict[str, Any]:
+    return {
+        "file": images.keep(image.data, image.mime),
+        "mime": image.mime,
+        "name": image.name,
+    }
+
+
+def _shown_of(kept: Dict[str, Any], images: _Images) -> Image:
+    return Image(images.read(kept["file"]), kept["mime"], kept["name"])
+
+
 def _entry(entry: list, images: _Images) -> list:
     """What a turn told, as its line keeps it."""
     if entry[0] == "said":
         return ["said", _said(entry[1], images)]
+    if entry[0] == "image":
+        return ["image", _shown(entry[1], images)]
     return entry
 
 
@@ -312,6 +341,7 @@ _TOLD: Dict[str, Callable[..., tuple]] = {
     "answered": lambda images, call, text, failed: (call, text, failed),
     "usage": lambda images, *used: (Used(*used),),
     "said": lambda images, said: (_said_of(said, images),),
+    "image": lambda images, image: (_shown_of(image, images),),
 }
 
 

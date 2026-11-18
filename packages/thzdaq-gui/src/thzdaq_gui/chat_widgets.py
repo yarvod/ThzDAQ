@@ -1,7 +1,9 @@
 """Widgets of a chat in a narrow dock, where nothing may widen it: text that
 wraps anywhere and is as tall as it is (MessageView), a line cut to its width
-(ElidedLabel), a card that folds to such a line (Fold), what is attached to a
-message (Chip), how much of the model's context the chat fills (ContextRing);
+(ElidedLabel), a card that folds to such a line (Fold), an image as wide as
+the chat and never wider than its pixels (Picture), what is attached to a
+message (Chip: clicked, with a menu of its own), how much of the model's
+context the chat fills (ContextRing);
 buttons that flow into rows (Flow) and wrap their words (WrapButton), what
 scrolls within past a height (Capped), and the chat's bar under the input:
 what is chosen (PickerButton) and popups over it (Popup) with a list of
@@ -13,7 +15,7 @@ window as much as its letters, not their square."""
 
 import math
 import re
-from typing import Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
@@ -22,6 +24,7 @@ from PySide6.QtGui import (
     QFontDatabase,
     QFontMetricsF,
     QIcon,
+    QImage,
     QPainter,
     QPalette,
     QPen,
@@ -38,6 +41,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLayout,
     QLayoutItem,
+    QMenu,
     QScrollArea,
     QSizePolicy,
     QTextBrowser,
@@ -47,9 +51,11 @@ from PySide6.QtWidgets import (
 )
 
 from thzdaq_gui import theme
+from thzdaq_gui.decoding import UNREADABLE, decode, size_of
 
 MIN_WIDTH = 60  # what a message asks of the dock's width at least
 THUMB = 48  # the side of an image's thumbnail
+VIEW_TIP = "Click to view it large"
 FENCES = ("```", "~~~")
 LIST_ITEM = re.compile(r"([-*+]|\d+[.)])\s")
 LIST_START = "-*+0123456789"  # what a line still being written may make a list item
@@ -380,11 +386,138 @@ class Fold(QFrame):
         self.toggled.emit(on)
 
 
+class Picture(QWidget):
+    """An image in the chat: as wide as the chat gives it, never wider than
+    its own pixels, its proportions kept, so as tall as its width makes it
+    (height for width); its name under it, cut to the width. Its size comes
+    from its header at once, so the chat is laid out before it is decoded,
+    apart from the GUI thread, once (decoding.decode); it is scaled once per
+    width it is painted at. A click on it: clicked."""
+
+    clicked = Signal()
+    GAP = 2  # between the image and its name
+    MARGINS = (8, 2, 8, 2)  # as a message's
+
+    def __init__(self, data: bytes, name: str = "", parent=None):
+        super().__init__(parent)
+        self.name = name
+        self._natural = size_of(data)  # not valid: no image Qt reads
+        self._image: Optional[QImage] = None  # once decoded
+        self._scaled: Optional[QPixmap] = None  # for _scaled_for
+        self._scaled_for: Tuple[QSize, float] = (QSize(), 0.0)
+        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+        self.setContentsMargins(*self.MARGINS)
+        self.setToolTip(f"{name}\n{VIEW_TIP}" if name else VIEW_TIP)
+        if self._natural.isValid():
+            self.setCursor(Qt.PointingHandCursor)
+            decode(data, self._decoded, self)
+
+    def image(self) -> Optional[QImage]:
+        """The image decoded; None before, or when it does not decode."""
+        return self._image
+
+    def readable(self) -> bool:
+        return self._natural.isValid()
+
+    def shown(self, width: int) -> QSize:
+        """The image's size within a width of the widget."""
+        if not self.readable():
+            return QSize(0, 0)
+        margins = self.contentsMargins()
+        room = max(width - margins.left() - margins.right(), 1)
+        natural = self._natural
+        if natural.width() <= room:
+            return QSize(natural)
+        return QSize(room, max(round(natural.height() * room / natural.width()), 1))
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        margins = self.contentsMargins()
+        line = self.fontMetrics().lineSpacing()
+        tall = self.shown(width).height() if self.readable() else line
+        named = self.GAP + line if self.name else 0
+        return margins.top() + tall + named + margins.bottom()
+
+    def sizeHint(self) -> QSize:
+        """Its natural height; of the width, no more than a message asks."""
+        margins = self.contentsMargins()
+        wide = self._natural.width() + margins.left() + margins.right()
+        return QSize(MIN_WIDTH, self.heightForWidth(wide))
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(MIN_WIDTH, self.heightForWidth(MIN_WIDTH))
+
+    def _decoded(self, image: QImage) -> None:
+        if image.isNull():
+            self._natural = QSize()
+        else:
+            self._image = image
+            if image.size() != self._natural:  # its header told otherwise
+                self._natural = image.size()
+        self.setCursor(Qt.PointingHandCursor if self.readable() else Qt.ArrowCursor)
+        self.updateGeometry()
+        self.update()
+
+    def scaled(self, size: QSize) -> Optional[QPixmap]:
+        """The image at size, for this screen's pixels (never more than its
+        own); made once per size; None before it is decoded."""
+        if self._image is None:
+            return None
+        ratio = self.devicePixelRatioF()
+        if self._scaled_for != (size, ratio):
+            image = self._image
+            pixels = QSize(round(size.width() * ratio), round(size.height() * ratio))
+            if pixels.width() < image.width():
+                image = image.scaled(
+                    pixels, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            self._scaled = QPixmap.fromImage(image)
+            self._scaled.setDevicePixelRatio(image.width() / size.width())
+            self._scaled_for = (size, ratio)
+        return self._scaled
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        room = self.contentsRect()
+        line = self.fontMetrics().lineSpacing()
+        painter.setPen(QColor(theme.MUTED))
+        if not self.readable():
+            painter.drawText(
+                QRect(room.left(), room.top(), room.width(), line),
+                int(Qt.AlignLeft | Qt.AlignVCenter), UNREADABLE,
+            )  # fmt: skip
+            bottom = room.top() + line
+        else:
+            area = QRect(room.topLeft(), self.shown(self.width()))
+            pixmap = self.scaled(area.size())
+            if pixmap is None:  # until it is decoded
+                painter.fillRect(area, QColor(theme.PANEL))
+            else:
+                painter.drawPixmap(area.topLeft(), pixmap)
+            bottom = area.bottom() + 1
+        if self.name:
+            cut = self.fontMetrics().elidedText(self.name, Qt.ElideRight, room.width())
+            named = QRect(room.left(), bottom + self.GAP, room.width(), line)
+            painter.drawText(named, int(Qt.AlignLeft | Qt.AlignVCenter), cut)
+
+    def mouseReleaseEvent(self, event) -> None:
+        at = event.position().toPoint()
+        area = QRect(self.contentsRect().topLeft(), self.shown(self.width()))
+        if event.button() == Qt.LeftButton and area.contains(at):
+            self.clicked.emit()
+
+
 class Chip(QFrame):
-    """What is attached: its thumbnail or icon and its name; × removes it
-    when it can be removed."""
+    """What is attached: its thumbnail (decoded apart from the GUI thread) or
+    icon and its name; × removes it when it can be removed. A click on it:
+    clicked; a right click shows what it offers (offer)."""
 
     removed = Signal()
+    clicked = Signal()
 
     def __init__(
         self,
@@ -400,18 +533,19 @@ class Chip(QFrame):
             f"#chip {{ background: {theme.PANEL}; border: 1px solid {theme.BORDER};"
             " border-radius: 4px; }"
         )
+        self.setCursor(Qt.PointingHandCursor)
+        self._offered: List[Tuple[str, Callable[[], None]]] = []
         line = QHBoxLayout(self)
         line.setContentsMargins(4, 2, 2, 2)
         line.setSpacing(4)
-        picture = QLabel()
-        pixmap = QPixmap()
-        if image is not None and pixmap.loadFromData(image):
-            picture.setPixmap(
-                pixmap.scaled(THUMB, THUMB, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
-        else:
-            picture.setPixmap(theme.icon(icon).pixmap(16, 16))
-        line.addWidget(picture)
+        self.picture = QLabel()
+        self.picture.setPixmap(theme.icon(icon).pixmap(16, 16))
+        if image is not None:  # the thumbnail's room from the start
+            self.picture.setFixedSize(THUMB, THUMB)
+            self.picture.setAlignment(Qt.AlignCenter)
+            side = round(THUMB * self.devicePixelRatioF())
+            decode(image, self._thumbnail, self, side)
+        line.addWidget(self.picture)
         label = QLabel(name if len(name) <= 24 else name[:23] + "…")
         label.setToolTip(name)
         line.addWidget(label)
@@ -422,6 +556,35 @@ class Chip(QFrame):
             remove.setToolTip("Remove")
             remove.clicked.connect(self.removed)
             line.addWidget(remove)
+
+    def offer(self, title: str, done: Callable[[], None]) -> None:
+        """An entry of its menu (a right click)."""
+        self._offered.append((title, done))
+
+    def offered(self) -> List[str]:
+        return [title for title, _ in self._offered]
+
+    def _thumbnail(self, image: QImage) -> None:
+        if image.isNull():
+            return
+        pixmap = QPixmap.fromImage(image)
+        longest = max(image.width(), image.height())
+        pixmap.setDevicePixelRatio(longest / min(THUMB, longest))
+        self.picture.setPixmap(pixmap)
+
+    def mouseReleaseEvent(self, event) -> None:
+        at = event.position().toPoint()
+        if event.button() == Qt.LeftButton and self.rect().contains(at):
+            self.clicked.emit()
+
+    def contextMenuEvent(self, event) -> None:
+        if not self._offered:
+            super().contextMenuEvent(event)
+            return
+        menu = QMenu(self)
+        for title, done in self._offered:
+            menu.addAction(title, done)
+        menu.exec(event.globalPos())
 
 
 def grouped(count: int) -> str:

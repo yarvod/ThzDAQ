@@ -652,3 +652,69 @@ def test_the_settings_test_reports_the_adapter_found(
 @pytest.fixture
 def providers_model(app):
     return ProvidersModel()
+
+
+def test_the_images_codex_sends_are_shown_as_images(assistant, agent, tmp_path, wait):
+    """As codex-acp 2.7.0 sends them: an image in its message, an image
+    generation's tool call with the image (its bytes again in the raw output,
+    never shown as words), an image looked at named by its path (read), and
+    a generation whose bytes Codex kept, its file in the raw output."""
+    from model_server import png
+
+    looked_at, saved = tmp_path / "screen.png", tmp_path / "kept.png"
+    looked_at.write_bytes(png(8, 5))
+    saved.write_bytes(png(2, 2))
+    agent(picture=str(looked_at), saved=str(saved))
+    assistant.send("image please")
+    wait(lambda: not assistant.busy())
+    assert kinds(assistant) == [
+        Kind.PERSON, Kind.IMAGE, Kind.CALL, Kind.IMAGE, Kind.CALL, Kind.IMAGE,
+        Kind.CALL, Kind.IMAGE, Kind.ANSWER,
+    ]  # fmt: skip
+    images = [i.image for i in assistant.items if i.kind is Kind.IMAGE]
+    assert [(i.data, i.mime, i.name) for i in images] == [
+        (fake_acp.SAID_IMAGE, "image/png", ""),
+        (fake_acp.MADE, "image/png", "square.png"),
+        (looked_at.read_bytes(), "image/png", "screen.png"),
+        (saved.read_bytes(), "image/png", "kept.png"),
+    ]
+    made = assistant.items[2]
+    assert made.name == "Image generation" and made.state is State.DONE
+    assert made.text == f"Revised prompt: {fake_acp.REVISED}"  # no base64
+    assert assistant.items[4].name == f"View Image {looked_at}"
+    assert last(assistant, Kind.ANSWER).text == "Here they are."
+
+
+def test_a_loaded_chat_shows_its_images_again(
+    assistant, agent, session, tmp_path, wait
+):
+    import base64
+
+    from model_server import png
+
+    saved = tmp_path / "kept.png"
+    saved.write_bytes(png(3, 3))
+    folder = str(session.workspace.folder)
+    encoded = base64.b64encode(png(4, 1)).decode()
+    agent(
+        sessions=[{"sessionId": "s1", "cwd": folder, "title": "Drawn"}],
+        history={
+            "s1": [
+                ["user", "draw"], ["image", encoded],
+                ["generated", "g1", str(saved)], ["agent", "done"],
+            ]
+        },
+    )  # fmt: skip
+    assistant.find_chats()
+    wait(lambda: assistant.chats())
+    assistant.open_chat("s1")
+    wait(lambda: assistant.items)
+    assert kinds(assistant) == [
+        Kind.PERSON,
+        Kind.IMAGE,
+        Kind.CALL,
+        Kind.IMAGE,
+        Kind.ANSWER,
+    ]
+    images = [i.image.data for i in assistant.items if i.kind is Kind.IMAGE]
+    assert images == [png(4, 1), png(3, 3)]

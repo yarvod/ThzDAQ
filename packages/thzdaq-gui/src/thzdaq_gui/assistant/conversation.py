@@ -1,11 +1,14 @@
-"""A conversation with the model and the bench's tools (thzdaq_api.tools).
+"""A conversation with the model and its tools: the bench's
+(thzdaq_api.tools, Bench) and the assistant's own (images.py: an image made
+and shown to the person), each a Tool.
 
 A turn answers one message of the person:
 1. the model is asked with the messages so far and the tools;
 2. it answers with text, or with tool calls;
-3. each call goes to the bench as the assistant (rights, limits, a person's
-   consent in the window), and what it answers, a refusal too, goes back to
-   the model as the tool's message;
+3. each call runs: a bench's goes to the bench as the assistant (rights,
+   limits, a person's consent in the window), an own one does what it does
+   and may show the person an image (Running); what it answers, a refusal
+   too, goes back to the model as the tool's message;
 4. again, until the model answers with text alone, or MAX_STEPS steps.
 
 What the person writes while a turn runs waits (queue) and joins the
@@ -14,9 +17,10 @@ with it, and a turn whose model answered goes on while something waits.
 
 A turn runs apart from the window (a call waits for a person, a measurement,
 the model). stop() ends it at once: from then on the turn adds nothing and
-tells nothing, and a call it made that has no answer yet is answered
-"stopped". What the call asked of the bench goes on: a run it started runs,
-a dialog it opened still waits for the person.
+tells nothing (what a call made meanwhile, an image, is dropped), and a call
+it made that has no answer yet is answered "stopped". What the call asked of
+the bench goes on: a run it started runs, a dialog it opened still waits for
+the person.
 
 What a turn does is told as the chat's events (chat.Listener); how it ended
 is what say() returns. builtin.py runs it as a chat of the dock.
@@ -24,14 +28,15 @@ is what say() returns. builtin.py runs it as a chat of the dock.
 
 import json
 import threading
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from thzdaq_api import present
 from thzdaq_api.errors import ErrorCode, LabError
-from thzdaq_api.tools import Reach, Tool, by_name
+from thzdaq_api.tools import Reach
+from thzdaq_api.tools import Tool as Operation
 
 from thzdaq_gui.assistant.attachments import Content
-from thzdaq_gui.assistant.chat import Call, Listener, Outcome, Used
+from thzdaq_gui.assistant.chat import Call, Image, Listener, Outcome, Used
 from thzdaq_gui.assistant.provider import (
     Client,
     Message,
@@ -47,6 +52,70 @@ STOPPED = "stopped by the person before it answered"
 
 class Stopped(Exception):
     """The turn was stopped: it adds and tells nothing more."""
+
+
+class Running:
+    """A call as it runs: the bench as the assistant reached it, and what the
+    call tells the turn's listener; Stopped once the turn was stopped (what
+    the call made is dropped)."""
+
+    def __init__(
+        self,
+        conversation: "Conversation",
+        turn: object,
+        call: str,
+        reach: Reach,
+        listener: Listener,
+    ):
+        self.reach = reach
+        self._conversation, self._turn = conversation, turn
+        self._call, self._listener = call, listener
+
+    def progress(
+        self, done: float, total: Optional[float], message: Optional[str] = None
+    ) -> None:
+        """How far it is (a measurement waited for)."""
+        self._conversation._tell(
+            self._turn, self._listener.progress, self._call, done, total
+        )
+
+    def show(self, image: Image) -> None:
+        """An image shown to the person."""
+        self._conversation._tell(self._turn, self._listener.image, image)
+
+
+class Tool(Protocol):
+    """A tool the model is offered, as the conversation calls it."""
+
+    name: str
+
+    def offered(self) -> Dict[str, Any]:
+        """As chat/completions takes it (provider.tool)."""
+
+    def call(self, given: Dict[str, Any], running: Running) -> Tuple[str, bool]:
+        """What it answers the model for the arguments given, and whether it
+        refused or failed (the model reads why and goes on)."""
+
+
+class Bench:
+    """A tool of the bench (thzdaq_api.tools): an operation called on the
+    bench as the assistant reached it; what the bench refuses, a wrong
+    argument too, goes to the model as a refusal."""
+
+    def __init__(self, operation: Operation):
+        self.operation = operation
+        self.name = operation.name
+
+    def offered(self) -> Dict[str, Any]:
+        found = self.operation
+        return tool(found.name, found.description(), found.schema())
+
+    def call(self, given: Dict[str, Any], running: Running) -> Tuple[str, bool]:
+        try:
+            args = self.operation.arguments(given)
+            return self.operation.call(running.reach, args, running.progress), False
+        except LabError as e:
+            return present.failure(e), True
 
 
 class Conversation:
@@ -124,16 +193,19 @@ class Conversation:
         turn: object,
         content: Optional[Content],
         client: Client,
-        tools: Sequence[Tool],
+        tools: Sequence[Operation],
         reach: Reach,
         prompt: Callable[[Reach], str],
         listener: Listener,
+        own: Sequence[Tool] = (),
     ) -> Tuple[Outcome, str]:
         """Answer the person's message (None: only those that wait): how the
-        turn ended and, when it failed, why. prompt(reach) makes the system
+        turn ended and, when it failed, why. The model is offered the bench's
+        tools and the assistant's own ones. prompt(reach) makes the system
         prompt when the bench is new to the conversation."""
+        offered = [*(Bench(operation) for operation in tools), *own]
         try:
-            return self._say(turn, content, client, tools, reach, prompt, listener)
+            return self._say(turn, content, client, offered, reach, prompt, listener)
         except Stopped:
             return Outcome.STOPPED, ""
         finally:
@@ -152,8 +224,8 @@ class Conversation:
                 self._set_system(turn, system, forgotten)
         except LabError as e:
             return Outcome.FAILED, f"the bench cannot be asked: {e}"
-        found = by_name(tuple(tools))
-        offered = [tool(t.name, t.description(), t.schema()) for t in tools]
+        found = {each.name: each for each in tools}
+        offered = [each.offered() for each in tools]
 
         def heard(piece: str) -> None:
             self._tell(turn, listener.text, piece)
@@ -192,24 +264,20 @@ class Conversation:
         reach: Reach,
         listener: Listener,
     ) -> Tuple[str, bool]:
-        """What the bench answered the call, and whether it was refused or
+        """What the tool answered the call, and whether it was refused or
         wrong: the model reads either and goes on."""
-
-        def progress(done: float, total: Optional[float], message: Optional[str]):
-            self._tell(turn, listener.progress, call.id, done, total)
-
+        chosen = found.get(call.name)
         try:
-            chosen = found.get(call.name)
             if chosen is None:
                 raise LabError(
                     ErrorCode.UNKNOWN_OPERATION,
                     f"No tool {call.name!r}",
                     f"known: {', '.join(found)}",
                 )
-            args = chosen.arguments(arguments(call))
-            return chosen.call(reach, args, progress), False
+            given = arguments(call)
         except LabError as e:
             return present.failure(e), True
+        return chosen.call(given, Running(self, turn, call.id, reach, listener))
 
     def _take(self, turn: object, listener: Listener) -> None:
         """What waited joins the conversation."""

@@ -1,6 +1,6 @@
 """The model servers of the assistant, a page of its settings: a list, the form
 of the chosen one (name, URL, model, key, temperature, the tokens its model
-takes) and Test, which asks the server whether it answers and takes tools,
+takes, the model that makes its images, when it has one) and Test, which asks the server whether it answers and takes tools,
 and fills in the tokens when the server tells them. A view of ProvidersModel:
 Save hands it the form."""
 
@@ -70,6 +70,12 @@ class ProvidersPage(QWidget):
             "How long a conversation the model takes: the chat shows how much"
             " of it is filled"
         )
+        self.imageModel = QLineEdit()
+        self.imageModel.setPlaceholderText("none: the assistant makes no images")
+        self.imageModel.setToolTip(
+            "The server's model that makes images (images/generations), such as"
+            " gpt-image-1: the assistant may then draw for you"
+        )
         form = QFormLayout()
         form.addRow("Name", self.name)
         form.addRow("URL", self.url)
@@ -77,6 +83,7 @@ class ProvidersPage(QWidget):
         form.addRow("Key", self.key)
         form.addRow("Temperature", self.temperature)
         form.addRow("Context", self.context)
+        form.addRow("Image model", self.imageModel)
         self.keptLabel = QLabel()
         self.keptLabel.setProperty("role", "muted")
         self.keptLabel.setWordWrap(True)
@@ -134,6 +141,7 @@ class ProvidersPage(QWidget):
             NO_TEMPERATURE if temperature is None else temperature
         )
         self.context.setValue((found.context or 0) if found else 0)
+        self.imageModel.setText((found.image_model or "") if found else "")
         keys = self.providers.keys
         self.keptLabel.setText(
             "" if keys.kept() else
@@ -165,6 +173,7 @@ class ProvidersPage(QWidget):
             self.model.text().strip(),
             None if temperature <= NO_TEMPERATURE else temperature,
             self.context.value() or None,
+            self.imageModel.text().strip() or None,
         )
 
     def missing(self, provider: Provider) -> str:

@@ -14,7 +14,9 @@ thread, never waited for.
 What a session tells (session/update) goes to whoever hears that session
 now (a Route): a turn's listener (Told, chat.Listener) or a conversation told
 again as it loads (Retold, chat.Replay), in the chat's words: pieces of text
-and thought, tool calls and their answers, how full the context is; and to
+and thought, tool calls and their answers, the images the agent shows (in its
+message, or what a tool call made or looked at: given whole, or a file of
+this computer it names, read in the loop), how full the context is; and to
 the chat (Heard): its options (models, efforts, modes), its title, its
 context's size. What the agent asks before it acts (session/request_permission)
 waits in the loop for the person's answer; cancel() answers it cancelled. It
@@ -35,6 +37,7 @@ import asyncio
 import base64
 import json
 import logging
+import mimetypes
 import os
 import re
 import shlex
@@ -59,6 +62,8 @@ from typing import (
     Set,
     Tuple,
 )
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from acp import PROTOCOL_VERSION, RequestError
 from acp.client.router import build_client_router
@@ -69,11 +74,13 @@ from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     AllowedOutcome,
+    BlobResourceContents,
     CancelNotification,
     ClientCapabilities,
     ConfigOptionUpdate,
     ContentToolCallContent,
     DeniedOutcome,
+    EmbeddedResourceContentBlock,
     FileEditToolCallContent,
     ImageContentBlock,
     Implementation,
@@ -90,6 +97,7 @@ from acp.schema import (
     PromptRequest,
     PromptResponse,
     RequestPermissionResponse,
+    ResourceContentBlock,
     ResumeSessionRequest,
     ResumeSessionResponse,
     SessionConfigOptionSelect,
@@ -110,7 +118,7 @@ from acp.utils import serialize_params
 from pydantic import BaseModel
 from thzdaq_api import host
 
-from thzdaq_gui.assistant.attachments import Attachment
+from thzdaq_gui.assistant.attachments import IMAGE_BYTES, Attachment
 from thzdaq_gui.assistant.attachments import Kind as Given
 from thzdaq_gui.assistant.history import UNTITLED
 from thzdaq_gui.assistant.chat import (
@@ -119,6 +127,7 @@ from thzdaq_gui.assistant.chat import (
     Change,
     Choice,
     Files,
+    Image,
     Inputs,
     Kept,
     Listener,
@@ -145,6 +154,9 @@ END_S = 3.0  # how long a process may take to end once asked, before it is ended
 ERRORS_BYTES = 16 * 1024  # the end of what the process wrote, when it fails
 CHOICE = "="  # a choice of a session's option: "<option>=<value>"
 FINAL = ("completed", "failed")  # a tool call's status once it is over
+# codex-acp: where Codex saved an image it made (an image generation's raw
+# output), told alone when Codex kept the image's bytes
+SAVED = "savedPath"
 # Categories of a session's options: its model, how hard it thinks, its mode
 MODEL, EFFORT, POLICY = "model", "thought_level", "mode"
 # What an agent would do, by the kind of its tool call, when it gives no title
@@ -454,6 +466,82 @@ def _words(content: Any) -> str:
     return content.text if isinstance(content, TextContentBlock) else ""
 
 
+def _named(uri: Optional[str]) -> str:
+    """The name of the file a URI names; "" without one."""
+    return Path(urlsplit(uri).path).name if uri else ""
+
+
+def _decoded(encoded: str, mime: str, uri: Optional[str]) -> Optional[Image]:
+    """An image given whole (base64); None for what is not one."""
+    if not mime.startswith("image/"):
+        return None
+    try:
+        return Image(base64.b64decode(encoded, validate=True), mime, _named(uri))
+    except ValueError:
+        return None
+
+
+def _path_of(uri: str) -> Optional[Path]:
+    """The file of this computer a URI names (file:, or a path); None else."""
+    if uri.startswith("file:"):
+        return Path(url2pathname(urlsplit(uri).path))
+    path = Path(uri)
+    return path if path.is_absolute() else None
+
+
+def file_image(uri: str, mime: Optional[str] = None) -> Optional[Image]:
+    """An image file of this computer an agent names (one it looked at, one
+    it saved), read; None when it is not an image file that reads."""
+    path = _path_of(uri)
+    if path is None:
+        return None
+    mime = mime or mimetypes.guess_type(path.name)[0] or ""
+    if not mime.startswith("image/"):
+        return None
+    try:
+        if path.stat().st_size > IMAGE_BYTES:
+            logger.warning("The image %s is too large to show", path)
+            return None
+        return Image(path.read_bytes(), mime, path.name)
+    except OSError as e:
+        logger.warning("The image %s does not read: %s", path, e)
+        return None
+
+
+def images_of(blocks: Sequence[Any]) -> List[Image]:
+    """The images among content blocks: given whole (an image, an embedded
+    blob), or a file named (a resource link), read."""
+    found: List[Optional[Image]] = []
+    for block in blocks:
+        if isinstance(block, ImageContentBlock):
+            found.append(_decoded(block.data, block.mime_type, block.uri))
+        elif isinstance(block, EmbeddedResourceContentBlock) and isinstance(
+            block.resource, BlobResourceContents
+        ):
+            given = block.resource
+            found.append(_decoded(given.blob, given.mime_type or "", given.uri))
+        elif isinstance(block, ResourceContentBlock):
+            found.append(file_image(block.uri, block.mime_type))
+    return [image for image in found if image is not None]
+
+
+def _images_of_call(seen: "Seen", output: Any) -> List[Image]:
+    """The images a tool call over shows: in its content, else the file an
+    image generation saved, when Codex kept its bytes (codex-acp sends a
+    client like this one no link to it)."""
+    found = images_of(
+        [
+            each.content
+            for each in seen.content or ()
+            if isinstance(each, ContentToolCallContent)
+        ]
+    )
+    saved = output.get(SAVED) if isinstance(output, dict) else None
+    if not found and isinstance(saved, str):
+        found = [image for image in (file_image(saved),) if image is not None]
+    return found
+
+
 def _shown(value: Any) -> str:
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
@@ -469,8 +557,8 @@ def _answer_of(update: ToolCallUpdate) -> str:
         elif isinstance(content, TerminalToolCallContent):
             told.append(f"terminal {content.terminal_id}")
     text = "\n".join(part for part in told if part)
-    if not text and update.raw_output is not None:
-        text = _shown(update.raw_output)
+    if not text and not update.content and update.raw_output is not None:
+        text = _shown(update.raw_output)  # an image's bytes in it are shown apart
     return text
 
 
@@ -615,8 +703,9 @@ class Told:
     def __init__(self, listener: Listener, heard: Heard, session: str):
         self.listener, self.heard, self.session = listener, heard, session
         self.calls: Dict[str, Seen] = {}  # tool calls told, what of each
+        self.over: Set[str] = set()  # tool calls over
         self.told: Dict[type, Callable[[Any], None]] = {
-            AgentMessageChunk: self._text,
+            AgentMessageChunk: self._message,
             AgentThoughtChunk: self._thought,
             ToolCallStart: self._call,
             ToolCallProgress: self._call,
@@ -640,10 +729,12 @@ class Told:
         seen = self.calls.get(call.tool_call_id, Seen()).told(call)
         self.listener.permission(asked_of(seen, options), answer)
 
-    def _text(self, update: AgentMessageChunk) -> None:
+    def _message(self, update: AgentMessageChunk) -> None:
         words = _words(update.content)
         if words:
             self.listener.text(words)
+        for image in images_of([update.content]):
+            self.listener.image(image)
 
     def _thought(self, update: AgentThoughtChunk) -> None:
         words = _words(update.content)
@@ -651,16 +742,18 @@ class Told:
             self.listener.thought(words)
 
     def _call(self, update: ToolCallUpdate) -> None:
-        """A call starts (a call told only by its update starts too); its
-        answer once it is over."""
-        known = self.calls.get(update.tool_call_id)
-        self.calls[update.tool_call_id] = (known or Seen()).told(update)
+        """A call starts (a call told only by its update starts too); the
+        images it shows and its answer once it is over."""
+        call = update.tool_call_id
+        known = self.calls.get(call)
+        seen = self.calls[call] = (known or Seen()).told(update)
         if known is None:
             self.listener.called(_call_of(update))
-        if update.status in FINAL:
-            self.listener.answered(
-                update.tool_call_id, _answer_of(update), update.status == "failed"
-            )
+        if update.status in FINAL and call not in self.over:
+            self.over.add(call)
+            for image in _images_of_call(seen, update.raw_output):
+                self.listener.image(image)
+            self.listener.answered(call, _answer_of(update), update.status == "failed")
 
     def _usage(self, update: UsageUpdate) -> None:
         self.heard.sized(update.size)

@@ -11,8 +11,12 @@ comes last (stream_options.include_usage). test() checks that the server
 answers and takes tools: vLLM refuses them without
 --enable-auto-tool-choice and a tool call parser; context() asks the
 server how long a conversation its model takes, when it tells it.
+
+A server may also make images (images/generations) with an image model of
+its own (Provider.image_model): generate() asks it for one.
 """
 
+import base64
 import ipaddress
 import json
 from dataclasses import dataclass, field
@@ -33,6 +37,7 @@ import requests
 
 CONNECT_S = 10.0
 READ_S = 180.0  # a local model may think long before its first word
+IMAGE_S = 300.0  # a model may take minutes to make an image
 TEST_TOOL = "ping"
 JSON_TYPE = "application/json"
 DONE = "[DONE]"
@@ -50,27 +55,36 @@ Message = Dict[str, Any]  # a message of the chat as the server takes it
 class Provider:
     """Where the model is and which one: the URL up to /v1 (its
     chat/completions is asked), the model's name as the server knows it, and
-    its temperature (None: the server's own) and the context it takes in
-    tokens (None: not known). The key is kept apart (keys.py)."""
+    its temperature (None: the server's own), the context it takes in tokens
+    (None: not known), and the model of the server that makes images (None:
+    none; its images/generations is asked). The key is kept apart (keys.py)."""
 
     name: str
     url: str
     model: str
     temperature: Optional[float] = None
     context: Optional[int] = None  # tokens the model takes; None: not known
+    image_model: Optional[str] = None
 
     def endpoint(self) -> str:
         return self.url.rstrip("/") + "/chat/completions"
 
+    def images_endpoint(self) -> str:
+        return self.url.rstrip("/") + "/images/generations"
+
     def on_this_machine(self) -> bool:
-        """Whether the server runs on this computer (a loopback address or
-        localhost): it is asked directly, never through the person's proxy,
-        which is for servers elsewhere and has no way to this one's loopback."""
-        host = urlsplit(self.url).hostname or ""
-        try:
-            return ipaddress.ip_address(host).is_loopback
-        except ValueError:
-            return host == "localhost" or host.endswith(".localhost")
+        return on_this_machine(self.url)
+
+
+def on_this_machine(url: str) -> bool:
+    """Whether a URL is of this computer (a loopback address or localhost):
+    it is asked directly, never through the person's proxy, which is for
+    servers elsewhere and has no way to this one's loopback."""
+    host = urlsplit(url).hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost" or host.endswith(".localhost")
 
 
 @dataclass(frozen=True)
@@ -174,7 +188,7 @@ class Client:
             body["tool_choice"] = "auto"
         if self.provider.temperature is not None:
             body["temperature"] = self.provider.temperature
-        response = self._ask(body, stream)
+        response = self._ask(self.provider.endpoint(), body, stream, READ_S)
         with response:
             if response.headers.get("content-type", "").startswith(JSON_TYPE):
                 reply = whole(_json(response))
@@ -184,6 +198,47 @@ class Client:
                     heard(reply.text)
                 return reply
             return streamed(_events(response), heard, thought)
+
+    def generate(self, prompt: str, size: Optional[str]) -> bytes:
+        """An image the server's image model makes of prompt, as its file's
+        bytes; size: its width and height ("1024x1024"; None: the server's
+        own). ProviderError when the server refuses or answers no image.
+
+        The image comes as base64 (b64_json): GPT image models give nothing
+        else and refuse response_format, which only asks it of the older
+        models; those give an address unless asked, so it is fetched there."""
+        body: Dict[str, Any] = {
+            "model": self.provider.image_model, "prompt": prompt, "n": 1,
+        }  # fmt: skip
+        if size:
+            body["size"] = size
+        endpoint = self.provider.images_endpoint()
+        with self._ask(endpoint, body, False, IMAGE_S) as response:
+            found = _json(response)
+        made = found.get("data") if isinstance(found, dict) else None
+        image = made[0] if isinstance(made, list) and made else None
+        if not isinstance(image, dict):
+            raise ProviderError("the server answered no image")
+        if image.get("b64_json"):
+            try:
+                return base64.b64decode(image["b64_json"], validate=True)
+            except ValueError:
+                raise ProviderError("the server's image is not base64") from None
+        if image.get("url"):
+            return self._fetch(image["url"])
+        raise ProviderError("the server answered no image")
+
+    def _fetch(self, url: str) -> bytes:
+        """A file the server gave the address of (an image it made)."""
+        try:
+            with requests.Session() as session:
+                session.trust_env = not on_this_machine(url)
+                response = session.get(url, timeout=(CONNECT_S, IMAGE_S))
+        except requests.RequestException as e:
+            raise ProviderError(f"{url} does not answer: {e}") from None
+        if response.status_code != 200:
+            raise ProviderError(refusal(response))
+        return response.content
 
     def context(self) -> Optional[int]:
         """The tokens its model takes, as the server's GET /models tells
@@ -237,15 +292,17 @@ class Client:
         session.trust_env = not self.provider.on_this_machine()
         return session
 
-    def _ask(self, body: Dict[str, Any], stream: bool) -> requests.Response:
+    def _ask(
+        self, endpoint: str, body: Dict[str, Any], stream: bool, read_s: float
+    ) -> requests.Response:
         try:
             with self._session() as session:
                 response = session.post(
-                    self.provider.endpoint(),
+                    endpoint,
                     json=body,
                     headers=self._headers(),
                     stream=stream,
-                    timeout=(CONNECT_S, READ_S),
+                    timeout=(CONNECT_S, read_s),
                 )
         except requests.RequestException as e:
             raise ProviderError(f"{self.provider.url} does not answer: {e}") from None

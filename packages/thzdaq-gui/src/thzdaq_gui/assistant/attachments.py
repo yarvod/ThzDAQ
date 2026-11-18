@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 TEXT_BYTES = 256 * 1024  # a longer text file goes by its path
 IMAGE_BYTES = 20 * 1024 * 1024  # what servers take at most, about
 PASTED = "pasted.png"
+PNG = "image/png"
 DATA, BASE64 = "data:", ";base64,"  # an image within a message: data:<mime>;base64,…
 
 Content = Union[str, List[Dict[str, Any]]]  # a message's, as servers take it
@@ -62,7 +63,7 @@ class Attachment:
     def image(
         data: bytes,
         name: str = PASTED,
-        mime: str = "image/png",
+        mime: str = PNG,
         path: Optional[Path] = None,
     ) -> "Attachment":
         return Attachment(

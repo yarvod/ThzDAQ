@@ -12,16 +12,21 @@ The config (JSON) chooses what it is and does:
 - log: a file each request and notification it gets is written to (a JSON
   line: method, params), as it came: the tests read what the window sent;
 - sessions, history: what session/list answers and session/load tells again
-  (by session id: [kind, ...] entries, as answer() tells them).
+  (by session id: [kind, ...] entries, as answer() tells them);
+- picture, saved: image files of this computer an image turn names (one
+  Codex looked at, one it saved without sending its bytes).
 
 A prompt's first words choose what the turn does: "tool" (a tool call with
 its updates), "permission" (asks, then says what was chosen; "permission
 long": a long command with codex-acp's every answer, "permission edit": a file
 change whose diff came with its tool call's start, "permission mcp": a call of
 the bench's tool named by its id alone; in full access it asks nothing and
-says so), "wait" (until the turn is cancelled), "many <n>" (n pieces of
-text), "die" (the process ends at once, saying why on its error output), else
-a thought, the words said back in pieces and the context filled.
+says so), "image" (images as codex-acp 2.7.0 sends them: in the agent's
+message, an image generation's tool call with the image, an image looked at
+named by its path, a generation whose bytes Codex kept), "wait" (until the
+turn is cancelled), "many <n>" (n pieces of text), "die" (the process ends at
+once, saying why on its error output), else a thought, the words said back in
+pieces and the context filled.
 
 What it asks is shaped as codex-acp 2.7.0 shapes it (permissions/,
 tool-calls/reporters/): a command not started has itself as the title and
@@ -30,6 +35,7 @@ an MCP tool) names its id, kind and status only.
 """
 
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -46,6 +52,7 @@ from acp.schema import (
     AgentThoughtChunk,
     ContentToolCallContent,
     FileEditToolCallContent,
+    ImageContentBlock,
     ListSessionsResponse,
     LoadSessionResponse,
     NewSessionResponse,
@@ -53,6 +60,7 @@ from acp.schema import (
     PromptResponse,
     RequestPermissionRequest,
     RequestPermissionResponse,
+    ResourceContentBlock,
     ResumeSessionResponse,
     SessionConfigOptionSelect,
     SessionConfigSelectOption,
@@ -71,6 +79,7 @@ from acp.schema import (
 )
 from acp.stdio import stdio_streams
 from acp.utils import notify_model, request_model
+from model_server import png
 
 MODELS = [("gpt-a", "A"), ("gpt-b", "B")]
 EFFORTS = {"gpt-a": ["low", "high"], "gpt-b": ["medium"]}
@@ -112,12 +121,77 @@ ANSWERS = {  # codex-acp's permissions/options.ts, by the request
         ("no", "No, and tell Codex what to do differently", "reject_once"),
     ],
 }  # fmt: skip
+SAID_IMAGE = png(4, 4, b"\x00\xff\x00")  # in the agent's message
+MADE = png(6, 3, b"\x00\x00\xff")  # an image generation's
+REVISED = "A red square"
 OLD = "".join(f"line {n}\n" for n in range(1, 41))
 NEW = OLD.replace("line 7\n", "line seven\n").replace("line 30\n", "")
 
 
 def text(words: str) -> TextContentBlock:
     return TextContentBlock(type="text", text=words)
+
+
+def said_image(encoded: str) -> AgentMessageChunk:
+    image = ImageContentBlock(type="image", data=encoded, mime_type="image/png")
+    return AgentMessageChunk(session_update="agent_message_chunk", content=image)
+
+
+def generating(id: str, saved: str) -> ToolCallStart:
+    """codex-acp's ImageGenerationReporter.started."""
+    return ToolCallStart(
+        session_update="tool_call", tool_call_id=id, title="Image generation",
+        kind="other", status="in_progress", raw_input={"id": id},
+    )  # fmt: skip
+
+
+def finished(id: str, saved: str) -> ToolCallProgress:
+    """.completed, to a client that is not AIR: the image in its content,
+    its bytes again in the raw output."""
+    encoded = base64.b64encode(MADE).decode()
+    return ToolCallProgress(
+        session_update="tool_call_update", tool_call_id=id, status="completed",
+        content=[
+            ContentToolCallContent(type="content", content=text(f"Revised prompt: {REVISED}")),
+            ContentToolCallContent(
+                type="content",
+                content=ImageContentBlock(type="image", data=encoded, mime_type="image/png", uri=saved),
+            ),
+        ],
+        raw_output={"status": "completed", "revisedPrompt": REVISED, "result": encoded, "savedPath": saved},
+    )  # fmt: skip
+
+
+def kept_whole(id: str, saved: str) -> ToolCallStart:
+    """.whole of a generation whose bytes Codex kept (a file id): its saved
+    file only in the raw output, the link to it not sent to this client."""
+    return ToolCallStart(
+        session_update="tool_call", tool_call_id=id, title="Image generation",
+        kind="other", status="completed",
+        content=[ContentToolCallContent(type="content", content=text(f"Revised prompt: {REVISED}"))],
+        raw_output={"status": "completed", "revisedPrompt": REVISED, "fileId": "file-1", "savedPath": saved},
+    )  # fmt: skip
+
+
+def viewed(id: str, path: str) -> ToolCallStart:
+    """codex-acp's ImageViewReporter.viewed: the image by its path."""
+    return ToolCallStart(
+        session_update="tool_call", tool_call_id=id, title=f"View Image {path}",
+        kind="read", status="completed", raw_input={"path": path},
+        locations=[ToolCallLocation(path=path)],
+        content=[
+            ContentToolCallContent(
+                type="content",
+                content=ResourceContentBlock(type="resource_link", name=path, uri=path),
+            )
+        ],
+    )  # fmt: skip
+
+
+IMAGES = {
+    "image": said_image, "generating": generating, "generated": kept_whole,
+    "viewed": viewed,
+}  # fmt: skip
 
 
 class Fake:
@@ -287,6 +361,15 @@ class Fake:
         if first == "die":
             print("boom: the fake adapter fell over", file=sys.stderr, flush=True)
             os._exit(3)
+        if first == "image":
+            await self.answer(
+                session_id, "image", base64.b64encode(SAID_IMAGE).decode()
+            )
+            await self.answer(session_id, "generating", "gen-1", "/made/square.png")
+            await self.answer(session_id, "viewed", "view-1", self.config["picture"])
+            await self.answer(session_id, "generated", "gen-2", self.config["saved"])
+            await self.answer(session_id, "agent", "Here they are.")
+            return PromptResponse(stop_reason="end_turn")
         if first == "many":
             for _ in range(int(words.split()[1])):
                 await self.answer(session_id, "agent", "x")
@@ -353,9 +436,16 @@ class Fake:
         )  # fmt: skip
 
     async def answer(self, session: str, kind: str, *given: Any) -> None:
-        """One entry of a turn: user, agent or thought words, or a tool call
-        (id, title, input, answer) with its updates."""
-        if kind == "user":
+        """One entry of a turn: user, agent or thought words, an image in the
+        agent's message (image: base64), an image generation (generating: id,
+        the path it saved; generated: id, the path of the bytes Codex kept,
+        told whole as a loaded chat tells it), an image looked at (viewed: id,
+        path), or a tool call (id, title, input, answer) with its updates."""
+        if kind in IMAGES:
+            await self.tell(session, IMAGES[kind](*given))
+            if kind == "generating":
+                await self.tell(session, finished(*given))
+        elif kind == "user":
             await self.tell(
                 session,
                 UserMessageChunk(

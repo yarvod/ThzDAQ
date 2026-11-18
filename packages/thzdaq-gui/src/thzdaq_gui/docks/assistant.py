@@ -10,8 +10,10 @@ is attached (files, images; Ctrl+V and dropping too), and under it the bar
 without asking, attach, a ring of how much of the context the chat fills
 (hovered or clicked, the tokens), Stop and Send. While the assistant works,
 what is sent joins at its next step. Showing a mode gets its chat ready
-(Codex starts in the background). A view of AssistantModel, of the mode it
-shows."""
+(Codex starts in the background). An image the assistant shows fits the
+chat's width; a click views it large (image_viewer.py), as it does an image
+attached; a file attached opens in its application, and its menu shows its
+folder. A view of AssistantModel, of the mode it shows."""
 
 import json
 from typing import Any, Callable, Dict, List, Optional
@@ -34,12 +36,13 @@ from PySide6.QtWidgets import (
 
 from thzdaq_gui import theme
 from thzdaq_gui.assistant.attachments import Attachment, AttachmentError, Kind as Given
-from thzdaq_gui.chat_widgets import Chip, ElidedLabel, Fold, MessageView
+from thzdaq_gui.chat_widgets import Chip, ElidedLabel, Fold, MessageView, Picture
 from thzdaq_gui.docks.assistant_settings import TITLE as SETTINGS, AssistantSettings
 from thzdaq_gui.docks.chat_bar import ModelPicker, PolicyPicker, UsageRing
 from thzdaq_gui.docks.chat_history import HistoryPage
 from thzdaq_gui.docks.permission import PermissionCard
 from thzdaq_gui.folders import ATTACHMENTS
+from thzdaq_gui.image_viewer import SHOW_IN_FOLDER, Opener
 from thzdaq_gui.models.assistant import AssistantModel, Item, Kind, State
 
 PLACEHOLDER = "Ask the assistant (Enter sends, Shift+Enter: a new line)"
@@ -47,6 +50,8 @@ BUSY_PLACEHOLDER = "Write more: it joins at the assistant's next step (Enter)"
 QUEUED = "queued: goes in at the next step"
 UNSENT = "not sent: the turn was stopped"
 HISTORY_TIP = "History: the chats of this workspace"
+VIEW = "View"
+OPEN = "Open"
 INPUT_LINES = (3, 10)  # the input's height in lines, least and most
 STATE_ICONS = {  # of a call: its icon and colour
     State.RUNNING: ("progress-clock", theme.ACCENT),
@@ -202,11 +207,23 @@ class ThoughtCard(Fold):
             self.thought.show_text(item.text)
 
 
-class Bubble(QFrame):
-    """What the person wrote, with what is attached and whether it waits; or
-    what the model answered, or a note."""
+class ImageItem(Picture):
+    """An image the assistant showed; a click views it large."""
 
-    def __init__(self, item: Item, parent=None):
+    def __init__(self, item: Item, opener: Opener, parent=None):
+        shown = item.image
+        super().__init__(shown.data, shown.name, parent)
+        self.clicked.connect(lambda: opener.view(shown, self.image()))
+
+    def show_item(self, item: Item) -> None:
+        """An image shown stays as it is."""
+
+
+class Bubble(QFrame):
+    """What the person wrote, with what is attached (each opens) and whether
+    it waits; or what the model answered, or a note."""
+
+    def __init__(self, item: Item, opener: Opener, parent=None):
         super().__init__(parent)
         self.setObjectName("bubble")
         person = item.kind is Kind.PERSON
@@ -225,7 +242,7 @@ class Bubble(QFrame):
             row = QHBoxLayout()
             row.setSpacing(4)
             for given in item.attachments:
-                row.addWidget(chip(given, removable=False))
+                row.addWidget(chip(given, opener, removable=False))
             row.addStretch()
             holder = QWidget()
             holder.setLayout(row)
@@ -259,10 +276,22 @@ class Stats(ElidedLabel):
         self.setText(item.text)
 
 
-def chip(given: Attachment, removable: bool = True) -> Chip:
-    image = given.data if given.kind is Given.IMAGE else None
-    icon = "file-document-outline" if given.kind is Given.TEXT else "file-outline"
-    return Chip(given.name, image, icon, removable)
+def chip(given: Attachment, opener: Opener, removable: bool = True) -> Chip:
+    """What is attached, as a chip: a click views an image large, or opens a
+    file in its application (a pasted image has no file); its menu does so
+    too, and shows the folder of a file."""
+    if given.kind is Given.IMAGE:
+        shown = Chip(given.name, given.data, "image-outline", removable)
+        shown.clicked.connect(lambda: opener.view(given))
+        shown.offer(VIEW, lambda: opener.view(given))
+    else:
+        icon = "file-document-outline" if given.kind is Given.TEXT else "file-outline"
+        shown = Chip(given.name, None, icon, removable)
+        shown.clicked.connect(lambda: opener.open(given.path))
+        shown.offer(OPEN, lambda: opener.open(given.path))
+    if given.path:
+        shown.offer(SHOW_IN_FOLDER, lambda: opener.reveal(given.path))
+    return shown
 
 
 def scrolled(widget: QWidget) -> QScrollArea:
@@ -278,9 +307,11 @@ def scrolled(widget: QWidget) -> QScrollArea:
     return area
 
 
-def item_widget(item: Item, answer: Callable[[str], None]) -> QWidget:
+def item_widget(item: Item, answer: Callable[[str], None], opener: Opener) -> QWidget:
     """The widget of an item; answer: what a question's card tells once the
-    person picked an option."""
+    person picked an option; opener: what opens an image or a file shown."""
+    if item.kind is Kind.IMAGE:
+        return ImageItem(item, opener)
     if item.kind is Kind.PERMISSION:
         card = PermissionCard(item)
         card.chosen.connect(answer)
@@ -291,7 +322,7 @@ def item_widget(item: Item, answer: Callable[[str], None]) -> QWidget:
         return ThoughtCard(item)
     if item.kind is Kind.STATS:
         return Stats(item)
-    return Bubble(item)
+    return Bubble(item, opener)
 
 
 class AssistantWidget(QWidget):
@@ -300,6 +331,7 @@ class AssistantWidget(QWidget):
         self.model = model
         self.shown: List[QWidget] = []  # a widget per item of the mode shown
         self.attached: List[Attachment] = []  # for the next message
+        self.opener = Opener(model.session.folders, self)  # images, files
 
         # On top: the modes on the left, the chat's actions on the right
         self.modeTabs = QTabBar()
@@ -514,7 +546,7 @@ class AssistantWidget(QWidget):
 
     def _attach(self, given: Attachment) -> None:
         self.attached.append(given)
-        shown = chip(given)
+        shown = chip(given, self.opener)
         shown.removed.connect(lambda: self._detach(given, shown))
         self.chips.insertWidget(self.chips.count() - 1, shown)
         self.attachments.show()
@@ -570,7 +602,9 @@ class AssistantWidget(QWidget):
 
     def add(self, index: int) -> None:
         widget = item_widget(
-            self.model.items[index], lambda option: self.model.answer(index, option)
+            self.model.items[index],
+            lambda option: self.model.answer(index, option),
+            self.opener,
         )
         self.shown.append(widget)
         self.column.insertWidget(self.column.count() - 1, widget)

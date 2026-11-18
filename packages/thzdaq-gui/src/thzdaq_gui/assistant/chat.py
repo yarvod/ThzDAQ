@@ -5,7 +5,8 @@ Codex over ACP (codex.py), each a mode of the same dock. No Qt.
 A chat starts a turn with what the person said and runs it in a thread of
 its own, telling the listener it was given (Listener) what the turn does: a
 step asked, the person's queued messages taken, pieces of thought and of
-text, tool calls with their progress and answers, the tokens, and how the
+text, tool calls with their progress and answers, the images it shows the
+person (Image: one it made, one it looked at), the tokens, and how the
 turn ended; an agent that acts on its own (Codex) also asks the person
 before it runs a command or writes a file, and waits for the answer. What the
 person says while a turn runs is queued: it joins at the turn's next step, or
@@ -63,6 +64,17 @@ class Call:
     id: str
     name: str
     arguments: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Image:
+    """An image the assistant shows the person (one it made, one it looked
+    at): its bytes as its file has them, their MIME type, and its name (its
+    file's, or what it shows in a few words; "": none)."""
+
+    data: bytes
+    mime: str
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -216,6 +228,10 @@ class Listener(Protocol):
 
     def answered(self, call: str, text: str, failed: bool) -> None:
         """What a call answered; failed: refused or wrong."""
+
+    def image(self, image: Image) -> None:
+        """An image shown to the person, after what was told before it (an
+        answer may be one alone)."""
 
     def usage(self, used: Used) -> None:
         """The tokens a step took."""

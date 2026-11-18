@@ -43,7 +43,14 @@ from thzdaq_api.station import (
 )
 
 from thzdaq_gui.bridge import Bridge
-from thzdaq_gui.folders import ATTACHMENTS, MEASUREMENTS, PROFILES, SCRIPTS, Folders
+from thzdaq_gui.folders import (
+    ATTACHMENTS,
+    IMAGES,
+    MEASUREMENTS,
+    PROFILES,
+    SCRIPTS,
+    Folders,
+)
 from thzdaq_gui.measurements import MeasurementsModel
 from thzdaq_gui.processes import Processes
 from thzdaq_gui.settings import stations_dir
@@ -100,6 +107,7 @@ class Session(QObject):
                 PROFILES: stations_dir,
                 SCRIPTS: lambda: self.workspace.scripts,
                 ATTACHMENTS: lambda: self.workspace.folder,
+                IMAGES: lambda: self.workspace.folder,
             }
         )
         self.runs: List[RunModel] = []

@@ -772,7 +772,8 @@ def test_each_mode_is_a_chat_of_its_own_shown_anew_whole(
     monkeypatch.setattr(
         dock,
         "item_widget",
-        lambda item, answer: made.append(item) or item_widget(item, answer),
+        lambda item, answer, opener: made.append(item)
+        or item_widget(item, answer, opener),
     )
     tabs.setCurrentIndex(0)
     assert made == assistant.items  # a widget per item, once

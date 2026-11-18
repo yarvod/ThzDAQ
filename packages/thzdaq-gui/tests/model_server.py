@@ -1,12 +1,36 @@
 """A model's server for the tests: OpenAI-compatible chat/completions on
 localhost that answers what a test scripted, streamed as servers stream
 (server-sent events) or whole, with what the model thought and the tokens it
-took; GET /models tells its model's context. It keeps what it was asked."""
+took; GET /models tells its model's context. Its images/generations draws a
+tiny PNG, as base64 or at an address of its own. It keeps what it was
+asked."""
 
+import base64
 import json
+import struct
 import threading
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
+
+IMAGES = "/images/generations"
+DRAWN = "/files/drawn.png"  # where it gives what it drew, when asked to
+
+
+def png(width: int, height: int, pixel: bytes = b"\xff\x00\x00") -> bytes:
+    """A PNG of one colour (RGB), made without Qt."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    rows = b"".join(b"\0" + pixel * width for _ in range(height))
+    shape = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", shape)
+        + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+    )  # fmt: skip
+
 
 # What vLLM answers to tools when started without --enable-auto-tool-choice
 NO_TOOLS = (
@@ -56,6 +80,12 @@ class ModelServer:
         self.held = threading.Event()  # cleared: the answer waits for it
         self.held.set()
         self.context: Optional[int] = 32768  # what GET /models tells
+        self.drawing = png(3, 2)  # what images/generations draws
+        self.drawn: List[Dict[str, Any]] = []  # the bodies it was asked to draw
+        self.draws = threading.Event()  # cleared: a drawing waits for it
+        self.draws.set()
+        self.images_status = 200  # another: refuse to draw with it
+        self.by_address = False  # give what it drew at an address of its own
         server = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -63,6 +93,13 @@ class ModelServer:
                 pass
 
             def do_GET(self):
+                if self.path == DRAWN:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Content-Length", str(len(server.drawing)))
+                    self.end_headers()
+                    self.wfile.write(server.drawing)
+                    return
                 model = {"id": "qwen", "object": "model"}
                 if server.context is not None:
                     model["max_model_len"] = server.context
@@ -70,6 +107,9 @@ class ModelServer:
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path.endswith(IMAGES):
+                    self._draw(body)
+                    return
                 server.asked.append(body)
                 server.keys.append(self.headers.get("Authorization"))
                 server.held.wait(10)
@@ -83,6 +123,23 @@ class ModelServer:
                 else:
                     reply = server.next()
                     self._json(200, {"choices": [{"message": reply}], "usage": USAGE})
+
+            def _draw(self, body: Dict[str, Any]) -> None:
+                server.drawn.append(body)
+                server.keys.append(self.headers.get("Authorization"))
+                server.draws.wait(10)
+                if server.images_status != 200:
+                    self._json(server.images_status, {"error": {"message": "nope"}})
+                    return
+                if server.by_address:
+                    host, port = server.httpd.server_address
+                    made = {"url": f"http://{host}:{port}{DRAWN}"}
+                else:
+                    made = {"b64_json": base64.b64encode(server.drawing).decode()}
+                try:
+                    self._json(200, {"created": 0, "data": [made]})
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # the client stopped listening
 
             def _json(self, status: int, found: Dict[str, Any]) -> None:
                 data = json.dumps(found).encode()
@@ -126,6 +183,7 @@ class ModelServer:
 
     def close(self) -> None:
         self.held.set()
+        self.draws.set()
         self.httpd.shutdown()
         self.httpd.server_close()
 

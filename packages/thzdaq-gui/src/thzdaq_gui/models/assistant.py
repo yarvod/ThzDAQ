@@ -25,7 +25,8 @@ thinking, writing, running a tool), how long it runs, what the model thought
 what the model read (summed over its steps, each of which reads the whole
 conversation again: what the server bills, not the context) and of it what
 was cached, what it wrote and of it what it thought; and, apart, how much of
-the model's context the conversation fills (the last step's).
+the model's context the conversation fills (the last step's). An image the
+assistant shows is an item of its own, an answer alone or among words.
 
 The mode shown offers its chat's models, the chosen model's reasoning
 efforts, and what its agent may do without asking (policies: Codex's modes),
@@ -61,6 +62,7 @@ from thzdaq_gui.assistant.chat import (
     Call,
     Chat,
     Choice,
+    Image,
     Kept,
     Outcome,
     Said,
@@ -273,6 +275,7 @@ class Kind(str, Enum):
     NOTE = "note"  # how a turn ended when it did not answer
     STATS = "stats"  # how long a turn took and its tokens
     PERMISSION = "permission"  # what an agent asks before it acts: a card
+    IMAGE = "image"  # an image the assistant shows
 
 
 class State(str, Enum):
@@ -304,6 +307,7 @@ class Item:
     # Of what an agent asks: the question, the id of the option chosen
     asked: Optional[Asked] = None
     chosen: Optional[str] = None
+    image: Optional[Image] = None  # of an image shown
 
     def summary(self) -> str:
         """A call in a line: the tool, its arguments' values and how it went
@@ -463,6 +467,9 @@ class _Turn:
     def answered(self, call: str, text: str, failed: bool) -> None:
         self.model._tell(self, self.mode._heard_answer, call, text, failed)
 
+    def image(self, image: Image) -> None:
+        self.model._tell(self, self.mode._heard_image, image)
+
     def usage(self, used: Used) -> None:
         self.model._tell(self, self.mode._heard_usage, used)
 
@@ -527,6 +534,9 @@ class _Opening:
 
     def answered(self, call: str, text: str, failed: bool) -> None:
         self.told.append((self.mode._heard_answer, (call, text, failed)))
+
+    def image(self, image: Image) -> None:
+        self.told.append((self.mode._heard_image, (image,)))
 
     def usage(self, used: Used) -> None:
         self.told.append((self.mode._heard_usage, (used,)))
@@ -785,6 +795,11 @@ class Mode:
         item = self.items[index]
         item.text, item.state = text, State.REFUSED if failed else State.DONE
         self._change(index)
+
+    def _heard_image(self, image: Image) -> None:
+        self._thought_over(State.DONE)
+        self._answer = None  # words after it go below it
+        self._add(Item(Kind.IMAGE, image.name, image=image))
 
     def _thought_over(self, state: State) -> None:
         if self._thinking is None:
