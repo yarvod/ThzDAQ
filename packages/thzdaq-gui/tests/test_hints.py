@@ -1,14 +1,17 @@
 """The assistant's hints where the person types, against a model's server on
 localhost (model_server): what is asked and taken without Qt, the owner of
-the questions (answers, failures, cancelled ones dropped), the editor
-offscreen (a change hunk by hunk with ✓ and ✗, the ghost, Ctrl+I), Fix of a
-script's failed run, and all of it off without a server."""
+the questions (answers streamed with what the model does meanwhile, pieces
+taken whole, failures, cancelled ones dropped), the editor offscreen (a
+change hunk by hunk with ✓ and ✗, the ghost and its busy mark, Ctrl+I's box
+with what the model thinks and writes), Fix of a script's failed run, and
+all of it off without a server."""
 
 import os
+import threading
 from pathlib import Path
 
 import pytest
-from model_server import says
+from model_server import says, thinks
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QMessageBox
@@ -16,7 +19,8 @@ from thzdaq_gui.assistant import hints
 from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.editor import CodeEditor
 from thzdaq_gui.models.assistant import ProvidersModel
-from thzdaq_gui.models.hints import NO_SERVER, HintsModel
+from thzdaq_gui.models.assistant import THINKING, WRITING
+from thzdaq_gui.models.hints import NO_SERVER, WAITING, HintsModel, Stopped
 from thzdaq_gui.review import Review, Source
 
 # Pictures of the editor for a person to look at, when asked for (a folder)
@@ -78,6 +82,18 @@ def asked_text(model, index=-1):
     return model.asked[index]["messages"][-1]["content"]
 
 
+def hints_done() -> bool:
+    """No question's thread runs any more."""
+    return not any(t.name == "assistant hint" for t in threading.enumerate())
+
+
+def heard_of(request):
+    """What a request tells as it goes: each take's (thought, text)."""
+    found = []
+    request.progressed.connect(lambda thought, text: found.append((thought, text)))
+    return found
+
+
 # Without Qt: what is asked, what is taken
 def test_code_is_taken_from_a_fenced_block_or_bare():
     assert hints.code_of("Here:\n```python\nx = 1\n\n```\nDone.") == "x = 1"
@@ -124,33 +140,90 @@ def test_the_model_is_told_the_bench_and_where_the_code_is():
 
 
 # The owner of the questions
-def test_a_question_is_answered_in_the_gui_thread(helper, model, wait):
-    model.replies = [says("```python\nprint(v)\n```")]
-    heard = []
+def test_a_question_streams_and_is_answered_in_the_gui_thread(helper, model, wait):
+    model.replies = [thinks("Print v, it is the loop's.", "```python\nprint(v)\n```")]
+    heard, ended = [], []
     request = helper.write(hints.IN_FILE, "x = 1\n", 6, 6, "print it", helper)
+    assert request.phase == WAITING and request.asked == "print it"
+    assert request.model == "qwen" and "local" in request.server
+    progress = heard_of(request)
     request.answered.connect(heard.append)
+    request.ended.connect(lambda: ended.append(True))
     wait(lambda: heard)
-    assert heard == ["x = 1\nprint(v)"]
+    assert heard == ["x = 1\nprint(v)"] and ended == [True]
+    assert "".join(t for t, _ in progress) == "Print v, it is the loop's."
+    assert "".join(x for _, x in progress) == "```python\nprint(v)\n```"
     (asked,) = model.asked
-    assert asked["stream"] is False and "tools" not in asked
+    assert asked["stream"] is True and "tools" not in asked
     assert "sis_bias_1" in asked["messages"][0]["content"]  # the bench's devices
     assert model.keys == ["Bearer secret"]
 
 
-def test_a_failure_is_told_and_a_cancelled_answer_dropped(helper, model, wait):
-    model.status = 500
-    failed = []
-    helper.ghost(hints.IN_FILE, "x", 1, helper).failed.connect(failed.append)
-    wait(lambda: failed)
-    assert "500" in failed[0]
-    model.status = 200
-    delivered, heard = [], []
-    helper._answered.connect(lambda *told: delivered.append(told))
-    request = helper.ghost(hints.IN_FILE, "x", 1, helper)
-    request.answered.connect(heard.append)
+def test_a_request_tells_what_the_model_does_and_for_how_long(helper, model, app):
+    model.held.clear()  # the model never answers in this test
+    request = helper.write(hints.IN_FILE, "x\n", 2, 2, "anything", helper)
+    request.began -= 4
+    assert request.doing() == f"{WAITING}… 4 s"
+    request.told.thought("Look at ")
+    request.told.thought("the bias.")
+    app.processEvents()
+    assert request.phase == THINKING and request.thought == "Look at the bias."
+    assert request.doing() == f"{THINKING}… 4 s" and request.text == ""
+    request.told.heard("print(")
+    app.processEvents()
+    assert request.phase == WRITING and request.text == "print("
     request.cancel()
-    wait(lambda: delivered)
-    assert heard == []
+    model.held.set()
+
+
+def test_pieces_reach_the_gui_thread_in_one_take(helper, model, app):
+    """However many pieces came while the GUI thread was busy: one update,
+    and the queue woke it once."""
+    model.held.clear()
+    request = helper.write(hints.IN_FILE, "x\n", 2, 2, "anything", helper)
+    progress = heard_of(request)
+    woken = []
+    helper._arrived.connect(lambda told: woken.append(told))  # directly: each emit
+    for _ in range(200):
+        request.told.thought("hm ")
+    for _ in range(300):
+        request.told.heard("ab")
+    assert len(woken) == 1 and progress == []
+    app.processEvents()
+    assert progress == [("hm " * 200, "ab" * 300)]
+    assert request.phase == WRITING
+    request.cancel()
+    model.held.set()
+
+
+def test_a_failure_is_told_and_a_cancelled_answer_dropped(helper, model, wait, app):
+    model.status = 500
+    failed, ended = [], []
+    request = helper.ghost(hints.IN_FILE, "x", 1, helper)
+    request.failed.connect(failed.append)
+    request.ended.connect(lambda: ended.append(True))
+    wait(lambda: failed)
+    assert "500" in failed[0] and ended == [True]
+    # Cancelled with pieces on their way: they are dropped, and the next one
+    # the model sends stops its reply
+    model.status = 200
+    model.held.clear()
+    model.replies = [thinks("long " * 50, "range(3):")]
+    heard, ended = [], []
+    request = helper.ghost(hints.IN_FILE, "x", 1, helper)
+    progress = heard_of(request)
+    request.answered.connect(heard.append)
+    request.ended.connect(lambda: ended.append(True))
+    wait(lambda: model.asked)
+    told = request.told
+    told.heard("late")
+    request.cancel()
+    assert ended == [True]  # at once
+    with pytest.raises(Stopped):
+        told.heard("later")
+    model.held.set()
+    wait(hints_done)
+    assert heard == [] and progress == [] and ended == [True]
 
 
 # The editor: a change hunk by hunk
@@ -202,7 +275,7 @@ def test_a_ghost_comes_after_a_pause_and_tab_takes_it(editor, model, wait):
     model.replies = [says("range(3):")]
     QTest.keyClicks(editor, "for v in ")
     wait(lambda: editor.ghost is not None)
-    assert editor.ghost == "range(3):"
+    assert editor.ghost == "range(3):" and not editor.ghostMark.isVisible()
     assert asked_text(model).endswith(
         f"for v in {hints.CURSOR}\n```\n\nComplete the code at {hints.CURSOR}: "
         f"answer with what follows it only, at most {hints.GHOST_LINES} lines, "
@@ -229,8 +302,6 @@ def test_esc_or_typing_drops_a_ghost(editor, model, wait):
 
 
 def test_a_ghost_for_text_typed_before_is_never_shown(editor, helper, model, wait):
-    delivered = []
-    helper._answered.connect(lambda *told: delivered.append(told))
     model.held.clear()  # the model thinks
     model.replies = [says("stale")]
     QTest.keyClicks(editor, "x = ")
@@ -238,11 +309,110 @@ def test_a_ghost_for_text_typed_before_is_never_shown(editor, helper, model, wai
     editor.pause.setInterval(60_000)
     QTest.keyClicks(editor, "1")  # typed since: the question goes
     model.held.set()
-    wait(lambda: delivered)
+    wait(hints_done)
     assert editor.ghost is None and editor.asked_ghost is None
 
 
+def test_a_ghost_asked_shows_a_busy_mark_only(editor, model, wait):
+    model.held.clear()
+    model.replies = [thinks("hm", "range(3):")]
+    QTest.keyClicks(editor, "for v in ")
+    wait(lambda: model.asked)
+    mark = editor.ghostMark
+    assert mark.isVisible() and "qwen" in mark.toolTip()
+    caret = editor.cursorRect()
+    assert mark.geometry().left() > caret.left()  # where the ghost would show
+    assert abs(mark.geometry().center().y() - caret.center().y()) <= 1
+    assert not editor.askBox.isVisible()  # quiet: no box, no thought shown
+    shot(editor, "ghost_asked")
+    model.held.set()
+    wait(lambda: editor.ghost is not None)
+    assert not mark.isVisible()
+    # A ghost that fails: the mark goes, nothing is told
+    QTest.keyClick(editor, Qt.Key_Escape)
+    model.status = 500
+    QTest.keyClicks(editor, "x")
+    wait(lambda: len(model.asked) == 2)
+    wait(lambda: editor.asked_ghost is None)
+    assert not mark.isVisible() and editor.ghost is None
+    assert not editor.askBox.isVisible()
+
+
+def test_moving_the_cursor_drops_a_ghost_asked(editor, model, wait):
+    model.held.clear()
+    editor.setPlainText("a = 1\n")
+    editor.moveCursor(editor.textCursor().MoveOperation.End)
+    QTest.keyClicks(editor, "b = ")
+    wait(lambda: model.asked)
+    editor.pause.setInterval(60_000)
+    editor.moveCursor(editor.textCursor().MoveOperation.Start)
+    assert editor.asked_ghost is None and not editor.ghostMark.isVisible()
+    model.held.set()
+
+
 # Ctrl+I
+def test_ctrl_i_shows_what_the_model_does_until_the_proposal(editor, model, wait):
+    editor.setPlainText(SCRIPT)
+    editor.moveCursor(editor.textCursor().MoveOperation.End)
+    model.held.clear()  # the model is slow: the box shows what it does
+    model.replies = [says("```python\nprint(bias.voltage)\n```")]
+    QTest.keyClick(editor, Qt.Key_I, Qt.ControlModifier)
+    QTest.keyClicks(editor.askBox.field, "print the voltage")
+    QTest.keyClick(editor.askBox.field, Qt.Key_Return)
+    box = editor.askBox
+    request = editor.asked_code
+    assert box.request is request and box.field.isReadOnly()
+    assert box.spinner.isVisible() and box.doing.text() == f"{WAITING}… 0 s · qwen"
+    assert "qwen" in box.spinner.toolTip() and "local" in box.doing.toolTip()
+    assert not box.preview.isVisible() and not box.thoughtButton.isVisible()
+    # It thinks: the thought comes folded, a click opens it
+    request.began -= 4
+    request.told.thought("The voltage of bias_1 is read with bias.voltage; ")
+    request.told.thought("the loop printed v, so print it after the loop.")
+    wait(lambda: request.phase == THINKING)
+    assert box.doing.text() == f"{THINKING}… 4 s · qwen"
+    assert box.thoughtButton.isVisible() and not box.thoughtView.isVisible()
+    shot(editor, "ask_thinking")
+    box.thoughtButton.click()
+    assert box.thoughtView.isVisible()
+    assert box.thoughtView.toPlainText().endswith("so print it after the loop.")
+    box.thoughtButton.click()
+    # It writes: the code so far in a preview that grows
+    request.began -= 2
+    request.told.heard("```python\nfor v in range(3):\n")
+    wait(lambda: request.phase == WRITING)
+    assert box.doing.text() == f"{WRITING}… 6 s · qwen"
+    assert box.preview.isVisible() and box._lines == 3
+    first = box.preview.height()
+    request.told.heard("    print(v)\n")
+    wait(lambda: box._lines == 4)
+    assert box.preview.height() > first
+    assert box.preview.toPlainText() == "```python\nfor v in range(3):\n    print(v)\n"
+    shot(editor, "ask_writing")
+    # Its end: the proposal, hunk by hunk
+    model.held.set()
+    wait(lambda: editor.review is not None)
+    assert not box.isVisible() and not box.ticker.isActive()
+    assert editor.asked_code is None
+
+
+def test_a_long_preview_follows_its_end_within_its_lines(editor, model, wait):
+    model.held.clear()
+    QTest.keyClick(editor, Qt.Key_I, Qt.ControlModifier)
+    QTest.keyClicks(editor.askBox.field, "many lines")
+    QTest.keyClick(editor.askBox.field, Qt.Key_Return)
+    box = editor.askBox
+    for line in range(40):
+        editor.asked_code.told.heard(f"x{line} = {line}\n")
+    wait(lambda: box.preview.isVisible())
+    assert box.geometry().bottom() <= editor.viewport().height()
+    bar = box.preview.verticalScrollBar()
+    assert bar.maximum() > 0 and bar.value() == bar.maximum()
+    QTest.keyClick(box.field, Qt.Key_Escape)  # Esc stops it
+    assert not box.isVisible() and editor.asked_code is None
+    model.held.set()
+
+
 def test_ctrl_i_asks_for_code_that_comes_as_a_proposal(editor, model, wait):
     editor.setPlainText(SCRIPT)
     editor.moveCursor(editor.textCursor().MoveOperation.End)
@@ -261,7 +431,7 @@ def test_ctrl_i_asks_for_code_that_comes_as_a_proposal(editor, model, wait):
     assert editor.toPlainText() == SCRIPT + "print(bias.voltage)"
 
 
-def test_esc_closes_the_field_and_drops_its_question(editor, model, wait):
+def test_esc_or_close_drops_the_question(editor, model, wait):
     model.held.clear()
     QTest.keyClick(editor, Qt.Key_I, Qt.ControlModifier)
     QTest.keyClicks(editor.askBox.field, "anything")
@@ -269,6 +439,12 @@ def test_esc_closes_the_field_and_drops_its_question(editor, model, wait):
     wait(lambda: model.asked)
     QTest.keyClick(editor.askBox.field, Qt.Key_Escape)
     assert not editor.askBox.isVisible() and editor.asked_code is None
+    QTest.keyClick(editor, Qt.Key_I, Qt.ControlModifier)
+    QTest.keyClick(editor.askBox.field, Qt.Key_Return)  # the words kept: again
+    assert editor.asked_code is not None
+    editor.askBox.closeButton.click()
+    assert not editor.askBox.isVisible() and editor.asked_code is None
+    assert not editor.askBox.ticker.isActive()
     model.held.set()
 
 
@@ -279,6 +455,7 @@ def test_a_failure_is_told_in_the_field(editor, model, wait):
     QTest.keyClick(editor.askBox.field, Qt.Key_Return)
     wait(lambda: "refused" in editor.askBox.status.text())
     assert not editor.askBox.field.isReadOnly()  # asked again as it is
+    assert not editor.askBox.spinner.isVisible() and editor.asked_code is None
 
 
 # Fix of a script's failed run, in its tab
@@ -291,9 +468,21 @@ def test_fix_mends_a_script_by_its_failed_run(window, wait, model, tmp_path, dro
     assert not widget.fixButton.isEnabled()  # nothing failed yet
     widget.output.show_whole("0\n" + FAILED)
     assert widget.fixButton.isEnabled() and widget.askButton.isEnabled()
-    model.replies = [says("```python\nfor v in range(3):\n    print(v)\n```")]
+    fixed = says("```python\nfor v in range(3):\n    print(v)\n```")
+    model.replies = [fixed, fixed]  # the first is asked, then stopped
+    model.held.clear()
     widget.fixButton.click()
+    box = widget.editor.askBox
+    assert box.isVisible() and box.spinner.isVisible()  # what it does meanwhile
+    assert box.field.text() == "Fix: NameError: name 'w' is not defined"
+    assert not widget.fixButton.isEnabled()
+    QTest.keyClick(box.field, Qt.Key_Escape)  # stopped: Fix again
+    assert not box.isVisible() and widget.fixing is None
+    assert widget.fixButton.isEnabled()
+    widget.fixButton.click()
+    model.held.set()
     wait(lambda: widget.editor.review is not None)
+    assert widget.fixButton.isEnabled() and len(model.asked) == 2
     window.resize(1200, 800)
     shot(window.code.tabs, "editor_fix_review")
     assert "NameError: name 'w' is not defined" in asked_text(model)

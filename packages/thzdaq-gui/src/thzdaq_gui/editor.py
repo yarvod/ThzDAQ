@@ -12,9 +12,13 @@ shown when they come, each with what it is, filtered by what is typed since.
 
 The assistant's hints, when the editor is given them (models/hints.py):
 after a pause in typing what may follow the cursor shows grey (Tab takes it,
-Esc or any other key drops it, an answer to text typed since is never
-shown); Ctrl+I opens a field under the line for code asked in words, which
-comes as a proposal. A change is looked at in the text hunk by hunk
+Esc or any other key drops it, an answer to text typed since or for another
+place of the cursor is never shown); while it is asked a small turning mark
+stands where it would show, the model's server in its tooltip, and nothing
+more: a ghost that fails is not told. Ctrl+I opens a box under the line for
+code asked in words (ask_box.py), which comes as a proposal; a Fix comes the
+same way (await_proposal). The box shows what the model does meanwhile. A
+change is looked at in the text hunk by hunk
 (show_review: a proposal, a change of its file on disk): the lines that go
 red and struck out, those that come green, ✓ and ✗ beside each hunk and for
 all over the text; the text takes no typing until every hunk is decided,
@@ -23,7 +27,7 @@ then it is the review's text (review_ended).
 
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFontDatabase,
@@ -40,6 +44,7 @@ from PySide6.QtWidgets import (
     QCompleter,
     QPlainTextEdit,
     QTextEdit,
+    QToolButton,
     QToolTip,
     QWidget,
 )
@@ -132,9 +137,12 @@ class CodeEditor(QPlainTextEdit):
         hints: Optional[HintsModel] = None,
         where: str = IN_FILE,
         parent=None,
+        box_in: Optional[QWidget] = None,
     ):
         """hints: the assistant's, for code where the editor is (where: a
-        file, a console); None, the editor has none."""
+        file, a console); None, the editor has none. box_in: a widget around
+        the editor the box of its hints shows in, an editor too low for it
+        (a console's input) gives its tab; else its text's."""
         super().__init__(parent)
         self.complete = complete
         self.hints = hints
@@ -157,12 +165,13 @@ class CodeEditor(QPlainTextEdit):
         self.ghost: Optional[str] = None
         self.ghost_at = -1
         self.asked_ghost: Optional[Request] = None
+        self.ghostMark = self._ghost_mark()  # while one is asked
         self.pause = QTimer(self)
         self.pause.setSingleShot(True)
         self.pause.setInterval(GHOST_PAUSE_MS)
         self.pause.timeout.connect(self.ask_ghost)
         # Ctrl+I: the field and its question
-        self.askBox = AskBox(self.viewport())
+        self.askBox = AskBox(box_in or self.viewport())
         self.askBox.asked.connect(self._write)
         self.askBox.closed.connect(self._ask_closed)
         self.asked_code: Optional[Request] = None
@@ -180,6 +189,18 @@ class CodeEditor(QPlainTextEdit):
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
         self.completer.activated.connect(self.insert_completion)
 
+    def _ghost_mark(self) -> QToolButton:
+        mark = QToolButton(self.viewport())
+        mark.setAutoRaise(True)
+        mark.setFocusPolicy(Qt.NoFocus)
+        mark.setStyleSheet(
+            "QToolButton { border: none; background: transparent; padding: 0; }"
+        )
+        self._ghost_spin = theme.Spinner(mark)
+        mark.setIcon(self._ghost_spin.icon)
+        mark.hide()
+        return mark
+
     # Line numbers, and the bar of a review over the text
     def numbers_width(self) -> int:
         digits = len(str(max(1, self.blockCount())))
@@ -196,6 +217,7 @@ class CodeEditor(QPlainTextEdit):
         if dy:
             self.numbers.scroll(0, dy)
             self._place_hunks()
+            self._place_ghost_mark()
         else:
             self.numbers.update(0, rect.y(), self.numbers.width(), rect.height())
 
@@ -213,6 +235,7 @@ class CodeEditor(QPlainTextEdit):
         )
         self.reviewBar.setGeometry(QRect(area.left(), area.top(), area.width(), top))
         self._place_hunks()
+        self._place_ghost_mark()
 
     def paint_numbers(self, widget: QWidget, event) -> None:
         painter = QPainter(widget)
@@ -436,23 +459,38 @@ class CodeEditor(QPlainTextEdit):
             return
         self.asked_ghost = self.hints.ghost(self.where, text, cursor.position(), self)
         self.asked_ghost.answered.connect(self._ghost_came)
-        self.asked_ghost.failed.connect(self._ghost_failed)
+        self.asked_ghost.ended.connect(self._ghost_ended)
+        self.ghostMark.setToolTip(self.asked_ghost.server)
+        self._ghost_spin.run(True)
+        self.ghostMark.show()
+        self._place_ghost_mark()
 
     def _ghost_came(self, text: str) -> None:
-        self.asked_ghost = None
         if text:
             self.ghost, self.ghost_at = text, self.textCursor().position()
             self.viewport().update()
 
-    def _ghost_failed(self, _why: str) -> None:
-        self.asked_ghost = None  # nothing shows: the next pause asks again
+    def _ghost_ended(self) -> None:
+        """Answered, failed (nothing shows: the next pause asks again) or
+        dropped: the mark goes."""
+        self.asked_ghost = None
+        self._ghost_spin.run(False)
+        self.ghostMark.hide()
+
+    def _place_ghost_mark(self) -> None:
+        """Right after the cursor, where the ghost would show, a line high."""
+        if self.asked_ghost is None:
+            return
+        caret = self.cursorRect()
+        size = caret.height()
+        self.ghostMark.setIconSize(QSize(size - 4, size - 4))
+        self.ghostMark.setGeometry(caret.right() + 2, caret.top(), size, size)
 
     def dismiss_ghost(self) -> None:
         """The ghost shown and the question for one go."""
         self.pause.stop()
         if self.asked_ghost is not None:
             self.asked_ghost.cancel()
-            self.asked_ghost = None
         if self.ghost is not None:
             self.ghost = None
             self.viewport().update()
@@ -464,7 +502,9 @@ class CodeEditor(QPlainTextEdit):
         self.ensureCursorVisible()
 
     def _cursor_moved(self) -> None:
-        if self.ghost is not None and self.textCursor().position() != self.ghost_at:
+        """A ghost, shown or asked, is for one place of the cursor."""
+        moved = self.ghost is not None and self.textCursor().position() != self.ghost_at
+        if moved or self.asked_ghost is not None:
             self.dismiss_ghost()
 
     def focusOutEvent(self, event) -> None:
@@ -494,10 +534,10 @@ class CodeEditor(QPlainTextEdit):
             )
             painter.drawText(left, top + metrics.ascent(), line)
 
-    # Ctrl+I: code asked for in words
+    # Ctrl+I: code asked for in words; a Fix
     def ask(self) -> None:
-        """The field for it under the line of the cursor; without the
-        assistant's server, a word of why."""
+        """The box for it under the line of the cursor (a question on its
+        way goes); without the assistant's server, a word of why."""
         if not self.hints_on():
             QToolTip.showText(
                 self.mapToGlobal(self.cursorRect().bottomLeft()), NO_SERVER, self
@@ -506,20 +546,37 @@ class CodeEditor(QPlainTextEdit):
         if self.review is not None:
             return
         self.dismiss_ghost()
-        caret = self.cursorRect()
-        x = max(0, caret.left() - 4)
-        self.askBox.open(x, caret.bottom() + 2, self.viewport().width() - x - 8)
+        self._drop_asked()
+        self.askBox.open(self._caret_in_box())
+
+    def _caret_in_box(self) -> QRect:
+        """The cursor where the box shows."""
+        at = self.viewport().mapTo(self.askBox.parentWidget(), QPoint(0, 0))
+        return self.cursorRect().translated(at)
 
     def _write(self, asked: str) -> None:
         cursor = self.textCursor()
         code = self.toPlainText()
         start, end = cursor.selectionStart(), cursor.selectionEnd()
-        self.asked_code = self.hints.write(self.where, code, start, end, asked, self)
-        self.asked_code.answered.connect(lambda text: self._written(code, text))
-        self.asked_code.failed.connect(self._not_written)
+        self._await(self.hints.write(self.where, code, start, end, asked, self), code)
+
+    def await_proposal(self, request: Request, base: str) -> None:
+        """A whole text for base the assistant writes (a Fix): what it does
+        meanwhile in the box under the cursor, its answer a proposal. A
+        question on its way before goes."""
+        self.dismiss_ghost()
+        self._drop_asked()
+        self.askBox.open(self._caret_in_box())
+        self._await(request, base)
+
+    def _await(self, request: Request, base: str) -> None:
+        self.asked_code = request
+        request.answered.connect(lambda text: self._written(base, text))
+        request.failed.connect(self.askBox.tell)
+        request.ended.connect(self._asked_ended)
+        self.askBox.follow(request)
 
     def _written(self, base: str, text: str) -> None:
-        self.asked_code = None
         why = self.propose(base, text)
         if why is None:
             self.askBox.hide()
@@ -527,14 +584,15 @@ class CodeEditor(QPlainTextEdit):
         else:
             self.askBox.tell(why)
 
-    def _not_written(self, why: str) -> None:
+    def _asked_ended(self) -> None:
         self.asked_code = None
-        self.askBox.tell(why)
 
-    def _ask_closed(self) -> None:
+    def _drop_asked(self) -> None:
         if self.asked_code is not None:
             self.asked_code.cancel()
-            self.asked_code = None
+
+    def _ask_closed(self) -> None:
+        self._drop_asked()
         self.setFocus()
 
     # Keys

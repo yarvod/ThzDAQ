@@ -7,7 +7,8 @@ nothing here is unsaved; else a banner asks: Reload, Keep mine, or Compare
 
 The assistant writes code where the cursor is (Ask, Ctrl+I) and mends the
 text when its last run failed (Fix beside its output, with the traceback):
-proposals, shown hunk by hunk for the person to take.
+what it does meanwhile shows in the editor's box under the cursor, its
+answers are proposals, shown hunk by hunk for the person to take.
 
 Run of one of the bench's own measurements is Start of its dock, with the
 values of its form; another script runs in the daemon as thzdaq script start
@@ -63,7 +64,6 @@ PARAGRAPH = "\u2029"  # how Qt ends the lines of a selection
 NO_PROBLEMS = "No problems found"
 ASK_TIP = "Code written here by the assistant, asked in words (Ctrl+I)"
 FIX_TIP = "The assistant mends the script by the error of its last run"
-FIXING = "The assistant mends it…"
 # Pieces of a measurement to insert where the cursor is
 PIECES = {
     "Sweep loop": (
@@ -253,10 +253,7 @@ class CodeWidget(QWidget):
         corner = QWidget()
         row = QHBoxLayout(corner)
         row.setContentsMargins(0, 0, 4, 0)
-        self.fixStatus = QLabel()
-        self.fixStatus.setStyleSheet(f"color: {theme.MUTED};")
         self.fixButton = theme.tool_button("Fix", "auto-fix", FIX_TIP, self.fix)
-        row.addWidget(self.fixStatus)
         row.addWidget(self.fixButton)
         return corner
 
@@ -340,24 +337,19 @@ class CodeWidget(QWidget):
         self.fixButton.setToolTip(FIX_TIP if on else NO_SERVER)
 
     def fix(self) -> None:
+        """The text mended by the error of its last run: a proposal in the
+        editor, which shows what the assistant does meanwhile."""
         error = failure(self.output.toPlainText())
         if error is None or self.fixing is not None:
             return
         code = self.text
         self.fixing = self.hints.fix(IN_FILE, code, error, (), self)
-        self.fixing.answered.connect(lambda text: self._fixed(code, text))
-        self.fixing.failed.connect(self._fix_failed)
-        self.fixStatus.setText(FIXING)
+        self.fixing.ended.connect(self._fix_ended)
+        self.editor.await_proposal(self.fixing, code)
         self.show_hints()
 
-    def _fixed(self, code: str, text: str) -> None:
+    def _fix_ended(self) -> None:
         self.fixing = None
-        self.fixStatus.setText(self.editor.propose(code, text) or "")
-        self.show_hints()
-
-    def _fix_failed(self, why: str) -> None:
-        self.fixing = None
-        self.fixStatus.setText(why)
         self.show_hints()
 
     # Check and run

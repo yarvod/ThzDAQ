@@ -358,8 +358,21 @@ def test_fix_mends_the_block_that_raised_into_the_input(started, hints, model, w
     assert widget.fixButton.isEnabled() and model_.failed.before == ("a = 2",)
     assert "NameError" in model_.failed.error and "\x1b" not in model_.failed.error
     model.replies = [says("```python\nb = 1\nprint(a / b)\n```")]
+    widget.resize(900, 300)
+    widget.show()
+    model.held.clear()  # the model is slow: what it does shows meanwhile
     widget.fixButton.click()
+    box = widget.input.askBox
+    widget.input.asked_code.told.heard("```python\nb = 1\n")
+    wait(lambda: box.preview.isVisible())
+    # The input is too low for the box: it shows over the tab, whole
+    assert box.parentWidget() is widget and box.isVisible()
+    assert widget.rect().contains(box.geometry())
+    assert box.preview.height() >= box.preview.lines_high(2)
+    assert box.field.text() == "Fix: NameError: name 'b' is not defined"
+    model.held.set()
     wait(lambda: widget.input.review is not None)
+    assert not box.isVisible() and widget.fixButton.isEnabled()
     told = model.asked[-1]["messages"][-1]["content"]
     assert "a = 2" in told and "print(a / b)" in told and "NameError" in told
     widget.input.reviewBar.takeAll.click()

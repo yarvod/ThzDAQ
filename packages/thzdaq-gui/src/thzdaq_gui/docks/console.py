@@ -12,7 +12,8 @@ copies); Ctrl+Space or a dot asks the kernel for completions.
 The assistant's hints work in the input as in the editor of a file: the
 ghost while typing, Ctrl+I (Ask) for code asked in words; Fix mends the last
 block that raised, told its traceback and the blocks before it. What it
-writes comes into the input as a proposal; the person runs it.
+does meanwhile shows in the input's box; what it writes comes into the input
+as a proposal; the person runs it.
 
 It shows a ConsoleModel and calls its methods; the window's ConsoleDocks
 makes, names and closes these tabs.
@@ -59,7 +60,6 @@ STATES = {
 HINT = "Python · Enter runs a complete block, Shift+Enter a new line, ↑ earlier ones"
 ASK_TIP = "Code written into the input by the assistant, asked in words (Ctrl+I)"
 FIX_TIP = "The assistant mends the last block that raised, into the input"
-FIXING = "The assistant mends the block that raised…"
 
 
 class ConsoleInput(CodeEditor):
@@ -70,8 +70,8 @@ class ConsoleInput(CodeEditor):
     interrupt_requested = Signal()
     completions_requested = Signal(str, int)  # the code, the cursor in it
 
-    def __init__(self, hints: HintsModel, parent=None):
-        super().__init__(None, hints, IN_CONSOLE, parent)
+    def __init__(self, hints: HintsModel, parent=None, box_in=None):
+        super().__init__(None, hints, IN_CONSOLE, parent, box_in)
         self.setPlaceholderText(HINT)
 
     def request_completions(self, text: str, line: int, column: int) -> None:
@@ -132,7 +132,8 @@ class ConsoleWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._toolbar())
         self.output = ConsoleOutput(open_place)
-        self.input = ConsoleInput(hints)
+        # Its hints' box over the tab: the input is too low for it
+        self.input = ConsoleInput(hints, box_in=self)
         below = QWidget()
         column = QVBoxLayout(below)
         column.setContentsMargins(0, 0, 0, 0)
@@ -243,26 +244,15 @@ class ConsoleWidget(QWidget):
         failed = self.model.failed
         if failed is None or self.fixing is not None:
             return
-        typed = self.input.code()
         self.fixing = self.hints.fix(
             IN_CONSOLE, failed.code, failed.error, failed.before, self
         )
-        self.fixing.answered.connect(lambda text: self._fixed(typed, text))
-        self.fixing.failed.connect(self._fix_failed)
-        self.output.add_note(FIXING)
+        self.fixing.ended.connect(self._fix_ended)
+        self.input.await_proposal(self.fixing, self.input.code())
         self.show_hints()
 
-    def _fixed(self, typed: str, text: str) -> None:
+    def _fix_ended(self) -> None:
         self.fixing = None
-        why = self.input.propose(typed, text)
-        if why is not None:
-            self.output.add_note(why)
-        self.input.setFocus()
-        self.show_hints()
-
-    def _fix_failed(self, why: str) -> None:
-        self.fixing = None
-        self.output.add_note(why)
         self.show_hints()
 
     # Inputs of earlier
