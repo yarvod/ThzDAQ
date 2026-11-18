@@ -45,6 +45,9 @@ CLI_PROGRAM = "thzdaq-cli"  # the built command line, next to it
 RUN_SCRIPT = "run-script"  # thzdaq-cli run-script <file>: a build's Python runs it
 MODULE = "-m"  # thzdaq-cli run-script -m <module>: a module run as a program
 PASSED = "--"  # what follows is the script's (or module's) own arguments
+MCP = "mcp"  # thzdaq mcp: the bench's MCP server for agents
+MCP_NAME = "thzdaq"  # the server's name among an agent's MCP servers
+WORKSPACE = "--workspace"  # thzdaq mcp --workspace: where its measurements go
 UNKNOWN = "unknown"  # the version of a build without package metadata
 
 
@@ -278,6 +281,15 @@ def cli_command() -> List[str]:
             "install thzdaq, or start the ThzDAQ build once",
         )
     return found
+
+
+def mcp_server(cli: Sequence[str], simulate: bool, folder: Path) -> List[str]:
+    """How an agent starts the bench's MCP server for a workspace: the command
+    line (cli, as another program starts it) with [--simulate] mcp
+    --workspace FOLDER (thzdaq agent-setup writes it, the window's Codex
+    gives it)."""
+    options = [SIMULATE] if simulate else []
+    return [*cli, *options, MCP, WORKSPACE, str(folder)]
 
 
 def script_python() -> Tuple[str, ...]:

@@ -17,6 +17,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
+    "agent-client-protocol==1.0.0",
     "ipykernel>=6.29",
     "jedi>=0.19",
     "jupyter-client>=8.6",

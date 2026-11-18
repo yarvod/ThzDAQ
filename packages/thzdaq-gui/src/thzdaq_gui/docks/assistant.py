@@ -1,8 +1,9 @@
-"""The assistant's chat: its modes as tabs on top (the built-in assistant;
-each a chat of its own) with History (a page of the dock: the chats kept in
+"""The assistant's chat: its modes as tabs on top (the built-in assistant,
+Codex; each a chat of its own) with History (a page of the dock: the chats kept in
 the workspace, chat_history.py), New chat and the settings; the messages
 (Markdown that wraps to the dock's width; what the model thought and each
-tool call a card folded to its line); what the turn does now and for how
+tool call a card folded to its line; what an agent asks before it acts, a
+card with a button per answer it offers); what the turn does now and for how
 long, beside a thin bar of how much of the model's context the chat fills
 and the tokens in a popup; the input with what is attached (files, images;
 Ctrl+V and dropping too), and under it the mode's model, Send and Stop.
@@ -10,7 +11,7 @@ While the assistant works, what is sent joins at its next step. A view of
 AssistantModel, of the mode it shows."""
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QKeyEvent
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
@@ -62,6 +64,8 @@ NO_MODEL = "no model yet"
 USAGE_TIP = "Tokens of the last answer and of this chat"
 HISTORY_TIP = "History: the chats of this workspace"
 UNKNOWN = "—"  # tokens the model's server did not tell
+UNANSWERED = "Not answered: the turn ended first"
+ANSWERED = "Answered: {option}"
 INPUT_LINES = (3, 10)  # the input's height in lines, least and most
 STATE_ICONS = {  # of a call: its icon and colour
     State.RUNNING: ("progress-clock", theme.ACCENT),
@@ -259,6 +263,71 @@ class Bubble(QFrame):
         self.state.setVisible(bool(told))
 
 
+class PermissionCard(QFrame):
+    """What an agent asks before it acts: what it would do, more of it (the
+    command, the file), and a button per answer it offers; once answered,
+    the answer; once its turn ended first, that nobody answered."""
+
+    chosen = Signal(str)  # the id of the option the person picked
+
+    def __init__(self, item: Item, parent=None):
+        super().__init__(parent)
+        self.setObjectName("asked")
+        self.setStyleSheet(
+            f"#asked {{ border: 1px solid {theme.ACCENT}; border-radius: 6px; }}"
+        )
+        asked = item.asked
+        icon = QLabel()
+        icon.setPixmap(theme.icon("shield-alert-outline", theme.ACCENT).pixmap(16, 16))
+        self.titleLabel = MessageView(markdown=False)
+        self.titleLabel.show_text(asked.title)
+        head = QHBoxLayout()
+        head.setSpacing(6)
+        head.addWidget(icon, 0, Qt.AlignTop)
+        head.addWidget(self.titleLabel, 1)
+        self.detail = MessageView(markdown=False, mono=True)
+        self.detail.show_text(asked.detail)
+        self.detail.setVisible(bool(asked.detail))
+        self.buttons: Dict[str, QPushButton] = {}
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        for option in asked.options:
+            button = QPushButton(
+                theme.icon("check" if option.allows else "close"), option.name
+            )
+            button.clicked.connect(lambda _=False, id=option.id: self.chosen.emit(id))
+            self.buttons[option.id] = button
+            row.addWidget(button)
+        row.addStretch()
+        self.choices = QWidget()
+        self.choices.setLayout(row)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.state = ElidedLabel()
+        self.state.set_color(theme.MUTED)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+        layout.addLayout(head)
+        layout.addWidget(self.detail)
+        layout.addWidget(self.choices)
+        layout.addWidget(self.state)
+        self.show_item(item)
+
+    def show_item(self, item: Item) -> None:
+        waiting = item.state is State.RUNNING
+        self.choices.setVisible(waiting)
+        names = {option.id: option.name for option in item.asked.options}
+        told = (
+            ""
+            if waiting
+            else ANSWERED.format(option=names[item.chosen])
+            if item.chosen is not None
+            else UNANSWERED
+        )
+        self.state.setText(told)
+        self.state.setVisible(bool(told))
+
+
 class Stats(ElidedLabel):
     """How long a turn took and its tokens, small, on the right."""
 
@@ -293,7 +362,13 @@ def scrolled(widget: QWidget) -> QScrollArea:
     return area
 
 
-def item_widget(item: Item) -> QWidget:
+def item_widget(item: Item, answer: Callable[[str], None]) -> QWidget:
+    """The widget of an item; answer: what a question's card tells once the
+    person picked an option."""
+    if item.kind is Kind.PERMISSION:
+        card = PermissionCard(item)
+        card.chosen.connect(answer)
+        return card
     if item.kind is Kind.CALL:
         return CallCard(item)
     if item.kind is Kind.THOUGHT:
@@ -629,7 +704,8 @@ class AssistantWidget(QWidget):
         self.model.send(text, attached)
 
     def edit(self) -> None:
-        AssistantSettings(self.model.providers, self.model.instructions, self).exec()
+        model = self.model
+        AssistantSettings(model.providers, model.instructions, model.codex, self).exec()
 
     # The chats kept
     def show_history(self, shown: bool) -> None:
@@ -653,7 +729,9 @@ class AssistantWidget(QWidget):
         self.model.new_chat()
 
     def add(self, index: int) -> None:
-        widget = item_widget(self.model.items[index])
+        widget = item_widget(
+            self.model.items[index], lambda option: self.model.answer(index, option)
+        )
         self.shown.append(widget)
         self.column.insertWidget(self.column.count() - 1, widget)
 

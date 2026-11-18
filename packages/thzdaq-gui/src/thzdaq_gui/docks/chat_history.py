@@ -1,7 +1,8 @@
 """The chats the assistant keeps, a page of its dock: a search by title over
 the chats of the window's workspace for the mode shown, the newest first,
 each with how long ago it was spoken in last. A click (or Enter) opens one;
-F2 or its menu renames it in place. A view of AssistantModel."""
+F2 or its menu renames it in place, in a mode whose chats take another
+title. A view of AssistantModel."""
 
 import time
 from typing import List, Optional
@@ -81,6 +82,12 @@ class HistoryPage(QWidget):
         edited stays."""
         chats = self.model.chats(self.search.text())
         now, current = time.time(), self.model.current_chat()
+        renames = self.model.renames()
+        self.list.setEditTriggers(
+            QAbstractItemView.EditKeyPressed
+            if renames
+            else QAbstractItemView.NoEditTriggers
+        )
         if [chat.id for chat in chats] == self.ids():
             for row, chat in enumerate(chats):
                 self._show(self.list.topLevelItem(row), chat, now, current)
@@ -130,7 +137,8 @@ class HistoryPage(QWidget):
         menu.addAction(
             theme.icon("folder-open-outline"), "Open", lambda: self._open(item)
         )
-        menu.addAction(
-            theme.icon("pencil-outline"), "Rename", lambda: self.rename(item)
-        )
+        if self.model.renames():
+            menu.addAction(
+                theme.icon("pencil-outline"), "Rename", lambda: self.rename(item)
+            )
         menu.exec(self.list.viewport().mapToGlobal(at))

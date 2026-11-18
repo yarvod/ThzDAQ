@@ -19,7 +19,8 @@ from thzdaq_gui.models.assistant import InstructionsModel
 ABOUT = (
     "Your instructions to the assistant, the same in every workspace. They add"
     " to its built-in prompt: where they contradict its rules, the rules hold."
-    " A change applies from the next message."
+    " Codex gets them too, after its own instructions. A change applies from"
+    " the next message."
 )
 EXAMPLE = (
     "e.g. Answer in Russian. Before a sweep longer than ten minutes, say how"

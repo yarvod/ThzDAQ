@@ -37,8 +37,8 @@ from thzdaq_cli.client import (
 )
 
 PLUGINS = "thzdaq.cli"  # entry points of the packages that add a command
-MCP = "mcp"
-SERVER = "thzdaq"  # the MCP server's name in the agents' configs
+MCP = host.MCP
+SERVER = host.MCP_NAME
 INSTALL = "thzdaq mcp needs the thzdaq-mcp package: uv tool install 'thzdaq[mcp]'"
 
 CLAUDE_CONFIG = ".mcp.json"
@@ -60,7 +60,7 @@ def add(commands) -> None:
         MCP, help="the MCP server for agents, on stdin and stdout"
     )
     serve.add_argument(
-        "--workspace", help=f"its measurements go to data/ there ({HERE})"
+        host.WORKSPACE, help=f"its measurements go to data/ there ({HERE})"
     )
     serve.set_defaults(run=serve_mcp)
     setup = commands.add_parser(
@@ -96,8 +96,7 @@ def command() -> List[str]:
 
 def server_command(simulate: bool, folder: Path) -> List[str]:
     """thzdaq [--simulate] mcp --workspace FOLDER, absolute."""
-    options = ["--simulate"] if simulate else []
-    return [*command(), *options, MCP, "--workspace", str(folder)]
+    return host.mcp_server(command(), simulate, folder)
 
 
 def claude_config(path: Path, started: List[str]) -> str:

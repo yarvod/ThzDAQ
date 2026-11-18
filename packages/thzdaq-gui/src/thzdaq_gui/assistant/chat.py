@@ -1,15 +1,17 @@
 """A chat of the assistant's dock apart from what answers it (Chat): the
 built-in assistant (builtin.py: a model's server with the bench's tools), and
-later Codex over ACP, each a mode of the same dock. No Qt.
+Codex over ACP (codex.py), each a mode of the same dock. No Qt.
 
 A chat starts a turn with what the person said and runs it in a thread of
 its own, telling the listener it was given (Listener) what the turn does: a
 step asked, the person's queued messages taken, pieces of thought and of
 text, tool calls with their progress and answers, the tokens, and how the
-turn ended. What the person says while a turn runs is queued and joins at
-its next step. stop() ends the turn at once; what its thread still tells
-after that is the owner's to drop (the view model hears only the turn it
-began last).
+turn ended; an agent that acts on its own (Codex) also asks the person
+before it runs a command or writes a file, and waits for the answer. What the
+person says while a turn runs is queued: it joins at the turn's next step, or
+(Codex) goes once the turn ended. stop() ends the turn at once; what its
+thread still tells after that is the owner's to drop (the view model hears
+only the turn it began last).
 
 A chat also offers its models (Choice), the one chosen, and how many tokens
 of context the chosen one takes when that is known; watch() hears when
@@ -81,6 +83,29 @@ class Choice:
 
 
 @dataclass(frozen=True)
+class Option:
+    """An answer the person may give to what an agent asks: its id, its name
+    as the agent words it, and what it does (allow or reject, once or
+    always)."""
+
+    id: str
+    name: str
+    allows: bool
+    always: bool = False
+
+
+@dataclass(frozen=True)
+class Asked:
+    """What an agent asks the person before it acts on its own (Codex runs a
+    command or writes a file): what it would do in a line, more of it (the
+    command, the file), and the answers it offers."""
+
+    title: str
+    detail: str
+    options: Tuple[Option, ...]
+
+
+@dataclass(frozen=True)
 class Kept:
     """A conversation a chat keeps: its id, its title, when a turn of it
     ended last (seconds since the epoch), and the workspace it is kept for."""
@@ -121,10 +146,12 @@ class Listener(Protocol):
     def ended(self, outcome: Outcome, why: str) -> None:
         """The turn is over; why: what failed (FAILED)."""
 
-    # Codex asks the person before it runs a command or writes a file
-    # (ACP session/request_permission): permission(asked) with the options it
-    # sends, answered with the one the person picks. Not told yet: the
-    # built-in chat changes the bench only, whose consent the daemon asks.
+    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
+        """The agent asks the person before it acts (Codex, ACP
+        session/request_permission) and waits: answer(the id of the option
+        chosen) from any thread, once; answer(None) when the turn is stopped
+        first. The built-in chat never asks: it changes the bench only, whose
+        consent the daemon asks for in the window."""
 
 
 class Replay(Listener, Protocol):
@@ -202,6 +229,11 @@ class Chat(ABC):
     @abstractmethod
     def rename(self, chat: Kept, title: str) -> None:
         """Give a kept conversation another title. Never waits."""
+
+    def renames(self) -> bool:
+        """Whether a kept conversation takes another title (rename); an agent
+        that keeps its own titles may offer none."""
+        return True
 
     @abstractmethod
     def close(self) -> None:

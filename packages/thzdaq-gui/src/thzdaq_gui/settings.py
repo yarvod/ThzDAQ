@@ -73,6 +73,13 @@ ASSISTANT_PROVIDERS = "assistant/providers"
 ASSISTANT_PROVIDER = "assistant/provider"
 # The person's instructions to the assistant, added to its built-in prompt
 ASSISTANT_INSTRUCTIONS = "assistant/instructions"
+# Codex in the assistant's dock: the ACP adapter's command line, the codex it
+# runs (CODEX_PATH; empty: its own), the mode a new chat starts in, and the
+# session's options the person chose last (JSON: option id -> value)
+CODEX_COMMAND = "codex/command"
+CODEX_EXECUTABLE = "codex/executable"
+CODEX_MODE = "codex/mode"
+CODEX_OPTIONS = "codex/options"
 
 
 def procedure_key(procedure: str) -> str:

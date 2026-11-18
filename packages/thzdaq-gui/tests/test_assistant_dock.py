@@ -19,6 +19,7 @@ from thzdaq_gui.assistant.prompt import BENCH, INSTRUCTIONS, INSTRUCTIONS_RANK
 from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.models.assistant import (
     AssistantModel,
+    CodexSettingsModel,
     InstructionsModel,
     Kind,
     ProvidersModel,
@@ -66,7 +67,9 @@ def instructions(app):
 def built_in(session, providers, instructions):
     """The chat of the window with its built-in mode."""
     chat = built_in_chat(session, providers, instructions)
-    return AssistantModel(session, providers, instructions, [chat])
+    return AssistantModel(
+        session, providers, instructions, CodexSettingsModel(), [chat]
+    )
 
 
 @pytest.fixture
@@ -343,7 +346,7 @@ def test_a_folded_cards_body_is_made_when_it_is_unfolded(app):
 def test_the_dialog_saves_a_server_and_tests_it(providers, instructions, model, wait):
     from thzdaq_gui.docks.assistant_settings import AssistantSettings
 
-    settings = AssistantSettings(providers, instructions)
+    settings = AssistantSettings(providers, instructions, CodexSettingsModel())
     settings.show()
     dialog = settings.servers
     assert dialog.list.count() == 1 and dialog.key.text() == "secret"
@@ -380,7 +383,7 @@ def test_the_dialog_edits_the_instructions_over_the_built_in_prompt(instructions
         AssistantSettings,
     )
 
-    settings = AssistantSettings(ProvidersModel(), instructions)
+    settings = AssistantSettings(ProvidersModel(), instructions, CodexSettingsModel())
     settings.show()
     assert settings.windowTitle() == TITLE
     settings.tabs.setCurrentWidget(settings.instructions)
@@ -644,7 +647,9 @@ class FakeChat(Chat):
 @pytest.fixture
 def fake(session, providers, instructions):
     chat = FakeChat()
-    assistant = AssistantModel(session, providers, instructions, [chat])
+    assistant = AssistantModel(
+        session, providers, instructions, CodexSettingsModel(), [chat]
+    )
     yield chat, assistant
     assistant.close()
 
@@ -741,7 +746,9 @@ def test_each_mode_is_a_chat_of_its_own_shown_anew_whole(
     from thzdaq_gui.docks import assistant as dock
 
     first, second = FakeChat("First"), FakeChat("Second")
-    assistant = AssistantModel(session, providers, instructions, [first, second])
+    assistant = AssistantModel(
+        session, providers, instructions, CodexSettingsModel(), [first, second]
+    )
     widget = dock.AssistantWidget(assistant)
     tabs = widget.modeTabs
     assert [tabs.tabText(i) for i in range(tabs.count())] == ["First", "Second"]
@@ -759,7 +766,9 @@ def test_each_mode_is_a_chat_of_its_own_shown_anew_whole(
     made = []
     item_widget = dock.item_widget
     monkeypatch.setattr(
-        dock, "item_widget", lambda item: made.append(item) or item_widget(item)
+        dock,
+        "item_widget",
+        lambda item, answer: made.append(item) or item_widget(item, answer),
     )
     tabs.setCurrentIndex(0)
     assert made == assistant.items  # a widget per item, once

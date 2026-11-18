@@ -2,7 +2,7 @@
 
 Setup and Data, Processes, Log, Daemon, Editor (a tab per script's file),
 Console (a tab per Python console) and Assistant (the chat with a model that
-uses the bench's tools) are docks pinned to the side bars (base); every instrument and configured
+uses the bench's tools, or with Codex) are docks pinned to the side bars (base); every instrument and configured
 device has a dock, and every graph, placed where the user wants.
 Measurements are chosen, set and run from the bar on top: the drop-down under
 its settings button shows the form of the chosen one. The window builds
@@ -79,9 +79,11 @@ from thzdaq_gui.run_graphs import RunGraphs
 from thzdaq_gui.models.approvals import ApprovalsModel
 from thzdaq_gui.models.assistant import (
     AssistantModel,
+    CodexSettingsModel,
     InstructionsModel,
     ProvidersModel,
     built_in_chat,
+    codex_chat,
 )
 from thzdaq_gui.models.hints import HintsModel
 from thzdaq_gui.models.daemon import LOST, DaemonModel
@@ -165,11 +167,16 @@ class MainWindow(QMainWindow):
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)
         self.approvalPrompts = ApprovalPrompts(self.approvals, self)
-        # The chat's modes: the built-in assistant
+        # The chat's modes: the built-in assistant, Codex
         instructions = InstructionsModel(self)
+        codex = CodexSettingsModel(self)
         self.assistant = AssistantModel(
-            session, self.providers, instructions,
-            [built_in_chat(session, self.providers, instructions)], self,
+            session, self.providers, instructions, codex,
+            [
+                built_in_chat(session, self.providers, instructions),
+                codex_chat(session, codex, instructions),
+            ],
+            self,
         )  # fmt: skip
         self.workspaceMenu = WorkspaceMenu(session, self.load_profile, self)
         self.build_menus()

@@ -19,6 +19,7 @@ from thzdaq_gui.assistant.provider import Provider
 from thzdaq_gui.models.assistant import (
     THINKING,
     AssistantModel,
+    CodexSettingsModel,
     InstructionsModel,
     Kind,
     ProvidersModel,
@@ -59,7 +60,9 @@ def assistant(session, providers, instructions):
 @pytest.fixture
 def fake(session, providers, instructions):
     chat = FakeChat()
-    assistant = AssistantModel(session, providers, instructions, [chat])
+    assistant = AssistantModel(
+        session, providers, instructions, CodexSettingsModel(), [chat]
+    )
     yield chat, assistant
     assistant.close()
 

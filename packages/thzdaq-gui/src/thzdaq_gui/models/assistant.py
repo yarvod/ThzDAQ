@@ -1,11 +1,11 @@
 """The assistant of the window: its model servers (ProvidersModel), the
-person's instructions to it (InstructionsModel) and its chat (AssistantModel),
-on QtCore.
+person's instructions to it (InstructionsModel), Codex's settings
+(CodexSettingsModel) and its chat (AssistantModel), on QtCore.
 
 The chat has modes, each a chat backend of its own (assistant/chat.py, Chat:
-the built-in assistant, built_in_chat()) with its own items, tokens and turn
-(Mode); the dock shows one of them. The model knows a backend only through
-that interface.
+the built-in assistant, built_in_chat(); Codex, codex_chat()) with its own
+items, tokens and turn (Mode); the dock shows one of them. The model knows a
+backend only through that interface.
 
 A turn runs in a thread of its own (it waits for the model, for the bench,
 for the person's consent); what it tells waits in one queue that the GUI
@@ -16,7 +16,10 @@ never piles work up for it. Stop ends the turn at once: what is still on its
 way from the stopped turn is dropped.
 
 What the person sends while a turn runs waits and joins at the turn's next
-step (queued, then sent). The model tells what the turn does now (phase:
+step (queued, then sent; Codex takes it as its next turn). An agent that
+acts on its own asks the person first (Codex runs a command, writes a file):
+a card with its options, answered by the person, or cancelled once the turn
+ends. The model tells what the turn does now (phase:
 thinking, writing, running a tool), how long it runs, what the model thought
 (a card that folds), and the tokens: of each turn, of the chat, and how much
 of the model's context the conversation fills.
@@ -40,9 +43,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from PySide6.QtCore import QObject, Qt, Signal, SignalInstance
 
+from thzdaq_gui.assistant import codex
+from thzdaq_gui.assistant.acp import choice, setting
 from thzdaq_gui.assistant.attachments import Attachment
 from thzdaq_gui.assistant.builtin import BuiltInChat
 from thzdaq_gui.assistant.chat import (
+    Asked,
     Call,
     Chat,
     Choice,
@@ -52,6 +58,7 @@ from thzdaq_gui.assistant.chat import (
     Unready,
     Used,
 )
+from thzdaq_gui.assistant.codex import CodexChat
 from thzdaq_gui.assistant.history import Shelf
 from thzdaq_gui.assistant.keys import Keys
 from thzdaq_gui.assistant.provider import Client, Provider, ProviderError
@@ -59,6 +66,10 @@ from thzdaq_gui.settings import (
     ASSISTANT_INSTRUCTIONS,
     ASSISTANT_PROVIDER,
     ASSISTANT_PROVIDERS,
+    CODEX_COMMAND,
+    CODEX_EXECUTABLE,
+    CODEX_MODE,
+    CODEX_OPTIONS,
     chats_dir,
     settings,
 )
@@ -66,6 +77,7 @@ from thzdaq_gui.settings import (
 SHOWN = 40  # letters of an argument a card's line shows
 # What a turn does now
 THINKING, WRITING, RUNNING = "Thinking", "Writing", "Running"
+ASKING = "Waiting for your answer"
 THOUGHT = "Thought"  # a thought over, how long not known
 
 
@@ -174,6 +186,63 @@ class InstructionsModel(QObject):
         self.changed.emit()
 
 
+class CodexSettingsModel(QObject):
+    """Codex's settings, in the program's settings: the adapter's command
+    line, the codex it runs (empty: its own), the mode a new chat starts in,
+    and what the person chose of a session's options last (codex.Settings).
+    Test starts the adapter and initializes it only."""
+
+    tested = Signal(bool, str)  # it works, what was found or what is wrong
+
+    def command(self) -> str:
+        return settings().value(CODEX_COMMAND) or codex.COMMAND
+
+    def executable(self) -> str:
+        return settings().value(CODEX_EXECUTABLE) or ""
+
+    def mode(self) -> str:
+        return settings().value(CODEX_MODE) or codex.WORKSPACE_WRITE
+
+    def chosen(self) -> Tuple[str, ...]:
+        kept = settings().value(CODEX_OPTIONS)
+        return tuple(choice(*pair) for pair in json.loads(kept).items()) if kept else ()
+
+    def choose(self, made: str) -> None:
+        kept = settings().value(CODEX_OPTIONS)
+        chosen = json.loads(kept) if kept else {}
+        option, value = setting(made)
+        chosen.pop(option, None)  # in the order chosen: a model before its effort
+        chosen[option] = value
+        settings().setValue(CODEX_OPTIONS, json.dumps(chosen))
+
+    def save(self, command: str, executable: str, mode: str) -> None:
+        """What the page holds; a new chat starts with it."""
+        kept = settings()
+        kept.setValue(CODEX_COMMAND, command.strip() or codex.COMMAND)
+        kept.setValue(CODEX_EXECUTABLE, executable.strip())
+        kept.setValue(CODEX_MODE, mode)
+
+    def test(self, command: str, executable: str) -> None:
+        """Whether the adapter of this command starts and is one that works:
+        told by tested, from a thread of its own."""
+        given = _Given(command.strip() or codex.COMMAND, executable.strip())
+        codex.test(given, self.tested.emit)
+
+
+@dataclass(frozen=True)
+class _Given:
+    """The adapter as the settings page holds it, before it is saved."""
+
+    line: str
+    path: str
+
+    def command(self) -> str:
+        return self.line
+
+    def executable(self) -> str:
+        return self.path
+
+
 class Kind(str, Enum):
     PERSON = "person"  # what the person wrote
     ANSWER = "answer"  # what the model answered
@@ -181,15 +250,16 @@ class Kind(str, Enum):
     CALL = "call"  # a tool call: a card
     NOTE = "note"  # how a turn ended when it did not answer
     STATS = "stats"  # how long a turn took and its tokens
+    PERMISSION = "permission"  # what an agent asks before it acts: a card
 
 
 class State(str, Enum):
-    """Of a tool call, or of a thought."""
+    """Of a tool call, of a thought, or of what an agent asks."""
 
-    RUNNING = "running"
-    DONE = "done"
+    RUNNING = "running"  # a question: waits for the person
+    DONE = "done"  # a question: answered
     REFUSED = "refused"  # refused or wrong: the model reads why
-    STOPPED = "stopped"
+    STOPPED = "stopped"  # a question: its turn ended first
 
 
 @dataclass
@@ -209,6 +279,9 @@ class Item:
     # (time.monotonic); how long it took, once over, when known
     started: Optional[float] = None
     seconds: Optional[float] = None
+    # Of what an agent asks: the question, the id of the option chosen
+    asked: Optional[Asked] = None
+    chosen: Optional[str] = None
 
     def summary(self) -> str:
         """A call in a line: the tool, its arguments' values and how it went
@@ -302,6 +375,14 @@ class Tokens:
         return f"{tokens(self.read)} in · {tokens(self.written)} out{thinking}"
 
 
+def codex_chat(
+    session, codex_settings: CodexSettingsModel, instructions: InstructionsModel
+) -> CodexChat:
+    """Codex, a mode of the chat, over ACP: with the person's instructions as
+    its system prompt, in the settings' mode."""
+    return CodexChat(session, codex_settings, instructions)
+
+
 def built_in_chat(
     session, providers: ProvidersModel, instructions: InstructionsModel
 ) -> BuiltInChat:
@@ -350,6 +431,9 @@ class _Turn:
 
     def ended(self, outcome: Outcome, why: str) -> None:
         self.model._tell(self, self.mode._end, outcome, why)
+
+    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
+        self.model._tell(self, self.mode._heard_permission, asked, answer)
 
 
 class _Watch:
@@ -418,6 +502,10 @@ class _Opening:
     def opened(self, why: str = "") -> None:
         self.model._tell(self, self.mode._opened, self, why)
 
+    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
+        """Nothing is asked of a conversation told again."""
+        answer(None)
+
 
 class _Listing:
     """The kept conversations a mode's chat found, from its thread: heard
@@ -453,6 +541,7 @@ class Mode:
         self._answer: Optional[int] = None  # the item the model's words go to
         self._thinking: Optional[int] = None  # the thought the model thinks now
         self._calls: Dict[str, int] = {}  # call id -> its item
+        self._asked: Dict[int, Callable[[Optional[str]], None]] = {}  # item -> answer
         self._queued: List[int] = []  # the person's items that wait, in order
         self.history: Tuple[Kept, ...] = ()  # of the workspace, as listed last
         self.listing: Optional[_Listing] = None  # asked last
@@ -623,6 +712,28 @@ class Mode:
             self.items[self._calls[call]].progress = progress
             self._change(self._calls[call])
 
+    def _heard_permission(
+        self, asked: Asked, answer: Callable[[Optional[str]], None]
+    ) -> None:
+        self._thought_over(State.DONE)
+        self._answer = None  # words after it go below it
+        index = self._add(
+            Item(Kind.PERMISSION, asked.title, state=State.RUNNING, asked=asked)
+        )
+        self._asked[index] = answer
+        self._doing(ASKING)
+
+    def answer(self, index: int, option: str) -> None:
+        """The person's answer to what the agent asks (an option's id); once."""
+        answer = self._asked.pop(index, None)
+        if answer is None:
+            return
+        item = self.items[index]
+        item.state, item.chosen = State.DONE, option
+        self._change(index)
+        answer(option)
+        self._doing(RUNNING)
+
     def _heard_answer(self, call: str, text: str, failed: bool) -> None:
         if call not in self._calls:
             return
@@ -664,6 +775,11 @@ class Mode:
             self.items[index].state = State.STOPPED
             self._change(index)
         self._calls.clear()
+        for index, answer in self._asked.items():  # not answered: cancelled
+            self.items[index].state = State.STOPPED
+            self._change(index)
+            answer(None)
+        self._asked.clear()
         self._answer = None
         steps = self.last.steps
         note = {
@@ -760,14 +876,17 @@ class AssistantModel(QObject):
         session,
         providers: ProvidersModel,
         instructions: InstructionsModel,
+        codex_settings: CodexSettingsModel,
         chats: Sequence[Chat],
         parent=None,
     ):
         super().__init__(parent)
         self.session = session
-        # The settings: the built-in chat's servers, the person's instructions
+        # The settings: the built-in chat's servers, the person's
+        # instructions, Codex's
         self.providers = providers
         self.instructions = instructions
+        self.codex = codex_settings
         # What turns told, waiting for the GUI thread: (whose, handler, args)
         self._told: List[Tuple[Any, Callable[..., None], tuple]] = []
         self._told_lock = threading.Lock()
@@ -859,6 +978,16 @@ class AssistantModel(QObject):
     def rename_chat(self, id: str, title: str) -> None:
         chat = next(chat for chat in self.mode.history if chat.id == id)
         self.mode.rename(chat, title)
+
+    def renames(self) -> bool:
+        """Whether the mode shown gives its chats other titles."""
+        return self.mode.chat.renames()
+
+    def answer(self, index: int, option: str) -> None:
+        """The person's answer to what the agent of the mode shown asks (the
+        item at index), an option's id."""
+        self.mode.answer(index, option)
+        self._show_changes()
 
     def show_mode(self, index: int) -> None:
         """Show another mode; a turn it or the one shown before runs goes on."""
