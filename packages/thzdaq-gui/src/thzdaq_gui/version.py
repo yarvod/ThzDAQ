@@ -1,4 +1,4 @@
 """Application version; release.py rewrites it and CI checks it against the tag."""
 
-__version__ = "0.0.6-beta.4"
+__version__ = "0.0.6-beta.5"
 REPO_SLUG = "yarvod/ThzDAQ"
