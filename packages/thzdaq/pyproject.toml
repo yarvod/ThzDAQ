@@ -21,6 +21,11 @@ dependencies = [
     "thzdaq-cli==0.0.6b5",
 ]
 
+# The command of thzdaq-cli, declared here too: uv tool install links only the
+# commands of the package it is given (thzdaq, thzdaq[mcp], thzdaq[all])
+[project.scripts]
+thzdaq = "thzdaq_cli.app:main"
+
 [project.urls]
 Homepage = "https://github.com/yarvod/ThzDAQ"
 Documentation = "https://github.com/yarvod/ThzDAQ/blob/master/docs/daemon.md"

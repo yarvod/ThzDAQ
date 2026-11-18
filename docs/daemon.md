@@ -1963,6 +1963,9 @@ with lab.measurement("pv_hot_cold", devices=[bias, detector, load], exclusive=[b
 ## Пакеты на PyPI
 - Внутри — отдельные пакеты («Пакеты, слои и границы»), а человек ставит одно имя `thzdaq`:
   - `uv tool install thzdaq` — команда `thzdaq` глобально; клиент без драйверов и numpy;
+    с extras так же (`uv tool install 'thzdaq[mcp]'`, `uv tool install --python 3.11
+    'thzdaq[all]'`: окно только на 3.11). Команду `thzdaq` объявляет и мета-пакет: uv
+    ставит команды только того пакета, который ему назвали, а не его зависимостей;
   - `uv add thzdaq` / `pip install thzdaq==<версия exe>` — в свой проект, Jupyter или conda:
     `from thzdaq import connect`;
   - `thzdaq[analysis]` — функции анализа для своих расчётов в скрипте (thzdaq-analysis,

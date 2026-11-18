@@ -12,6 +12,13 @@ uv tool install thzdaq          # the thzdaq command
 uv add thzdaq                   # or pip install thzdaq: in your project or notebook
 ```
 
+Everything as one tool, the window included (it needs Python 3.11); `thzdaq gui`,
+`thzdaq daemon start` and `thzdaq mcp` are then at hand:
+
+```bash
+uv tool install --python 3.11 'thzdaq[all]'
+```
+
 | Extra | What it adds |
 |---|---|
 | `thzdaq[analysis]` | analysis functions for your own calculations (numpy only) |

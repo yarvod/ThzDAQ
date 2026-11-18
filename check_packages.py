@@ -9,7 +9,9 @@
   msgspec (no numpy, no drivers), on the oldest and the newest Python; the
   thzdaq command answers and `from thzdaq import connect` imports;
 - thzdaq[all] brings every package at that version; their commands answer, and
-  the daemon it brings starts on simulators, answers and stops.
+  the daemon it brings starts on simulators, answers and stops;
+- uv tool install thzdaq, and thzdaq[all], give the thzdaq command (uv links
+  only the commands of the package it installs).
 
 The packages of ThzDAQ come only from the folder, given as files: PyPI may
 already have that version (a release built again with release.py --again).
@@ -181,6 +183,32 @@ def check_all(built: Built, folder: Path, version: str) -> None:
         env.command("thzdaq", "--simulate", "daemon", action)
 
 
+def check_tool(built: Built, folder: Path, python: str, extras: str = "") -> None:
+    """thzdaq installed as uv installs a tool: its command in uv's bin folder."""
+    env = Environment(folder, python)
+    tools, bin = folder / "tools", folder / "bin"
+    env.env.update(UV_TOOL_DIR=str(tools), UV_TOOL_BIN_DIR=str(bin))
+    brought = closure_of(built, extras)
+    env.uv(
+        "tool", "install", "--quiet", "--python", python,
+        built.requirement("thzdaq", extras),
+        *(f"--with={built.requirement(name)}" for name in sorted(brought)),
+    )  # fmt: skip
+    command = bin / ("thzdaq.exe" if os.name == "nt" else "thzdaq")
+    if not command.is_file():
+        raise Failed(f"uv tool install thzdaq{extras} gave no thzdaq command")
+    run(str(command), "--help", cwd=env.home, env=env.env)
+    if extras:
+        run(str(command), "mcp", "--help", cwd=env.home, env=env.env)
+
+
+def closure_of(built: Built, extras: str) -> Set[str]:
+    """The packages of ThzDAQ that thzdaq with extras brings, but itself: given
+    as the files built, never taken from PyPI."""
+    light = {"thzdaq-api", "thzdaq-cli"}
+    return set(built.wheels) - {"thzdaq"} if extras else light
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("folder", type=Path, help="where uv build put the packages")
@@ -201,6 +229,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"thzdaq on Python {python}: {', '.join(sorted(LIGHT))}; it runs")
             check_all(built, Path(temporary) / "all", version)
             print(f"thzdaq[all] on Python {ALL_PYTHON}: every package; the daemon runs")
+            newest = LIGHT_PYTHONS[-1]
+            check_tool(built, Path(temporary) / "tool", newest)
+            print(f"uv tool install thzdaq on Python {newest}: the thzdaq command")
+            check_tool(built, Path(temporary) / "tool-all", ALL_PYTHON, "[all]")
+            print(f"uv tool install thzdaq[all] on Python {ALL_PYTHON}: the command")
     except (Failed, ValueError) as failure:  # ValueError: a tag that is no version
         print(f"check_packages: {failure}", file=sys.stderr)
         return 1

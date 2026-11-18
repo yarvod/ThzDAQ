@@ -119,6 +119,12 @@ def test_the_client_alone_brings_no_numpy_and_no_drivers():
     assert closure("thzdaq") == {"thzdaq", "thzdaq-api", "thzdaq-cli", "msgspec"}
 
 
+def test_installing_thzdaq_as_a_tool_gives_the_command():
+    # uv tool install thzdaq links only the commands of thzdaq itself
+    command = BY_NAME["thzdaq-cli"]["scripts"]["thzdaq"]
+    assert BY_NAME["thzdaq"]["scripts"] == {"thzdaq": command}
+
+
 def test_analysis_takes_the_numpy_of_a_notebook():
     # numpy<2 stays with thzdaq-core: the daemon is tested with numpy 1.x
     numpy = {r.name: r for r in requirements(BY_NAME["thzdaq-analysis"])}["numpy"]
