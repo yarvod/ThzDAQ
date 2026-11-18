@@ -13,9 +13,13 @@ person says while a turn runs is queued: it joins at the turn's next step, or
 thread still tells after that is the owner's to drop (the view model hears
 only the turn it began last).
 
-A chat also offers its models (Choice), the one chosen, and how many tokens
-of context the chosen one takes when that is known; watch() hears when
-these change.
+A chat also offers its models (Choice), the one chosen, the reasoning
+efforts of that one (when it has some), what the agent may do without asking
+(its policies: Codex's modes; none for the built-in assistant), and how many
+tokens of context the chosen model takes when that is known; watch() hears
+when these change. Shown for the first time, it may get ready in the
+background (warm: Codex starts its adapter and a session, so its models are
+known before the first message).
 
 A chat keeps its conversations, each under an id, in the workspace it began
 in (Kept): it lists them, opens one to go on with it, and renames one. An
@@ -26,11 +30,12 @@ files of the program (history.py); Codex keeps its own sessions and replays
 one as it loads.
 """
 
+import difflib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple, Union
 
 from thzdaq_gui.assistant.attachments import Attachment
 
@@ -62,24 +67,30 @@ class Call:
 
 @dataclass(frozen=True)
 class Used:
-    """Tokens of one step: what the model read, what it wrote and, of that,
-    what it thought; context: how much of the model's context the
-    conversation fills now (None: not told)."""
+    """Tokens of one step, or of an agent's turn summed over the requests it
+    made: read, all the input the model read (each request reads the whole
+    conversation again), of which cached came from the server's cache (None:
+    not told); written, all it wrote, of which reasoning it thought; context,
+    how much of the model's context the conversation fills now (None: not
+    told)."""
 
     read: int = 0
     written: int = 0
     reasoning: int = 0
     context: Optional[int] = None
+    cached: Optional[int] = None
 
 
 @dataclass(frozen=True)
 class Choice:
-    """A model the person may choose for a chat: its id, its name as shown,
-    and more about it (a tooltip)."""
+    """What the person may choose for a chat (a model, its effort, a policy):
+    its id, its name as shown, more about it in a line, and what to ask the
+    person before it is chosen (empty: nothing)."""
 
     id: str
     title: str
     tip: str = ""
+    confirm: str = ""
 
 
 @dataclass(frozen=True)
@@ -95,13 +106,79 @@ class Option:
 
 
 @dataclass(frozen=True)
+class Run:
+    """A command an agent would run, and the folder it runs in ("": not
+    told)."""
+
+    line: str
+    folder: str = ""
+
+
+HUNK = "@@"  # a hunk of a diff begins
+
+
+@dataclass(frozen=True)
+class Change:
+    """A file an agent would change: its path and its hunks, each the text
+    before (None: the file is new) and after; of an edit, the lines around
+    it only."""
+
+    path: str
+    hunks: Tuple[Tuple[Optional[str], str], ...]
+
+    def diff(self) -> List[str]:
+        """Its lines as a unified diff shows them ("+added", "-removed",
+        " kept"), hunks apart ("@@"; the lines of a hunk the agent sent count
+        from its own text, not the file's, so none are told)."""
+        found: List[str] = []
+        for old, new in self.hunks:
+            lines = difflib.unified_diff(
+                (old or "").splitlines(), new.splitlines(), lineterm="", n=3
+            )
+            found += [HUNK if line.startswith(HUNK) else line for line in lines][2:]
+        return found[1:]  # the first hunk's mark
+
+    def counted(self) -> Tuple[int, int]:
+        """The lines it adds and removes."""
+        lines = self.diff()
+        added = sum(1 for line in lines if line.startswith("+"))
+        return added, sum(1 for line in lines if line.startswith("-"))
+
+
+@dataclass(frozen=True)
+class Note:
+    """What the agent tells of it in words (a host it would reach, a
+    permission it wants)."""
+
+    text: str
+
+
+@dataclass(frozen=True)
+class Inputs:
+    """What else the agent would be given: names and values as text."""
+
+    values: Tuple[Tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class Files:
+    """The files it would touch."""
+
+    paths: Tuple[str, ...]
+
+
+Part = Union[Run, Change, Note, Inputs, Files]
+
+
+@dataclass(frozen=True)
 class Asked:
     """What an agent asks the person before it acts on its own (Codex runs a
-    command or writes a file): what it would do in a line, more of it (the
-    command, the file), and the answers it offers."""
+    command, writes a file, calls a tool): what it would do in a line, what it
+    would act on (the command and its folder, each file's changes, its
+    input), and the answers it offers."""
 
     title: str
-    detail: str
+    parts: Tuple[Part, ...]
     options: Tuple[Option, ...]
 
 
@@ -261,11 +338,45 @@ class Chat(ABC):
     def choose(self, model: str) -> None:
         """Turns from now on go to this model."""
 
+    def efforts(self) -> Sequence[Choice]:
+        """How hard the chosen model may think (its reasoning efforts), in
+        order; none when it offers no choice."""
+        return ()
+
+    def effort(self) -> Optional[str]:
+        """The id of the effort chosen; None without one."""
+        return None
+
+    def choose_effort(self, effort: str) -> None:
+        """The chosen model thinks so hard from now on (one of efforts())."""
+
+    def policies(self) -> Sequence[Choice]:
+        """What the agent may do without asking the person first (Codex's
+        modes), in order; none when it never acts on its own."""
+        return ()
+
+    def policy(self) -> Optional[str]:
+        """The id of the policy in force; None without one."""
+        return None
+
+    def choose_policy(self, policy: str) -> None:
+        """The agent acts so from now on, a turn running too (one of
+        policies())."""
+
+    def warm(self) -> None:
+        """The chat is shown for the first time: what makes its models known
+        starts in the background. Never waits."""
+
+    def finding(self) -> bool:
+        """Whether its models are being found (warm) and not known yet."""
+        return False
+
     @abstractmethod
     def context_limit(self) -> Optional[int]:
         """The tokens the chosen model takes, when known."""
 
     @abstractmethod
     def watch(self, changed: Callable[[], None]) -> None:
-        """changed() is called, from any thread, once the models, the one
-        chosen or its context limit changed."""
+        """changed() is called, from any thread, once the models, efforts or
+        policies, the ones chosen, whether models are being found or the
+        context limit changed."""

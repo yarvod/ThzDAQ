@@ -2,7 +2,7 @@
 it is extended, never rendered anew, and ends as the whole text would show."""
 
 import pytest
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QIcon, QTextCursor
 
 SAMPLES = {
     "paragraphs": "One **bold** line.\n\nTwo `code` line.\n\nThree.",
@@ -80,25 +80,50 @@ def test_text_that_is_not_a_continuation_is_shown_anew(app):
     assert view.text() == "Another."
 
 
-def test_the_context_bar_tells_its_tokens_and_lights_up_on_hover_or_focus(app):
+def test_the_context_ring_fills_and_warms_as_the_context_fills(app):
     from PySide6.QtCore import QEvent, QPointF
-    from PySide6.QtGui import QEnterEvent, QFocusEvent
+    from PySide6.QtGui import QEnterEvent
     from PySide6.QtWidgets import QApplication
-    from thzdaq_gui.chat_widgets import ContextBar
+    from thzdaq_gui import theme
+    from thzdaq_gui.chat_widgets import ContextRing
 
-    bar = ContextBar()
-    bar.show_context(46200, 272000)
-    assert bar.toolTip() == "Context 46 200 / 272 000" and not bar.isTextVisible()
-    assert bar.value() == round(1000 * 46200 / 272000)
-    assert not bar.highlighted()
+    ring = ContextRing()
+    hovered = []
+    ring.hovered.connect(hovered.append)
+    assert ring.share() is None and ring.color() == theme.MUTED  # no limit known
+    ring.show_share(0.17)
+    assert ring.color() == theme.MUTED
+    ring.show_share(0.75)
+    assert ring.color() == theme.ACCENT
+    ring.show_share(0.95)
+    assert ring.color() == theme.BAD
     at = QPointF(1, 1)
-    QApplication.sendEvent(bar, QEnterEvent(at, at, at))
-    assert bar.highlighted()
-    QApplication.sendEvent(bar, QEvent(QEvent.Leave))
-    assert not bar.highlighted()
-    QApplication.sendEvent(bar, QFocusEvent(QEvent.FocusIn))
-    assert bar.highlighted()
-    QApplication.sendEvent(bar, QFocusEvent(QEvent.FocusOut))
-    assert not bar.highlighted()
-    bar.show_context(1230, None)  # the model's limit not known
-    assert bar.toolTip() == "Context 1 230" and bar.value() == 0
+    QApplication.sendEvent(ring, QEnterEvent(at, at, at))
+    QApplication.sendEvent(ring, QEvent(QEvent.Leave))
+    assert hovered == [True, False]
+    assert ring.grab().width() == ring.SIDE  # it paints
+
+
+def test_buttons_flow_into_rows_and_wrap_their_words_within_the_width(app):
+    from PySide6.QtWidgets import QWidget
+    from thzdaq_gui.chat_widgets import Flow, WrapButton
+
+    holder = QWidget()
+    flow = Flow(holder)
+    short = [WrapButton(QIcon(), name) for name in ("Yes", "No")]
+    long = WrapButton(
+        QIcon(),
+        "Yes, and don't ask again for commands that start with "
+        "`python -m thzdaq_api.kernel --connection-file /a/very/long/path`",
+    )
+    for button in short + [long]:
+        flow.addWidget(button)
+    assert flow.minimumSize().width() < 120  # the long one asks no more than a word
+    holder.resize(300, flow.heightForWidth(300))
+    holder.show()
+    app.processEvents()
+    yes, no = short
+    assert yes.y() == no.y() and no.x() > yes.x()  # short ones share a row
+    assert long.y() > yes.y() and long.width() == 300  # a row of its own, wrapped
+    assert long.height() > 2 * long.fontMetrics().lineSpacing()
+    assert all(b.geometry().right() < 300 for b in short + [long])

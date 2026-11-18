@@ -21,8 +21,17 @@ acts on its own asks the person first (Codex runs a command, writes a file):
 a card with its options, answered by the person, or cancelled once the turn
 ends. The model tells what the turn does now (phase:
 thinking, writing, running a tool), how long it runs, what the model thought
-(a card that folds), and the tokens: of each turn, of the chat, and how much
-of the model's context the conversation fills.
+(a card that folds), and the tokens (Tokens): of each turn and of the chat,
+what the model read (summed over its steps, each of which reads the whole
+conversation again: what the server bills, not the context) and of it what
+was cached, what it wrote and of it what it thought; and, apart, how much of
+the model's context the conversation fills (the last step's).
+
+The mode shown offers its chat's models, the chosen model's reasoning
+efforts, and what its agent may do without asking (policies: Codex's modes),
+each chosen through the chat; shown in the dock it gets ready (prepare: Codex
+starts its adapter and a session in the background, so its models are known
+before the first message).
 
 A mode's chat keeps its conversations (Chat.chats, open, rename): the
 model lists those of the window's workspace for the mode shown (history,
@@ -44,7 +53,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 from PySide6.QtCore import QObject, Qt, Signal, SignalInstance
 
 from thzdaq_gui.assistant import codex
-from thzdaq_gui.assistant.acp import choice, setting
+from thzdaq_gui.assistant.acp import Options, choice, setting
 from thzdaq_gui.assistant.attachments import Attachment
 from thzdaq_gui.assistant.builtin import BuiltInChat
 from thzdaq_gui.assistant.chat import (
@@ -68,6 +77,7 @@ from thzdaq_gui.settings import (
     ASSISTANT_PROVIDERS,
     CODEX_COMMAND,
     CODEX_EXECUTABLE,
+    CODEX_KNOWN,
     CODEX_MODE,
     CODEX_OPTIONS,
     chats_dir,
@@ -79,6 +89,7 @@ SHOWN = 40  # letters of an argument a card's line shows
 THINKING, WRITING, RUNNING = "Thinking", "Writing", "Running"
 ASKING = "Waiting for your answer"
 THOUGHT = "Thought"  # a thought over, how long not known
+CACHED, REASONING = "cached", "reasoning"  # of the tokens read, of those written
 
 
 class ProvidersModel(QObject):
@@ -215,6 +226,17 @@ class CodexSettingsModel(QObject):
         chosen[option] = value
         settings().setValue(CODEX_OPTIONS, json.dumps(chosen))
 
+    def known(self) -> Optional[Options]:
+        """Options kept by a version that kept them otherwise are none."""
+        kept = settings().value(CODEX_KNOWN)
+        try:
+            return Options.restored(json.loads(kept)) if kept else None
+        except (ValueError, TypeError, AttributeError):  # not of the shape saved
+            return None
+
+    def keep(self, options: Options) -> None:
+        settings().setValue(CODEX_KNOWN, json.dumps(options.saved()))
+
     def save(self, command: str, executable: str, mode: str) -> None:
         """What the page holds; a new chat starts with it."""
         kept = settings()
@@ -347,19 +369,26 @@ def tokens(count: int) -> str:
 
 @dataclass
 class Tokens:
-    """Tokens summed over steps; context: how much of the model's context the
-    conversation fills, as last told."""
+    """Tokens of a turn or of a chat, summed over the model's steps (an
+    agent's requests): read, all the input it read, each step the whole
+    conversation again, so what the server bills and more than the context;
+    of it cached, what came from the server's cache (None: never told);
+    written, all it wrote, of it reasoning, what it thought. Context: how much
+    of the model's context the conversation fills, as last told."""
 
     read: int = 0
     written: int = 0
     reasoning: int = 0
     steps: int = 0
     context: int = 0
+    cached: Optional[int] = None
 
     def add(self, used: Used) -> None:
         self.read += used.read
         self.written += used.written
         self.reasoning += used.reasoning
+        if used.cached is not None:
+            self.cached = (self.cached or 0) + used.cached
         if used.context is not None:
             self.context = used.context
 
@@ -368,11 +397,19 @@ class Tokens:
         return bool(self.read or self.written)
 
     def told(self) -> str:
-        """In a line: "4.2k in · 310 out (120 thinking)"."""
+        """In a line, as the turn's stats and the popup's "In" and "Out" say
+        them: "4.2k in (3.9k cached) · 310 out (120 reasoning)"."""
         if not self.known():
             return ""
-        thinking = f" ({tokens(self.reasoning)} thinking)" if self.reasoning else ""
-        return f"{tokens(self.read)} in · {tokens(self.written)} out{thinking}"
+        cached = f" ({tokens(self.cached)} {CACHED})" if self.cached else ""
+        thought = f" ({tokens(self.reasoning)} {REASONING})" if self.reasoning else ""
+        return f"{tokens(self.read)} in{cached} · {tokens(self.written)} out{thought}"
+
+
+def share(used: int, limit: Optional[int]) -> Optional[float]:
+    """How much of the context is filled (0…1); None while the limit is not
+    known."""
+    return min(used / limit, 1.0) if limit else None
 
 
 def codex_chat(
@@ -546,7 +583,14 @@ class Mode:
         self.history: Tuple[Kept, ...] = ()  # of the workspace, as listed last
         self.listing: Optional[_Listing] = None  # asked last
         self.opening: Optional[_Opening] = None  # a kept one being told again
+        self._warmed = False
         chat.watch(_Watch(model, self))
+
+    def prepare(self) -> None:
+        """Shown: its chat gets ready in the background, the first time."""
+        if not self._warmed:
+            self._warmed = True
+            self.chat.warm()
 
     def busy(self) -> bool:
         return self.turn is not None
@@ -790,7 +834,8 @@ class Mode:
         if note:
             self._add(Item(Kind.NOTE, note))
         told = [f"{seconds:.1f} s"] if seconds is not None else []
-        told.append(f"{steps} step{'s' if steps != 1 else ''}")
+        if steps > 1:  # one step says nothing: an agent's turn is one too
+            told.append(f"{steps} steps")
         used = self.last.told()
         self._add(Item(Kind.STATS, " · ".join(told + ([used] if used else []))))
 
@@ -864,7 +909,8 @@ class AssistantModel(QObject):
     busy_changed = Signal(bool)
     phase_changed = Signal(str)  # what the turn does now; "" once it ended
     usage_changed = Signal()  # the tokens (usage, last_usage, context_limit)
-    models_changed = Signal()  # the models offered, the one chosen
+    # The models, efforts and policies offered, the ones chosen, the finding
+    models_changed = Signal()
     mode_changed = Signal()  # another mode shown: all of it anew
     history_changed = Signal()  # the kept conversations listed, or one renamed
 
@@ -933,6 +979,11 @@ class AssistantModel(QObject):
         """The tokens the chosen model takes, when known."""
         return self.mode.chat.context_limit()
 
+    def context_share(self) -> Optional[float]:
+        """How much of the context the chat fills (0…1), when its limit is
+        known."""
+        return share(self.usage.context, self.context_limit())
+
     def models(self) -> Sequence[Choice]:
         return self.mode.chat.models()
 
@@ -941,6 +992,37 @@ class AssistantModel(QObject):
 
     def choose_model(self, model: str) -> None:
         self.mode.chat.choose(model)
+
+    def finding_models(self) -> bool:
+        """Whether the mode's models are being found and not known yet."""
+        return self.mode.chat.finding()
+
+    def efforts(self) -> Sequence[Choice]:
+        """The reasoning efforts of the chosen model; none without a choice."""
+        return self.mode.chat.efforts()
+
+    def chosen_effort(self) -> Optional[str]:
+        return self.mode.chat.effort()
+
+    def choose_effort(self, effort: str) -> None:
+        self.mode.chat.choose_effort(effort)
+
+    def policies(self) -> Sequence[Choice]:
+        """What the mode's agent may do without asking (its modes); none for
+        a chat that never acts on its own."""
+        return self.mode.chat.policies()
+
+    def chosen_policy(self) -> Optional[str]:
+        return self.mode.chat.policy()
+
+    def choose_policy(self, policy: str) -> None:
+        """At once, a turn running too (what asks first is the dock's)."""
+        self.mode.chat.choose_policy(policy)
+
+    def prepare(self) -> None:
+        """The dock shows the mode: its chat gets ready in the background
+        (Codex starts and makes a session, so its models are known); once."""
+        self.mode.prepare()
 
     def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
         """The person's message: the model answers it. While a turn runs it

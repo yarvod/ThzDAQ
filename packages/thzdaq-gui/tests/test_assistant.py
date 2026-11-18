@@ -23,7 +23,7 @@ from thzdaq_gui.assistant.prompt import (
     built_in,
     system_prompt,
 )
-from thzdaq_gui.assistant.provider import Client, Provider, ProviderError
+from thzdaq_gui.assistant.provider import Client, Provider, ProviderError, Usage
 
 BIAS = {"ref": "sis_bias_1", "key": "voltage_set", "value": "1 mV"}
 
@@ -427,3 +427,50 @@ def test_a_server_elsewhere_is_asked_through_the_persons_proxy(system_proxy):
     with pytest.raises(ProviderError, match=r"refused \(503\)"):
         cloud.test()
     assert len(system_proxy.asked) == 1
+
+
+@pytest.mark.parametrize(
+    "told, usage",
+    [
+        (  # OpenAI, vLLM: cached input among the prompt's details
+            {
+                "prompt_tokens": 1200, "completion_tokens": 30,
+                "prompt_tokens_details": {"cached_tokens": 1000},
+                "completion_tokens_details": {"reasoning_tokens": 10},
+            },
+            Usage(1200, 30, 10, 1000),
+        ),
+        (  # DeepSeek: apart
+            {"prompt_tokens": 1200, "completion_tokens": 30, "prompt_cache_hit_tokens": 800},
+            Usage(1200, 30, 0, 800),
+        ),
+        ({"prompt_tokens": 1200, "completion_tokens": 30}, Usage(1200, 30)),  # none told
+    ],
+)  # fmt: skip
+def test_a_steps_tokens_are_read_with_the_cached_ones(told, usage):
+    assert Usage.of(told) == usage
+
+
+def test_the_context_is_the_last_steps_and_what_was_read_is_summed():
+    """Each step reads the whole conversation again: summed over steps, what
+    was read is what the server billed; the context is the last step's
+    prompt and answer."""
+    from thzdaq_gui.assistant.chat import Used
+    from thzdaq_gui.assistant.conversation import used
+    from thzdaq_gui.models.assistant import Tokens, share
+
+    first, second = used(Usage(1200, 30, 0)), used(Usage(1300, 40, 10, 1100))
+    assert first == Used(1200, 30, 0, 1230) and second == Used(1300, 40, 10, 1340, 1100)
+    turn = Tokens()
+    turn.add(first)
+    assert turn.cached is None  # not told yet: not 0
+    turn.add(second)
+    assert (turn.read, turn.cached, turn.written, turn.reasoning) == (
+        2500,
+        1100,
+        70,
+        10,
+    )
+    assert turn.context == 1340
+    assert turn.told() == "2.5k in (1.1k cached) · 70 out (10 reasoning)"
+    assert share(1340, None) is None and share(136000, 272000) == 0.5

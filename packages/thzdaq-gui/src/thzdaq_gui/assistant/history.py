@@ -189,7 +189,9 @@ class Recorder:
         self.listener.answered(call, text, failed)
 
     def usage(self, used: Used) -> None:
-        self._keep(["usage", used.read, used.written, used.reasoning, used.context])
+        # cached last: a line kept before it was told reads without it
+        told = [used.read, used.written, used.reasoning, used.context, used.cached]
+        self._keep(["usage", *told])
         self.listener.usage(used)
 
     def ended(self, outcome: Outcome, why: str) -> None:

@@ -13,6 +13,13 @@ that server, as the agent mcp:<its name>: what it changes waits for the
 person in the window, as any agent's; what it runs or writes on its own it
 asks first (session/request_permission, a card in the chat).
 
+The session is made as the chat is first shown (warm), so Codex's models,
+their efforts and its modes are known before the first message; those last
+known are kept in the settings and shown at once on the next start, until
+the session tells its own. The person chooses a model, its effort and the
+mode at any time: the mode goes at once, a turn running too (Codex then asks
+for less, or more); full access is confirmed first.
+
 A turn is one session/prompt. What the person sends while it runs waits and
 goes as the next turn once it ended (taken then). Stop is session/cancel:
 what Codex asked and nobody answered is answered cancelled. A session made in
@@ -32,7 +39,7 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Protocol, Sequence, Tuple
 
@@ -42,6 +49,7 @@ from thzdaq_api.errors import LabError
 from thzdaq_gui.assistant.acp import (
     Agent,
     Command,
+    Offer,
     Options,
     Problem,
     Ready,
@@ -82,6 +90,7 @@ WANTED = Wanted(
 )  # fmt: skip
 MODE = "mode"  # the session's option of Codex's approvals and sandbox
 WORKSPACE_WRITE = "workspace-write"
+FULL_ACCESS = "agent-full-access"
 # Codex's modes (codex-acp's AgentMode), for the settings before any session
 MODES = (
     Choice("read-only", "Read-only", "Asks before it edits a file or uses the network"),
@@ -90,11 +99,12 @@ MODES = (
         "Edits the workspace; asks before it writes outside it or uses the network",
     ),
     Choice("agent", "Auto review", "Asks only for what looks unsafe"),
-    Choice(
-        "agent-full-access", "Full access",
-        "Any file, the network: asks nothing",
-    ),
+    Choice(FULL_ACCESS, "Full access", "Any file, the network: asks nothing"),
 )  # fmt: skip
+CONFIRM_FULL_ACCESS = (
+    "In full access Codex runs any command, changes any file on this computer"
+    " and uses the network without asking you first. Give it full access?"
+)
 # How a turn ended, by the stop reason of ACP
 ENDINGS = {
     "end_turn": (Outcome.ANSWERED, ""),
@@ -140,6 +150,12 @@ class Settings(Protocol):
 
     def choose(self, made: str) -> None:
         """Remember a choice (in place of the one of the same option)."""
+
+    def known(self) -> Optional[Options]:
+        """The options a session told last; None before any."""
+
+    def keep(self, options: Options) -> None:
+        """Remember the options a session told, from any thread."""
 
 
 def command(settings: Settings) -> Command:
@@ -193,9 +209,11 @@ class CodexChat(Chat):
         # Told by the loop, read by the GUI thread: the lock only guards these
         self._lock = threading.Lock()
         self._kept: Optional[Kept] = None
-        self._options = Options()
+        self._policy: Optional[str] = None  # chosen for the next new session
+        self._options = self._unmade()  # as shown: the session's once it told them
         self._limit: Optional[int] = None
         self._titles = False
+        self._finding = False  # warm() makes a session that tells its options
         # In the loop
         self._id: Optional[str] = None  # the session going on
         self._made: Optional[Tuple[int, Setup]] = None  # its process, its setup
@@ -215,14 +233,38 @@ class CodexChat(Chat):
             self.instructions.instructions(),
         )
 
+    def _unmade(self) -> Options:
+        """The options shown before a session tells its own: those a session
+        told last (Codex's modes, when it told none), in the mode a new chat
+        takes."""
+        known = self.settings.known() or Options()
+        if not known.policies.choices:
+            modes = tuple(replace(mode, id=choice(MODE, mode.id)) for mode in MODES)
+            known = replace(known, policies=Offer(MODE, modes))
+        return known.chose(self._policy or choice(MODE, self.settings.mode()))
+
     def start(self, said: Optional[Said], listener: Listener) -> None:
         setup = self._setup()
         given = [said] if said is not None else self._waiting
         taken = 0 if said is not None else len(self._waiting)
         self._waiting = []
-        defaults = (choice(MODE, self.settings.mode()), *self.settings.chosen())
         self._turn = turn = _Turn(listener)
-        self.agent.soon(self._run(turn, tuple(given), taken, setup, defaults))
+        self.agent.soon(self._run(turn, tuple(given), taken, setup))
+
+    def warm(self) -> None:
+        try:
+            setup = self._setup()
+        except Unready as e:  # the turn tells why
+            logger.warning("Codex was not started: %s", e)
+            return
+        with self._lock:
+            self._finding = True
+        self._changed()
+        self.agent.soon(self._warm(setup))
+
+    def finding(self) -> bool:
+        with self._lock:
+            return self._finding
 
     def queue(self, said: Said) -> None:
         self._waiting.append(said)
@@ -237,9 +279,12 @@ class CodexChat(Chat):
         self.agent.soon(self._stop(turn))
 
     def new_chat(self) -> None:
+        """The next session starts in the settings' mode."""
         self._waiting, self._turn = [], None
         with self._lock:
-            self._kept = None
+            self._kept, self._policy = None, None
+            self._options = self._options.chose(choice(MODE, self.settings.mode()))
+        self._changed()
         self.agent.soon(self._forget())
 
     def current(self) -> Optional[Kept]:
@@ -282,15 +327,54 @@ class CodexChat(Chat):
 
     def models(self) -> Sequence[Choice]:
         with self._lock:
-            return self._options.choices
+            return self._options.models.choices
 
     def model(self) -> Optional[str]:
         with self._lock:
-            return self._options.chosen
+            return self._options.models.chosen
 
     def choose(self, model: str) -> None:
+        """Remembered: a new session takes it too."""
         self.settings.choose(model)
-        self.agent.soon(self._choose(model))
+        self._set(model)
+
+    def efforts(self) -> Sequence[Choice]:
+        with self._lock:
+            return self._options.efforts.choices
+
+    def effort(self) -> Optional[str]:
+        with self._lock:
+            return self._options.efforts.chosen
+
+    def choose_effort(self, effort: str) -> None:
+        self.choose(effort)
+
+    def policies(self) -> Sequence[Choice]:
+        """Codex's modes; full access asks first."""
+        with self._lock:
+            modes = self._options.policies.choices
+        full = choice(MODE, FULL_ACCESS)
+        return tuple(
+            replace(mode, confirm=CONFIRM_FULL_ACCESS) if mode.id == full else mode
+            for mode in modes
+        )
+
+    def policy(self) -> Optional[str]:
+        with self._lock:
+            return self._options.policies.chosen
+
+    def choose_policy(self, policy: str) -> None:
+        """Of this chat only: before its session, the one it is made with."""
+        with self._lock:
+            self._policy = policy
+        self._set(policy)
+
+    def _set(self, made: str) -> None:
+        """Shown chosen at once; the session's option set in the loop."""
+        with self._lock:
+            self._options = self._options.chose(made)
+        self._changed()
+        self.agent.soon(self._choose(made))
 
     def context_limit(self) -> Optional[int]:
         with self._lock:
@@ -307,8 +391,11 @@ class CodexChat(Chat):
             self._changed()
 
     def configured(self, options: Options) -> None:
+        """Kept for the next start too, when it offers models."""
         with self._lock:
-            self._options = options
+            self._options, self._finding = options, False
+        if options.models.choices:
+            self.settings.keep(options)
         self._changed()
 
     def titled(self, session: str, title: str) -> None:
@@ -317,24 +404,23 @@ class CodexChat(Chat):
 
     # In the loop
     async def _run(
-        self,
-        turn: _Turn,
-        said: Tuple[Said, ...],
-        taken: int,
-        setup: Setup,
-        defaults: Tuple[str, ...],
+        self, turn: _Turn, said: Tuple[Said, ...], taken: int, setup: Setup
     ) -> None:
         async with self._prompting:  # a turn stopped before ends first
             if turn.stopped:
                 return
             listener = turn.listener
             try:
-                session = await self._session(turn, setup, defaults, said)
+                session = await self._session(setup)
             except Problem as e:
                 listener.ended(Outcome.FAILED, str(e))
                 return
-            if turn.stopped:
-                return
+            with self._lock:
+                if turn.stopped:  # the window went on to another chat
+                    return
+                if self._kept is None or self._kept.id != session:  # it begins
+                    title = title_of(said[0])
+                    self._kept = Kept(session, title, time.time(), setup.folder)
             if taken:
                 listener.taken(taken)
             listener.asking()
@@ -353,13 +439,19 @@ class CodexChat(Chat):
                 listener.usage(used)
             listener.ended(*ENDINGS[answered.stop_reason])
 
-    async def _session(
-        self,
-        turn: _Turn,
-        setup: Setup,
-        defaults: Tuple[str, ...],
-        said: Tuple[Said, ...],
-    ) -> str:
+    async def _warm(self, setup: Setup) -> None:
+        """A session made before the first message, so its options are
+        known; what fails is told by the first turn."""
+        async with self._prompting:
+            try:
+                await self._session(setup)
+            except Problem as e:
+                logger.warning("Codex's session was not made: %s", e)
+            with self._lock:
+                self._finding = False
+            self._changed()
+
+    async def _session(self, setup: Setup) -> str:
         """The session going on, made with the window's setup: a new one (in
         the mode and with the options chosen), or the one going on, resumed
         when it was made otherwise."""
@@ -370,11 +462,7 @@ class CodexChat(Chat):
                 setup.folder, servers, setup.instructions
             )
             self._id, self._made = made.session_id, (ready.process, setup)
-            kept = Kept(made.session_id, title_of(said[0]), time.time(), setup.folder)
-            with self._lock:
-                if not turn.stopped:  # else the window went on to another chat
-                    self._kept = kept
-            await self._defaults(made.session_id, defaults, made.config_options)
+            await self._defaults(made.session_id, made.config_options)
         elif self._made != (ready.process, setup):
             options = await self.agent.resume_session(
                 self._id, setup.folder, servers, setup.instructions
@@ -383,13 +471,19 @@ class CodexChat(Chat):
             self.configured(options)
         return self._id
 
-    async def _defaults(
-        self, session: str, defaults: Tuple[str, ...], found: Optional[Sequence[Any]]
-    ) -> None:
-        """A new session in the mode of the settings, with the options the
-        person chose last that it offers (a model's efforts after it)."""
+    def _wanted(self) -> Tuple[str, ...]:
+        """What a new session is set to: the mode chosen for it (else the
+        settings'), then what the person chose of the options last. Read as
+        the session is made: a choice made while it was being made goes too."""
+        with self._lock:
+            policy = self._policy
+        return (policy or choice(MODE, self.settings.mode()), *self.settings.chosen())
+
+    async def _defaults(self, session: str, found: Optional[Sequence[Any]]) -> None:
+        """A new session in the mode wanted, with the options the person
+        chose last that it offers (a model's efforts after it)."""
         options = options_of(found)
-        for made in defaults:
+        for made in self._wanted():
             if not options.offers(made):
                 continue
             try:

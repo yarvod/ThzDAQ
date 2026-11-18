@@ -41,6 +41,7 @@ REASONING = ("reasoning_content", "reasoning")  # where servers put thoughts
 # How servers tell their model's context in GET /models: vLLM, OpenRouter and
 # others, LM Studio
 CONTEXT_KEYS = ("max_model_len", "context_length", "max_context_length")
+CACHE_HITS = "prompt_cache_hit_tokens"  # DeepSeek's cached input, apart from details
 
 Message = Dict[str, Any]  # a message of the chat as the server takes it
 
@@ -89,22 +90,28 @@ class ToolCall:
 @dataclass(frozen=True)
 class Usage:
     """Tokens of one step: what the model read (the whole conversation so
-    far) and what it wrote, its thoughts among them."""
+    far), of it what the server had cached (None: not told), and what it
+    wrote, its thoughts among them."""
 
     prompt: int = 0
     completion: int = 0
     reasoning: int = 0
+    cached: Optional[int] = None
 
     @staticmethod
     def of(found: Any) -> Optional["Usage"]:
-        """As a server tells it; None when it does not."""
+        """As a server tells it; None when it does not. Cached input is in
+        prompt_tokens_details (OpenAI, vLLM) or apart (DeepSeek)."""
         if not isinstance(found, Mapping):
             return None
-        details = found.get("completion_tokens_details") or {}
+        written = found.get("completion_tokens_details") or {}
+        read = found.get("prompt_tokens_details") or {}
+        cached = read.get("cached_tokens", found.get(CACHE_HITS))
         return Usage(
             int(found.get("prompt_tokens") or 0),
             int(found.get("completion_tokens") or 0),
-            int(details.get("reasoning_tokens") or 0),
+            int(written.get("reasoning_tokens") or 0),
+            None if cached is None else int(cached),
         )
 
 

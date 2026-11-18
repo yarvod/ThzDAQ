@@ -74,12 +74,14 @@ ASSISTANT_PROVIDER = "assistant/provider"
 # The person's instructions to the assistant, added to its built-in prompt
 ASSISTANT_INSTRUCTIONS = "assistant/instructions"
 # Codex in the assistant's dock: the ACP adapter's command line, the codex it
-# runs (CODEX_PATH; empty: its own), the mode a new chat starts in, and the
-# session's options the person chose last (JSON: option id -> value)
+# runs (CODEX_PATH; empty: its own), the mode a new chat starts in, the
+# session's options the person chose last (JSON: option id -> value), and the
+# options a session told last, shown before the next one tells its own (JSON)
 CODEX_COMMAND = "codex/command"
 CODEX_EXECUTABLE = "codex/executable"
 CODEX_MODE = "codex/mode"
 CODEX_OPTIONS = "codex/options"
+CODEX_KNOWN = "codex/known"
 
 
 def procedure_key(procedure: str) -> str:

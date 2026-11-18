@@ -239,7 +239,7 @@ def test_an_opened_chat_goes_on_with_its_messages_and_a_prompt_made_anew(
     wait(lambda: assistant.items)
     assert kinds(assistant) == [Kind.PERSON, Kind.ANSWER]
     assert [i.text for i in assistant.items[:2]] == ["first", "One."]
-    assert assistant.items[2].text.endswith(" s · 1 step · 1.2k in · 30 out")
+    assert assistant.items[2].text.endswith(" s · 1.2k in · 30 out")
     assert len(changed) == len(set(changed))  # each item told once
     assert len(made) == 1
     assistant.send("second")
@@ -339,9 +339,9 @@ def test_an_opened_chat_comes_back_whole_in_one_take_by_the_live_handlers(
     assert thought.thought_title() == "Thought for 2 s"
     assert call.summary() == "read_device sis_bias_1 → done"
     assert answer.text == "It is 0 V."
-    assert stats.text == "3.0 s · 1 step · 100 in · 10 out"
+    assert stats.text == "3.0 s · 100 in · 10 out"
     assert items[6].text == "faster" and items[6].unsent
-    assert items[7].text == "Stopped." and items[8].text == "1.0 s · 1 step"
+    assert items[7].text == "Stopped." and items[8].text == "1.0 s"
     assert assistant.usage.read == 100 and assistant.phase == THINKING
     # what was sent meanwhile went once it opened
     assert chat.started == [Said("before"), Said("meanwhile")] and assistant.busy()

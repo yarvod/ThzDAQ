@@ -15,9 +15,12 @@ What a session tells (session/update) goes to whoever hears that session
 now (a Route): a turn's listener (Told, chat.Listener) or a conversation told
 again as it loads (Retold, chat.Replay), in the chat's words: pieces of text
 and thought, tool calls and their answers, how full the context is; and to
-the chat (Heard): its options, its title, its context's size. What the agent
-asks before it acts (session/request_permission) waits in the loop for the
-person's answer; cancel() answers it cancelled.
+the chat (Heard): its options (models, efforts, modes), its title, its
+context's size. What the agent asks before it acts (session/request_permission)
+waits in the loop for the person's answer; cancel() answers it cancelled. It
+is about a tool call, which codex-acp often names by its id alone (an MCP
+tool's call, a command started, a file change whose diff came with its
+start): the route shows it with what was told of that call (Seen).
 
 The SDK (1.0.0, ACP schema 1.23) lacks what codex-acp takes as unstable
 parts of ACP: systemPrompt on session/new, load and resume, session/set_title,
@@ -39,7 +42,7 @@ import shutil
 import tempfile
 import threading
 from concurrent.futures import Future
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import (
@@ -113,12 +116,18 @@ from thzdaq_gui.assistant.history import UNTITLED
 from thzdaq_gui.assistant.chat import (
     Asked,
     Call,
+    Change,
     Choice,
+    Files,
+    Inputs,
     Kept,
     Listener,
+    Note,
     Option,
     Outcome,
+    Part,
     Replay,
+    Run,
     Said,
     Used,
 )
@@ -136,7 +145,20 @@ END_S = 3.0  # how long a process may take to end once asked, before it is ended
 ERRORS_BYTES = 16 * 1024  # the end of what the process wrote, when it fails
 CHOICE = "="  # a choice of a session's option: "<option>=<value>"
 FINAL = ("completed", "failed")  # a tool call's status once it is over
-MODEL, EFFORT = "model", "thought_level"  # categories of a session's options
+# Categories of a session's options: its model, how hard it thinks, its mode
+MODEL, EFFORT, POLICY = "model", "thought_level", "mode"
+# What an agent would do, by the kind of its tool call, when it gives no title
+DOING = {
+    "execute": "Run a command",
+    "edit": "Edit files",
+    "delete": "Delete files",
+    "move": "Move files",
+    "read": "Read files",
+    "fetch": "Fetch from the network",
+}
+ACTS = "Act on its own"  # what an agent would do, of another kind
+COMMAND, FOLDER = "command", "cwd"  # of a command's raw input
+TERMINAL = "Runs in a terminal of the agent"
 
 NOT_STARTED = (
     "The adapter did not start ({command}: {error}). Set its command in {where}."
@@ -212,14 +234,28 @@ class Ready:
 
 
 @dataclass(frozen=True)
-class Options:
-    """A session's options (ACP config options) as the chat offers them: its
-    models, the one chosen shown with each of its reasoning efforts, the
-    others by name (a choice's id: choice(option, value)); values: each
-    option's value now, and those it takes."""
+class Offer:
+    """One option of a session (its id) as choices, a choice's id
+    choice(option, value), and the one chosen."""
 
+    option: str = ""
     choices: Tuple[Choice, ...] = ()
     chosen: Optional[str] = None
+
+    def chose(self, made: str) -> "Offer":
+        """With made chosen, when it is a value of this option."""
+        return replace(self, chosen=made) if setting(made)[0] == self.option else self
+
+
+@dataclass(frozen=True)
+class Options:
+    """A session's options (ACP config options) as the chat offers them: its
+    models, the reasoning efforts of the one chosen, its modes (policies);
+    values: each option's value now, and those it takes."""
+
+    models: Offer = Offer()
+    efforts: Offer = Offer()
+    policies: Offer = Offer()
     values: Dict[str, str] = field(default_factory=dict)
     offered: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
@@ -228,6 +264,38 @@ class Options:
         value it takes and has not now."""
         option, value = setting(made)
         return value in self.offered.get(option, ()) and self.values[option] != value
+
+    def chose(self, made: str) -> "Options":
+        """As shown once made is chosen, before the agent tells its options."""
+        return replace(
+            self, models=self.models.chose(made), efforts=self.efforts.chose(made),
+            policies=self.policies.chose(made),
+        )  # fmt: skip
+
+    def saved(self) -> Dict[str, Any]:
+        """What is offered, as JSON keeps it (restored)."""
+        return {
+            name: [offer.option, offer.chosen, [asdict(c) for c in offer.choices]]
+            for name, offer in self._offers().items()
+        }
+
+    @staticmethod
+    def restored(kept: Mapping[str, Any]) -> "Options":
+        """Options as saved() kept them, to show before a session tells its
+        own; nothing can be set by them (values and offered are empty)."""
+        return Options(
+            **{
+                name: Offer(option, tuple(Choice(**c) for c in choices), chosen)
+                for name, (option, chosen, choices) in kept.items()
+                if name in OFFERS
+            }
+        )
+
+    def _offers(self) -> Dict[str, Offer]:
+        return {name: getattr(self, name) for name in OFFERS}
+
+
+OFFERS = ("models", "efforts", "policies")  # the Offers of Options, by name
 
 
 def choice(option: str, value: str) -> str:
@@ -300,7 +368,8 @@ def checked(raw: Dict[str, Any], wanted: Wanted, process: int) -> Ready:
 
 
 def options_of(found: Optional[Sequence[Any]]) -> Options:
-    """The options of a session as the chat offers them (Options)."""
+    """The options of a session as the chat offers them (Options), by their
+    categories: model, thought level, mode."""
     selects = [
         option
         for option in found or ()
@@ -310,25 +379,21 @@ def options_of(found: Optional[Sequence[Any]]) -> Options:
     offered = {
         option.id: tuple(value for value, _, _ in _values(option)) for option in selects
     }
-    model = next((option for option in selects if option.category == MODEL), None)
-    if model is None:
-        return Options(values=values, offered=offered)
-    effort = next((option for option in selects if option.category == EFFORT), None)
-    choices = []
-    for value, name, about in _values(model):
-        if value == model.current_value and effort is not None:
-            choices += [
-                Choice(choice(effort.id, level), f"{name} · {level_name}", level_about)
-                for level, level_name, level_about in _values(effort)
-            ]
-        else:
-            choices.append(Choice(choice(model.id, value), name, about))
-    chosen = (
-        choice(effort.id, effort.current_value)
-        if effort is not None
-        else choice(model.id, model.current_value)
-    )
-    return Options(tuple(choices), chosen, values, offered)
+
+    def offer(category: str) -> Offer:
+        option = next((each for each in selects if each.category == category), None)
+        if option is None:
+            return Offer()
+        return Offer(
+            option.id,
+            tuple(
+                Choice(choice(option.id, value), name, about)
+                for value, name, about in _values(option)
+            ),
+            choice(option.id, option.current_value),
+        )
+
+    return Options(offer(MODEL), offer(EFFORT), offer(POLICY), values, offered)
 
 
 def _values(option: SessionConfigOptionSelect) -> List[Tuple[str, str, str]]:
@@ -419,16 +484,58 @@ def _call_of(update: ToolCallUpdate) -> Call:
     return Call(update.tool_call_id, update.title or update.kind or "tool", arguments)
 
 
-def asked_of(call: ToolCallUpdate, options: Sequence[PermissionOption]) -> Asked:
-    """What the agent asks, as the chat shows it."""
-    given = call.raw_input
-    if isinstance(given, dict):
-        detail = "\n".join(f"{key}: {_shown(value)}" for key, value in given.items())
-    else:
-        detail = "" if given is None else _shown(given)
+SEEN = ("title", "kind", "raw_input", "content", "locations")  # of a tool call
+
+
+@dataclass(frozen=True)
+class Seen:
+    """What a session told of a tool call so far, each field as told last: a
+    permission asked for a call told before (an MCP tool's, a command started,
+    a file change with its diff) may name only its id."""
+
+    title: Optional[str] = None
+    kind: Optional[str] = None
+    raw_input: Any = None
+    content: Optional[Sequence[Any]] = None
+    locations: Optional[Sequence[Any]] = None
+
+    def told(self, update: Any) -> "Seen":
+        """With what an update (ToolCallStart, ToolCallProgress, the
+        ToolCallUpdate of a permission) tells anew."""
+        changed = {name: getattr(update, name) for name in SEEN}
+        return replace(self, **{k: v for k, v in changed.items() if v is not None})
+
+
+def asked_of(seen: Seen, options: Sequence[PermissionOption]) -> Asked:
+    """What the agent asks, as the chat shows it: what it would do in a line
+    (its title, else what its kind does), the command it would run and where,
+    each file's changes, what else it is given, and the files it touches."""
+    given = seen.raw_input
+    fields = dict(given) if isinstance(given, dict) else {}
+    if given is not None and not isinstance(given, dict):
+        fields = {"input": given}
+    parts: List[Part] = []
+    command = fields.pop(COMMAND, None)
+    if command:
+        line = command if isinstance(command, str) else shlex.join(map(str, command))
+        parts.append(Run(line, str(fields.pop(FOLDER, None) or "")))
+    if fields:
+        parts.append(Inputs(tuple((k, _shown(v)) for k, v in fields.items())))
+    parts += _parts_of(seen.content or ())
+    changed = {part.path for part in parts if isinstance(part, Change)}
+    paths = tuple(
+        dict.fromkeys(
+            where.path for where in seen.locations or () if where.path not in changed
+        )
+    )
+    if paths:
+        parts.append(Files(paths))
+    title = seen.title or ""
+    if not title or (command and title == parts[0].line):  # a command is shown
+        title = DOING.get(seen.kind or "", ACTS)
     return Asked(
-        call.title or call.kind or "",
-        detail,
+        title,
+        tuple(parts),
         tuple(
             Option(
                 option.option_id, option.name,
@@ -440,12 +547,35 @@ def asked_of(call: ToolCallUpdate, options: Sequence[PermissionOption]) -> Asked
     )  # fmt: skip
 
 
+def _parts_of(content: Sequence[Any]) -> List[Part]:
+    """A tool call's content as the chat shows it: words as notes, a file's
+    diffs (one per hunk) as one change, a terminal as a note."""
+    notes: List[Part] = []
+    hunks: Dict[str, List[Tuple[Optional[str], str]]] = {}
+    for each in content:
+        if isinstance(each, FileEditToolCallContent):
+            hunks.setdefault(each.path, []).append((each.old_text, each.new_text))
+        elif isinstance(each, TerminalToolCallContent):
+            notes.append(Note(TERMINAL))
+        elif isinstance(each, ContentToolCallContent) and _words(each.content):
+            notes.append(Note(_words(each.content)))
+    return notes + [Change(path, tuple(found)) for path, found in hunks.items()]
+
+
 def used_of(answered: PromptResponse) -> Optional[Used]:
-    """The tokens of a turn, when the agent told them."""
+    """The tokens of a turn summed over the requests it made, when the agent
+    told them. Its input tokens are those read fresh (codex-acp, TokenCount):
+    what came from the cache and what went into it are apart."""
     usage = answered.usage
     if usage is None:
         return None
-    return Used(usage.input_tokens, usage.output_tokens, usage.thought_tokens or 0)
+    cached = usage.cached_read_tokens or 0
+    return Used(
+        usage.input_tokens + cached + (usage.cached_write_tokens or 0),
+        usage.output_tokens,
+        usage.thought_tokens or 0,
+        cached=cached,
+    )
 
 
 class Heard(Protocol):
@@ -462,22 +592,29 @@ class Heard(Protocol):
 
 
 class Route(Protocol):
-    """Who hears a session now: what it tells, what its agent asks."""
+    """Who hears a session now: what it tells, what its agent asks (about a
+    tool call, with the answers it offers)."""
 
     def update(self, update: Any) -> None:
         ...
 
-    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
+    def permission(
+        self,
+        call: ToolCallUpdate,
+        options: Sequence[PermissionOption],
+        answer: Callable[[Optional[str]], None],
+    ) -> None:
         ...
 
 
 class Told:
     """What a session tells as a turn runs, told to the turn's listener in
-    the chat's words (a Route)."""
+    the chat's words (a Route). What the agent asks about a tool call told
+    before shows what was told of it."""
 
     def __init__(self, listener: Listener, heard: Heard, session: str):
         self.listener, self.heard, self.session = listener, heard, session
-        self.calls: Set[str] = set()  # tool calls told
+        self.calls: Dict[str, Seen] = {}  # tool calls told, what of each
         self.told: Dict[type, Callable[[Any], None]] = {
             AgentMessageChunk: self._text,
             AgentThoughtChunk: self._thought,
@@ -494,8 +631,14 @@ class Told:
         if told is not None:
             told(update)
 
-    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
-        self.listener.permission(asked, answer)
+    def permission(
+        self,
+        call: ToolCallUpdate,
+        options: Sequence[PermissionOption],
+        answer: Callable[[Optional[str]], None],
+    ) -> None:
+        seen = self.calls.get(call.tool_call_id, Seen()).told(call)
+        self.listener.permission(asked_of(seen, options), answer)
 
     def _text(self, update: AgentMessageChunk) -> None:
         words = _words(update.content)
@@ -510,8 +653,9 @@ class Told:
     def _call(self, update: ToolCallUpdate) -> None:
         """A call starts (a call told only by its update starts too); its
         answer once it is over."""
-        if update.tool_call_id not in self.calls:
-            self.calls.add(update.tool_call_id)
+        known = self.calls.get(update.tool_call_id)
+        self.calls[update.tool_call_id] = (known or Seen()).told(update)
+        if known is None:
             self.listener.called(_call_of(update))
         if update.status in FINAL:
             self.listener.answered(
@@ -549,7 +693,12 @@ class Retold(Told):
         self._began()
         super().update(update)
 
-    def permission(self, asked: Asked, answer: Callable[[Optional[str]], None]) -> None:
+    def permission(
+        self,
+        call: ToolCallUpdate,
+        options: Sequence[PermissionOption],
+        answer: Callable[[Optional[str]], None],
+    ) -> None:
         answer(None)
 
     def done(self, why: str = "") -> None:
@@ -587,7 +736,7 @@ class _Client:
         options: List[PermissionOption],
         **_: Any,
     ) -> RequestPermissionResponse:
-        chosen = await self.agent.asked(session_id, asked_of(tool_call, options))
+        chosen = await self.agent.asked(session_id, tool_call, options)
         outcome = (
             DeniedOutcome(outcome="cancelled")
             if chosen is None
@@ -910,10 +1059,15 @@ class Agent:
         await self._ask(SET_TITLE, None, sessionId=session, title=title)
 
     # What the agent asks, in the loop
-    async def asked(self, session: str, asked: Asked) -> Optional[str]:
-        """The person's answer to what the agent asks (the id of the option
-        chosen), or None: nobody hears the session, or its turn was
-        stopped."""
+    async def asked(
+        self,
+        session: str,
+        call: ToolCallUpdate,
+        options: Sequence[PermissionOption],
+    ) -> Optional[str]:
+        """The person's answer to what the agent asks about a tool call (the
+        id of the option chosen), or None: nobody hears the session, or its
+        turn was stopped."""
         route = self.routes.get(session)
         if route is None:
             return None
@@ -924,7 +1078,7 @@ class Agent:
             if not self.loop.is_closed():
                 self.loop.call_soon_threadsafe(_settle, waiting, chosen)
 
-        route.permission(asked, answer)
+        route.permission(call, options, answer)
         try:
             return await waiting
         finally:

@@ -2,7 +2,6 @@
 model on the simulated bench with a model's server on localhost, the dock
 and the dialog of the servers."""
 
-import os
 import threading
 import time
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import List, Optional
 import pytest
 from lab_helpers import Window
 from model_server import USAGE, calls, says, thinks
-from PySide6.QtCore import Qt
+from shots import shot
 from thzdaq_gui.assistant.builtin import NO_PROVIDER
 from thzdaq_gui.assistant.chat import Call, Chat, Choice, Kept, Outcome, Said, Used
 from thzdaq_gui.assistant.keys import SERVICE
@@ -28,17 +27,6 @@ from thzdaq_gui.models.assistant import (
 )
 
 BIAS = {"ref": "sis_bias_1", "key": "voltage_set", "value": "1 mV"}
-# Pictures of the dock for a person to look at, when asked for (a folder)
-SHOTS = os.environ.get("THZDAQ_SHOTS")
-
-
-def shot(widget, name: str) -> None:
-    if SHOTS:
-        from PySide6.QtWidgets import QApplication
-
-        for _ in range(3):  # the layout follows the messages' heights
-            QApplication.processEvents()
-        widget.grab().save(str(Path(SHOTS) / f"{name}.png"))
 
 
 @pytest.fixture(autouse=True)
@@ -277,7 +265,8 @@ def test_the_dock_shows_messages_and_folded_cards(assistant, model, person, wait
     cards[1].set_expanded(True)
     assert "too high for this junction" in cards[1].answer.text()
     assert widget.input.toPlainText() == ""
-    assert widget.modelBox.currentText() == "local"
+    assert widget.modelPicker.whole() == "local"
+    assert widget.policyPicker.isHidden()  # the built-in assistant never acts alone
     shot(widget, "assistant_dock")
     widget.close()
 
@@ -567,7 +556,11 @@ def test_the_dock_wraps_long_words_and_attaches_what_is_pasted(assistant, model,
     assert card.minimumSizeHint().width() <= 320
     answer = [b for b in widget.findChildren(Bubble) if b.label.markdown][0]
     assert answer.label.height() > 3 * answer.label.fontMetrics().lineSpacing()
-    assert widget.contextBar.toolTip() == "Context 1 230"  # its limit not known
+    ring = widget.ring  # its limit not known: a bare ring
+    assert (
+        ring.share() is None
+        and ring.accessibleName() == "Context 1 230 · limit not known"
+    )
     shot(widget, "assistant_narrow")
     widget.close()
 
@@ -583,6 +576,8 @@ class FakeChat(Chat):
         self.stopped = 0
         self.turn = None  # the listener of the last turn started
         self.chosen = "small"
+        self.levels = {}  # model -> its efforts
+        self.level: Optional[str] = None
         self.limit: Optional[int] = None
         self.changed = None
         self.kept: List[Kept] = []  # what chats() finds, for any workspace
@@ -635,6 +630,17 @@ class FakeChat(Chat):
 
     def choose(self, model):
         self.chosen = model
+        self.level = next(iter(self.levels.get(model, ())), Choice("", "")).id or None
+        self.changed()
+
+    def efforts(self):
+        return self.levels.get(self.chosen, ())
+
+    def effort(self):
+        return self.level
+
+    def choose_effort(self, effort):
+        self.level = effort
         self.changed()
 
     def context_limit(self):
@@ -683,9 +689,7 @@ def test_what_a_chat_tells_becomes_the_items_of_its_mode(fake, wait):
     assert thought.text == "hmm" and thought.state is State.DONE
     assert call.summary() == "read_device sis_bias_1 → done"
     assert call.text == "sis_bias_1: 0 V" and answer.text == "It is 0 V."
-    assert assistant.items[-1].text.endswith(
-        " s · 1 step · 100 in · 10 out (4 thinking)"
-    )
+    assert assistant.items[-1].text.endswith(" s · 100 in · 10 out (4 reasoning)")
     assert busy == [True, False]
 
 
@@ -784,64 +788,118 @@ def test_each_mode_is_a_chat_of_its_own_shown_anew_whole(
     widget.close()
 
 
-def test_the_model_selector_shows_a_modes_models_and_chooses_one(fake, app):
+def test_the_model_picker_lists_models_with_a_line_each_and_the_effort_apart(fake, app):
     from thzdaq_gui.docks.assistant import AssistantWidget
 
     chat, assistant = fake
+    chat.levels = {"large": (Choice("low", "Low", "quick"), Choice("high", "High"))}
     widget = AssistantWidget(assistant)
-    box = widget.modelBox
-    assert [box.itemText(i) for i in range(box.count())] == ["Small", "Large"]
-    assert box.currentText() == "Small"
-    box.activated.emit(1)
-    assert chat.chosen == "large"
+    widget.resize(320, 500)
+    widget.show()
+    picker = widget.modelPicker
+    assert picker.whole() == "Small"
+    picker.click()
+    popup = picker.popup
+    assert popup.isVisible()
+    rows = popup.rows
+    assert [(row.text(), row.tip) for row in rows.values()] == [
+        ("Small", ""), ("Large", "more context"),
+    ]  # fmt: skip
+    assert rows["small"].isChecked() and not rows["large"].isChecked()
+    assert popup.efforts.isHidden()  # Small offers no efforts
+    rows["large"].click()
+    assert chat.chosen == "large" and not popup.isVisible()
     app.processEvents()
-    assert box.currentText() == "Large" and box.toolTip() == "more context"
+    assert picker.whole() == "Large · Low" and picker.toolTip() == "more context"
+    picker.click()
+    efforts = popup.efforts
+    assert not efforts.isHidden() and list(efforts.buttons) == ["low", "high"]
+    assert efforts.buttons["low"].isChecked()
+    efforts.buttons["high"].click()
+    assert chat.level == "high"
+    app.processEvents()
+    assert picker.whole() == "Large · High" and popup.rows["large"].isChecked()
+    shot(popup, "assistant_model_popup")
+    popup.hide()
     widget.close()
 
 
-def test_the_model_selector_chooses_a_server(assistant, providers, model, app):
+def test_the_model_picker_chooses_a_server_described_by_its_model_and_url(
+    assistant, providers, model, app
+):
     from thzdaq_gui.docks.assistant import AssistantWidget
 
     providers.save(Provider("vllm", model.url, "qwen-large", None, 32768), "other")
     widget = AssistantWidget(assistant)
-    box = widget.modelBox
-    assert [box.itemText(i) for i in range(box.count())] == ["local", "vllm"]
-    assert box.currentText() == "local"
-    assert box.itemData(1, Qt.ToolTipRole) == f"qwen-large at {model.url}"
-    box.activated.emit(1)
+    picker = widget.modelPicker
+    rows = picker.popup.rows
+    assert [(row.text(), row.tip) for row in rows.values()] == [
+        ("local", f"qwen at {model.url}"), ("vllm", f"qwen-large at {model.url}"),
+    ]  # fmt: skip
+    assert picker.whole() == "local" and rows["local"].isChecked()
+    rows["vllm"].click()
     assert providers.chosen().name == "vllm" and assistant.context_limit() == 32768
     app.processEvents()
-    assert box.currentText() == "vllm"
+    assert picker.whole() == "vllm"
     widget.close()
 
 
-def test_the_context_bar_and_the_usage_popup_tell_the_tokens(fake, app):
-    from thzdaq_gui.docks.assistant import UNKNOWN, AssistantWidget
+def test_the_ring_and_its_card_tell_the_context_and_the_tokens(fake, app):
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QEnterEvent
+    from PySide6.QtWidgets import QApplication
+    from thzdaq_gui import theme
+    from thzdaq_gui.docks.chat_bar import UNKNOWN
+    from thzdaq_gui.docks.assistant import AssistantWidget
 
     chat, assistant = fake
     widget = AssistantWidget(assistant)
-    assert widget.contextBar.toolTip() == "Context 0"
-    widget.usageButton.menu().aboutToShow.emit()
-    assert widget.usageView.told() == [[UNKNOWN, UNKNOWN]] * 2
-    assistant.send("one")
-    chat.turn.usage(Used(1200, 30, 0, 1230))
-    chat.turn.usage(Used(1300, 40, 10, 1340))
+    widget.resize(320, 500)
+    widget.show()
+    ring, card = widget.ring, widget.ring.card
+    at = QPointF(1, 1)
+    QApplication.sendEvent(ring, QEnterEvent(at, at, at))  # hovered: the card
+    assert card.hovering()
+    assert ring.view.told() == [
+        ["Context", "0 · limit not known"],
+        ["This answer", *[UNKNOWN] * 4],
+        ["This chat", *[UNKNOWN] * 4],
+    ]
+    QApplication.sendEvent(ring, QEvent(QEvent.Leave))
+    assert not card.isVisible()
+    assistant.send("one")  # two steps; the server tells no cached tokens
+    for used in (Used(1200, 30, 0, 1230), Used(1300, 40, 10, 1340)):
+        chat.turn.asking()
+        chat.turn.usage(used)
     chat.turn.ended(Outcome.ANSWERED, "")
     app.processEvents()
-    assert widget.contextBar.toolTip() == "Context 1 340"
+    assert assistant.items[-1].text.endswith(
+        " s · 2 steps · 2.5k in · 70 out (10 reasoning)"
+    )
     chat.limit = 272000  # the model's limit is told
     chat.changed()
-    app.processEvents()
-    assert widget.contextBar.toolTip() == "Context 1 340 / 272 000"
-    assistant.send("two")
-    chat.turn.usage(Used(46200, 100, 0, 46300))
+    assistant.send("two")  # the context is the last step's, not the sum
+    chat.turn.usage(Used(46200, 100, 20, 46300, cached=40000))
     chat.turn.ended(Outcome.ANSWERED, "")
     app.processEvents()
-    widget.usageButton.menu().aboutToShow.emit()
-    assert widget.usageView.told() == [
-        ["46 200", "100"],
-        ["48 700", "170 (10 thinking)"],
+    assert ring.share() == pytest.approx(46300 / 272000) and ring.color() == theme.MUTED
+    ring.clicked.emit()  # clicked: the card stays until a click elsewhere
+    assert card.isVisible() and not card.hovering()
+    assert ring.view.told() == [
+        ["Context", "46 300 / 272 000 · 17%"],
+        ["This answer", "46 200", "40 000", "100", "20"],
+        ["This chat", "48 700", "40 000", "170", "30"],
     ]
-    assert widget.contextBar.toolTip() == "Context 46 300 / 272 000"
-    shot(widget, "assistant_usage")
+    stats = assistant.items[-1].text
+    assert stats.endswith(" s · 46.2k in (40.0k cached) · 100 out (20 reasoning)")
+    shot(card, "assistant_usage_card")
+    chat.turn = None
+    assistant.send("three")
+    chat.turn.usage(Used(context=250000))  # near full: red
+    chat.turn.ended(Outcome.ANSWERED, "")
+    app.processEvents()
+    assert ring.color() == theme.BAD
+    assert ring.view.told()[0] == ["Context", "250 000 / 272 000 · 92%"]
+    shot(widget, "assistant_bar")
+    card.hide()
     widget.close()

@@ -15,10 +15,18 @@ The config (JSON) chooses what it is and does:
   (by session id: [kind, ...] entries, as answer() tells them).
 
 A prompt's first words choose what the turn does: "tool" (a tool call with
-its updates), "permission" (asks, then says what was chosen), "wait" (until
-the turn is cancelled), "many <n>" (n pieces of text), "die" (the process
-ends at once, saying why on its error output), else a thought, the words said
-back in pieces and the context filled.
+its updates), "permission" (asks, then says what was chosen; "permission
+long": a long command with codex-acp's every answer, "permission edit": a file
+change whose diff came with its tool call's start, "permission mcp": a call of
+the bench's tool named by its id alone; in full access it asks nothing and
+says so), "wait" (until the turn is cancelled), "many <n>" (n pieces of
+text), "die" (the process ends at once, saying why on its error output), else
+a thought, the words said back in pieces and the context filled.
+
+What it asks is shaped as codex-acp 2.7.0 shapes it (permissions/,
+tool-calls/reporters/): a command not started has itself as the title and
+{command, cwd} as raw input; an approval of a call told before (a file change,
+an MCP tool) names its id, kind and status only.
 """
 
 import asyncio
@@ -37,6 +45,7 @@ from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
+    FileEditToolCallContent,
     ListSessionsResponse,
     LoadSessionResponse,
     NewSessionResponse,
@@ -53,6 +62,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
     TextContentBlock,
     ToolCallProgress,
+    ToolCallLocation,
     ToolCallStart,
     ToolCallUpdate,
     Usage,
@@ -64,9 +74,46 @@ from acp.utils import notify_model, request_model
 
 MODELS = [("gpt-a", "A"), ("gpt-b", "B")]
 EFFORTS = {"gpt-a": ["low", "high"], "gpt-b": ["medium"]}
-MODES = ["read-only", "workspace-write", "agent"]
+MODES = [  # codex-acp's AgentMode
+    ("read-only", "Read-only", "Requires approval to edit files and access the internet."),
+    ("workspace-write", "Workspace access", "Edit workspace files; ask before writing outside the workspace or accessing the network."),
+    ("agent", "Auto review", "Only ask for actions detected as potentially unsafe"),
+    ("agent-full-access", "Full access", "Unrestricted access to the internet and any file on your computer"),
+]  # fmt: skip
+FULL_ACCESS = "agent-full-access"
 CONTEXT = (1200, 272000)  # tokens filled, tokens it takes
-USAGE = Usage(total_tokens=125, input_tokens=100, output_tokens=20, thought_tokens=5)
+# A turn's tokens as codex-acp sums them (TokenCount): input read fresh,
+# cached reads and writes apart, output with the reasoning in it
+USAGE = Usage(
+    total_tokens=1045, input_tokens=100, cached_read_tokens=900,
+    cached_write_tokens=20, output_tokens=25, thought_tokens=5,
+)  # fmt: skip
+LONG = (
+    "python -m thzdaq_api.kernel --connection-file /very/long/path/"
+    + "deeply_nested_folder/" * 12
+    + "kernel.json && echo done\n"
+    + "for f in $(ls data/*.json); do jq '.records | length' \"$f\"; done"
+)
+ANSWERS = {  # codex-acp's permissions/options.ts, by the request
+    "short": [
+        ("yes", "Yes, proceed", "allow_once"),
+        ("no", "No, and tell Codex what to do differently", "reject_once"),
+    ],
+    "long": [
+        ("yes", "Yes, proceed", "allow_once"),
+        ("session", "Yes, and don't ask again for this command in this session", "allow_always"),
+        ("prefix", "Yes, and don't ask again for commands that start with `python -m thzdaq_api.kernel --connection-file`", "allow_always"),
+        ("decline", "No, continue without running it", "reject_once"),
+        ("no", "No, and tell Codex what to do differently", "reject_once"),
+    ],
+    "edit": [
+        ("yes", "Yes, proceed", "allow_once"),
+        ("session", "Yes, and don't ask again for these files", "allow_always"),
+        ("no", "No, and tell Codex what to do differently", "reject_once"),
+    ],
+}  # fmt: skip
+OLD = "".join(f"line {n}\n" for n in range(1, 41))
+NEW = OLD.replace("line 7\n", "line seven\n").replace("line 30\n", "")
 
 
 def text(words: str) -> TextContentBlock:
@@ -104,7 +151,10 @@ class Fake:
             SessionConfigOptionSelect(
                 id="mode", name="Mode", category="mode", type="select",
                 current_value=values["mode"],
-                options=[SessionConfigSelectOption(value=m, name=m) for m in MODES],
+                options=[
+                    SessionConfigSelectOption(value=v, name=n, description=d)
+                    for v, n, d in MODES
+                ],
             ),
             SessionConfigOptionSelect(
                 id="model", name="Model", category="model", type="select",
@@ -201,22 +251,23 @@ class Fake:
             await self.cancelled[session_id].wait()
             return PromptResponse(stop_reason="cancelled")
         if first == "permission":
+            if self.values[session_id]["mode"] == FULL_ACCESS:
+                await self.answer(session_id, "agent", "ran it without asking")
+                return PromptResponse(stop_reason="end_turn")
+            how = words.split()[1] if len(words.split()) > 1 else "short"
             asked = await request_model(
                 self.conn,
                 "session/request_permission",
                 RequestPermissionRequest(
                     session_id=session_id,
-                    tool_call=ToolCallUpdate(
-                        tool_call_id="p1", title="Run ls", kind="execute",
-                        raw_input={"command": "ls -la"},
-                    ),
+                    tool_call=await self.call_asked(session_id, how),
                     options=[
-                        PermissionOption(option_id="yes", name="Allow", kind="allow_once"),
-                        PermissionOption(option_id="no", name="Reject", kind="reject_once"),
+                        PermissionOption(option_id=id, name=name, kind=kind)
+                        for id, name, kind in ANSWERS.get(how, ANSWERS["short"])
                     ],
                 ),
                 RequestPermissionResponse,
-            )  # fmt: skip
+            )
             chosen = getattr(asked.outcome, "option_id", "cancelled")
             self.note("answered", chosen)
             await self.answer(session_id, "agent", f"chose {chosen}")
@@ -254,6 +305,52 @@ class Fake:
             ),
         )
         return PromptResponse(stop_reason="end_turn", usage=USAGE)
+
+    async def call_asked(self, session: str, how: str) -> ToolCallUpdate:
+        """The tool call a permission is asked about, as codex-acp sends it:
+        a command not started whole; a file change or an MCP tool's call
+        started first (its diff, its arguments), then named by id."""
+        if how == "edit":
+            await self.tell(
+                session,
+                ToolCallStart(
+                    session_update="tool_call", tool_call_id="e1",
+                    title="Editing files", kind="edit", status="pending",
+                    content=[
+                        FileEditToolCallContent(
+                            type="diff", path="/work/scripts/sweep.py",
+                            old_text=OLD, new_text=NEW,
+                        ),
+                        FileEditToolCallContent(
+                            type="diff", path="/work/scripts/new_notes.md",
+                            old_text=None, new_text="# Notes\n\nBias at 2.8 mV\n",
+                        ),
+                    ],
+                ),
+            )  # fmt: skip
+            return ToolCallUpdate(
+                tool_call_id="e1", kind="edit", status="pending", title="Edit files",
+                locations=[
+                    ToolCallLocation(path="/work/scripts/sweep.py"),
+                    ToolCallLocation(path="/work/scripts/new_notes.md"),
+                ],
+            )  # fmt: skip
+        if how == "mcp":
+            await self.tell(
+                session,
+                ToolCallStart(
+                    session_update="tool_call", tool_call_id="m1",
+                    title="thzdaq: set_quantity", kind="execute",
+                    status="pending",
+                    raw_input={"ref": "sis_bias_1", "key": "voltage_set", "value": "2 mV"},
+                ),
+            )  # fmt: skip
+            return ToolCallUpdate(tool_call_id="m1", kind="execute", status="pending")
+        line = LONG if how == "long" else "ls -la"
+        return ToolCallUpdate(
+            tool_call_id="p1", title=line, kind="execute", status="pending",
+            raw_input={"command": line, "cwd": "/work"},
+        )  # fmt: skip
 
     async def answer(self, session: str, kind: str, *given: Any) -> None:
         """One entry of a turn: user, agent or thought words, or a tool call

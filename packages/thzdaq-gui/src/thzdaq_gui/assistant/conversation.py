@@ -262,10 +262,13 @@ def shown(call: ToolCall) -> Call:
 
 
 def used(usage: Usage) -> Used:
-    """A step's tokens; the conversation fills what the model read and wrote."""
+    """A step's tokens; the conversation fills what the model read and wrote
+    in it (the last step's is the context now; summed over steps, what was
+    read is what the server billed, not the context)."""
     return Used(
-        usage.prompt, usage.completion, usage.reasoning, usage.prompt + usage.completion
-    )
+        usage.prompt, usage.completion, usage.reasoning,
+        usage.prompt + usage.completion, usage.cached,
+    )  # fmt: skip
 
 
 def arguments(call: ToolCall) -> Dict[str, Any]:
