@@ -1522,6 +1522,7 @@ dependencies = [
     { name = "psutil" },
     { name = "thzdaq-api" },
     { name = "thzdaq-core" },
+    { name = "thzdaq-instruments", extra = ["visa"] },
 ]
 
 [package.metadata]
@@ -1529,6 +1530,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=5.9" },
     { name = "thzdaq-api", editable = "packages/thzdaq-api" },
     { name = "thzdaq-core", editable = "packages/thzdaq-core" },
+    { name = "thzdaq-instruments", extras = ["visa"], editable = "packages/thzdaq-instruments" },
 ]
 
 [[package]]

@@ -55,7 +55,7 @@ thzdaq-mcp ─┘         ▲                ▲   └──────►  thz
 ```
 
 - `thzdaq-instruments` — драйверы, транспорт, симуляторы (pyserial, requests, pymodbus;
-  pyvisa — extra `[visa]`); ничего выше себя не знает.
+  pyvisa — extra `[visa]`, его тянет демон); ничего выше себя не знает.
 - `thzdaq-analysis` — чистые расчёты (I-V, шум, 2SB), только numpy.
 - `thzdaq-core` — домен, юзкейсы и адаптеры; не знает ни демона, ни клиентов.
 - `thzdaq-api` — контракт демона (операции, DTO, события, ошибки, каталог, формат файла
@@ -186,7 +186,11 @@ class ConnectionSpec:
     read_termination: str | None = "\n"   # None — чтение кусками с паузой (SIS-блок)
 ```
 - GPIB: Prologix Ethernet, Prologix USB (через serial) и любой VISA-ресурс (NI GPIB-USB-HS,
-  Keysight 82357B, USBTMC/LXI); VISA — опциональная зависимость `thzdaq-instruments[visa]`.
+  Keysight 82357B, USBTMC/LXI). pyvisa (`thzdaq-instruments[visa]`) стоит у демона и в
+  сборке, но VISA-библиотеку компьютер ставит сам: на Windows — Keysight IO Libraries Suite
+  или NI-VISA; для проверок на macOS/Linux — `pyvisa-py`, `pyusb` и libusb с
+  `PYVISA_LIBRARY=@py`. После таймаута линк переподключается и шлёт device clear: прибор
+  VISA держит запоздавший ответ (и ещё идущий запрос) в своей очереди, сессия его не сбрасывает.
   Приборы за шлюзом serial→Ethernet — обычный `socket` с нужными терминаторами.
 - `TransportPool.acquire(spec)`: один линк на физическую точку (`spec.link_key`), подсчёт
   ссылок, линк закрывается последним `transport.close()`; Prologix настраивается один раз.

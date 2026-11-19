@@ -20,6 +20,7 @@ dependencies = [
     "psutil>=5.9",
     "thzdaq-api==0.0.6b6",
     "thzdaq-core==0.0.6b6",
+    "thzdaq-instruments[visa]==0.0.6b6",
 ]
 
 [project.urls]
@@ -34,6 +35,7 @@ thzdaq-daemon = "thzdaq_daemon.__main__:main"
 [tool.uv.sources]
 thzdaq-api = { workspace = true }
 thzdaq-core = { workspace = true }
+thzdaq-instruments = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.27"]

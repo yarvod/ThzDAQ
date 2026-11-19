@@ -203,7 +203,8 @@ class SerialLink(Link):
 
 
 class VisaLink(Link):
-    """Any VISA resource through pyvisa (install the `visa` extra and a VISA backend).
+    """Any VISA resource through pyvisa (the `visa` extra, which the daemon brings;
+    the computer needs a VISA library: Keysight IO Libraries, NI-VISA).
 
     Covers GPIB adapters other than Prologix (NI GPIB-USB-HS, Keysight 82357B),
     USBTMC and LXI instruments. VISA addresses the bus itself, so each resource
@@ -237,6 +238,20 @@ class VisaLink(Link):
         import pyvisa
 
         return pyvisa.errors.VisaIOError, pyvisa.constants.StatusCode.error_timeout
+
+    def reset(self) -> None:
+        """Reconnect, then device clear: a VISA device (USBTMC, GPIB) keeps a late
+        answer in its own output queue, and a query it still runs, across
+        sessions. A resource without device clear has nothing of the kind."""
+        import pyvisa
+
+        super().reset()
+        try:
+            self._require().clear()
+        except pyvisa.errors.VisaIOError as e:
+            if e.error_code != pyvisa.constants.StatusCode.error_nonsupported_operation:
+                self.broken = True
+                raise InstrumentConnectionError(f"{self!r}: {e}") from e
 
     def open(self) -> None:
         if self._instrument is not None:

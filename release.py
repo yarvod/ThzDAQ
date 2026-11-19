@@ -33,8 +33,9 @@ VERSION = re.compile(r"^(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?$")
 PRE = {"alpha": "a", "beta": "b", "rc": "rc"}
 PROGRAM_VERSION = re.compile(r'__version__ = "([^"]*)"')
 PROJECT_VERSION = re.compile(r'^version = "[^"]*"', re.MULTILINE)
-# A requirement on a package of ThzDAQ, pinned or not: "thzdaq-api", "thzdaq-api==0.3.0"
-PIN = re.compile(r'"(thzdaq(?:-[a-z]+)?)(?:==[^"]*)?"')
+# A requirement on a package of ThzDAQ, pinned or not, with its extras:
+# "thzdaq-api", "thzdaq-api==0.3.0", "thzdaq-instruments[visa]==0.3.0"
+PIN = re.compile(r'"(thzdaq(?:-[a-z]+)?(?:\[[a-z,]+\])?)(?:==[^"]*)?"')
 
 
 def git(*args: str) -> str:

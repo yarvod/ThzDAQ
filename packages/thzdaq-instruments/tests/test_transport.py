@@ -284,3 +284,85 @@ class TestSocketLink:
         probe.close()
         with pytest.raises(InstrumentConnectionError):
             SocketLink("127.0.0.1", port, timeout=0.5).open()
+
+
+class VisaDevice:
+    """A USBTMC device behind VISA: its output queue is the device's own, so it
+    outlives a session; a query answered late is still queued after a timeout."""
+
+    def __init__(self, late: int = 0, clears: bool = True):
+        self.queue = []
+        self.late = late  # how many next reads time out, their answers queued
+        self.clears = clears  # whether the resource has device clear
+        self.sessions = 0
+
+    def manager(self, backend=""):
+        device = self
+
+        class Manager:
+            def open_resource(self, resource):
+                device.sessions += 1
+                return VisaSession(device)
+
+        return Manager()
+
+
+class VisaSession:
+    def __init__(self, device: VisaDevice):
+        self.device = device
+
+    def write(self, line: str) -> None:
+        if line.endswith("?"):
+            self.device.queue.append(f"answer to {line}")
+
+    def read(self) -> str:
+        from pyvisa.constants import StatusCode
+        from pyvisa.errors import VisaIOError
+
+        if self.device.late:
+            self.device.late -= 1
+            raise VisaIOError(StatusCode.error_timeout)
+        return self.device.queue.pop(0)
+
+    def clear(self) -> None:
+        from pyvisa.constants import StatusCode
+        from pyvisa.errors import VisaIOError
+
+        if not self.device.clears:
+            raise VisaIOError(StatusCode.error_nonsupported_operation)
+        self.device.queue.clear()
+
+    def close(self) -> None:
+        pass
+
+
+class TestVisaLink:
+    @pytest.fixture
+    def visa(self, monkeypatch):
+        pyvisa = pytest.importorskip("pyvisa")
+
+        def connect(device: VisaDevice):
+            from thzdaq_instruments.transport import MessageTransport, VisaLink
+
+            monkeypatch.setattr(pyvisa, "ResourceManager", device.manager)
+            link = VisaLink("USB0::0x0957::0x2D18::MY54260001::0::INSTR")
+            link.open()
+            return MessageTransport(link)
+
+        return connect
+
+    def test_a_late_answer_is_not_read_as_the_next_one(self, visa):
+        device = VisaDevice(late=1)
+        transport = visa(device)
+        with pytest.raises(InstrumentTimeoutError):
+            transport.query("READ?")
+        assert transport.query("*IDN?") == "answer to *IDN?"
+        assert device.sessions == 2
+
+    def test_a_resource_without_device_clear_reconnects(self, visa):
+        device = VisaDevice(late=1, clears=False)
+        transport = visa(device)
+        with pytest.raises(InstrumentTimeoutError):
+            transport.query("READ?")
+        device.queue.clear()  # such a resource keeps no late answer
+        assert transport.query("*IDN?") == "answer to *IDN?"
