@@ -29,7 +29,6 @@ from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS
 from thzdaq_instruments.actions import Action
 from thzdaq_instruments.errors import InstrumentError
-from thzdaq_instruments.parts import read_values
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import format_value
 
@@ -148,7 +147,7 @@ class DeviceAccess:
 
     def read(self, ref: str, keys: Optional[Iterable[str]] = None) -> Dict[str, Any]:
         wanted = self.readable(ref, keys)
-        values = self.bench.run(ref, lambda device: read_values(device, wanted))
+        values = self.bench.run(ref, lambda device: device.read(wanted))
         self.known.update(ref, values)
         return values
 
@@ -166,7 +165,7 @@ class DeviceAccess:
                 self.known.update(ref, values)
             deliver(values, error)
 
-        self.bench.submit(ref, lambda device: read_values(device, wanted), done)
+        self.bench.submit(ref, lambda device: device.read(wanted), done)
 
     def write(
         self,
@@ -183,7 +182,7 @@ class DeviceAccess:
         quantity, parsed = self.checked(ref, key, value)
         users = self._users((ref,), share, within)
         before = self.known.get(ref, key)
-        self.bench.run(ref, lambda device: quantity.write(device, parsed))
+        self.bench.run(ref, lambda device: device.write(quantity, parsed))
         self.known.update(ref, {key: parsed})
         within.tell(ref, key, parsed, before, origin)
         self._note(users, origin, ref, key=key, before=before, value=parsed)
@@ -327,7 +326,7 @@ class DeviceAccess:
         within = within or self.outside
         action, bound = self.bound(ref, key, arguments)
         users = self._users((ref,), share, within) if action.changes else []
-        result = self.bench.run(ref, lambda device: action.call(device, **bound))
+        result = self.bench.run(ref, lambda device: device.act(action, bound))
         if action.changes:
             # What it held may have changed with it (a grid's zero): known
             # again once read, and its guard reads where a change starts from

@@ -20,7 +20,7 @@ from thzdaq_api.procedures import (
     plot_for,
     split_entry,
 )
-from thzdaq_instruments.parts import quantities_of, read_values
+from thzdaq_instruments.parts import quantities_of
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import GHZ, MA, MV, UA
 
@@ -164,7 +164,7 @@ class Monitor(Procedure):
             elapsed = ctx.monotonic() - started
             stamp = ctx.now()
             for ref, device in devices.items():
-                values = read_values(device, chosen[ref])
+                values = device.read(chosen[ref])
                 for quantity in chosen[ref]:
                     ctx.record(
                         "samples",

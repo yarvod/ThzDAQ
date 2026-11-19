@@ -51,6 +51,12 @@ class SimSpectrumAnalyzer(SimInstrument, SpectrumAnalyzer):
     def set_video_bandwidth(self, bandwidth: float) -> None:
         self.video_bandwidth = bandwidth
 
+    def set_continuous_sweep(self, continuous: bool) -> None:
+        """Every read sees the tone as it is: sweeping or not is all one."""
+
+    def trigger(self) -> None:
+        """Every read sees the tone as it is: nothing to start."""
+
     def _level(self, frequency: float) -> float:
         offset = (frequency - self.tone_frequency) / self.resolution_bandwidth
         tone = self.tone_power - 10 * offset**2

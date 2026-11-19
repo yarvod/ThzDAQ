@@ -1,9 +1,13 @@
+import time
+
 import pytest
 from thzdaq_api.measurement_file import COMPLETED, DeviceUse
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.application.runner import MeasurementRunner
 from thzdaq_core.domain.parameters import StringListParameter
 from thzdaq_core.domain.measurements.procedures import Demagnetize, Monitor
+from thzdaq_core.domain.station.ports import port
+from thzdaq_core.domain.station.safety import Guard
 from thzdaq_api.procedures import (
     default_quantities,
     monitor_quantities,
@@ -148,7 +152,10 @@ class TestMonitor:
             def require(
                 self, devices, requirements, pause, planned=(), told=None, changed=None
             ):
-                return {slot: ports[slot] for slot in requirements}
+                return {
+                    slot: port(ports[slot], Guard(slot, {}, {}), (), time.sleep)
+                    for slot in requirements
+                }
 
             def quantities(self, ref):
 

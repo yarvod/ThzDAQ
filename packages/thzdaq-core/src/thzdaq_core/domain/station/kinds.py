@@ -24,7 +24,7 @@ from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_core.domain.errors import ProcedureError, StationError
 from thzdaq_core.domain.parameters import FloatParameter, Parameter
 from thzdaq_core.domain.sis.calibration import calibration_actions
-from thzdaq_core.domain.station.ports import AttributePort
+from thzdaq_core.domain.station.ports import Attributes
 
 
 def instrument_type(driver: str, registry: Optional[DriverRegistry] = None) -> str:
@@ -81,9 +81,9 @@ class DeviceKind:
             return ()
         return self.action_factory(channel, metadata)
 
-    def build(self, part: Any, settings: Dict[str, Any]) -> Any:
-        values = self.clean(settings)
-        return AttributePort(part, values) if values else part
+    def attributes(self, part: Any, settings: Dict[str, Any]) -> Attributes:
+        """The settings of a device of this kind, as attributes of its part."""
+        return Attributes(part, self.clean(settings))
 
 
 # Settings of driver sub-devices, by sub-device key

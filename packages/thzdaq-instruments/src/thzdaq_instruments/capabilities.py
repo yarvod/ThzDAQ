@@ -8,8 +8,10 @@ frequency source. A method left out fails as the class is instantiated.
 
 A capability gives every part that has it its quantities and actions
 (``capability_quantities``, ``capability_actions``): the voltage setpoint of a
-VoltageSource, the hot and cold loads of a LoadSwitch. A driver adds its own with
-``quantities`` and ``actions`` (thzdaq_instruments.parts).
+VoltageSource, the hot and cold loads of a LoadSwitch. One that refines another
+(PreciseVoltageSource of VoltageSource) gives its quantity in place of the other's
+of the same key. A driver adds its own with ``quantities`` and ``actions``
+(thzdaq_instruments.parts).
 
 Examples:
     power supply channel  -> Switchable, VoltageSource, CurrentSource, VoltageCurrentMeter
@@ -36,6 +38,7 @@ from thzdaq_instruments.quantities import (
     FREQUENCY,
     OUTPUT,
     POWER_LEVEL,
+    PRECISE_VOLTAGE_SET,
     VOLTAGE_SET,
     Quantity,
 )
@@ -90,6 +93,18 @@ class VoltageSource(Capability):
     @abstractmethod
     def get_voltage(self) -> float:
         """Programmed voltage, V. Use VoltageCurrentMeter.measure() for the actual one."""
+
+
+class PreciseVoltageSource(VoltageSource):
+    """A voltage source that also corrects its setpoint by readback until the
+    measured voltage is the one asked (a SIS bias)."""
+
+    capability_quantities = (PRECISE_VOLTAGE_SET,)
+
+    @abstractmethod
+    def set_voltage_precise(self, voltage: float, max_iterations: int = 30) -> float:
+        """V; returns the voltage measured, raises InstrumentError when it is
+        not reached in max_iterations corrections."""
 
 
 class CurrentSource(Capability):
@@ -221,6 +236,14 @@ class SpectrumAnalyzer(Capability):
         """Hz, the nearest supported value is used"""
 
     @abstractmethod
+    def set_continuous_sweep(self, continuous: bool) -> None:
+        """Sweep over and over, or once per trigger()."""
+
+    @abstractmethod
+    def trigger(self) -> None:
+        """Start one sweep (single sweep mode); nothing while sweeping continuously."""
+
+    @abstractmethod
     def read_peak(self) -> Tuple[float, float]:
         """(frequency Hz, power dBm) of the highest peak"""
 
@@ -318,6 +341,7 @@ ALL_CAPABILITIES: tuple[type, ...] = (
     RawCommands,
     Switchable,
     VoltageSource,
+    PreciseVoltageSource,
     CurrentSource,
     OutputProtection,
     VoltageCurrentMeter,

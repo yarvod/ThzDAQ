@@ -22,6 +22,7 @@ from thzdaq_api.measurements import (
 )
 from thzdaq_api.measurement_file import read_measurement
 from thzdaq_api.procedures import CURRENT_VS_GRID_ANGLE, MONITOR_VALUES_VS_TIME
+from thzdaq_instruments.actions import ZERO_ANGLE
 from thzdaq_instruments.angle import AngleUnknown
 from thzdaq_instruments.drivers import ArduinoGrid
 
@@ -111,7 +112,7 @@ class TestStation:
             with pytest.raises(AngleUnknown):
                 grid.rotate_to(10.0)
             position = bench.instrument(GRID).position
-            grid.zero()
+            grid.act(ZERO_ANGLE, {})  # its own action, by its declaration
             assert grid.get_angle() == 0.0
             assert bench.instrument(GRID).position == position  # nothing moved
         assert json.loads(path.read_text())[GRID]["state"] == {"angle": 0.0}

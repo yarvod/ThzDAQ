@@ -34,6 +34,7 @@ from thzdaq_instruments.capabilities import (
     OutputProtection,
     PowerDetector,
     PowerLevel,
+    PreciseVoltageSource,
     RawCommands,
     Rotator,
     SpectrumAnalyzer,
@@ -196,6 +197,13 @@ def check_voltage_source(device, voltage=1.5):
     assert math.isclose(device.get_voltage(), voltage, rel_tol=1e-6)
 
 
+def check_precise_voltage_source(device, voltage=1.5e-3):
+    device.set_voltage(voltage)  # reached already: no correction, no settling
+    measured = device.set_voltage_precise(voltage, max_iterations=3)
+    assert math.isclose(measured, voltage, rel_tol=1e-3)
+    assert math.isclose(device.get_voltage(), voltage, rel_tol=1e-6)
+
+
 def check_current_source(device):
     device.set_current(0.5)
     assert math.isclose(device.get_current(), 0.5, rel_tol=1e-6)
@@ -250,6 +258,8 @@ def check_spectrum_analyzer(device):
     device.set_span(1e6)
     device.set_resolution_bandwidth(1e3)
     device.set_video_bandwidth(1e3)
+    device.set_continuous_sweep(False)
+    device.trigger()
     frequency, power = device.read_peak()
     assert isinstance(frequency, float) and isinstance(power, float)
     trace = device.read_trace()
@@ -371,6 +381,13 @@ CONTRACTS = {
                 {"voltage": 1.5e-3},
             ),
             "sis bias": (lambda: sis().channel("DEV4"), {"voltage": 1.5e-3}),
+        },
+    ),
+    PreciseVoltageSource: (
+        check_precise_voltage_source,
+        {
+            "sim sis bias": lambda: SimSisBlock().channel("DEV4"),
+            "sis bias": lambda: sis().channel("DEV4"),
         },
     ),
     CurrentSource: (

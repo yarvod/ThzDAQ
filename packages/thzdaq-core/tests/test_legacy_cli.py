@@ -74,7 +74,9 @@ class TestLegacyImport:
         with Station(config, pause=time.sleep, simulate=True) as station:
             station["sis_bias_2"].set_voltage(2.5e-3)
             station["sis_coil_2"].set_current(1e-3)
-            assert station["sis_bias_2"].offset_voltage == -0.000187
+            assert (
+                station["sis_bias_2"].attributes.values["offset_voltage"] == -0.000187
+            )
 
     def test_without_state_defaults(self):
         config, _ = station_from_legacy(LEGACY, include_state_defaults=False)

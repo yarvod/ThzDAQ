@@ -1,11 +1,24 @@
-"""Adapters over an instrument part: the attributes of a configured device,
-the guard every device is handed out in.
+"""A device as the station hands it out: a port over an instrument part that
+implements the capabilities the part declares, and nothing else.
 
-An adapter delegates every attribute it doesn't override to the wrapped part.
+The class of a port is built once per class of part (port_class): it inherits
+the part's capabilities, so ``isinstance(port, PowerDetector)`` holds by
+declaration, and implements each of their methods by calling the part. A method
+that a capability's quantity names as its setter goes through the guard. What
+no capability declares (a driver's own methods) is no method of the port.
+
+A part's own quantities and actions (an NRX's averaging, a sensor's zero) are
+reached by their declarations (read, write, act), a setpoint among them through
+the same guard. The attributes of a configured device (a SIS bias's offsets) are
+set on its part before every call (Attributes).
 """
 
-from typing import Any, Callable, Dict, Iterable, Optional, Set, Tuple
+import functools
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set, Tuple
 
+from thzdaq_instruments.actions import Action
+from thzdaq_instruments.capabilities import capabilities_of
+from thzdaq_instruments.parts import declared_by, read_values
 from thzdaq_instruments.quantities import Quantity
 
 from thzdaq_core.domain.errors import StationError
@@ -15,74 +28,32 @@ Pause = Callable[[float], None]  # waits so many seconds
 Told = Callable[[str, float], None]  # hears a quantity key and the value set
 # Hears, at a run's first change of a quantity, how to set it back
 Changed = Callable[[Callable[[], None]], None]
-# A port's own attributes: never looked up on the device it wraps
-PORT_ATTRIBUTES = (
-    "target", "guard", "setters", "pause", "setpoints", "told", "changed",
-    "changed_keys",
-)  # fmt: skip
 
 
-class PortAdapter:
-    def __init__(self, target: Any):
-        self.target = target
+class Attributes:
+    """The attributes of a configured device (a SIS bias's offsets), set on its
+    part before every call through the device: two devices configured on one
+    channel share the part."""
 
-    def __getattr__(self, name: str) -> Any:
-        # Only called for attributes missing on the adapter itself
-        if name == "target":
-            raise AttributeError(name)
-        return getattr(self.target, name)
+    def __init__(self, part: Any, values: Mapping[str, Any]):
+        for name in values:
+            if not hasattr(part, name):
+                raise StationError(f"{part!r} has no attribute {name!r}")
+        self.values = dict(values)
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.target!r})"
-
-
-class AttributePort(PortAdapter):
-    """A configured device over a shared part, with its own attributes.
-
-    Two SIS configs on one DEV (different mixers, offsets) share the channel
-    object; the attributes are applied before every call through this device.
-    """
-
-    def __init__(self, target: Any, attributes: Dict[str, Any]):
-        super().__init__(target)
-        for name in attributes:
-            if not hasattr(target, name):
-                raise StationError(f"{target!r} has no attribute {name!r}")
-        self.attributes = dict(attributes)
-        self.apply()
-
-    def apply(self) -> None:
-        for name, value in self.attributes.items():
-            setattr(self.target, name, value)
-
-    def __getattr__(self, name: str) -> Any:
-        if name in ("target", "attributes"):
-            raise AttributeError(name)
-        if name in self.__dict__.get("attributes", {}):
-            return self.attributes[name]
-        value = getattr(self.target, name)
-        if not callable(value):
-            return value
-
-        def call(*args, **kwargs):
-            self.apply()
-            return value(*args, **kwargs)
-
-        return call
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in self.__dict__.get("attributes", {}):
-            self.attributes[name] = value
-            setattr(self.target, name, value)
-        else:
-            super().__setattr__(name, value)
+    def apply(self, part: Any) -> None:
+        for name, value in self.values.items():
+            setattr(part, name, value)
 
 
-class GuardedPort(PortAdapter):
-    """A device as the station hands it out. Every call that sets a quantity
-    (its Quantity.setters) is checked by the guard first, so nothing outside
-    the limits reaches the instrument whoever calls; a change larger than the
-    bench step goes in steps, pausing between them for the bench rate.
+NO_ATTRIBUTES = Attributes(None, {})
+
+
+class GuardedPort:
+    """The base of every port class (port_class). Every call that sets a
+    quantity (its Quantity.setters) is checked by the guard first, so nothing
+    outside the limits reaches the instrument whoever calls; a change larger
+    than the bench step goes in steps, pausing between them for the bench rate.
 
     The value before a change is the setpoint last written through the device
     (read once when there is none yet), so a sweep costs no extra query. The
@@ -102,18 +73,24 @@ class GuardedPort(PortAdapter):
         guard: Guard,
         quantities: Iterable[Quantity],
         pause: Pause,
+        attributes: Attributes = NO_ATTRIBUTES,
         setpoints: Optional[Dict[str, float]] = None,
         told: Optional[Told] = None,
         changed: Optional[Changed] = None,
     ):
-        super().__init__(target)
+        """quantities: those the guard checks and ramps (numbers it sets)."""
+        self.target = target  # the part
         self.guard = guard
         self.setters = {name: q for q in quantities for name in q.setters}
         self.pause = pause
+        self.attributes = attributes
         self.setpoints: Dict[str, float] = {} if setpoints is None else setpoints
         self.told = told
         self.changed = changed
         self.changed_keys: Set[str] = set()  # those changed hears of already
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.target!r})"
 
     def for_run(
         self,
@@ -123,9 +100,15 @@ class GuardedPort(PortAdapter):
     ) -> "GuardedPort":
         """The same device for a run: its ramps wait with the run's pause,
         told hears the values it sets and changed how to set each back."""
-        quantities = set(self.setters.values())
-        return GuardedPort(
-            self.target, self.guard, quantities, pause, self.setpoints, told, changed
+        return type(self)(
+            self.target,
+            self.guard,
+            set(self.setters.values()),
+            pause,
+            self.attributes,
+            self.setpoints,
+            told,
+            changed,
         )
 
     def forget(self) -> None:
@@ -133,23 +116,41 @@ class GuardedPort(PortAdapter):
         its own first."""
         self.setpoints.clear()
 
-    def __getattr__(self, name: str) -> Any:
-        if name in PORT_ATTRIBUTES:
-            raise AttributeError(name)
-        value = getattr(self.target, name)
+    # A part's quantities and actions by their declarations
+    def read(self, quantities: Iterable[Quantity]) -> Dict[str, Any]:
+        """Values of these quantities of the part, a shared source read once."""
+        self.attributes.apply(self.target)
+        return read_values(self.target, quantities)
+
+    def write(self, quantity: Quantity, value: Any) -> Any:
+        """Set a quantity of the part: a setpoint through the guard."""
+        if quantity.setters:
+            return self._setter(quantity.setters[0], quantity.parse(value), (), {})
+        self.attributes.apply(self.target)
+        return quantity.write(self.target, value)
+
+    def act(self, action: Action, arguments: Mapping[str, Any]) -> Any:
+        """Run an action of the part with its arguments, bound already."""
+        self.attributes.apply(self.target)
+        return action.call(self.target, **arguments)
+
+    # How the methods of a port class call the part
+    def _call(self, name: str, *args, **kwargs) -> Any:
+        self.attributes.apply(self.target)
+        return getattr(self.target, name)(*args, **kwargs)
+
+    def _setter(
+        self, name: str, value: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> Any:
         quantity = self.setters.get(name)
-        if quantity is None:
-            return value
-
-        def guarded(new: float, *args, **kwargs):
-            return self._set(quantity, value, new, args, kwargs)
-
-        return guarded
+        if quantity is None:  # a value the guard has no limits for (an output)
+            return self._call(name, value, *args, **kwargs)
+        return self._set(quantity, name, value, args, kwargs)
 
     def _set(
         self,
         quantity: Quantity,
-        method: Callable[..., Any],
+        name: str,
         value: float,
         args: Tuple[Any, ...],
         kwargs: Dict[str, Any],
@@ -160,14 +161,14 @@ class GuardedPort(PortAdapter):
             self.changed_keys.add(key)
             self._note_before(quantity)
         before = self._before(quantity) if self.guard.ramps(key) else None
-        plain = getattr(self.target, quantity.setters[0])
+        plain = quantity.setters[0]
         last = before
         for step in self.guard.ladder(key, before, value)[:-1]:
-            plain(step)
+            self._call(plain, step)
             self.setpoints[key] = step
             self.pause(self.guard.delay(key, step - last))
             last = step
-        result = method(value, *args, **kwargs)
+        result = self._call(name, value, *args, **kwargs)
         self.setpoints[key] = value
         if self.told is not None:
             self.told(key, value)
@@ -179,11 +180,79 @@ class GuardedPort(PortAdapter):
         before = self._before(quantity)
         if before is None:
             return
-        setter = getattr(self, quantity.setters[0])
-        self.changed(lambda: setter(before))
+        plain = quantity.setters[0]
+        self.changed(lambda: self._set(quantity, plain, before, (), {}))
 
     def _before(self, quantity: Quantity) -> Optional[float]:
         """The setpoint now: the last one written, else read once."""
         if quantity.key not in self.setpoints and quantity.readable:
+            self.attributes.apply(self.target)
             self.setpoints[quantity.key] = quantity.read(self.target)
         return self.setpoints.get(quantity.key)
+
+
+def _calling(name: str, doc: Optional[str]) -> Callable[..., Any]:
+    def method(self, *args, **kwargs):
+        return self._call(name, *args, **kwargs)
+
+    method.__name__, method.__doc__ = name, doc
+    return method
+
+
+def _setting(name: str, doc: Optional[str]) -> Callable[..., Any]:
+    def method(self, value, *args, **kwargs):
+        return self._setter(name, value, args, kwargs)
+
+    method.__name__, method.__doc__ = name, doc
+    return method
+
+
+@functools.lru_cache(maxsize=None)
+def port_class(part_class: type) -> type:
+    """The class of the ports over parts of this class: a GuardedPort with the
+    part's capabilities, its methods built from their declarations, and the
+    part's own quantities and actions declared as the part's class declares
+    them (thzdaq_instruments.parts asks the port as it asks the part)."""
+    capabilities = capabilities_of(part_class)
+    setters = {
+        name
+        for capability in capabilities
+        for quantity in capability.capability_quantities
+        for name in quantity.setters
+    }
+    namespace: Dict[str, Any] = {
+        "__module__": __name__,
+        "quantities": declared_by(part_class, "quantities")[1],
+        "actions": declared_by(part_class, "actions")[1],
+    }
+    for capability in capabilities:
+        for name, member in vars(capability).items():
+            public = callable(member) and not name.startswith("_")
+            if public and hasattr(GuardedPort, name):
+                raise TypeError(
+                    f"{capability.__name__}.{name} is a name of the port itself"
+                )
+        for name in sorted(capability.__abstractmethods__):
+            doc = getattr(capability, name).__doc__
+            build = _setting if name in setters else _calling
+            namespace.setdefault(name, build(name, doc))
+    # The most refined ones: a capability another one refines comes with it
+    bases = tuple(
+        capability
+        for capability in capabilities
+        if not any(
+            c is not capability and issubclass(c, capability) for c in capabilities
+        )
+    )
+    return type(f"{part_class.__name__}Port", (GuardedPort, *bases), namespace)
+
+
+def port(
+    part: Any,
+    guard: Guard,
+    quantities: Iterable[Quantity],
+    pause: Pause,
+    attributes: Attributes = NO_ATTRIBUTES,
+) -> GuardedPort:
+    """A port over the part, of the class its own class gets."""
+    return port_class(type(part))(part, guard, quantities, pause, attributes)

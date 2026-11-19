@@ -158,8 +158,10 @@ ANGLE = Quantity(
     "angle", "Angle", "deg", get=lambda t: t.get_angle(), setters=("rotate_to",)
 )
 
-# The bias of a SIS block also takes a voltage corrected by readback
-SIS_VOLTAGE_SET = replace(VOLTAGE_SET, setters=("set_voltage", "set_voltage_precise"))
+# A precise voltage source (a SIS bias) also takes a voltage corrected by readback
+PRECISE_VOLTAGE_SET = replace(
+    VOLTAGE_SET, setters=("set_voltage", "set_voltage_precise")
+)
 
 
 # Coil current the SIS block reports (the setpoint field is what was asked)

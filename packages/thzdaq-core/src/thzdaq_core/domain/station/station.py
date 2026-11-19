@@ -44,7 +44,13 @@ from thzdaq_core.domain.station.config import (
     channel_ref,
 )
 from thzdaq_core.domain.station.kinds import DeviceKind, kind_capabilities, kinds_for
-from thzdaq_core.domain.station.ports import GuardedPort, Pause
+from thzdaq_core.domain.station.ports import (
+    NO_ATTRIBUTES,
+    Attributes,
+    GuardedPort,
+    Pause,
+    port,
+)
 from thzdaq_core.domain.station.profile import station_to_dict
 from thzdaq_core.domain.station.safety import Guard
 
@@ -105,8 +111,9 @@ class Station:
 
     Measurements get devices by ref and check capabilities (station.require),
     never drivers, so the same procedure runs on any bench or simulator. Every
-    device is handed out guarded (GuardedPort): the passport of its driver and
-    the safety section of the profile hold whoever sets it.
+    device is handed out in a port (GuardedPort) that offers the capabilities
+    of its part and nothing else: the passport of its driver and the safety
+    section of the profile hold whoever sets it.
     """
 
     def __init__(
@@ -208,7 +215,8 @@ class Station:
                 continue
             voltage, current = (limits.get(q.key) for q in (VOLTAGE_SET, CURRENT_SET))
             if voltage or current:
-                self._part(ref).set_protection(
+                part, _ = self._part(ref)
+                part.set_protection(
                     voltage.maximum if voltage else None,
                     current.maximum if current else None,
                 )
@@ -231,7 +239,9 @@ class Station:
         length). A value is parsed as the quantity takes one from a person ("off"
         is False). One that fails leaves it closed: the open fails."""
         for quantity in quantities_of(instrument):
-            if not (quantity.persistent and quantity.settable and quantity.key in settings):
+            if not (
+                quantity.persistent and quantity.settable and quantity.key in settings
+            ):
                 continue
             value = settings[quantity.key]
             try:
@@ -431,28 +441,29 @@ class Station:
         """The device of a ref, guarded; opens its instrument on first use."""
         with self._lock:
             if ref not in self._devices:
-                part = self._part(ref)
+                part, attributes = self._part(ref)
                 guarded = [
                     q for q in self.quantities(ref) if q.setters and q.kind in NUMBERS
                 ]
-                self._devices[ref] = GuardedPort(
-                    part, self.guard(ref), guarded, self.pause
+                self._devices[ref] = port(
+                    part, self.guard(ref), guarded, self.pause, attributes
                 )
             return self._devices[ref]
 
-    def _part(self, ref: str) -> Any:
+    def _part(self, ref: str) -> Tuple[Any, Attributes]:
+        """The part a device is and the attributes it is used with."""
         if ref in self.config.instruments:
-            return self.instrument(ref)
+            return self.instrument(ref), NO_ATTRIBUTES
         if CHANNEL_SEPARATOR in ref:
             instrument_id, key = ref.split(CHANNEL_SEPARATOR, 1)
             cls = self.driver_class(instrument_id)
             matches = [k for k in cls.fixed_channels() if str(k) == key]
             if not matches:
                 raise StationError(f"{self.name}: {instrument_id} has no channel {key}")
-            return self.instrument(instrument_id).channel(matches[0])
-        return self._build_configured(ref)
+            return self.instrument(instrument_id).channel(matches[0]), NO_ATTRIBUTES
+        return self._configured_part(ref)
 
-    def _build_configured(self, device_id: str) -> Any:
+    def _configured_part(self, device_id: str) -> Tuple[Any, Attributes]:
         found = self.config.find_device(device_id)
         if found is None:
             raise StationError(f"{self.name}: no device {device_id!r}")
@@ -473,7 +484,7 @@ class Station:
         else:
             part = instrument
         try:
-            return kind.build(part, spec.settings)
+            return part, kind.attributes(part, spec.settings)
         except TypeError as e:
             raise StationError(f"device {device_id!r}: {e}") from e
 

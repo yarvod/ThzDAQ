@@ -5,8 +5,8 @@ from typing import Dict, Optional
 
 from thzdaq_instruments.capabilities import (
     CurrentSource,
+    PreciseVoltageSource,
     VoltageCurrentMeter,
-    VoltageSource,
 )
 from thzdaq_instruments.errors import (
     ConfigurationError,
@@ -14,7 +14,7 @@ from thzdaq_instruments.errors import (
     InstrumentResponseError,
 )
 from thzdaq_instruments.instrument import Channel, ScpiInstrument
-from thzdaq_instruments.quantities import COIL_CURRENT, SHORT, SIS_VOLTAGE_SET
+from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments import sis_block
 from thzdaq_instruments.sis_block import DEVICES
@@ -23,15 +23,15 @@ from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 logger = logging.getLogger(__name__)
 
 
-class SisBiasChannel(Channel, VoltageSource, VoltageCurrentMeter):
-    """Voltage bias of one SIS device: VoltageSource + VoltageCurrentMeter.
+class SisBiasChannel(Channel, PreciseVoltageSource, VoltageCurrentMeter):
+    """Voltage bias of one SIS device: PreciseVoltageSource + VoltageCurrentMeter.
 
     Offsets compensate the bias circuit: the instrument gets voltage - offset,
     readings come back + offset.
     """
 
     instrument: "ScontelSisBlock"
-    quantities = (SIS_VOLTAGE_SET, SHORT)
+    quantities = (SHORT,)
 
     def __init__(self, instrument: "ScontelSisBlock", key: str):
         super().__init__(instrument, key)

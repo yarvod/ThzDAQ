@@ -125,10 +125,13 @@ class TestStation:
         config.instruments["generator"].settings = {"frequency_multiplier": 18}
         with Station(config, pause=time.sleep) as station:
             assert station["sis_bias_1"] is station.device("sis_bias_1")
-            assert station["sis_bias_1"].instrument is station["sis_bias_2"].instrument
+            assert (
+                station["sis_bias_1"].target.instrument
+                is station["sis_bias_2"].target.instrument
+            )
             assert station.opened == ("sis",)
             # A simulator starts configured as the profile says
-            assert station["generator"].get_frequency_multiplier() == 18
+            assert station.instrument("generator").get_frequency_multiplier() == 18
             # Handed out guarded, over the instrument's own channel
             assert station["supply:3"].target is station.instrument("supply").channel(3)
         assert station.opened == ()
@@ -150,7 +153,7 @@ class TestStation:
             seven.get_voltage()
             assert channel.offset_voltage == -1e-5
             one.set_voltage(2e-3)
-            assert channel.offset_voltage == 4e-5 and one.offset_voltage == 4e-5
+            assert channel.offset_voltage == 4e-5
             assert station.info("sis_bias_1").provides(VoltageSource)
 
     def test_unknown_kind_and_missing_channel(self):
@@ -312,13 +315,15 @@ class TestStorage:
         with Station(load_station(EXAMPLE), pause=time.sleep, simulate=True) as station:
             found = station.require(TWO_SB_DEVICES, TWO_SB_REQUIREMENTS, time.sleep)
             found["lo"].set_frequency(223e9)  # at the mixer: the generator multiplies
-            assert found["lo"].get_frequency_multiplier() == 18
+            assert found["lo"].target.get_frequency_multiplier() == 18
             assert found["lo"].get_frequency() == pytest.approx(223e9)
             found["if_selector"].set_output(False)
             found["load"].to_hot()
             assert isinstance(found["detector"].read_power(), float)
-            assert found["sis1"].offset_voltage == pytest.approx(3.3e-5)
-            assert isinstance(found["sis1"].instrument, SimSisBlock)
+            assert found["sis1"].attributes.values["offset_voltage"] == pytest.approx(
+                3.3e-5
+            )
+            assert isinstance(found["sis1"].target.instrument, SimSisBlock)
 
     def test_lab_profile_loads(self):
         config = load_station(LAB)
