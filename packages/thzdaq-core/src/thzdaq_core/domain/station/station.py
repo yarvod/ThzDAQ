@@ -181,8 +181,9 @@ class Station:
                 simulate=simulate,
                 **(spec.sim_options if simulate else spec.options),
             )
+            if not instrument.keeps_settings:
+                self._apply_settings(instrument_id, instrument, spec.settings)
             if simulate or self.registry.get(spec.driver).simulated:
-                self._apply_settings(instrument, spec.settings)
                 if self.lively and hasattr(instrument, "liven"):
                     instrument.liven()
             if simulate and hasattr(instrument, "load_position"):
@@ -220,11 +221,26 @@ class Station:
         return None
 
     @staticmethod
-    def _apply_settings(instrument: Instrument, settings: Dict[str, Any]) -> None:
-        """A simulator starts configured as the profile says (a real one is not touched)."""
+    def _apply_settings(
+        instrument_id: str, instrument: Instrument, settings: Dict[str, Any]
+    ) -> None:
+        """An instrument that does not keep its configuration (a simulator, an
+        NRX) starts configured as the profile says. Settings go in the order of
+        its quantities, which its driver lists so that a later one is not undone
+        by an earlier (a filter length after the switch of its automatic
+        length). A value is parsed as the quantity takes one from a person ("off"
+        is False). One that fails leaves it closed: the open fails."""
         for quantity in quantities_of(instrument):
-            if quantity.persistent and quantity.settable and quantity.key in settings:
-                quantity.write(instrument, settings[quantity.key])
+            if not (quantity.persistent and quantity.settable and quantity.key in settings):
+                continue
+            value = settings[quantity.key]
+            try:
+                quantity.write(instrument, quantity.parse(value))
+            except (InstrumentError, ValueError) as e:
+                instrument.close()
+                raise InstrumentError(
+                    f"{instrument_id}: {quantity.key} = {value!r} of the profile: {e}"
+                ) from e
 
     def is_open(self, instrument_id: str) -> bool:
         return instrument_id in self._instruments

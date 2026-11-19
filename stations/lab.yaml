@@ -375,7 +375,7 @@ instruments:
       kind: socket
       host: 169.254.2.20
       port: 5025
-    options:
+    settings:
       aperture_time: 0.05
       averaging: false
   yig_filter_1:

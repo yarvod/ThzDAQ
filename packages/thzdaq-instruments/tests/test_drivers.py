@@ -191,18 +191,20 @@ class TestNrx:
         assert math.isnan(meter.read_power())
         assert meter.fetch() == pytest.approx(watt)  # the reading itself is kept
 
-    def test_options_configure_meter(self):
+    def test_units(self):
         emulator = NrxEmulator()
-        meter, _ = make(RohdeSchwarzNRX, emulator, aperture_time=0.05, averaging=False)
-        assert emulator.aperture == 0.05 and emulator.averaging is False
+        meter, _ = make(RohdeSchwarzNRX, emulator)
         meter.set_units("W")
         assert meter.read_power() == pytest.approx(-30.0, abs=1e-3)
         with pytest.raises(ConfigurationError):
             meter.set_units("V")
 
-    def test_constructor_has_no_side_effects_by_default(self):
+    def test_constructor_writes_nothing(self):
+        """Its averaging and aperture come from the profile's settings, which
+        the station writes as it opens (keeps_settings is False)."""
         _, link = make(RohdeSchwarzNRX, NrxEmulator())
         assert link.written == []
+        assert RohdeSchwarzNRX.keeps_settings is False
 
     def test_settings_are_configuration_quantities(self):
         from thzdaq_instruments.parts import quantities_of, read_values

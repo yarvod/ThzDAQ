@@ -49,13 +49,22 @@ def part_of(target: Any) -> Any:
 def declared(target: Any, attribute: str) -> Tuple[Tuple[type, ...], Tuple[Any, ...]]:
     """Capabilities of a device part's class and what the class declares under
     the attribute (quantities, actions)."""
-    cls = type(part_of(target))
+    return declared_by(type(part_of(target)), attribute)
+
+
+def declared_by(cls: type, attribute: str) -> Tuple[Tuple[type, ...], Tuple[Any, ...]]:
+    """Capabilities of a part class and what it declares under the attribute."""
     return capabilities_of(cls), tuple(getattr(cls, attribute, ()))
+
+
+def class_quantities(cls: type) -> List[Quantity]:
+    """Quantities every part of this class has, known without one."""
+    return quantities_for(*declared_by(cls, "quantities"))
 
 
 def quantities_of(target: Any) -> List[Quantity]:
     """Quantities of a device part: from its capabilities, then its own ones."""
-    return quantities_for(*declared(target, "quantities"))
+    return class_quantities(type(part_of(target)))
 
 
 def actions_of(target: Any) -> List[Action]:

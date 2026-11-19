@@ -51,7 +51,7 @@ instruments:
     driver: rs.nrx
     title: R&S NRX
     connection: {kind: socket, host: 169.254.2.20, port: 5025}
-    options: {aperture_time: 0.05, averaging: false}
+    settings: {aperture_time: 0.05, averaging: false}
   yig_filter_1:
     driver: ni.yig
     title: NI YIG

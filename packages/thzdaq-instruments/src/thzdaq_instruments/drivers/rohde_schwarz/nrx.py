@@ -19,27 +19,20 @@ class RohdeSchwarzNRX(ScpiInstrument, PowerDetector):
     read_power() always returns dBm whatever display unit is selected (also
     one changed on the front panel). In W the noise near zero gives values
     <= 0 that have no dBm: they are NaN, which plots and monitors skip.
+
+    Its averaging and aperture are the bench's: the profile's settings are
+    written as it opens, whatever was left on its panel.
     """
 
     driver_key = "rs.nrx"
     device_type = "power_meter"
 
     quantities = POWER_METER_QUANTITIES
+    keeps_settings = False
 
-    def __init__(
-        self,
-        transport: Transport,
-        *,
-        name: Optional[str] = None,
-        aperture_time: Optional[float] = None,
-        averaging: Optional[bool] = None,
-    ):
+    def __init__(self, transport: Transport, *, name: Optional[str] = None):
         super().__init__(transport, name=name)
         self._unit: Optional[PowerUnit] = None
-        if averaging is not None:
-            self.set_averaging(averaging)
-        if aperture_time is not None:
-            self.set_aperture_time(aperture_time)
 
     @staticmethod
     def connection(host: str = "169.254.2.20", port: int = 5025) -> ConnectionSpec:

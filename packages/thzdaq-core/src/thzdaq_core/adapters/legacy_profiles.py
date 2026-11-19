@@ -125,7 +125,7 @@ def _state_defaults() -> Dict[str, InstrumentConfig]:
             driver=RohdeSchwarzNRX.driver_key,
             connection=RohdeSchwarzNRX.connection(),
             # The legacy driver configured the meter like this on every connect
-            options={"aperture_time": 0.05, "averaging": False},
+            settings={"aperture_time": 0.05, "averaging": False},
             title="R&S NRX",
         ),
         "yig_filter_1": InstrumentConfig(

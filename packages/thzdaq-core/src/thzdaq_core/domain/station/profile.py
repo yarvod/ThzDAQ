@@ -5,9 +5,12 @@ Files are read and written by the adapter (adapters/yaml_profiles.py).
 
 import logging
 from dataclasses import fields
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from thzdaq_instruments import default_registry
 from thzdaq_instruments.errors import ConfigurationError
+from thzdaq_instruments.parts import class_quantities
+from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_instruments.transport.base import ConnectionSpec
 
 from thzdaq_core.domain.errors import StationError
@@ -202,7 +205,9 @@ def device_from_dict(device_id: str, item: Dict[str, Any]) -> DeviceConfig:
     )
 
 
-def station_from_dict(data: Dict[str, Any]) -> StationConfig:
+def station_from_dict(
+    data: Dict[str, Any], registry: Optional[DriverRegistry] = None
+) -> StationConfig:
     if not isinstance(data, dict):
         raise StationError("Station profile must be a mapping")
     version = data.get("version", FORMAT_VERSION)
@@ -210,7 +215,7 @@ def station_from_dict(data: Dict[str, Any]) -> StationConfig:
         data = migrate_v1(data)
     elif version != FORMAT_VERSION:
         raise StationError(f"Unsupported station profile version {version}")
-    data = drop_old_kinds(data)
+    data = settings_from_options(drop_old_kinds(data), registry or default_registry())
     _known_keys(
         "station", data, ["version", "name", "description", "instruments", "safety"]
     )
@@ -281,6 +286,40 @@ def drop_old_kinds(data: Dict[str, Any]) -> Dict[str, Any]:
         if "devices" in item:
             item["devices"] = devices
         instruments[instrument_id] = item
+    return {**data, "instruments": instruments}
+
+
+def settings_from_options(
+    data: Dict[str, Any], registry: DriverRegistry
+) -> Dict[str, Any]:
+    """Options that are configuration become settings.
+
+    An option named as a persistent quantity of its driver (the averaging and
+    aperture of an NRX) went to the constructor once; it is a setting now,
+    written as the instrument opens. A setting kept already wins: a person set
+    it later, in the dock. Drivers not registered keep their options.
+    """
+    instruments = {}
+    for instrument_id, item in (data.get("instruments") or {}).items():
+        instruments[instrument_id] = item
+        driver = (item or {}).get("driver")
+        options = (item or {}).get("options") or {}
+        if driver not in registry:
+            continue
+        cls = registry.get(driver).cls
+        configuration = {q.key for q in class_quantities(cls) if q.persistent}
+        moved = {k: v for k, v in options.items() if k in configuration}
+        if not moved:
+            continue
+        logger.warning(
+            f"{instrument_id}: options {sorted(moved)} are settings of the "
+            "profile now, written as it opens"
+        )
+        instruments[instrument_id] = {
+            **item,
+            "options": {k: v for k, v in options.items() if k not in moved},
+            "settings": {**moved, **(item.get("settings") or {})},
+        }
     return {**data, "instruments": instruments}
 
 

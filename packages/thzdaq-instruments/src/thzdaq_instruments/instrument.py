@@ -57,6 +57,11 @@ class Instrument:
     # itself or of every channel; channel_limits for channels that differ
     limits: ClassVar[Mapping[str, Limit]] = {}
     channel_limits: ClassVar[Mapping[Hashable, Mapping[str, Limit]]] = {}
+    # It keeps its configuration (its persistent quantities) itself, set on its
+    # panel and kept over a power cycle: the profile's settings are not written
+    # to it as it opens. False: the program keeps it, and the station writes
+    # them on every open (a simulator, a sensor that forgets all when unplugged)
+    keeps_settings: ClassVar[bool] = True
 
     @classmethod
     def passport(cls, channel: Optional[Hashable] = None) -> Mapping[str, Limit]:
