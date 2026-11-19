@@ -122,6 +122,19 @@ START_ROTATION = Action(
 STOP_ROTATION = Action("stop", "Stop", lambda t: t.stop(), help="Stop the rotation")
 CHOPPER_ACTIONS = (START_ROTATION, STOP_ROTATION)
 
+# A power sensor's zero (Keysight U2000): inside the sensor, or of what the
+# input sees, which must then carry no signal
+ZERO_SENSOR = Action(
+    "zero", "Zero", lambda t: t.zero(),
+    help="Internal zeroing: the signal at the input may stay on",
+)  # fmt: skip
+ZERO_EXTERNAL = Action(
+    "zero_external", "Zero (external)", lambda t: t.zero_external(),
+    danger="Turn the RF off at the sensor input first: what reaches it is taken as zero",
+    help="More accurate than the internal zero below −30 dBm",
+)  # fmt: skip
+POWER_SENSOR_ACTIONS = (ZERO_SENSOR, ZERO_EXTERNAL)
+
 # A rotator that counts its angle (thzdaq_instruments.angle): a program zero
 ZERO_ANGLE = Action(
     "zero", "Set zero", lambda t: t.zero(),

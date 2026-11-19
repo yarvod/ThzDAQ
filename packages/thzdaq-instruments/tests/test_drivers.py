@@ -522,6 +522,7 @@ class TestDefaultRegistry:
         } <= sources
         assert {i.key for i in registry.find(PowerDetector)} == {
             "rs.nrx",
+            "keysight.u2002h",
             "sim.power_meter",
         }
         supply = registry.open("rigol.dp832a", simulate=True)

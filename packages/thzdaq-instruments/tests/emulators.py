@@ -221,6 +221,101 @@ class NrxEmulator(ScpiEmulator):
         return f"{self.power_dbm:.3f}"
 
 
+NO_ERROR = '+0,"No error"'
+
+
+def is_on(value: str) -> bool:
+    """An SCPI boolean as written: 1 or ON."""
+    return value in ("1", "ON")
+
+
+class U2000Emulator(ScpiEmulator):
+    """Keysight U2002H USB power sensor as after *RST. A message of several
+    commands (";") runs each of them, the answer is the last one's. READ?
+    while measuring continuously only queues -213, as the sensor does; a zero
+    with `zero_fails` queues -231. The averaging settings couple: a count
+    turns auto off and averaging on, auto on turns averaging on."""
+
+    def __init__(self, power_dbm: float = -20.0):
+        super().__init__()
+        self.power_dbm = power_dbm
+        self.unit = "DBM"
+        self.continuous = False
+        self.frequency = 50e6
+        self.averaging = True
+        self.averaging_auto = True
+        self.averaging_count = 4
+        self.rate = "NORM"
+        self.offset = 0.0
+        self.offset_on = False
+        self.temperature_c = 27.0
+        self.zero_type = "INT"
+        self.zeros: List[str] = []  # types of the zeros done
+        self.zero_fails = False
+        self.queue: List[str] = []  # SYST:ERR? answers
+        flag = r"(0|1|ON|OFF)"
+        self.route(
+            r"\*IDN\?", lambda: "Agilent Technologies,U2002H,MY54260001,A1.04.01"
+        )
+        self.route(r"\*CLS", self.queue.clear)
+        self.route(r"\*OPC\?", lambda: "1")
+        self.route(r"SYST:ERR\?", lambda: self.queue.pop(0) if self.queue else NO_ERROR)
+        self.route(r"UNIT:POW (DBM|W)", lambda u: setattr(self, "unit", u))
+        self.route(
+            r"INIT:CONT " + flag, lambda v: setattr(self, "continuous", is_on(v))
+        )
+        self.route(r"READ\?", self._read)
+        self.route(r"SENS:FREQ (\S+)", lambda v: setattr(self, "frequency", float(v)))
+        self.route(r"SENS:FREQ\?", lambda: f"{self.frequency:.6E}")
+        self.route(
+            r"SENS:AVER:STAT " + flag, lambda v: setattr(self, "averaging", is_on(v))
+        )
+        self.route(r"SENS:AVER:STAT\?", lambda: "1" if self.averaging else "0")
+        self.route(r"SENS:AVER:COUN:AUTO " + flag, self._set_auto)
+        self.route(
+            r"SENS:AVER:COUN:AUTO\?", lambda: "1" if self.averaging_auto else "0"
+        )
+        self.route(r"SENS:AVER:COUN (\d+)", self._set_count)
+        self.route(r"SENS:AVER:COUN\?", lambda: f"+{self.averaging_count}")
+        self.route(r"SENS:MRAT (NORM|DOUB|FAST)", lambda r: setattr(self, "rate", r))
+        self.route(r"SENS:MRAT\?", lambda: self.rate)
+        self.route(r"SENS:CORR:GAIN2 (\S+)", self._set_offset)
+        self.route(r"SENS:CORR:GAIN2\?", lambda: f"{self.offset:+.3f}")
+        self.route(r"SENS:CORR:GAIN2:STAT\?", lambda: "1" if self.offset_on else "0")
+        self.route(r"SENS:TEMP\?", lambda: f"{self.temperature_c:+.2f}")
+        self.route(r"CAL:ZERO:TYPE (INT|EXT)", lambda t: setattr(self, "zero_type", t))
+        self.route(r"CAL:ZERO:AUTO ONCE", self._zero)
+
+    def __call__(self, message: str) -> Optional[str]:
+        answer = None
+        for command in message.split(";"):
+            answer = super().__call__(command.strip().lstrip(":")) or answer
+        return answer
+
+    def _read(self) -> Optional[str]:
+        if self.continuous:
+            self.queue.append('-213,"Init ignored"')
+            return None
+        dbm = self.power_dbm + (self.offset if self.offset_on else 0.0)
+        return f"{dbm_to_watt(dbm):.6E}" if self.unit == "W" else f"{dbm:+.3f}"
+
+    def _set_auto(self, value: str) -> None:
+        self.averaging_auto = is_on(value)
+        self.averaging = self.averaging or self.averaging_auto
+
+    def _set_count(self, value: str) -> None:
+        self.averaging_count = int(value)
+        self.averaging_auto, self.averaging = False, True
+
+    def _set_offset(self, value: str) -> None:
+        self.offset, self.offset_on = float(value), True
+
+    def _zero(self) -> None:
+        self.zeros.append(self.zero_type)
+        if self.zero_fails:
+            self.queue.append('-231,"Data questionable;ZERO ERROR"')
+
+
 class SisEmulator(ScpiEmulator):
     """Bias source with gain error and offset; `fail` makes the next N answers ERROR."""
 

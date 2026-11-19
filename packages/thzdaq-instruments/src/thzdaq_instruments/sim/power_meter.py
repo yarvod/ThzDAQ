@@ -2,10 +2,16 @@ import math
 import random
 from typing import Any, Callable, Optional
 
+from thzdaq_instruments.actions import POWER_SENSOR_ACTIONS
 from thzdaq_instruments.capabilities import PowerDetector
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.sim.base import SimInstrument
-from thzdaq_instruments.quantities import POWER_METER_QUANTITIES, POWER_UNITS
+from thzdaq_instruments.quantities import (
+    MEASUREMENT_RATES,
+    POWER_METER_QUANTITIES,
+    POWER_UNITS,
+    U2000_QUANTITIES,
+)
 from thzdaq_instruments.sim.lively import Wobble, still
 
 # The receiver a simulated bench measures with its hot and cold loads
@@ -132,3 +138,74 @@ class SimPowerMeter(SimDetector):
 
     def set_upper_limit(self, value: float) -> None:
         self.upper_limit = float(value)
+
+
+class SimU2000(SimDetector):
+    """A Keysight U2000 USB power sensor simulated: its offset adds to the
+    power, its averaging settings couple as the sensor's do, a zero does
+    nothing."""
+
+    quantities = U2000_QUANTITIES
+    actions = POWER_SENSOR_ACTIONS
+
+    def __init__(self, **detector: Any):
+        super().__init__(**detector)
+        self.frequency = 50e6  # Hz, as after *RST
+        self.temperature = 300.0  # K
+        self.averaging = True
+        self.averaging_auto = True
+        self.averaging_count = 4
+        self.measurement_rate = "NORM"
+        self.offset = 0.0  # dB
+
+    def read_power(self) -> float:
+        return super().read_power() + self.offset
+
+    def set_frequency(self, frequency: float) -> None:
+        self.frequency = float(frequency)
+
+    def get_frequency(self) -> float:
+        return self.frequency
+
+    def read_temperature(self) -> float:
+        return self.temperature
+
+    def set_averaging(self, value: bool) -> None:
+        self.averaging = bool(value)
+
+    def get_averaging(self) -> bool:
+        return self.averaging
+
+    def set_averaging_auto(self, value: bool) -> None:
+        self.averaging_auto = bool(value)
+        self.averaging = self.averaging or self.averaging_auto
+
+    def get_averaging_auto(self) -> bool:
+        return self.averaging_auto
+
+    def set_averaging_count(self, count: int) -> None:
+        self.averaging_count = int(count)
+        self.averaging_auto, self.averaging = False, True
+
+    def get_averaging_count(self) -> int:
+        return self.averaging_count
+
+    def set_measurement_rate(self, rate: str) -> None:
+        if rate not in MEASUREMENT_RATES:
+            raise ConfigurationError(f"Unsupported measurement rate {rate!r}")
+        self.measurement_rate = rate
+
+    def get_measurement_rate(self) -> str:
+        return self.measurement_rate
+
+    def set_offset(self, db: float) -> None:
+        self.offset = float(db)
+
+    def get_offset(self) -> float:
+        return self.offset
+
+    def zero(self) -> None:
+        pass
+
+    def zero_external(self) -> None:
+        pass

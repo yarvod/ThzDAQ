@@ -21,6 +21,7 @@ from emulators import (
     RigolEmulator,
     SisEmulator,
     Sr830Emulator,
+    U2000Emulator,
     ZvaEmulator,
 )
 from thzdaq_instruments.capabilities import (
@@ -48,6 +49,7 @@ from thzdaq_instruments.drivers import (
     ArduinoGrid,
     GenericScpi,
     Keithley2200,
+    KeysightU2002H,
     LakeShore336,
     ModbusChopper,
     NiYigFilter,
@@ -75,6 +77,7 @@ from thzdaq_instruments.sim import (
     SimSisBlock,
     SimSpectrumAnalyzer,
     SimTemperatureController,
+    SimU2000,
     SimVacuumGauge,
     SimYigFilter,
 )
@@ -103,6 +106,10 @@ def agilent():
 
 def nrx():
     return driver(RohdeSchwarzNRX, NrxEmulator())
+
+
+def u2002h():
+    return driver(KeysightU2002H, U2000Emulator())
 
 
 def sis():
@@ -307,6 +314,7 @@ CONTRACTS = {
             "keithley": keithley,
             "agilent": agilent,
             "nrx": nrx,
+            "u2002h": u2002h,
             "sis": sis,
             "yig": yig,
             "chopper": chopper,
@@ -338,6 +346,7 @@ CONTRACTS = {
             "sim rotator": SimRotator,
             "rigol": rigol,
             "agilent": agilent,
+            "u2002h": u2002h,
             "lakeshore": lakeshore,
             "sr830": sr830,
             "zva": zva,
@@ -402,7 +411,12 @@ CONTRACTS = {
     ),
     PowerDetector: (
         check_power_detector,
-        {"sim power meter": SimPowerMeter, "nrx": nrx},
+        {
+            "sim power meter": SimPowerMeter,
+            "nrx": nrx,
+            "sim u2000": SimU2000,
+            "u2002h": u2002h,
+        },
     ),
     TunableFilter: (
         check_tunable_filter,

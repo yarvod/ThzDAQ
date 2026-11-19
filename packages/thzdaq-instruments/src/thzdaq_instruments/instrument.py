@@ -1,5 +1,15 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Hashable, Mapping, Optional, Tuple, Type
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Hashable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+)
 
 from thzdaq_instruments.capabilities import Identifiable, RawCommands
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
@@ -9,6 +19,9 @@ from thzdaq_instruments.transport.base import Transport
 # The device type of an instrument without a driver of its own: it takes raw
 # commands only (drivers/generic.py)
 GENERIC = "generic"
+
+# SYST:ERR? answers read at most, should a queue never say it is empty
+ERROR_QUEUE_READS = 32
 
 
 class Channel:
@@ -161,6 +174,18 @@ class ScpiInstrument(Instrument, Identifiable, RawCommands):
 
     def identify(self) -> str:
         return self.query("*IDN?")
+
+    def errors(self) -> List[str]:
+        """The instrument's error queue (SYST:ERR?), read until it answers
+        code 0 ("+0,\"No error\""): the answers with an error, oldest first."""
+        found = []
+        for _ in range(ERROR_QUEUE_READS):
+            answer = self.query("SYST:ERR?")
+            code = self._parse("SYST:ERR?", answer, lambda a: int(a.split(",")[0]))
+            if code == 0:
+                break
+            found.append(answer)
+        return found
 
     def close(self) -> None:
         self.transport.close()

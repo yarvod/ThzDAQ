@@ -1057,6 +1057,7 @@ registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
 1. **Каркас** ✅: uv workspace, `thzdaq-instruments` (errors, units, readings, capabilities,
    transport с пулом и блокировками, `Instrument/Channel`, реестр, симуляторы).
 2. **Драйверы** ✅: Rigol DP832A, R&S HMP2030 / NRX / ZVA67 / FSEK30, Keithley 2200,
+   Keysight U2002H (USB-датчик мощности через VISA),
    Agilent E8247C, Scontel SIS, NI YIG (HTTP), Modbus-чоппер, LakeShore 336, SRS SR830,
    Sumitomo F-70 (RS-232 и REST), Arduino grid — с симуляторами (Pfeiffer отключён до
    переписывания),

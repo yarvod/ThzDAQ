@@ -3,6 +3,7 @@ from thzdaq_instruments.drivers.arduino import ArduinoGrid
 from thzdaq_instruments.drivers.chopper import ModbusChopper
 from thzdaq_instruments.drivers.generic import GenericScpi
 from thzdaq_instruments.drivers.keithley import Keithley2200
+from thzdaq_instruments.drivers.keysight import KeysightU2000, KeysightU2002H
 from thzdaq_instruments.drivers.lakeshore import (
     HeaterOutput,
     LakeShore336,
@@ -39,6 +40,7 @@ from thzdaq_instruments.sim import (
     SimSisBlock,
     SimSpectrumAnalyzer,
     SimTemperatureController,
+    SimU2000,
     SimYigFilter,
 )
 
@@ -49,6 +51,7 @@ DRIVERS = (
     (Keithley2200, "Keithley 2200 power supply", SimPlainPowerSupply),
     (AgilentE8247C, "Agilent E8247C signal generator", SimSignalGenerator),
     (RohdeSchwarzNRX, "R&S NRX power meter", SimPowerMeter),
+    (KeysightU2002H, "Keysight U2002H USB power sensor", SimU2000),
     (ScontelSisBlock, "Scontel SIS bias block", SimSisBlock),
     (NiYigFilter, "NI digital YIG filters", SimYigFilter),
     (ModbusChopper, "Modbus chopper", SimChopper),
@@ -82,6 +85,8 @@ __all__ = [
     "SumitomoF70Rest",
     "TemperatureInput",
     "Keithley2200",
+    "KeysightU2000",
+    "KeysightU2002H",
     "ModbusChopper",
     "NiYigFilter",
     "RigolDP832A",

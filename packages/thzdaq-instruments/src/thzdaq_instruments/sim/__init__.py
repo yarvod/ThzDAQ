@@ -1,7 +1,7 @@
 from thzdaq_instruments.sim.analyzers import SimNetworkAnalyzer, SimSpectrumAnalyzer
 from thzdaq_instruments.sim.chopper import SimChopper
 from thzdaq_instruments.sim.generic import SimGenericScpi
-from thzdaq_instruments.sim.power_meter import SimPowerMeter
+from thzdaq_instruments.sim.power_meter import SimPowerMeter, SimU2000
 from thzdaq_instruments.sim.power_supply import (
     SimPlainPowerSupply,
     SimPlainSupplyChannel,
@@ -65,6 +65,7 @@ __all__ = [
     "SimSisBlock",
     "SimSisCtrlChannel",
     "SimSupplyChannel",
+    "SimU2000",
     "SimYigChannel",
     "SimYigFilter",
     "register_simulators",

@@ -187,6 +187,13 @@ CHOPPER_QUANTITIES = (
 
 POWER_UNITS = ("DBM", "W", "DBUV")
 
+# The averaging filter of a power meter (NRX, U2000): on or off
+AVERAGING = Quantity(
+    "averaging", "Averaging filter", kind="bool",
+    get=lambda t: t.get_averaging(), set=lambda t, v: t.set_averaging(bool(v)),
+    persistent=True,
+)  # fmt: skip
+
 # Configuration of a power meter (R&S NRX): kept in the station profile.
 # read_power() is dBm whatever the display unit; the reading is in that unit.
 POWER_METER_QUANTITIES = (
@@ -198,11 +205,7 @@ POWER_METER_QUANTITIES = (
         get=lambda t: t.get_units(), set=lambda t, v: t.set_units(str(v)),
         persistent=True,
     ),
-    Quantity(
-        "averaging", "Averaging filter", kind="bool",
-        get=lambda t: t.get_averaging(), set=lambda t, v: t.set_averaging(bool(v)),
-        persistent=True,
-    ),
+    AVERAGING,
     Quantity(
         "filter_time", "Filter time", "s",
         get=lambda t: t.get_filter_time(),
@@ -222,6 +225,47 @@ POWER_METER_QUANTITIES = (
         "limit_upper", "Upper limit (display unit)",
         get=lambda t: t.get_upper_limit(),
         set=lambda t, v: t.set_upper_limit(float(v)), persistent=True,
+    ),
+)  # fmt: skip
+
+MEASUREMENT_RATES = ("NORM", "DOUB", "FAST")  # 20, 40, up to 110 readings/s
+
+# The frequency a power sensor corrects its response for (Keysight U2000)
+CORRECTION_FREQUENCY = Quantity(
+    "frequency", "Frequency (correction)", "Hz",
+    get=lambda t: t.get_frequency(), setters=("set_frequency",),
+)  # fmt: skip
+
+# A Keysight U2000 USB power sensor. Its configuration is written in this
+# order: the sensor couples the averaging settings (a count turns auto off,
+# a count or auto turn averaging on), so the last one written wins.
+U2000_QUANTITIES = (
+    CORRECTION_FREQUENCY,
+    Quantity(
+        "sensor_temperature", "Sensor temperature", "K",
+        get=lambda t: t.read_temperature(),
+    ),
+    Quantity(
+        "averaging_count", "Averaging count", kind="int",
+        get=lambda t: t.get_averaging_count(),
+        set=lambda t, v: t.set_averaging_count(int(v)),
+        minimum=1, maximum=1024, persistent=True,
+    ),
+    Quantity(
+        "averaging_auto", "Auto averaging", kind="bool",
+        get=lambda t: t.get_averaging_auto(),
+        set=lambda t, v: t.set_averaging_auto(bool(v)), persistent=True,
+    ),
+    AVERAGING,
+    Quantity(
+        "measurement_rate", "Measurement rate", kind="text", choices=MEASUREMENT_RATES,
+        get=lambda t: t.get_measurement_rate(),
+        set=lambda t, v: t.set_measurement_rate(str(v)), persistent=True,
+    ),
+    Quantity(
+        "offset", "Offset", "dB",
+        get=lambda t: t.get_offset(), set=lambda t, v: t.set_offset(float(v)),
+        minimum=-100, maximum=100, persistent=True,
     ),
 )  # fmt: skip
 
