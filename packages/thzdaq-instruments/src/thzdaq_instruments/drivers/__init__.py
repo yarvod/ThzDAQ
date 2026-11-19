@@ -36,6 +36,7 @@ from thzdaq_instruments.sim import (
     SimPowerMeter,
     SimPowerSupply,
     SimRotator,
+    SimSingleSupply,
     SimSignalGenerator,
     SimSisBlock,
     SimSpectrumAnalyzer,
@@ -48,7 +49,7 @@ from thzdaq_instruments.sim import (
 DRIVERS = (
     (RigolDP832A, "Rigol DP832A power supply", SimPowerSupply),
     (RohdeSchwarzHMP2030, "R&S HMP2030 power supply", SimPlainPowerSupply),
-    (Keithley2200, "Keithley 2200 power supply", SimPlainPowerSupply),
+    (Keithley2200, "Keithley 2200 power supply", SimSingleSupply),
     (AgilentE8247C, "Agilent E8247C signal generator", SimSignalGenerator),
     (RohdeSchwarzNRX, "R&S NRX power meter", SimPowerMeter),
     (KeysightU2002H, "Keysight U2002H USB power sensor", SimU2000),

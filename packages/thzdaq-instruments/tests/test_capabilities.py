@@ -44,6 +44,7 @@ CAPABILITIES = {
     "SimPowerSupply": {"Identifiable", "RawCommands"},
     # The supply simulator of drivers whose outputs have no protection (0.3)
     "SimPlainPowerSupply": {"Identifiable", "RawCommands"},
+    "SimSingleSupply": {"Identifiable", "RawCommands"},
     "SimPlainSupplyChannel": {
         "CurrentSource", "Switchable", "VoltageCurrentMeter", "VoltageSource",
     },

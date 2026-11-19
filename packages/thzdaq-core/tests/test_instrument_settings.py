@@ -64,7 +64,11 @@ class TestOpen:
             "settings": {"limit_upper": 10.0, "aperture_time": 0.1, "power_unit": "W"},
         }
         station, link, _ = opened(profile(power_meter_1=meter), "power_meter_1")
-        assert link.written == ["UNIT1:POW W", "CALC:APER 0.1", "CALC1:LIM1:UPP:DATA 10.0"]
+        assert link.written == [
+            "UNIT1:POW W",
+            "CALC:APER 0.1",
+            "CALC1:LIM1:UPP:DATA 10.0",
+        ]
         station.close()
 
     def test_a_setting_that_fails_leaves_the_instrument_closed(self):
@@ -77,6 +81,34 @@ class TestOpen:
             station.instrument("power_meter_1")
         assert not station.is_open("power_meter_1")
         assert pool.open_links == 0
+
+    def test_a_power_sensor_gets_its_settings_in_the_order_it_couples_them(self):
+        """A U2002H forgets everything when it is plugged in again; a count turns
+        its auto averaging off and either turns averaging on, so auto on with
+        averaging off holds only when written count, auto, averaging."""
+        sensor = {
+            "driver": "keysight.u2002h",
+            "connection": {
+                "kind": "visa",
+                "resource": "USB0::0x0957::0x2D18::MY54260001::0::INSTR",
+            },
+            "settings": {
+                "offset": -10.0,
+                "averaging": False,
+                "averaging_auto": True,
+                "averaging_count": 64,
+                "measurement_rate": "DOUB",
+            },
+        }
+        station, link, _ = opened(profile(power_meter_2=sensor), "power_meter_2")
+        assert link.written == [
+            "SENS:AVER:COUN 64",
+            "SENS:AVER:COUN:AUTO 1",
+            "SENS:AVER:STAT 0",
+            "SENS:MRAT DOUB",
+            "SENS:CORR:GAIN2 -10.0",
+        ]
+        station.close()
 
     def test_a_simulator_starts_configured_as_the_profile_says(self):
         meter = {**NRX, "simulate": True, "settings": {"aperture_time": 0.3}}

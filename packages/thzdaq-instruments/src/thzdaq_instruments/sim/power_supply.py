@@ -118,6 +118,12 @@ class SimPlainPowerSupply(SimInstrument):
         return f"THZDAQ,{type(self).__name__},0,1.0"
 
 
+class SimSingleSupply(SimPlainPowerSupply):
+    """A one-output supply without protection (as a Keithley 2200)."""
+
+    channel_keys = (1,)
+
+
 class SimPowerSupply(SimPlainPowerSupply):
     """A three-output supply whose outputs protect themselves (OVP, OCP)."""
 

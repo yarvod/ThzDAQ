@@ -6,6 +6,7 @@ from thzdaq_instruments.sim.power_supply import (
     SimPlainPowerSupply,
     SimPlainSupplyChannel,
     SimPowerSupply,
+    SimSingleSupply,
     SimSupplyChannel,
 )
 from thzdaq_instruments.sim.rotator import SimRotator
@@ -60,6 +61,7 @@ __all__ = [
     "SimPlainPowerSupply",
     "SimPlainSupplyChannel",
     "SimPowerSupply",
+    "SimSingleSupply",
     "SimSignalGenerator",
     "SimSisBiasChannel",
     "SimSisBlock",

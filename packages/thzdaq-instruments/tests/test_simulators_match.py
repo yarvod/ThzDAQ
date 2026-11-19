@@ -1,7 +1,8 @@
 """A simulator offers what its driver does: a measurement, a dock or a script
 checked on the simulator works the same on the instrument.
 
-Compared part by part (the instrument, its channels, each sub-device part):
+Compared part by part (the instrument, its channels and their keys, each
+sub-device part):
 capabilities, quantity keys, action keys. How an instrument is reached (ACCESS:
 Identifiable, RawCommands) may be more on the simulator: one simulator serves
 several drivers (SimCompressor the F-70 over RS-232 and over REST), and the
@@ -43,6 +44,7 @@ def offered(cls):
     "driver, sim", PAIRS, ids=[driver.__name__ for driver, _ in PAIRS]
 )
 def test_simulator_offers_what_its_driver_does(driver, sim):
+    assert sim.fixed_channels() == driver.fixed_channels()
     assert set(sim.subdevices) == set(driver.subdevices)
     driver_parts, sim_parts = parts(driver), parts(sim)
     assert set(sim_parts) == set(driver_parts)
