@@ -897,7 +897,8 @@ class TestDeviceDocks:
             "sis_bias_2"
         ].settings["offset_voltage"] == pytest.approx(1e-4)
         # The device uses them; the dock is not rebuilt for its own values
-        assert bench.station.device("sis_bias_2").offset_voltage == pytest.approx(1e-4)
+        offsets = bench.station.device("sis_bias_2").attributes.values
+        assert offsets["offset_voltage"] == pytest.approx(1e-4)
         assert window.docks["device:sis_bias_2"].widget() is widget
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
