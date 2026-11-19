@@ -112,7 +112,12 @@ def test_a_session_is_a_measurement_the_script_fills(lab, tmp_path):
     assert not lab.call(ListLeases())
 
 
-def test_its_plots_and_records_are_told_at_once(lab, lab_as):
+def test_its_plots_and_records_are_told_at_once(lab, lab_as, monkeypatch):
+    from thzdaq_core.application import runs
+
+    # A call of records is one event however long after the last telling it
+    # comes: records told one at a time are no longer held at all
+    monkeypatch.setattr(runs, "BATCH_S", 0.0)
     window = Window(lab_as(GUI))
     try:
         run = lab.call(StartSession(title="scan"))
@@ -127,6 +132,17 @@ def test_its_plots_and_records_are_told_at_once(lab, lab_as):
         lab.call(EndSession(id=run.id))
     finally:
         window.stop()
+
+
+def test_records_before_one_it_cannot_take_are_told(lab, window):
+    run = lab.call(StartSession(title="scan"))
+    good, bad = {"voltage": 1e-3}, {"voltage": {"__float__": "x"}}
+    with pytest.raises(LabError):
+        lab.call(RecordSession(id=run.id, table="pv", rows=(good, bad)))
+    wait_for(lambda: bodies(window.heard, MeasurementRecords))
+    assert [r.rows for r in bodies(window.heard, MeasurementRecords)] == [(good,)]
+    assert lab.call(GetRunSnapshot(id=run.id)).rows == {"pv": (good,)}
+    lab.call(EndSession(id=run.id))
 
 
 def test_the_daemon_restores_at_the_end(lab):

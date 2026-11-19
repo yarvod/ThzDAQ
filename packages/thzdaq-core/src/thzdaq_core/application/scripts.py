@@ -235,9 +235,7 @@ class ScriptSession(Procedure):
                 self.columns[column.key] = column
                 for found in ctx.measurement.tables.values():
                     found.describe(column)
-            for row in rows:
-                ctx.record(table, **decode_values(row))
-            ctx.flush()  # a call of records is a batch already
+            ctx.records(table, (decode_values(row) for row in rows))
 
     def advance(self, done: Optional[int], total: Optional[int]) -> None:
         with self._changed:

@@ -106,8 +106,10 @@ class RunObserver:
     def on_record(self, table: str, record: Dict[str, Any]) -> None:
         ...
 
-    def on_flush(self) -> None:
-        """Records held back to go together go now."""
+    def on_records(self, table: str, records: List[Dict[str, Any]]) -> None:
+        """Records that go together (a script's call of them), told at once."""
+        for record in records:
+            self.on_record(table, record)
 
     def on_set(self, ref: str, key: str, value: float) -> None:
         """The run set a quantity of a device (a point of its sweep)."""
@@ -156,6 +158,25 @@ class Context:
         return self.devices[slot]
 
     def record(self, table: str, /, **values: Any) -> Dict[str, Any]:
+        record = self._kept(table, values)
+        self._emit("on_record", table, record)
+        return record
+
+    def records(
+        self, table: str, rows: Iterable[Mapping[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Records that go together (a script's call of them): told at once,
+        in one batch of their own; those kept before one that fails too."""
+        records: List[Dict[str, Any]] = []
+        try:
+            for row in rows:
+                records.append(self._kept(table, row))
+        finally:
+            self._emit("on_records", table, records)
+        return records
+
+    def _kept(self, table: str, values: Mapping[str, Any]) -> Dict[str, Any]:
+        """A record the measurement holds, in its file too."""
         record = dict(values)
         if table not in self.measurement.tables and self.procedure is not None:
             self.measurement.table(table, self.procedure.table_titles.get(table, ""))
@@ -163,13 +184,7 @@ class Context:
         self.measurement.append(table, record, overrides)
         if self._written is not None:
             self._written(table, record)
-        self._emit("on_record", table, record)
         return record
-
-    def flush(self) -> None:
-        """The records so far are told now, not with the next ones (the end of
-        a script's call of records)."""
-        self._emit("on_flush")
 
     def plot(self, plot: PlotInfo) -> None:
         """Another plot of the run's records, drawn from now on and kept

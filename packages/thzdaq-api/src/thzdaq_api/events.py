@@ -70,8 +70,9 @@ class MeasurementStarted(msgspec.Struct, tag="measurement_started", frozen=True)
 
 
 class MeasurementRecords(msgspec.Struct, tag="measurement_records", frozen=True):
-    """Records of a running measurement, a few at a time. Values are encoded as
-    in measurement files: thzdaq_api.data.decode_values gives them back."""
+    """Records of a running measurement, a few at a time; those a script
+    records in one call (RecordSession) together. Values are encoded as in
+    measurement files: thzdaq_api.data.decode_values gives them back."""
 
     id: int
     table: str

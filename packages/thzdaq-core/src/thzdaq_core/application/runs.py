@@ -267,7 +267,10 @@ class _Run(RunObserver):
         if time.monotonic() - self._flushed >= BATCH_S:
             self._flush()
 
-    def on_flush(self) -> None:
+    def on_records(self, table: str, records: List[Dict[str, Any]]) -> None:
+        """A batch already: told whole and at once, with what waits before it."""
+        for record in records:
+            self._batch.setdefault(table, []).append(encode_values(record))
         self._flush()
 
     def on_set(self, ref: str, key: str, value: float) -> None:
