@@ -17,6 +17,8 @@ Device slots:
 from typing import Dict
 
 from thzdaq_instruments.capabilities import (
+    COLD,
+    HOT,
     FrequencySource,
     LoadSwitch,
     PowerDetector,
@@ -205,8 +207,8 @@ class HotColdMixin:
             ctx.check_cancel()
             self.select_channel(ctx, side_band, switch_delay)
             powers = {}
-            for state in ("cold", "hot"):
-                getattr(load, f"to_{state}")()
+            for state in (COLD, HOT):
+                load.to(state)
                 ctx.sleep(self.load_delay)
                 for frequency in frequencies:
                     ctx.check_cancel()
@@ -224,7 +226,7 @@ class HotColdMixin:
                     ctx.progress()
             temperatures = []
             for frequency in frequencies:
-                hot, cold = powers["hot", frequency], powers["cold", frequency]
+                hot, cold = powers[HOT, frequency], powers[COLD, frequency]
                 tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
                 temperatures.append(tn)
                 ctx.record(
@@ -300,8 +302,7 @@ class SpectrumMixin:
         if self.detector != SPECTRUM:
             return
         spectrum = ctx[SPECTRUM]
-        if hasattr(spectrum, "set_continuous_sweep"):
-            spectrum.set_continuous_sweep(False)
+        spectrum.set_continuous_sweep(False)  # one sweep per point, on trigger()
         spectrum.set_video_bandwidth(self.video_bandwidth)
         spectrum.set_resolution_bandwidth(self.resolution_bandwidth)
         spectrum.set_span(self.span)
@@ -316,9 +317,7 @@ class SpectrumMixin:
         spectrum = ctx[SPECTRUM]
         spectrum.set_center_frequency(if_frequency)
         ctx.sleep(self.retune_delay * (20 if first else 1))
-        trigger = getattr(spectrum, "trigger", None)
-        if trigger is not None:
-            trigger()
+        spectrum.trigger()
         levels = [spectrum.read_peak()[1] for _ in range(self.averages)]
         return sum(levels) / len(levels)
 

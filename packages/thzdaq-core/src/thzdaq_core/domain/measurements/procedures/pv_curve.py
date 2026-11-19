@@ -2,7 +2,13 @@ from thzdaq_api.analysis import IV
 from thzdaq_api.devices import POWER_DBM
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import NOISE_TEMPERATURE_VS_VOLTAGE, POWER_VS_VOLTAGE
-from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, Rotator
+from thzdaq_instruments.capabilities import (
+    COLD,
+    HOT,
+    LoadSwitch,
+    PowerDetector,
+    Rotator,
+)
 from thzdaq_instruments.units import MV, UA
 
 from thzdaq_analysis.noise import match_hot_cold, noise_temperature
@@ -184,9 +190,9 @@ class TnVoltage(PVCurve):
                 grid.rotate_to(angle)
                 ctx.sleep(travel / self.grid_speed)
             sweeps = {}
-            for state in ("hot", "cold") if load is not None else (None,):
+            for state in (HOT, COLD) if load is not None else (None,):
                 if state is not None:
-                    getattr(load, f"to_{state}")()
+                    load.to(state)
                     ctx.sleep(self.load_delay)
                 sweeps[state] = self._sweep(
                     ctx, bias, detector, angle=angle, load=state
@@ -194,7 +200,7 @@ class TnVoltage(PVCurve):
             if load is not None:
                 temperatures = []
                 for voltage, hot, cold in match_hot_cold(
-                    sweeps["hot"], sweeps["cold"], self.match_window
+                    sweeps[HOT], sweeps[COLD], self.match_window
                 ):
                     tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
                     temperatures.append(tn)

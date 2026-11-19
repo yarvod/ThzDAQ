@@ -5,7 +5,13 @@ from thzdaq_api.procedures import (
     NOISE_TEMPERATURE_VS_VOLTAGE,
     POWER_VS_FREQUENCY,
 )
-from thzdaq_instruments.capabilities import LoadSwitch, PowerDetector, TunableFilter
+from thzdaq_instruments.capabilities import (
+    COLD,
+    HOT,
+    LoadSwitch,
+    PowerDetector,
+    TunableFilter,
+)
 from thzdaq_instruments.units import GHZ
 
 from thzdaq_analysis.noise import noise_temperature, y_factor_db
@@ -27,7 +33,7 @@ from thzdaq_core.domain.measurements.procedures.common import (
     warn_without_contrast,
 )
 
-LOADS = ("cold", "hot")
+LOADS = (COLD, HOT)
 
 
 def power_plot(group_by=()) -> PlotInfo:
@@ -150,12 +156,12 @@ class IFNoise(IFScan):
         powers = {}
         for state in LOADS:
             ctx.check_cancel()
-            getattr(load, f"to_{state}")()
+            load.to(state)
             ctx.sleep(self.load_delay)
             powers[state] = self.scan(ctx, load=state)
         temperatures = []
         for frequency in self.frequency.values():
-            hot, cold = powers["hot"][frequency], powers["cold"][frequency]
+            hot, cold = powers[HOT][frequency], powers[COLD][frequency]
             tn = noise_temperature(hot, cold, self.t_hot, self.t_cold)
             temperatures.append(tn)
             ctx.record(

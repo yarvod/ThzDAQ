@@ -7,6 +7,8 @@ with a FakeLink-backed transport, so drivers and simulators pass the same checks
 import json
 import math
 
+import pytest
+
 from emulators import (
     AgilentEmulator,
     F70Emulator,
@@ -25,6 +27,8 @@ from emulators import (
     ZvaEmulator,
 )
 from thzdaq_instruments.capabilities import (
+    COLD,
+    HOT,
     Compressor,
     CurrentSource,
     FrequencySource,
@@ -246,6 +250,10 @@ def check_tunable_filter(device):
 def check_load_switch(device):
     device.to_hot()
     device.to_cold()
+    device.to(HOT)
+    device.to(COLD)
+    with pytest.raises(ValueError, match="between"):
+        device.to("between")
 
 
 def check_thermometer(device):

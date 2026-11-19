@@ -8,6 +8,7 @@ from thzdaq_api.measurement_file import COMPLETED, DeviceUse
 from thzdaq_core.domain.errors import ProcedureError
 from thzdaq_core.application.runner import MeasurementRunner
 from thzdaq_core.domain.measurements.catalog import get_procedure
+from thzdaq_core.domain.measurements.procedures.common import set_bias
 from thzdaq_core.domain.measurements.procedures import (
     GridCurrentAngle,
     IFNoise,
@@ -22,6 +23,9 @@ from thzdaq_core.domain.measurements.procedures import (
     TnVoltage,
     TwoSbOptimization,
 )
+from thzdaq_core.domain.station.ports import port
+from thzdaq_core.domain.station.safety import Guard
+from thzdaq_instruments.capabilities import SpectrumAnalyzer
 from thzdaq_instruments.sim import (
     SimChopper,
     SimNetworkAnalyzer,
@@ -34,6 +38,40 @@ from thzdaq_instruments.sim import (
 )
 
 LO = 223e9
+
+
+class ToneAnalyzer(SpectrumAnalyzer):
+    """The spectrum analyzer of the bench: its peak is the power the bench's
+    model gives."""
+
+    def __init__(self, power):
+        self.power = power
+
+    def set_center_frequency(self, frequency):
+        ...
+
+    def set_span(self, span):
+        ...
+
+    def set_resolution_bandwidth(self, bandwidth):
+        ...
+
+    def set_video_bandwidth(self, bandwidth):
+        ...
+
+    def set_continuous_sweep(self, continuous):
+        ...
+
+    def trigger(self):
+        ...
+
+    def read_peak(self):
+        return 0.0, self.power()
+
+    def read_trace(self):
+        ...
+
+
 FAST = {"switch_delay": 0, "precise_bias": False}
 FAST_NOISE = {**FAST, "load_delay": 0, "point_delay": 0}
 
@@ -64,7 +102,7 @@ class Bench:
             "detector": SimPowerMeter(model=self.power),
             "if_filter": SimYigFilter().channel("yig_1"),
             "load": self.chopper,
-            "spectrum": self,
+            "spectrum": ToneAnalyzer(self.power),
             "vna": SimNetworkAnalyzer(),
             "grid": SimRotator(),
         }
@@ -81,30 +119,14 @@ class Bench:
         base = -30.0 if self.chopper.position == "hot" else -32.0
         return base + (0.5 if channel == "lower" else 0.0)
 
-    # Spectrum analyzer port: the tone peak follows the same model
-    def set_center_frequency(self, frequency):
-        ...
-
-    def set_span(self, span):
-        ...
-
-    def set_resolution_bandwidth(self, bandwidth):
-        ...
-
-    def set_video_bandwidth(self, bandwidth):
-        ...
-
-    def read_peak(self):
-        return 0.0, self.power()
-
-    def read_trace(self):
-        ...
-
-    # StationLike
+    # StationLike: devices in ports, as the station hands them out
     def require(
         self, devices, requirements, pause, planned=(), told=None, changed=None
     ):
-        return {slot: self.ports[slot] for slot in requirements}
+        return {
+            slot: port(self.ports[slot], Guard(slot, {}, {}), (), pause)
+            for slot in requirements
+        }
 
     def device_use(self, ref):
         return DeviceUse(ref)
@@ -470,3 +492,19 @@ class TestShownIf:
     def test_no_yig_power_in_2sb(self):
         for cls in (IfBalance, SidebandRatio, TwoSbNoise, TwoSbOptimization):
             assert "control_yig_power" not in cls.parameters()
+
+
+class TestBias:
+    @pytest.mark.parametrize(
+        "make, method",
+        [
+            (lambda: SimSisBlock().channel("DEV4"), "set_voltage_precise"),
+            (lambda: SimPowerSupply().channel(1), "set_voltage"),  # no readback
+        ],
+    )
+    def test_precise_only_where_the_source_declares_it(self, make, method):
+        part, called = make(), []
+        original = getattr(part, method)
+        setattr(part, method, lambda v, **kw: called.append(v) or original(v, **kw))
+        set_bias(port(part, Guard("bias", {}, {}), (), time.sleep), 2e-3, precise=True)
+        assert called == [2e-3]

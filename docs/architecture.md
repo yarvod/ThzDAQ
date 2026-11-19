@@ -256,21 +256,22 @@ class Identifiable(Capability):       identify() -> str
 class RawCommands(Capability):        send_raw(command, answer) -> str | None  # мимо защиты
 class Switchable(Capability):         set_output(bool), get_output() -> bool
 class VoltageSource(Capability):      set_voltage(V), get_voltage() -> V   # уставка
+class PreciseVoltageSource(VoltageSource): set_voltage_precise(V) -> V     # с поправкой по чтению
 class CurrentSource(Capability):      set_current(A), get_current() -> A   # уставка/предел
 class VoltageCurrentMeter(Capability): measure() -> ChannelReading         # факт
 class FrequencySource(Capability):    set_frequency(Hz), get_frequency() -> Hz
 class PowerLevel(Capability):         set_power(dBm), get_power() -> dBm
 class PowerDetector(Capability):      read_power() -> dBm                  # ошибка — исключение
 class TunableFilter(Capability):      tune(Hz) -> Hz, get_frequency()      # реально выставленная; без обратного чтения — последняя
-class LoadSwitch(Capability):         to_hot(), to_cold()
+class LoadSwitch(Capability):         to_hot(), to_cold(), to(HOT | COLD)
 class Thermometer(Capability):        read_temperature() -> K
-class SpectrumAnalyzer(Capability):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
+class SpectrumAnalyzer(Capability):   set_center_frequency/set_span/set_*_bandwidth, set_continuous_sweep(bool), trigger(), read_peak(), read_trace()
 class NetworkAnalyzer(Capability):    set_frequency_range(), set_points(), select_parameter(), set_averaging(), read_trace()
 class VacuumGauge(Capability):        read_pressure() -> Pa
 class Rotator(Capability):            rotate_to(deg), get_angle()
 class Compressor(Capability):         turn_on/off(), read_temperatures() -> K, read_pressures() -> Pa
 ```
-SIS-смещение — это `VoltageSource + VoltageCurrentMeter`, канал блока питания —
+SIS-смещение — это `PreciseVoltageSource + VoltageCurrentMeter`, канал блока питания —
 `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`. Единицы — СИ (К, Па) даже
 там, где прибор отдаёт °C, psig или гПа: пересчёт в драйвере, обратный — только в интерфейсе.
 
@@ -400,13 +401,17 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
     def run(self, ctx):
         detector, if_filter, load = ctx["detector"], ctx["if_filter"], ctx["load"]
         ctx.on_exit(load.to_cold)
-        for state in ("cold", "hot"):
-            getattr(load, f"to_{state}")()
+        for state in (COLD, HOT):
+            load.to(state)
             for f in self.frequency.values():
                 ...
                 ctx.record("power", frequency=f, load=state, power=p)
                 ctx.progress()
 ```
+- Процедура зовёт у устройства только то, что объявляют возможности его слота: порт
+  станции другого не отдаёт, `hasattr` по имени метода не нужен (точная установка смещения —
+  `isinstance(port, PreciseVoltageSource)`), а `thzdaq_core.domain.measurements` не
+  импортирует `thzdaq_instruments.drivers`, `.sim`, `.transport` (контракт import-linter).
 - Процедура объявляет **слоты** устройств (`requires`, `slots()`) с нужными возможностями;
   какое устройство стенда играет слот, выбирает пользователь (комбобоксы в доке измерения,
   `--device bias=sis_bias_1` в CLI). `slot_kinds` подсказывает вид: слот `bias` предлагает

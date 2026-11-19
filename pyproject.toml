@@ -186,6 +186,22 @@ that adapters implement.
 """
 
 [[tool.importlinter.contracts]]
+name = "Measurements reach devices by their capabilities, never by drivers"
+type = "forbidden"
+source_modules = ["thzdaq_core.domain.measurements"]
+forbidden_modules = [
+    "thzdaq_instruments.drivers",
+    "thzdaq_instruments.sim",
+    "thzdaq_instruments.transport",
+]
+broken_contract_guidance = """
+A procedure gets its devices in slots that name capabilities (thzdaq_instruments.capabilities)
+and calls only what they declare: the same procedure runs on any bench or simulator. What a
+procedure needs of a device that no capability declares yet is a capability to add, with every
+driver and simulator that has it.
+"""
+
+[[tool.importlinter.contracts]]
 name = "No import cycles between sibling modules"
 type = "acyclic_siblings"
 ancestors = [

@@ -1,5 +1,6 @@
 from thzdaq_api.leases import EXCLUSIVE, READ
 from thzdaq_api.procedures import TWO_SB_BIAS_OPTIMIZATION
+from thzdaq_instruments.capabilities import COLD, HOT
 from thzdaq_instruments.units import GHZ, MV
 
 from thzdaq_analysis.noise import noise_temperature
@@ -119,16 +120,16 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
                 loads = {}
                 for channel in SIDE_BANDS:
                     self.select_channel(ctx, channel, self.switch_delay)
-                    for state in ("cold", "hot"):
-                        getattr(load, f"to_{state}")()
+                    for state in (COLD, HOT):
+                        load.to(state)
                         ctx.sleep(self.load_delay)
                         loads[channel, state] = ctx["detector"].read_power()
 
                 srr_upper, srr_lower = sideband_rejection(
-                    loads["upper", "hot"],
-                    loads["upper", "cold"],
-                    loads["lower", "hot"],
-                    loads["lower", "cold"],
+                    loads["upper", HOT],
+                    loads["upper", COLD],
+                    loads["lower", HOT],
+                    loads["lower", COLD],
                     usb_power_upper=tone_powers["upper", "upper"],
                     usb_power_lower=tone_powers["upper", "lower"],
                     lsb_power_upper=tone_powers["lower", "upper"],
@@ -140,14 +141,14 @@ class TwoSbOptimization(LoMixin, HotColdMixin, IfSwitchProcedure):
                     sis2_voltage_set=v2,
                     **bias,
                     tn_upper=noise_temperature(
-                        loads["upper", "hot"],
-                        loads["upper", "cold"],
+                        loads["upper", HOT],
+                        loads["upper", COLD],
                         self.t_hot,
                         self.t_cold,
                     ),
                     tn_lower=noise_temperature(
-                        loads["lower", "hot"],
-                        loads["lower", "cold"],
+                        loads["lower", HOT],
+                        loads["lower", COLD],
                         self.t_hot,
                         self.t_cold,
                     ),

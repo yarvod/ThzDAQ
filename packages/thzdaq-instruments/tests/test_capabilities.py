@@ -5,8 +5,26 @@ a change of what a device offers to measurements, docks and the guard."""
 
 import pytest
 from thzdaq_instruments import default_registry
-from thzdaq_instruments.capabilities import PowerDetector, capabilities_of
-from thzdaq_instruments.instrument import Instrument
+from thzdaq_instruments.capabilities import (
+    Compressor,
+    CurrentSource,
+    FrequencySource,
+    LoadSwitch,
+    NetworkAnalyzer,
+    PowerDetector,
+    PowerLevel,
+    PreciseVoltageSource,
+    Rotator,
+    SpectrumAnalyzer,
+    Switchable,
+    Thermometer,
+    TunableFilter,
+    VacuumGauge,
+    VoltageCurrentMeter,
+    VoltageSource,
+    capabilities_of,
+)
+from thzdaq_instruments.instrument import GENERIC, Instrument
 
 CAPABILITIES = {
     "RigolDP832A": {"Identifiable", "RawCommands"},
@@ -120,3 +138,47 @@ def test_a_declared_capability_without_its_method_fails_as_it_is_made():
 
     with pytest.raises(TypeError, match="read_power"):
         HalfDetector()
+
+
+# What a device of each type always does: the type is a label (instrument ids,
+# icons, groups) and implies these, of the instrument and of each of its channels
+SUPPLY = (Switchable, VoltageSource, CurrentSource, VoltageCurrentMeter)
+TYPES = {
+    "power_meter": ((PowerDetector,), ()),
+    "signal_generator": ((FrequencySource, PowerLevel), ()),
+    "power_supply": ((), SUPPLY),
+    "sis_block": ((), (PreciseVoltageSource, VoltageCurrentMeter)),
+    "yig_filter": ((), (TunableFilter,)),
+    "temperature_controller": ((), (Thermometer,)),
+    "spectrum_analyzer": ((SpectrumAnalyzer,), ()),
+    "vna": ((NetworkAnalyzer, PowerLevel), ()),
+    "chopper": ((LoadSwitch,), ()),
+    "grid": ((Rotator,), ()),
+    "compressor": ((Compressor,), ()),
+    "vacuum_gauge": ((VacuumGauge,), ()),
+    "lock_in": ((), ()),
+    GENERIC: ((), ()),
+}
+
+
+def typed_classes():
+    """(driver key, class) of every driver and simulator of the registry."""
+    return [
+        (info.key, cls)
+        for info in default_registry().all()
+        for cls in filter(None, (info.cls, info.sim))
+    ]
+
+
+def test_every_device_type_says_what_it_implies():
+    assert {cls.device_type for _, cls in typed_classes()} == set(TYPES)
+
+
+@pytest.mark.parametrize(
+    "cls", [cls for _, cls in typed_classes()], ids=[k for k, _ in typed_classes()]
+)
+def test_a_device_type_implies_its_capabilities(cls):
+    instrument, channel = TYPES[cls.device_type]
+    assert set(instrument) <= set(capabilities_of(cls))
+    if channel:
+        assert set(channel) <= set(capabilities_of(cls.channel_class))

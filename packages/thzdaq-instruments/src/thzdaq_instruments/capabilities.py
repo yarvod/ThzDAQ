@@ -192,6 +192,9 @@ class TunableFilter(Capability):
         """Hz, the one tuned last (no readback); None before the first tune."""
 
 
+HOT, COLD = "hot", "cold"  # the loads of a LoadSwitch
+
+
 class LoadSwitch(Capability):
     """Hot/cold calibration load switch, e.g. a chopper."""
 
@@ -204,6 +207,13 @@ class LoadSwitch(Capability):
     @abstractmethod
     def to_cold(self) -> None:
         ...
+
+    def to(self, load: str) -> None:
+        """Turn to the load named: HOT or COLD."""
+        turns = {HOT: self.to_hot, COLD: self.to_cold}
+        if load not in turns:
+            raise ValueError(f"no load {load!r}: {HOT} or {COLD}")
+        turns[load]()
 
 
 class Thermometer(Capability):

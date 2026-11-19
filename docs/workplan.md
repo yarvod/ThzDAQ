@@ -151,12 +151,16 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 
 ### 0.5 Процедуры без `hasattr`
 
-- [ ] `PreciseVoltageSource` (SIS bias): `set_bias(..., precise=True)` спрашивает объявление.
-- [ ] Однократная развёртка и триггер — методы `SpectrumAnalyzer`, у каждого анализатора своя
-  реализация (у симулятора — ничего не делать).
-- [ ] `LoadSwitch.to(load)` вместо `getattr(load, f"to_{state}")`.
-- [ ] Контракт import-linter для процедур; тест «тип → обязательные возможности»
-  (`power_meter` — `PowerDetector`, `signal_generator` — `FrequencySource` и `PowerLevel`).
+- [x] `PreciseVoltageSource` (SIS bias): `set_bias(..., precise=True)` спрашивает объявление
+  (`isinstance(port, PreciseVoltageSource)`; сама возможность объявлена в 0.4).
+- [x] Однократная развёртка и триггер — методы `SpectrumAnalyzer`, у каждого анализатора своя
+  реализация (у симулятора — ничего не делать); процедуры 2SB зовут их без проверки.
+- [x] `LoadSwitch.to(load)` вместо `getattr(load, f"to_{state}")` (метод самой возможности:
+  `HOT`, `COLD`; другое имя — `ValueError`).
+- [x] Контракт import-linter для процедур; тест «тип → обязательные возможности»
+  (`power_meter` — `PowerDetector`, `signal_generator` — `FrequencySource` и `PowerLevel`;
+  таблица в `test_capabilities.py` называет каждый тип реестра, каналы — отдельно).
+  Тесты процедур получают устройства в портах, как от станции.
 
 ### Потом (в backlog)
 

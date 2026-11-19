@@ -6,7 +6,11 @@ import math
 from typing import Iterable, List, Optional, Tuple
 
 from thzdaq_api.measurements import plot_caption
-from thzdaq_instruments.capabilities import VoltageCurrentMeter, VoltageSource
+from thzdaq_instruments.capabilities import (
+    PreciseVoltageSource,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 from thzdaq_instruments.quantities import ANGLE, VOLTAGE_SET
 from thzdaq_instruments.units import GHZ, MV
 
@@ -170,9 +174,10 @@ class GridSpeed(FloatParameter):
 PRECISE_ITERATIONS = 30
 
 
-def set_bias(port, voltage: float, precise: bool = False) -> None:
-    """Set a bias voltage; `precise` corrects it by readback when the port can."""
-    if precise and hasattr(port, "set_voltage_precise"):
+def set_bias(port: VoltageSource, voltage: float, precise: bool = False) -> None:
+    """Set a bias voltage; `precise` corrects it by readback when the source
+    declares it can (PreciseVoltageSource: a SIS bias)."""
+    if precise and isinstance(port, PreciseVoltageSource):
         port.set_voltage_precise(voltage, max_iterations=PRECISE_ITERATIONS)
     else:
         port.set_voltage(voltage)
