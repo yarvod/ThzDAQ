@@ -89,41 +89,44 @@ class KeysightU2002H(ScpiInstrument, PowerDetector): ...
 class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProtection, VoltageCurrentMeter): ...
 ```
 
-- [ ] Тест-страховка до рефакторинга: возможности всех 40 классов реестра (драйверы, каналы,
+- [x] Тест-страховка до рефакторинга: возможности всех 40 классов реестра (драйверы, каналы,
   части sub-device, симуляторы) записаны таблицей; после — та же таблица.
-- [ ] Тест на 3.12 (или без версии: порт над прибором): `quantities_of(port)` и
+- [x] Тест на 3.12 (или без версии: порт над прибором): `quantities_of(port)` и
   `actions_of(port)` — те же, что у прибора. Падает на нынешнем коде под 3.12.
-- [ ] `capabilities.py`: возможности — ABC с `@abstractmethod` вместо `runtime_checkable
+- [x] `capabilities.py`: возможности — ABC с `@abstractmethod` вместо `runtime_checkable
   Protocol`; забытый метод — `TypeError` при создании. Просто наследовать нынешние Protocol
   нельзя: забытый метод тихо унаследуется заглушкой и вернёт `None`.
-- [ ] `capabilities_of(cls)` — по наследованию (`issubclass` у ABC номинальный).
-- [ ] `ScpiInstrument` и `SimInstrument` объявляют `Identifiable`, `RawCommands`; остальные
+- [x] `capabilities_of(cls)` — по наследованию (`issubclass` у ABC номинальный).
+- [x] `ScpiInstrument` и `SimInstrument` объявляют `Identifiable`, `RawCommands`; остальные
   классы — строкой `class …`. Симуляторы YIG, чоппера, сетки и т. п. сейчас `RawCommands`, а
   настоящие нет (станция проверяет и драйвер, и открытый класс, `station.py`); при явном
   объявлении решить, оставить ли так — таблица-страховка покажет.
-- [ ] `quantities.declared()`: развернуть `.target` до самой части и спросить её класс, без
+- [x] `quantities.declared()`: развернуть `.target` до самой части и спросить её класс, без
   `isinstance` по обёртке. `state.KeptState` и `application/kept.py` — так же, ABC.
-- [ ] `docs/architecture.md` (§ возможности, § 4.4), строка в `AGENTS.md` про новые приборы:
+- [x] `docs/architecture.md` (§ возможности, § 4.4), строка в `AGENTS.md` про новые приборы:
   «реализуют возможности» → «наследуют возможности».
-- [ ] Возможность владеет своими величинами и действиями (атрибуты класса возможности);
+- [x] Возможность владеет своими величинами и действиями (атрибуты класса возможности);
   `CAPABILITY_QUANTITIES` и `CAPABILITY_ACTIONS` уходят, `quantities_of`/`actions_of` собирают
   их по MRO и добавляют свои величины части.
 
 ### 0.2 Настройки — один путь
 
-- [ ] Прибор объявляет, кто хранит его настройки (ClassVar). Станция при открытии пишет
+- [x] Прибор объявляет, кто хранит его настройки (ClassVar). Станция при открытии пишет
   `persistent` величины профиля прибору, который их не хранит, и симулятору; тот, кто хранит
   (генератор: OEM-голову ставят на панели), не трогается — как сейчас.
-- [ ] `options` NRX (`averaging`, `aperture_time`) → `settings` профиля, конструктор без них;
+- [x] `options` NRX (`averaging`, `aperture_time`) → `settings` профиля, конструктор без них;
   поведение то же (NRX их получает при открытии); `stations/lab.yaml` и чтение старых профилей.
-- [ ] U2002H сразу так: конструктор без `options` настроек (этап 1 ниже).
+- [x] U2002H сразу так: конструктор без `options` настроек (этап 1 ниже).
 
 ### 0.3 Драйвер и симулятор не расходятся
 
-- [ ] Тест: у симулятора каждого драйвера те же возможности, величины и действия (расхождение
+- [x] Тест: у симулятора каждого драйвера те же возможности, величины и действия (расхождение
   с `RawCommands` — решённое в 0.1 исключение, названное в тесте).
-- [ ] Общая часть симулятора измерителя — база; настройки NRX — у его симулятора (это этап 2
+- [x] Общая часть симулятора измерителя — база; настройки NRX — у его симулятора (это этап 2
   ниже).
+- [x] Найдено и исправлено: каналы симулятора HMP2030 и Keithley 2200 имели защиту
+  (`OutputProtection`), которой у приборов нет (`SimPlainPowerSupply`); у Keithley 2200 один
+  выход, а симулятор давал три (`SimSingleSupply`, тест сверяет и ключи каналов).
 
 ### 0.4 Порт реализует возможности
 
@@ -180,7 +183,7 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 
 После этапа 0 имена методов драйвера свободны: у U2002H частоту поправки можно звать
 `set_frequency`, как в мануале, — генератором он от этого не станет. Таблица этапа 1 ниже
-пока с обходными именами; переименовать при реализации.
+сделана с этими именами: `set_frequency`, `read_temperature`.
 
 ## Прибор по мануалу (U2000 Series Programming Guide)
 
@@ -217,20 +220,20 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 | `test()` | `*IDN?` | модель `U2002H` в ответе |
 | `reset()` | `*RST` | |
 | `read_power()` | `UNIT:POW DBM;:INIT:CONT OFF;:READ?` | одно сообщение: всегда dBm и одиночное измерение, что бы ни задали сырыми командами; состояния в драйвере нет |
-| `set/get_correction_frequency` | `SENS:FREQ` | Hz; не `set_frequency` (см. выше) |
+| `set/get_frequency` | `SENS:FREQ` | Hz, частота поправки; генератором датчик не становится (0.1) |
 | `set/get_averaging` | `SENS:AVER:STAT` | |
 | `set/get_averaging_auto` | `SENS:AVER:COUN:AUTO` | |
 | `set/get_averaging_count` | `SENS:AVER:COUN` | 1…1024; сам прибор выключает авто |
 | `set/get_measurement_rate` | `SENS:MRAT` | `NORM`/`DOUB`/`FAST` |
 | `set/get_offset` | `SENS:CORR:GAIN2`, `:STAT` | dB, −100…+100 (аттенюатор, кабель); 0 при выключенном |
-| `read_sensor_temperature()` | `SENS:TEMP?` | K (°C + 273.15); не `read_temperature` |
+| `read_temperature()` | `SENS:TEMP?` | K (°C + 273.15), величина `sensor_temperature`; термометром не становится |
 | `zero()` | `CAL:ZERO:TYPE INT`, `CAL:ZERO:AUTO ONCE`, `*OPC?` | внутренний ноль, ошибка → `InstrumentError` |
 | `zero_external()` | то же с `EXT` | |
 | `errors()` | `SYST:ERR?` до `+0` | в `ScpiInstrument`, общий для SCPI-драйверов (как `check_errors` у pymeasure) |
 
 Величины — `U2000_QUANTITIES` в `quantities.py` рядом с NRX-овскими (словарь величин живёт там):
 
-- `correction_frequency`, Hz — уставка (`setters=("set_correction_frequency",)`), паспорт
+- `frequency` «Frequency (correction)», Hz — уставка (`setters=("set_frequency",)`), паспорт
   `limits` 50 MHz…24 GHz: её можно сканировать вместе с частотой ПЧ;
 - `averaging`, `averaging_auto`, `averaging_count` (int), `measurement_rate` (choices),
   `offset`, dB — конфигурация, `persistent=True`: профиль хранит, станция пишет их при каждом
@@ -243,12 +246,12 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 
 Тесты (`packages/thzdaq-instruments/tests`):
 
-- [ ] `U2000Emulator` в `emulators.py`: `*IDN?` → `Agilent Technologies,U2002H,MY54260001,A1.04.01`,
+- [x] `U2000Emulator` в `emulators.py`: `*IDN?` → `Agilent Technologies,U2002H,MY54260001,A1.04.01`,
   составное сообщение чтения, частота, усреднение (счётчик выключает авто), скорость, смещение,
   температура, ноль, `*OPC?`, `SYST:ERR?`; неизвестное — в `errors`.
-- [ ] `contracts.py`: фабрика `u2002h` в `PowerDetector` (и где перечислены `Identifiable`,
+- [x] `contracts.py`: фабрика `u2002h` в `PowerDetector` (и где перечислены `Identifiable`,
   `RawCommands`).
-- [ ] `test_drivers.py`, `TestU2002H`: чтение в dBm и одиночное, даже если до этого прибору
+- [x] `test_keysight.py`: чтение в dBm и одиночное, даже если до этого прибору
   задали `W` и `INIT:CONT ON`; конструктор ничего не пишет, настройки профиля приходят при открытии;
   `capabilities_of(KeysightU2002H)` — ровно три (защита от `FrequencySource`/`Thermometer`);
   ключи конфигурации; ноль шлёт нужную последовательность, −231 → исключение; реестр:
@@ -256,21 +259,21 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 
 ## Этап 2. Симулятор
 
-- [ ] Общая часть `SimPowerMeter` (мощность, `model`, шум, `wobble`, `load_position`) — в базу
+- [x] Общая часть `SimPowerMeter` (мощность, `model`, шум, `wobble`, `load_position`) — в базу
   `sim/power_meter.py`; NRX-настройки остаются у `SimPowerMeter`, рядом `SimU2000` с методами и
   величинами U2002H (смещение прибавляется к мощности, температура ~300 K, ноль мгновенный).
   Иначе в симуляции у U2002H были бы настройки NRX, а скрипт, проверенный на симуляторе, падал
   бы на приборе.
-- [ ] `DRIVERS`: `(KeysightU2002H, …, SimU2000)`; тест: у драйвера и его симулятора одни и те же
+- [x] `DRIVERS`: `(KeysightU2002H, …, SimU2000)`; тест: у драйвера и его симулятора одни и те же
   ключи величин и действий.
 
 ## Этап 3. VISA в программе
 
-- [ ] `thzdaq-daemon` зависит от `thzdaq-instruments[visa]` (приборы открывает демон), `uv lock`;
+- [x] `thzdaq-daemon` зависит от `thzdaq-instruments[visa]` (приборы открывает демон), `uv lock`;
   `tests/test_packages.py` — точные версии.
-- [ ] `ThzDAQ.spec`: pyvisa в сборке (hook из pyinstaller-hooks-contrib или
+- [x] `ThzDAQ.spec`: pyvisa в сборке (hook из pyinstaller-hooks-contrib или
   `collect_submodules("pyvisa")`), проверить импорт в собранном `thzdaq-cli`.
-- [ ] `docs/architecture.md`: VISA теперь в демоне; бэкенд — Keysight IO Libraries на Windows,
+- [x] `docs/architecture.md`: VISA теперь в демоне; бэкенд — Keysight IO Libraries на Windows,
   на macOS/Linux для проверки — `pyvisa-py` + `pyusb` + libusb с `PYVISA_LIBRARY=@py`; U2002H в
   списке драйверов.
 
