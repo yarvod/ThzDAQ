@@ -1,6 +1,7 @@
 import math
 from typing import Literal, Optional
 
+from thzdaq_instruments.capabilities import PowerDetector
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.quantities import POWER_METER_QUANTITIES
@@ -12,7 +13,7 @@ PowerUnit = Literal["DBM", "W", "DBUV"]
 DBUV_TO_DBM = -107.0
 
 
-class RohdeSchwarzNRX(ScpiInstrument):
+class RohdeSchwarzNRX(ScpiInstrument, PowerDetector):
     """R&S NRX power meter, sensor 1, LAN port 5025.
 
     read_power() always returns dBm whatever display unit is selected (also

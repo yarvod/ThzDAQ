@@ -151,7 +151,7 @@ class TestStation:
             assert channel.offset_voltage == -1e-5
             one.set_voltage(2e-3)
             assert channel.offset_voltage == 4e-5 and one.offset_voltage == 4e-5
-            assert isinstance(one, VoltageSource)
+            assert station.info("sis_bias_1").provides(VoltageSource)
 
     def test_unknown_kind_and_missing_channel(self):
         config = sim_station(

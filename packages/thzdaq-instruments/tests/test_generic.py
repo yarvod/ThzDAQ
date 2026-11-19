@@ -8,7 +8,7 @@ from thzdaq_instruments.capabilities import ACCESS, capabilities_of
 from thzdaq_instruments.drivers import GenericScpi
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import GENERIC
-from thzdaq_instruments.quantities import quantities_of
+from thzdaq_instruments.parts import quantities_of
 from thzdaq_instruments.sim import SimGenericScpi
 from thzdaq_instruments.transport import (
     PROLOGIX,

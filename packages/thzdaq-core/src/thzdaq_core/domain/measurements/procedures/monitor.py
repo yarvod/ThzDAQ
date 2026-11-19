@@ -20,7 +20,8 @@ from thzdaq_api.procedures import (
     plot_for,
     split_entry,
 )
-from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
+from thzdaq_instruments.parts import quantities_of, read_values
+from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import GHZ, MA, MV, UA
 
 from thzdaq_core.domain.measurements.procedures.common import (

@@ -1,6 +1,7 @@
 from typing import Any, Mapping, Optional
 
 from thzdaq_instruments.angle import CountedAngle
+from thzdaq_instruments.capabilities import Identifiable
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.transport.base import HTTP, SERIAL, ConnectionSpec, Transport
@@ -11,7 +12,7 @@ from thzdaq_instruments.transport.pool import TransportPool, default_pool
 ORIGIN = "origin"  # the serial firmware's own angle at the program's 0°
 
 
-class ArduinoGrid(CountedAngle, Instrument):
+class ArduinoGrid(CountedAngle, Instrument, Identifiable):
     """Wire grid polarizer on an Arduino stepper: Rotator, KeptState.
 
     The HTTP firmware rotates by a relative angle, the serial one goes to an

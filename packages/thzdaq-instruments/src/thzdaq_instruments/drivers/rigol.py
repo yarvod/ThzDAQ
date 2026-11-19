@@ -1,5 +1,6 @@
 from typing import Optional
 
+from thzdaq_instruments.capabilities import OutputProtection
 from thzdaq_instruments.drivers.power_supply import ScpiPowerSupply, SupplyChannel
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.limits import Limit
@@ -8,7 +9,7 @@ from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec
 
 
-class RigolChannel(SupplyChannel):
+class RigolChannel(SupplyChannel, OutputProtection):
     """An output of the DP832A: it also has over-voltage and over-current
     protection (OutputProtection)."""
 

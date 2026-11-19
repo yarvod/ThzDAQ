@@ -1,8 +1,15 @@
 """Instrument abilities as small interfaces.
 
-An instrument or a channel implements several of them, consumers depend only on the ones they
-use. Capabilities contain methods only, so ``issubclass(SomeDriver, Switchable)`` works and the
-registry derives a driver's capabilities from its class.
+An instrument or a channel declares the ones it has by inheriting them
+(``class RigolChannel(SupplyChannel, OutputProtection)``), consumers depend only on
+the ones they use. A capability is what its class says, never what a method's name
+happens to match: a power sensor with a ``set_frequency`` of its own is no
+frequency source. A method left out fails as the class is instantiated.
+
+A capability gives every part that has it its quantities and actions
+(``capability_quantities``, ``capability_actions``): the voltage setpoint of a
+VoltageSource, the hot and cold loads of a LoadSwitch. A driver adds its own with
+``quantities`` and ``actions`` (thzdaq_instruments.parts).
 
 Examples:
     power supply channel  -> Switchable, VoltageSource, CurrentSource, VoltageCurrentMeter
@@ -10,187 +17,298 @@ Examples:
     signal generator      -> FrequencySource, PowerLevel, Switchable
 """
 
-from typing import List, Optional, Protocol, Tuple, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import ClassVar, List, Optional, Tuple
 
+from thzdaq_instruments.actions import (
+    CONFIGURE_NETWORK,
+    CONFIGURE_SPECTRUM,
+    READ_TRACE,
+    TO_COLD,
+    TO_HOT,
+    TURN_OFF,
+    TURN_ON,
+    Action,
+)
+from thzdaq_instruments.quantities import (
+    ANGLE,
+    CURRENT_SET,
+    FREQUENCY,
+    OUTPUT,
+    POWER_LEVEL,
+    VOLTAGE_SET,
+    Quantity,
+)
 from thzdaq_instruments.readings import ChannelReading, ComplexTrace, Trace
 
 
-@runtime_checkable
-class Identifiable(Protocol):
+class Capability(ABC):
+    """An ability of a device part: its methods, and the quantities and actions
+    it gives every part that has it."""
+
+    capability_quantities: ClassVar[Tuple[Quantity, ...]] = ()
+    capability_actions: ClassVar[Tuple[Action, ...]] = ()
+
+
+def _measure(target):
+    return target.measure()
+
+
+def _temperatures(target):
+    return target.read_temperatures()
+
+
+def _pressures(target):
+    return target.read_pressures()
+
+
+class Identifiable(Capability):
+    @abstractmethod
     def identify(self) -> str:
         """Instrument identification, e.g. the *IDN? answer."""
 
 
-@runtime_checkable
-class Switchable(Protocol):
+class Switchable(Capability):
+    capability_quantities = (OUTPUT,)
+
+    @abstractmethod
     def set_output(self, value: bool) -> None:
         ...
 
+    @abstractmethod
     def get_output(self) -> bool:
         ...
 
 
-@runtime_checkable
-class VoltageSource(Protocol):
+class VoltageSource(Capability):
+    capability_quantities = (VOLTAGE_SET,)
+
+    @abstractmethod
     def set_voltage(self, voltage: float) -> None:
         """V"""
 
+    @abstractmethod
     def get_voltage(self) -> float:
         """Programmed voltage, V. Use VoltageCurrentMeter.measure() for the actual one."""
 
 
-@runtime_checkable
-class CurrentSource(Protocol):
+class CurrentSource(Capability):
+    capability_quantities = (CURRENT_SET,)
+
+    @abstractmethod
     def set_current(self, current: float) -> None:
         """A, setpoint or limit"""
 
+    @abstractmethod
     def get_current(self) -> float:
         """Programmed current, A"""
 
 
-@runtime_checkable
-class OutputProtection(Protocol):
+class OutputProtection(Capability):
     """A supply output that switches itself off above a voltage or a current
     (OVP, OCP), whatever the program does."""
 
+    @abstractmethod
     def set_protection(
         self, voltage: Optional[float], current: Optional[float]
     ) -> None:
         """V, A; None leaves that protection as it is."""
 
 
-@runtime_checkable
-class VoltageCurrentMeter(Protocol):
+class VoltageCurrentMeter(Capability):
+    capability_quantities = (
+        Quantity("voltage", "Voltage", "V", source=_measure, field="voltage"),
+        Quantity("current", "Current", "A", source=_measure, field="current"),
+    )
+
+    @abstractmethod
     def measure(self) -> ChannelReading:
         ...
 
 
-@runtime_checkable
-class FrequencySource(Protocol):
+class FrequencySource(Capability):
+    capability_quantities = (FREQUENCY,)
+
+    @abstractmethod
     def set_frequency(self, frequency: float) -> None:
         """Hz"""
 
+    @abstractmethod
     def get_frequency(self) -> float:
         """Hz"""
 
 
-@runtime_checkable
-class PowerLevel(Protocol):
+class PowerLevel(Capability):
+    capability_quantities = (POWER_LEVEL,)
+
+    @abstractmethod
     def set_power(self, power: float) -> None:
         """dBm"""
 
+    @abstractmethod
     def get_power(self) -> float:
         """dBm"""
 
 
-@runtime_checkable
-class PowerDetector(Protocol):
+class PowerDetector(Capability):
+    capability_quantities = (
+        Quantity("power", "Power", "dBm", get=lambda t: t.read_power()),
+    )
+
+    @abstractmethod
     def read_power(self) -> float:
         """dBm, raises InstrumentError instead of returning None"""
 
 
-@runtime_checkable
-class TunableFilter(Protocol):
+class TunableFilter(Capability):
+    capability_quantities = (
+        Quantity(
+            "frequency", "Frequency", "Hz",
+            get=lambda t: t.get_frequency(), setters=("tune",),
+        ),
+    )  # fmt: skip
+
+    @abstractmethod
     def tune(self, frequency: float) -> float:
         """Tune to a frequency, Hz. Returns the frequency actually set."""
 
+    @abstractmethod
     def get_frequency(self) -> Optional[float]:
         """Hz, the one tuned last (no readback); None before the first tune."""
 
 
-@runtime_checkable
-class LoadSwitch(Protocol):
+class LoadSwitch(Capability):
     """Hot/cold calibration load switch, e.g. a chopper."""
 
+    capability_actions = (TO_HOT, TO_COLD)
+
+    @abstractmethod
     def to_hot(self) -> None:
         ...
 
+    @abstractmethod
     def to_cold(self) -> None:
         ...
 
 
-@runtime_checkable
-class Thermometer(Protocol):
+class Thermometer(Capability):
+    capability_quantities = (
+        Quantity("temperature", "Temperature", "K", get=lambda t: t.read_temperature()),
+    )
+
+    @abstractmethod
     def read_temperature(self) -> float:
         """K"""
 
 
-@runtime_checkable
-class SpectrumAnalyzer(Protocol):
+class SpectrumAnalyzer(Capability):
+    capability_actions = (CONFIGURE_SPECTRUM, READ_TRACE)
+
+    @abstractmethod
     def set_center_frequency(self, frequency: float) -> None:
         """Hz"""
 
+    @abstractmethod
     def set_span(self, span: float) -> None:
         """Hz"""
 
+    @abstractmethod
     def set_resolution_bandwidth(self, bandwidth: float) -> None:
         """Hz, the nearest supported value is used"""
 
+    @abstractmethod
     def set_video_bandwidth(self, bandwidth: float) -> None:
         """Hz, the nearest supported value is used"""
 
+    @abstractmethod
     def read_peak(self) -> Tuple[float, float]:
         """(frequency Hz, power dBm) of the highest peak"""
 
+    @abstractmethod
     def read_trace(self) -> Trace:
         ...
 
 
-@runtime_checkable
-class NetworkAnalyzer(Protocol):
+class NetworkAnalyzer(Capability):
+    capability_actions = (CONFIGURE_NETWORK, READ_TRACE)
+
+    @abstractmethod
     def set_frequency_range(self, start: float, stop: float) -> None:
         """Hz"""
 
+    @abstractmethod
     def set_points(self, points: int) -> None:
         ...
 
+    @abstractmethod
     def select_parameter(self, parameter: str) -> None:
         """Measure this S-parameter ("S11", "S21", ...) as complex data."""
 
+    @abstractmethod
     def set_averaging(self, count: int) -> None:
         """Sweep averaging, count <= 1 switches it off."""
 
+    @abstractmethod
     def read_trace(self) -> ComplexTrace:
         ...
 
 
-@runtime_checkable
-class VacuumGauge(Protocol):
+class VacuumGauge(Capability):
+    capability_quantities = (
+        Quantity("pressure", "Pressure", "Pa", get=lambda t: t.read_pressure()),
+    )
+
+    @abstractmethod
     def read_pressure(self) -> float:
         """Pa"""
 
 
-@runtime_checkable
-class Rotator(Protocol):
+class Rotator(Capability):
     """Angles in degrees (the one non-SI unit, as on every lab drawing)."""
 
+    capability_quantities = (ANGLE,)
+
+    @abstractmethod
     def rotate_to(self, angle: float) -> float:
         """Rotate to an absolute angle, returns the angle reached."""
 
+    @abstractmethod
     def get_angle(self) -> float:
         ...
 
 
-@runtime_checkable
-class Compressor(Protocol):
+class Compressor(Capability):
+    # F-70: discharge, water out, water in (the fourth sensor is spare); return pressure
+    capability_quantities = (
+        Quantity("temperature_1", "Discharge temperature", "K", source=_temperatures, field=0),
+        Quantity("temperature_2", "Water out temperature", "K", source=_temperatures, field=1),
+        Quantity("temperature_3", "Water in temperature", "K", source=_temperatures, field=2),
+        Quantity("pressure_1", "Return pressure", "Pa", source=_pressures, field=0),
+    )  # fmt: skip
+    capability_actions = (TURN_ON, TURN_OFF)
+
+    @abstractmethod
     def turn_on(self) -> None:
         ...
 
+    @abstractmethod
     def turn_off(self) -> None:
         ...
 
+    @abstractmethod
     def read_temperatures(self) -> List[float]:
         """K"""
 
+    @abstractmethod
     def read_pressures(self) -> List[float]:
         """Pa, gauge pressure"""
 
 
-@runtime_checkable
-class RawCommands(Protocol):
+class RawCommands(Capability):
     """An instrument that takes commands as text: what its driver does not wrap
     yet is sent as typed, over its link, with nothing checked."""
 
+    @abstractmethod
     def send_raw(self, command: str, answer: bool) -> Optional[str]:
         """Send the command; with answer, read and return the answer."""
 
@@ -222,6 +340,7 @@ ACCESS: tuple[type, ...] = (Identifiable, RawCommands)
 
 
 def capabilities_of(cls: type | None) -> tuple[type, ...]:
+    """The capabilities a class declares (inherits), in ALL_CAPABILITIES order."""
     if cls is None:
         return ()
     return tuple(

@@ -1,8 +1,9 @@
 """Actions: what a device does on request, beyond setting a quantity.
 
 Like quantities, actions come from capabilities (a load switch turns to the
-hot or the cold load, an analyzer reads a trace) and drivers add their own
-(the chopper's continuous rotation) with the ``actions`` class attribute. An
+hot or the cold load, an analyzer reads a trace: ``capability_actions``) and
+drivers add their own (the chopper's continuous rotation) with the ``actions``
+class attribute (thzdaq_instruments.parts). An
 action takes arguments with units and may return a result (a trace). One that
 can harm the bench carries a warning, shown before it runs.
 
@@ -11,10 +12,9 @@ readback) also sets its zero where it stands.
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
-from thzdaq_instruments import capabilities as caps
-from thzdaq_instruments.quantities import Kind, by_key, declared, parse_as
+from thzdaq_instruments.quantities import Kind, parse_as
 
 
 @dataclass(frozen=True)
@@ -111,13 +111,6 @@ CONFIGURE_NETWORK = Action(
     help="Frequency range, points and the S-parameter of the sweep",
 )  # fmt: skip
 
-CAPABILITY_ACTIONS: Dict[type, Tuple[Action, ...]] = {
-    caps.LoadSwitch: (TO_HOT, TO_COLD),
-    caps.Compressor: (TURN_ON, TURN_OFF),
-    caps.SpectrumAnalyzer: (CONFIGURE_SPECTRUM, READ_TRACE),
-    caps.NetworkAnalyzer: (CONFIGURE_NETWORK, READ_TRACE),
-}
-
 # Chopper (driver and simulator): continuous rotation, the load stays undefined
 START_ROTATION = Action(
     "start_rotation", "Continuous rotation",
@@ -134,15 +127,3 @@ ZERO_ANGLE = Action(
     "zero", "Set zero", lambda t: t.zero(),
     help="Where it stands becomes 0°; nothing moves",
 )  # fmt: skip
-
-
-def actions_for(
-    capabilities: Iterable[type], extra: Iterable[Action] = ()
-) -> List[Action]:
-    """Actions of the given capabilities, then the extra (driver) ones."""
-    return by_key(CAPABILITY_ACTIONS, capabilities, extra)
-
-
-def actions_of(target: Any) -> List[Action]:
-    """Actions of a device part: from its capabilities, then its own ones."""
-    return actions_for(*declared(target, "actions"))

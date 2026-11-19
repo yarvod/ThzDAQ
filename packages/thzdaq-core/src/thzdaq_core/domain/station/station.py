@@ -19,7 +19,7 @@ from typing import (
 )
 
 from thzdaq_instruments import default_registry
-from thzdaq_instruments.actions import Action, actions_for
+from thzdaq_instruments.actions import Action
 from thzdaq_instruments.capabilities import (
     OutputProtection,
     RawCommands,
@@ -28,13 +28,8 @@ from thzdaq_instruments.capabilities import (
 from thzdaq_instruments.errors import InstrumentError
 from thzdaq_instruments.instrument import Instrument
 from thzdaq_instruments.limits import Limit
-from thzdaq_instruments.quantities import (
-    CURRENT_SET,
-    VOLTAGE_SET,
-    Quantity,
-    quantities_for,
-    quantities_of,
-)
+from thzdaq_instruments.parts import actions_for, quantities_for, quantities_of
+from thzdaq_instruments.quantities import CURRENT_SET, VOLTAGE_SET, Quantity
 from thzdaq_instruments.registry import DriverRegistry
 from thzdaq_instruments.transport.pool import TransportPool, default_pool
 

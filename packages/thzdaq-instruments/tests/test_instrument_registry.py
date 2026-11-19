@@ -26,7 +26,7 @@ from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
 from thzdaq_instruments.transport.fake import FakeLink, fake_transport
 
 
-class DemoChannel(Channel):
+class DemoChannel(Channel, Switchable, VoltageCurrentMeter):
     instrument: "DemoSupply"
 
     def set_output(self, value: bool) -> None:
@@ -88,7 +88,7 @@ class TestScpiInstrument:
 
 
 class TestRegistry:
-    def test_capabilities_are_derived_from_classes(self):
+    def test_capabilities_are_declared_by_classes(self):
         registry = DriverRegistry()
         registry.register("demo.supply", DemoSupply, title="Demo")
         info = registry.get("demo.supply")

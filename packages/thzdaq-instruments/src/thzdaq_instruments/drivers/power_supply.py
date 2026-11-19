@@ -1,11 +1,19 @@
 from abc import ABC, abstractmethod
 from typing import ClassVar, Tuple
 
+from thzdaq_instruments.capabilities import (
+    CurrentSource,
+    Switchable,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 from thzdaq_instruments.instrument import Channel, ScpiInstrument
 from thzdaq_instruments.readings import ChannelReading
 
 
-class SupplyChannel(Channel):
+class SupplyChannel(
+    Channel, Switchable, VoltageSource, CurrentSource, VoltageCurrentMeter
+):
     """One output of a power supply.
 
     Implements Switchable, VoltageSource, CurrentSource and VoltageCurrentMeter

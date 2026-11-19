@@ -4,12 +4,12 @@ import pytest
 from emulators import RigolEmulator
 from thzdaq_instruments.drivers import DRIVERS, AgilentE8247C, RigolDP832A
 from thzdaq_instruments.limits import Limit
+from thzdaq_instruments.parts import quantities_for
 from thzdaq_instruments.quantities import (
     CURRENT_SET,
     POWER_LEVEL,
     VOLTAGE_SET,
     Quantity,
-    quantities_for,
 )
 from thzdaq_instruments.capabilities import capabilities_of
 from thzdaq_instruments.sim import SimSisBlock

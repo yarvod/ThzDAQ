@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+from thzdaq_instruments.capabilities import Identifiable, TunableFilter
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Channel, Instrument
 from thzdaq_instruments.transport.base import HTTP, ConnectionSpec
@@ -9,7 +10,7 @@ from thzdaq_instruments.transport.http import JsonClient, JsonHttpClient
 DEFAULT_CODE_TO_FREQUENCY = (2.46705639e06, 2.97320263e09)
 
 
-class YigChannel(Channel):
+class YigChannel(Channel, TunableFilter):
     """One YIG filter on the NI DAQ: TunableFilter."""
 
     instrument: "NiYigFilter"
@@ -30,7 +31,7 @@ class YigChannel(Channel):
         return self.frequency
 
 
-class NiYigFilter(Instrument):
+class NiYigFilter(Instrument, Identifiable):
     """Digital YIG filters driven by the NI DAQ REST service."""
 
     driver_key = "ni.yig"

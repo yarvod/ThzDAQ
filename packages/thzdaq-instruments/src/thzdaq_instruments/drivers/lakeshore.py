@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, Literal, Optional
 
+from thzdaq_instruments.capabilities import Thermometer
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import Channel, ScpiInstrument
 from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec
@@ -16,7 +17,7 @@ OUTPUT_MODES = {
 }
 
 
-class TemperatureInput(Channel):
+class TemperatureInput(Channel, Thermometer):
     """Sensor input A-D: Thermometer."""
 
     instrument: "LakeShore336"

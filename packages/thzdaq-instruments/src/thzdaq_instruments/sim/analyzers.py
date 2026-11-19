@@ -2,11 +2,16 @@ import cmath
 import math
 from typing import Callable, Optional, Tuple
 
+from thzdaq_instruments.capabilities import (
+    NetworkAnalyzer,
+    PowerLevel,
+    SpectrumAnalyzer,
+)
 from thzdaq_instruments.sim.base import SimInstrument
 from thzdaq_instruments.readings import ComplexTrace, Trace, linspace
 
 
-class SimSpectrumAnalyzer(SimInstrument):
+class SimSpectrumAnalyzer(SimInstrument, SpectrumAnalyzer):
     """A single tone at `tone_frequency` above a flat noise floor."""
 
     driver_key = "sim.spectrum_analyzer"
@@ -63,7 +68,7 @@ class SimSpectrumAnalyzer(SimInstrument):
         return trace.frequency[index], trace.values[index]
 
 
-class SimNetworkAnalyzer(SimInstrument):
+class SimNetworkAnalyzer(SimInstrument, PowerLevel, NetworkAnalyzer):
     """Reflection of a resistive load at the end of a lossless line."""
 
     driver_key = "sim.network_analyzer"

@@ -9,6 +9,7 @@ parameter, data length, data, checksum = sum of the preceding bytes mod 256.
 import math
 from typing import Any, Optional, Union
 
+from thzdaq_instruments.capabilities import VacuumGauge
 from thzdaq_instruments.drivers.pfeiffer_parameters import (
     BY_NAME,
     PARAMETERS,
@@ -176,7 +177,7 @@ class PfeifferDevice(ScpiInstrument):
         return self.get_parameter("Error_code")
 
 
-class PfeifferTurboPump(PfeifferDevice):
+class PfeifferTurboPump(PfeifferDevice, VacuumGauge):
     """TC 110 drive of a HiPace/HiCube turbo pump."""
 
     def set_pumping_station(self, value: bool) -> None:
@@ -224,7 +225,7 @@ class PfeifferTurboPump(PfeifferDevice):
         return self.get_parameter("Pressure") * HPA
 
 
-class PfeifferGauge(PfeifferDevice):
+class PfeifferGauge(PfeifferDevice, VacuumGauge):
     """Active gauge on the bus (TPR, PKR, ...): VacuumGauge."""
 
     def read_pressure(self) -> float:

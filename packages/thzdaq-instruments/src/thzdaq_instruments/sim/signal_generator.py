@@ -1,11 +1,12 @@
 from typing import Optional
 
+from thzdaq_instruments.capabilities import FrequencySource, PowerLevel, Switchable
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.sim.base import SimInstrument
 from thzdaq_instruments.quantities import GENERATOR_QUANTITIES
 
 
-class SimSignalGenerator(SimInstrument):
+class SimSignalGenerator(SimInstrument, Switchable, FrequencySource, PowerLevel):
     """Generator with the configuration of an E8247C (multiplier, OEM head).
 
     Like the real one, frequencies are the displayed ones: with a multiplier

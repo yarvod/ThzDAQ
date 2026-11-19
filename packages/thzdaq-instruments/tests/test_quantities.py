@@ -1,5 +1,6 @@
 import pytest
-from thzdaq_instruments.quantities import Quantity, quantities_of, read_values
+from thzdaq_instruments.parts import quantities_of, read_values
+from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.sim import (
     SimPowerMeter,
     SimPowerSupply,

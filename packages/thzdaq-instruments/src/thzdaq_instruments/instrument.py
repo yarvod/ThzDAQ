@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, Hashable, Mapping, Optional, Tuple, Type
 
+from thzdaq_instruments.capabilities import Identifiable, RawCommands
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.limits import Limit
 from thzdaq_instruments.transport.base import Transport
@@ -108,7 +109,7 @@ class Instrument:
         self.close()
 
 
-class ScpiInstrument(Instrument):
+class ScpiInstrument(Instrument, Identifiable, RawCommands):
     """Message based instrument: text commands over a Transport."""
 
     def __init__(self, transport: Transport, *, name: Optional[str] = None):

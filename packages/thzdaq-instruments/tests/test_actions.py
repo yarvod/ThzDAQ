@@ -1,5 +1,6 @@
 import pytest
-from thzdaq_instruments.actions import Action, Argument, actions_of
+from thzdaq_instruments.actions import Action, Argument
+from thzdaq_instruments.parts import actions_of
 from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.sim import (
     SimChopper,

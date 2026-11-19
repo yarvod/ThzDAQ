@@ -1,10 +1,11 @@
 """Quantities: the values a device part can read or set, with units.
 
 A quantity binds a name and a unit to getter/setter calls of a capability
-(voltage of a VoltageSource, power of a PowerDetector, ...). Generic device
-controls, monitors and plots are built from them, so a new driver gets a
-working UI by implementing capabilities; drivers add their own quantities
-(e.g. the short circuit of a SIS bias) with the ``quantities`` class attribute.
+(voltage of a VoltageSource, power of a PowerDetector, ...: its
+``capability_quantities``). Generic device controls, monitors and plots are
+built from them, so a new driver gets a working UI by inheriting capabilities;
+drivers add their own quantities (e.g. the short circuit of a SIS bias) with the
+``quantities`` class attribute (thzdaq_instruments.parts).
 
 Several quantities may come from one call (voltage and current from
 measure()): they share a ``source`` and read_values() calls it once. A
@@ -13,20 +14,8 @@ checks and ramps every call that changes it, whoever makes it.
 """
 
 from dataclasses import dataclass, replace
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Literal,
-    Mapping,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Literal, Optional, Tuple, Union
 
-from thzdaq_instruments import capabilities as caps
 from thzdaq_instruments.units import parse_value
 
 Kind = Literal["float", "int", "bool", "text"]
@@ -129,18 +118,6 @@ def pick(result: Any, field: Union[str, int, None]) -> Any:
     return getattr(result, field)
 
 
-def _measure(target):
-    return target.measure()
-
-
-def _temperatures(target):
-    return target.read_temperatures()
-
-
-def _pressures(target):
-    return target.read_pressures()
-
-
 # Setpoints of capabilities, named: drivers, limits and procedures refer to them
 OUTPUT = Quantity(
     "output",
@@ -180,42 +157,6 @@ POWER_LEVEL = Quantity(
 ANGLE = Quantity(
     "angle", "Angle", "deg", get=lambda t: t.get_angle(), setters=("rotate_to",)
 )
-
-CAPABILITY_QUANTITIES: Dict[type, Tuple[Quantity, ...]] = {
-    caps.Switchable: (OUTPUT,),
-    caps.VoltageSource: (VOLTAGE_SET,),
-    caps.CurrentSource: (CURRENT_SET,),
-    caps.VoltageCurrentMeter: (
-        Quantity("voltage", "Voltage", "V", source=_measure, field="voltage"),
-        Quantity("current", "Current", "A", source=_measure, field="current"),
-    ),
-    caps.FrequencySource: (FREQUENCY,),
-    caps.PowerLevel: (POWER_LEVEL,),
-    caps.PowerDetector: (
-        Quantity("power", "Power", "dBm", get=lambda t: t.read_power()),
-    ),
-    caps.TunableFilter: (
-        Quantity(
-            "frequency", "Frequency", "Hz",
-            get=lambda t: t.get_frequency(), setters=("tune",),
-        ),
-    ),
-    caps.Thermometer: (
-        Quantity("temperature", "Temperature", "K", get=lambda t: t.read_temperature()),
-    ),
-    caps.VacuumGauge: (
-        Quantity("pressure", "Pressure", "Pa", get=lambda t: t.read_pressure()),
-    ),
-    # F-70: discharge, water out, water in (the fourth sensor is spare); return pressure
-    caps.Compressor: (
-        Quantity("temperature_1", "Discharge temperature", "K", source=_temperatures, field=0),
-        Quantity("temperature_2", "Water out temperature", "K", source=_temperatures, field=1),
-        Quantity("temperature_3", "Water in temperature", "K", source=_temperatures, field=2),
-        Quantity("pressure_1", "Return pressure", "Pa", source=_pressures, field=0),
-    ),
-    caps.Rotator: (ANGLE,),
-}  # fmt: skip
-
 
 # The bias of a SIS block also takes a voltage corrected by readback
 SIS_VOLTAGE_SET = replace(VOLTAGE_SET, setters=("set_voltage", "set_voltage_precise"))
@@ -314,63 +255,3 @@ GENERATOR_QUANTITIES = (
         minimum=1, maximum=100, persistent=True,
     ),
 )  # fmt: skip
-
-
-def by_key(
-    table: Mapping[type, Iterable[Any]],
-    capabilities: Iterable[type],
-    extra: Iterable[Any],
-) -> List[Any]:
-    """What the capabilities give in the table (quantities, actions), then the
-    extra (driver) ones; an extra one replaces a capability's with its key."""
-    found: Dict[str, Any] = {}
-    for capability in capabilities:
-        for item in table.get(capability, ()):
-            found.setdefault(item.key, item)
-    for item in extra:
-        found[item.key] = item
-    return list(found.values())
-
-
-def quantities_for(
-    capabilities: Iterable[type], extra: Iterable[Quantity] = ()
-) -> List[Quantity]:
-    """Quantities of the given capabilities, then the extra (driver) ones."""
-    return by_key(CAPABILITY_QUANTITIES, capabilities, extra)
-
-
-def declared(target: Any, attribute: str) -> Tuple[List[type], Tuple[Any, ...]]:
-    """Capabilities of a device part and what its class declares under the
-    attribute (quantities, actions); a port adapter counts what it delegates."""
-    if hasattr(target, "target"):
-        capabilities = [c for c in caps.ALL_CAPABILITIES if isinstance(target, c)]
-    else:
-        capabilities = caps.capabilities_of(type(target))
-    own = getattr(type(target), attribute, None) or getattr(
-        getattr(target, "target", None), attribute, ()
-    )
-    return capabilities, tuple(own)
-
-
-def quantities_of(target: Any) -> List[Quantity]:
-    """Quantities of a device part: from its capabilities, then its own ones."""
-    return quantities_for(*declared(target, "quantities"))
-
-
-def read_values(
-    target: Any, quantities: Optional[Iterable[Quantity]] = None
-) -> Dict[str, Any]:
-    """Read every readable quantity, calling a shared source (measure()) once."""
-    values: Dict[str, Any] = {}
-    sources: Dict[int, Any] = {}
-    for quantity in quantities_of(target) if quantities is None else quantities:
-        if not quantity.readable:
-            continue
-        if quantity.source is not None:
-            key = id(quantity.source)
-            if key not in sources:
-                sources[key] = quantity.source(target)
-            values[quantity.key] = pick(sources[key], quantity.field)
-        else:
-            values[quantity.key] = quantity.get(target)
-    return values

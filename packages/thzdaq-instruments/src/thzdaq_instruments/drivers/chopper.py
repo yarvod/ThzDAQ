@@ -3,6 +3,7 @@ import threading
 import time
 from typing import Optional, Tuple
 
+from thzdaq_instruments.capabilities import Identifiable, LoadSwitch
 from thzdaq_instruments.errors import ConfigurationError, InstrumentError
 from thzdaq_instruments.actions import CHOPPER_ACTIONS
 from thzdaq_instruments.instrument import Instrument
@@ -52,7 +53,7 @@ HOT: Sensors = (True, True)
 COLD: Sensors = (False, False)
 
 
-class ModbusChopper(Instrument):
+class ModbusChopper(Instrument, Identifiable, LoadSwitch):
     """Chopper on a Modbus stepper driver with two load position sensors: LoadSwitch.
 
     Both sensors on = hot load in the beam, both off = cold load.

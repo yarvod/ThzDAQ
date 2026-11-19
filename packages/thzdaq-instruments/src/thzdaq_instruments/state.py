@@ -9,33 +9,35 @@ kept (a file of the daemon) is not its business.
 The state is a mapping of JSON values.
 """
 
-from typing import Any, Callable, Dict, Mapping, Optional, Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Mapping, Optional
 
 State = Dict[str, Any]
 Told = Callable[[State], None]
 
 
-@runtime_checkable
-class KeptState(Protocol):
+class KeptState(ABC):
+    """An instrument that keeps such a state declares it by inheriting this."""
+
+    @abstractmethod
     def kept_state(self) -> State:
         """What it knows now, to be kept."""
 
+    @abstractmethod
     def restore_state(self, state: Mapping[str, Any]) -> None:
         """Take back what was kept, as it last told it."""
 
+    @abstractmethod
     def watch_state(self, told: Told) -> None:
         """told(state) hears every change, in the thread that makes it; a
         failure to keep it is the watcher's to handle, never raised here."""
 
 
-class KeepsState:
+class KeepsState(KeptState):
     """The watching half of KeptState for an instrument class: it tells its
     state through keep()."""
 
     _told: Optional[Told] = None
-
-    def kept_state(self) -> State:
-        raise NotImplementedError
 
     def watch_state(self, told: Told) -> None:
         self._told = told

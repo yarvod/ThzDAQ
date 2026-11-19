@@ -1,6 +1,11 @@
 import math
 from typing import Optional
 
+from thzdaq_instruments.capabilities import (
+    CurrentSource,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.quantities import COIL_CURRENT, SHORT, SIS_VOLTAGE_SET
@@ -11,7 +16,7 @@ from thzdaq_instruments.sim.lively import Wobble, still
 from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimSisBiasChannel(Channel):
+class SimSisBiasChannel(Channel, VoltageSource, VoltageCurrentMeter):
     """SIS junction biased by voltage: smooth current step at the gap."""
 
     instrument: "SimSisBlock"
@@ -61,7 +66,7 @@ class SimSisBiasChannel(Channel):
         return self._voltage
 
 
-class SimSisCtrlChannel(Channel):
+class SimSisCtrlChannel(Channel, CurrentSource):
     quantities = (COIL_CURRENT, SHORT)
 
     def __init__(self, instrument: "SimSisBlock", key: str):

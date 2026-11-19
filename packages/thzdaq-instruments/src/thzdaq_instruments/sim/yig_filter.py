@@ -1,10 +1,11 @@
 from typing import Optional
 
+from thzdaq_instruments.capabilities import TunableFilter
 from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimYigChannel(Channel):
+class SimYigChannel(Channel, TunableFilter):
     """YIG filter tuned by a DAC code: frequency = start + code * step."""
 
     instrument: "SimYigFilter"

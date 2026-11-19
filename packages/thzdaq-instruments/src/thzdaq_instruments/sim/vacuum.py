@@ -1,11 +1,12 @@
 from typing import List, Optional
 
+from thzdaq_instruments.capabilities import Compressor, VacuumGauge
 from thzdaq_instruments.sim.base import SimInstrument
 from thzdaq_instruments.sim.lively import Wobble, still
 from thzdaq_instruments.units import PSI, celsius_to_kelvin
 
 
-class SimVacuumGauge(SimInstrument):
+class SimVacuumGauge(SimInstrument, VacuumGauge):
     driver_key = "sim.vacuum_gauge"
     device_type = "vacuum_gauge"
 
@@ -24,7 +25,7 @@ class SimVacuumGauge(SimInstrument):
         return self.pressure * (1 + self.wobble())
 
 
-class SimCompressor(SimInstrument):
+class SimCompressor(SimInstrument, Compressor):
     driver_key = "sim.compressor"
     device_type = "compressor"
 

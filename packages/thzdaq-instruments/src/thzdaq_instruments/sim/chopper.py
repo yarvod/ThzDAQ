@@ -1,13 +1,14 @@
 from typing import Literal, Optional
 
 from thzdaq_instruments.actions import CHOPPER_ACTIONS
+from thzdaq_instruments.capabilities import LoadSwitch
 from thzdaq_instruments.sim.base import SimInstrument
 from thzdaq_instruments.quantities import CHOPPER_QUANTITIES
 
 LoadPosition = Literal["hot", "cold"]
 
 
-class SimChopper(SimInstrument):
+class SimChopper(SimInstrument, LoadSwitch):
     """Chopper with the controls of the Modbus one: moves, alignment, rotation."""
 
     driver_key = "sim.chopper"

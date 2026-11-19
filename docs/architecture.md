@@ -73,8 +73,10 @@ packages/
     errors.py            # InstrumentError → Connection / Timeout / Response / Configuration
     units.py             # СИ внутри (Гц, В, А, K, Па, с), мощность в дБм, углы в градусах
     readings.py          # ChannelReading, Trace, ComplexTrace
-    capabilities.py      # интерфейсы по возможностям (4.3)
+    capabilities.py      # интерфейсы по возможностям (4.3), их величины и действия
     quantities.py        # величины частей прибора (4.4)
+    actions.py           # действия частей прибора
+    parts.py             # что предлагает часть: величины и действия её возможностей и свои
     instrument.py        # Instrument, ScpiInstrument, Channel, SubdeviceType
     registry.py          # каталог драйверов, open() через пул
     transport/           # base (ConnectionSpec, Link, Transport), links (TCP, serial, VISA),
@@ -238,26 +240,31 @@ class SubdeviceType:                  # вид функционального у
   (`sis_coil`, `ctrl()`). Если подустройства используют `channel`, каналы отдельно не показываются.
 
 ### 4.3 Capabilities — маленькие интерфейсы (ISP)
-Интерфейс описывает одну возможность; прибор или его часть реализует несколько. Это `Protocol`
-только из методов, поэтому реестр выводит возможности драйвера из класса (`issubclass`).
+Интерфейс описывает одну возможность; прибор или его часть объявляет свои, наследуя их:
+`class RigolChannel(SupplyChannel, OutputProtection)`. Возможность — ABC
+(`Capability`) с абстрактными методами: реестр берёт возможности драйвера из его класса
+(`issubclass`, по наследованию, не по совпадению имён), а класс, не реализовавший метод
+объявленной возможности, не создаётся (`TypeError`). Датчик со своим `set_frequency` —
+не генератор, пока не объявил `FrequencySource`. `ScpiInstrument` и `SimInstrument` уже
+объявляют `Identifiable` и `RawCommands`.
 ```python
-class Identifiable(Protocol):       def identify(self) -> str
-class RawCommands(Protocol):        send_raw(command, answer) -> str | None  # мимо защиты
-class Switchable(Protocol):         set_output(bool), get_output() -> bool
-class VoltageSource(Protocol):      set_voltage(V), get_voltage() -> V   # уставка
-class CurrentSource(Protocol):      set_current(A), get_current() -> A   # уставка/предел
-class VoltageCurrentMeter(Protocol): measure() -> ChannelReading         # факт
-class FrequencySource(Protocol):    set_frequency(Hz), get_frequency() -> Hz
-class PowerLevel(Protocol):         set_power(dBm), get_power() -> dBm
-class PowerDetector(Protocol):      read_power() -> dBm                  # ошибка — исключение
-class TunableFilter(Protocol):      tune(Hz) -> Hz, get_frequency()      # реально выставленная; без обратного чтения — последняя
-class LoadSwitch(Protocol):         to_hot(), to_cold()
-class Thermometer(Protocol):        read_temperature() -> K
-class SpectrumAnalyzer(Protocol):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
-class NetworkAnalyzer(Protocol):    set_frequency_range(), set_points(), select_parameter(), set_averaging(), read_trace()
-class VacuumGauge(Protocol):        read_pressure() -> Pa
-class Rotator(Protocol):            rotate_to(deg), get_angle()
-class Compressor(Protocol):         turn_on/off(), read_temperatures() -> K, read_pressures() -> Pa
+class Identifiable(Capability):       identify() -> str
+class RawCommands(Capability):        send_raw(command, answer) -> str | None  # мимо защиты
+class Switchable(Capability):         set_output(bool), get_output() -> bool
+class VoltageSource(Capability):      set_voltage(V), get_voltage() -> V   # уставка
+class CurrentSource(Capability):      set_current(A), get_current() -> A   # уставка/предел
+class VoltageCurrentMeter(Capability): measure() -> ChannelReading         # факт
+class FrequencySource(Capability):    set_frequency(Hz), get_frequency() -> Hz
+class PowerLevel(Capability):         set_power(dBm), get_power() -> dBm
+class PowerDetector(Capability):      read_power() -> dBm                  # ошибка — исключение
+class TunableFilter(Capability):      tune(Hz) -> Hz, get_frequency()      # реально выставленная; без обратного чтения — последняя
+class LoadSwitch(Capability):         to_hot(), to_cold()
+class Thermometer(Capability):        read_temperature() -> K
+class SpectrumAnalyzer(Capability):   set_center_frequency/set_span/set_*_bandwidth, read_peak(), read_trace()
+class NetworkAnalyzer(Capability):    set_frequency_range(), set_points(), select_parameter(), set_averaging(), read_trace()
+class VacuumGauge(Capability):        read_pressure() -> Pa
+class Rotator(Capability):            rotate_to(deg), get_angle()
+class Compressor(Capability):         turn_on/off(), read_temperatures() -> K, read_pressures() -> Pa
 ```
 SIS-смещение — это `VoltageSource + VoltageCurrentMeter`, канал блока питания —
 `Switchable + VoltageSource + CurrentSource + VoltageCurrentMeter`. Единицы — СИ (К, Па) даже
@@ -270,12 +277,15 @@ SIS-смещение — это `VoltageSource + VoltageCurrentMeter`, кана�
 
 ### 4.4 Величины
 `Quantity` (`thzdaq_instruments.quantities`) — то, что часть прибора читает или задаёт: ключ,
-название, единица (СИ, dBm, deg), вид (`float`/`bool`), get/set. Величины выводятся из
-возможностей (`VoltageSource` → «Voltage setpoint, V», `VoltageCurrentMeter` → «Voltage» и
-«Current» из одного `measure()`, `PowerDetector` → «Power, dBm», ...); драйвер добавляет свои
-атрибутом `quantities` (закоротка SIS — `SHORT`, множитель и OEM-голова генератора —
-`GENERATOR_QUANTITIES`, состояние чоппера — `CHOPPER_QUANTITIES`). `read_values(part)` читает
-все сразу, общий вызов делается один раз. Из величин строятся доки устройств, мониторинг и
+название, единица (СИ, dBm, deg), вид (`float`/`bool`), get/set. Величины даёт возможность —
+её атрибут `capability_quantities` (`VoltageSource` → «Voltage setpoint, V»,
+`VoltageCurrentMeter` → «Voltage» и «Current» из одного `measure()`, `PowerDetector` →
+«Power, dBm», ...), действия — так же, `capability_actions`; драйвер добавляет свои атрибутами
+`quantities` и `actions` (закоротка SIS — `SHORT`, множитель и OEM-голова генератора —
+`GENERATOR_QUANTITIES`, состояние чоппера — `CHOPPER_QUANTITIES`). Собирает их
+`thzdaq_instruments.parts`: `quantities_of(part)`, `actions_of(part)` — по классу части;
+устройство в порту станции (`GuardedPort`, `AttributePort`) разворачивается до части по
+`target`. `read_values(part)` читает все сразу, общий вызов делается один раз. Из величин строятся доки устройств, мониторинг и
 графики — новый драйвер сразу получает рабочий док.
 - `choices` — список значений текстовой величины (OEM `OFF`/`ON`).
 - `persistent=True` — **конфигурация прибора** (множитель, OEM start/stop): хранится в профиле
@@ -840,7 +850,7 @@ registry.register("rigol.dp832a", RigolDP832A, title="Rigol DP832A power supply"
 registry.open("rigol.dp832a", connection, pool=pool, simulate=False, **options)
 ```
 - `default_registry()` — все встроенные драйверы (`drivers.DRIVERS`) и симуляторы (`sim.*`).
-- Возможности драйвера и его каналов выводятся из классов (`DriverInfo.capabilities`,
+- Возможности драйвера и его каналов — те, что объявили их классы (`DriverInfo.capabilities`,
   `channel_capabilities`), `find(capability)` ищет подходящие драйверы.
 - `open(..., simulate=True)` создаёт симулятор: приложение целиком работает на симуляторах
   (`--simulate`) — разработка без стенда, демо, тесты процедур.

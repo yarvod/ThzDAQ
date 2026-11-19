@@ -1,5 +1,6 @@
 from typing import Literal
 
+from thzdaq_instruments.capabilities import FrequencySource, PowerLevel, Switchable
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.limits import Limit
@@ -9,7 +10,7 @@ from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, Connectio
 OemState = Literal["ON", "OFF", "NONE", "REAR", "FRONT"]
 
 
-class AgilentE8247C(ScpiInstrument):
+class AgilentE8247C(ScpiInstrument, Switchable, FrequencySource, PowerLevel):
     """Agilent/Keysight PSG E8247C, usually GPIB behind Prologix.
 
     Frequencies are the ones the instrument displays: with a frequency

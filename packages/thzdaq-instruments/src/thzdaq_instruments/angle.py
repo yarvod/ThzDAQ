@@ -11,6 +11,7 @@ stands 0°. A move the rotator refused (it answered so) leaves it where it was.
 from typing import Any, Mapping, Optional
 
 from thzdaq_instruments.actions import ZERO_ANGLE
+from thzdaq_instruments.capabilities import Rotator
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.state import KeepsState, State
 
@@ -22,7 +23,7 @@ class AngleUnknown(InstrumentResponseError):
     """The rotator's angle is not known: a move did not end."""
 
 
-class CountedAngle(KeepsState):
+class CountedAngle(KeepsState, Rotator):
     """Rotator (rotate_to, get_angle) and KeptState of an instrument class;
     the class moves the rotator in _move()."""
 

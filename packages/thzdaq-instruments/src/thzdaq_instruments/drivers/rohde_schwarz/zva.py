@@ -2,6 +2,7 @@ import logging
 import time
 from typing import Dict, Literal, Tuple
 
+from thzdaq_instruments.capabilities import NetworkAnalyzer, PowerLevel
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.readings import ComplexTrace, linspace
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 DataFormat = Literal["COMP", "MLOG", "MLIN", "PHAS", "REAL", "IMAG"]
 
 
-class RohdeSchwarzZVA67(ScpiInstrument):
+class RohdeSchwarzZVA67(ScpiInstrument, PowerLevel, NetworkAnalyzer):
     """R&S ZVA67 vector network analyzer: NetworkAnalyzer, PowerLevel."""
 
     driver_key = "rs.zva67"

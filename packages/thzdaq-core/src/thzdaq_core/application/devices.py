@@ -29,7 +29,8 @@ from thzdaq_api.leases import EXCLUSIVE
 from thzdaq_api.measurement_file import CONFLICTS, INTERACTIONS
 from thzdaq_instruments.actions import Action
 from thzdaq_instruments.errors import InstrumentError
-from thzdaq_instruments.quantities import Quantity, read_values
+from thzdaq_instruments.parts import read_values
+from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.units import format_value
 
 from thzdaq_core.application.approvals import Ask

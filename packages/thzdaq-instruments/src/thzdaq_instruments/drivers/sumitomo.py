@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from thzdaq_instruments.capabilities import Compressor, Identifiable
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Instrument, ScpiInstrument
 from thzdaq_instruments.transport.base import HTTP, ConnectionSpec, serial_or_gateway
@@ -66,7 +67,7 @@ class F70Status:
         return 2 if self.raw & 1 << 15 else 1
 
 
-class SumitomoF70(ScpiInstrument):
+class SumitomoF70(ScpiInstrument, Compressor):
     """Sumitomo F-70 helium compressor, RS-232 protocol ($CMD + CRC + CR): Compressor.
 
     The legacy driver ended control commands with NUL instead of CR and read the
@@ -149,7 +150,7 @@ class SumitomoF70(ScpiInstrument):
         self.command("$POF")
 
 
-class SumitomoF70Rest(Instrument):
+class SumitomoF70Rest(Instrument, Identifiable, Compressor):
     """F-70 behind the lab REST service (°C and psig there): Compressor."""
 
     driver_key = "sumitomo.f70_rest"

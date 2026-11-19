@@ -6,19 +6,16 @@ import time
 from typing import List, Optional
 
 from thzdaq_instruments import InstrumentError
-from thzdaq_instruments.capabilities import ACCESS, ALL_CAPABILITIES
+from thzdaq_instruments.capabilities import ACCESS
 
 from thzdaq_core.adapters.legacy_profiles import import_legacy_settings
 from thzdaq_core.domain.station.station import Station
 from thzdaq_core.adapters.yaml_profiles import dump_station, load_station, save_station
 
 
-def capability_names(device) -> List[str]:
-    return [
-        c.__name__
-        for c in ALL_CAPABILITIES
-        if c not in ACCESS and isinstance(device, c)
-    ]
+def capability_names(capabilities) -> List[str]:
+    """What a device does, apart from how its instrument is reached."""
+    return [c.__name__ for c in capabilities if c not in ACCESS]
 
 
 def cmd_import(args) -> int:
@@ -62,12 +59,13 @@ def cmd_check(args) -> int:
         refs = args.devices or [info.ref for info in station.devices()]
         for ref in refs:
             try:
-                device = station.device(ref)
+                station.device(ref)
             except InstrumentError as e:
                 failures += 1
                 print(f"FAIL {ref}: {e}")
                 continue
-            print(f"ok   {ref}: {', '.join(capability_names(device)) or '-'}")
+            names = capability_names(station.info(ref).capabilities)
+            print(f"ok   {ref}: {', '.join(names) or '-'}")
         for instrument_id, identity in station.snapshot()["identities"].items():
             print(f"     {instrument_id}: {identity}")
     return 1 if failures else 0

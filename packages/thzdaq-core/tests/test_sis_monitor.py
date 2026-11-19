@@ -9,7 +9,7 @@ from thzdaq_api.procedures import (
     monitor_quantities,
     plot_for,
 )
-from thzdaq_instruments.quantities import quantities_of
+from thzdaq_instruments.parts import quantities_of
 from thzdaq_core.domain.sis.calibration import (
     CALIBRATION_FIELDS,
     calibration_for,

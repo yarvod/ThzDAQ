@@ -1,5 +1,6 @@
 from typing import Literal, Tuple
 
+from thzdaq_instruments.capabilities import SpectrumAnalyzer
 from thzdaq_instruments.instrument import ScpiInstrument
 from thzdaq_instruments.readings import Trace, linspace
 from thzdaq_instruments.transport.base import PROLOGIX, PROLOGIX_HOST, ConnectionSpec
@@ -20,7 +21,7 @@ def nearest_bandwidth(bandwidth: float) -> float:
     return min(BANDWIDTHS, key=lambda value: abs(value - bandwidth))
 
 
-class RohdeSchwarzFSEK30(ScpiInstrument):
+class RohdeSchwarzFSEK30(ScpiInstrument, SpectrumAnalyzer):
     """R&S FSEK30 spectrum analyzer, usually GPIB behind Prologix: SpectrumAnalyzer."""
 
     driver_key = "rs.fsek30"

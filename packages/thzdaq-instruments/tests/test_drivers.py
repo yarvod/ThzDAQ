@@ -205,7 +205,7 @@ class TestNrx:
         assert link.written == []
 
     def test_settings_are_configuration_quantities(self):
-        from thzdaq_instruments.quantities import quantities_of, read_values
+        from thzdaq_instruments.parts import quantities_of, read_values
         from thzdaq_instruments.sim import SimPowerMeter
 
         emulator = NrxEmulator(power_dbm=-20.0)

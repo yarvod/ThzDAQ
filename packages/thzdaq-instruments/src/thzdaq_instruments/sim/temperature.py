@@ -1,11 +1,12 @@
 from typing import Dict, Optional
 
+from thzdaq_instruments.capabilities import Thermometer
 from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.sim.lively import Wobble, still
 from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimTemperatureInput(Channel):
+class SimTemperatureInput(Channel, Thermometer):
     instrument: "SimTemperatureController"
 
     def read_temperature(self) -> float:

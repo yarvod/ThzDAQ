@@ -3,6 +3,11 @@ import logging
 import time
 from typing import Dict, Optional
 
+from thzdaq_instruments.capabilities import (
+    CurrentSource,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 from thzdaq_instruments.errors import (
     ConfigurationError,
     InstrumentError,
@@ -18,7 +23,7 @@ from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 logger = logging.getLogger(__name__)
 
 
-class SisBiasChannel(Channel):
+class SisBiasChannel(Channel, VoltageSource, VoltageCurrentMeter):
     """Voltage bias of one SIS device: VoltageSource + VoltageCurrentMeter.
 
     Offsets compensate the bias circuit: the instrument gets voltage - offset,
@@ -116,7 +121,7 @@ class SisBiasChannel(Channel):
         return self.instrument.command(f"BIAS:{self.key}:EEPR {payload}")
 
 
-class SisCtrlChannel(Channel):
+class SisCtrlChannel(Channel, CurrentSource):
     """Magnetic field coil current of one device: CurrentSource."""
 
     instrument: "ScontelSisBlock"

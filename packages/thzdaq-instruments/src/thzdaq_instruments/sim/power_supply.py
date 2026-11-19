@@ -1,5 +1,12 @@
 from typing import Dict, Optional, Tuple
 
+from thzdaq_instruments.capabilities import (
+    CurrentSource,
+    OutputProtection,
+    Switchable,
+    VoltageCurrentMeter,
+    VoltageSource,
+)
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Channel
 from thzdaq_instruments.readings import ChannelReading
@@ -7,7 +14,14 @@ from thzdaq_instruments.sim.lively import Wobble, still
 from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimSupplyChannel(Channel):
+class SimSupplyChannel(
+    Channel,
+    Switchable,
+    VoltageSource,
+    CurrentSource,
+    OutputProtection,
+    VoltageCurrentMeter,
+):
     """Output into a resistive load with constant voltage / current limit."""
 
     instrument: "SimPowerSupply"
