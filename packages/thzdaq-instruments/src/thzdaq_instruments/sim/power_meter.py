@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from thzdaq_instruments.capabilities import PowerDetector
 from thzdaq_instruments.errors import ConfigurationError
@@ -21,20 +21,18 @@ def load_power(power: float, load: Optional[str]) -> float:
     return power + 10 * math.log10((T_HOT + T_RECEIVER) / (T_COLD + T_RECEIVER))
 
 
-class SimPowerMeter(SimInstrument, PowerDetector):
-    """Reads `power` (dBm) or, when given, the value of `model()`.
+class SimDetector(SimInstrument, PowerDetector):
+    """What every simulated power meter measures: `power` (dBm) or, when
+    given, the value of `model()`.
 
     The model lets a simulated bench couple instruments, e.g. power that depends
     on the chopper position or the IF filter frequency. `load_position()`, when
     given, says where the load of the bench is ("hot", "cold"): the hot one adds
-    power as a receiver would see it (load_power). Has the settings of an
-    R&S NRX (display unit, averaging, filter and aperture time, limits).
+    power as a receiver would see it (load_power). The settings are those of the
+    meter simulated (subclasses).
     """
 
-    driver_key = "sim.power_meter"
     device_type = "power_meter"
-
-    quantities = POWER_METER_QUANTITIES
 
     def __init__(
         self,
@@ -52,19 +50,13 @@ class SimPowerMeter(SimInstrument, PowerDetector):
         self.noise = noise
         self._random = random.Random(seed)
         self.wobble = still
-        self.unit = "DBM"
-        self.averaging = False
-        self.filter_time = 0.05  # s
-        self.aperture_time = 0.05  # s
-        self.lower_limit = -60.0
-        self.upper_limit = 30.0
-        self._last = None
+        self._last: Optional[float] = None  # dBm, the last reading
 
     def liven(self) -> None:
         self.wobble = Wobble(drift=0.5, noise=0.05)  # dB
 
     def identify(self) -> str:
-        return "THZDAQ,SimPowerMeter,0,1.0"
+        return f"THZDAQ,{type(self).__name__},0,1.0"
 
     def read_power(self) -> float:
         value = self.model() if self.model is not None else self.power
@@ -74,6 +66,24 @@ class SimPowerMeter(SimInstrument, PowerDetector):
             value += self._random.gauss(0.0, self.noise)
         self._last = value + self.wobble()
         return self._last
+
+
+class SimPowerMeter(SimDetector):
+    """The R&S NRX simulated: display unit, averaging, filter and aperture
+    time, limits."""
+
+    driver_key = "sim.power_meter"
+
+    quantities = POWER_METER_QUANTITIES
+
+    def __init__(self, **detector: Any):
+        super().__init__(**detector)
+        self.unit = "DBM"
+        self.averaging = False
+        self.filter_time = 0.05  # s
+        self.aperture_time = 0.05  # s
+        self.lower_limit = -60.0
+        self.upper_limit = 30.0
 
     # NRX settings
     def get_units(self) -> str:

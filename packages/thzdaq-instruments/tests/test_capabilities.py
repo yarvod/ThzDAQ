@@ -41,6 +41,11 @@ CAPABILITIES = {
     "ArduinoGrid": {"Identifiable", "Rotator"},
     "GenericScpi": {"Identifiable", "RawCommands"},
     "SimPowerSupply": {"Identifiable", "RawCommands"},
+    # The supply simulator of drivers whose outputs have no protection (0.3)
+    "SimPlainPowerSupply": {"Identifiable", "RawCommands"},
+    "SimPlainSupplyChannel": {
+        "CurrentSource", "Switchable", "VoltageCurrentMeter", "VoltageSource",
+    },
     "SimSupplyChannel": {
         "CurrentSource", "OutputProtection", "Switchable", "VoltageCurrentMeter",
         "VoltageSource",
@@ -72,12 +77,13 @@ def registry_classes():
     """Every class the default registry reaches, once."""
     found = {}
     for info in default_registry().all():
-        parts = (info.cls, info.cls.channel_class) + tuple(
-            sub.part_class for sub in info.cls.subdevices.values()
-        )
-        for cls in parts:
-            if cls is not None:
-                found.setdefault(cls.__name__, cls)
+        for instrument in filter(None, (info.cls, info.sim)):
+            parts = (instrument, instrument.channel_class) + tuple(
+                sub.part_class for sub in instrument.subdevices.values()
+            )
+            for cls in parts:
+                if cls is not None:
+                    found.setdefault(cls.__name__, cls)
     return found
 
 

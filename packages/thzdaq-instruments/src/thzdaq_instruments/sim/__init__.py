@@ -2,7 +2,12 @@ from thzdaq_instruments.sim.analyzers import SimNetworkAnalyzer, SimSpectrumAnal
 from thzdaq_instruments.sim.chopper import SimChopper
 from thzdaq_instruments.sim.generic import SimGenericScpi
 from thzdaq_instruments.sim.power_meter import SimPowerMeter
-from thzdaq_instruments.sim.power_supply import SimPowerSupply, SimSupplyChannel
+from thzdaq_instruments.sim.power_supply import (
+    SimPlainPowerSupply,
+    SimPlainSupplyChannel,
+    SimPowerSupply,
+    SimSupplyChannel,
+)
 from thzdaq_instruments.sim.rotator import SimRotator
 from thzdaq_instruments.sim.signal_generator import SimSignalGenerator
 from thzdaq_instruments.sim.sis_block import (
@@ -52,6 +57,8 @@ __all__ = [
     "SimTemperatureInput",
     "SimVacuumGauge",
     "SimPowerMeter",
+    "SimPlainPowerSupply",
+    "SimPlainSupplyChannel",
     "SimPowerSupply",
     "SimSignalGenerator",
     "SimSisBiasChannel",
