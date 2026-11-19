@@ -368,6 +368,36 @@ def test_models_known_last_show_at_once_and_the_sessions_correct_them(
     widget.close()
 
 
+def test_what_a_session_tells_reaches_the_model_and_its_picker_together(
+    session, agent, codex_settings, tmp_path, app
+):
+    """The adapter's thread tells new options while the window is busy: the
+    view model shows them only as the window hears of them, with its picker,
+    never one before the other (a slow runner once saw them apart)."""
+    import threading
+
+    agent(gate=str(tmp_path / "gate"))  # the adapter tells nothing of its own
+    instructions = InstructionsModel()
+    chat = codex_chat(session, codex_settings, instructions)
+    assistant = AssistantModel(
+        session, ProvidersModel(), instructions, codex_settings, [chat]
+    )
+    widget = AssistantWidget(assistant)
+    picker = widget.modelPicker
+    app.processEvents()
+    before = (tuple(assistant.models()), picker.whole())
+    told = Options(models=Offer("model", (Choice("model=gpt-z", "Z"),), "model=gpt-z"))
+    thread = threading.Thread(target=chat.configured, args=(told,))
+    thread.start()
+    thread.join()
+    assert (tuple(assistant.models()), picker.whole()) == before  # not heard yet
+    app.processEvents()
+    assert [m.title for m in assistant.models()] == ["Z"] and picker.whole() == "Z"
+    assert not assistant.finding_models()
+    assistant.close()
+    widget.close()
+
+
 def test_without_models_known_the_picker_says_they_load(
     assistant, agent, tmp_path, wait
 ):

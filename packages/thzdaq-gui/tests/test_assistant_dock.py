@@ -456,7 +456,7 @@ def test_each_turn_tells_its_time_and_the_chat_its_tokens(
         "secret",
         was="local",
     )
-    assert assistant.context_limit() == 32768
+    wait(lambda: assistant.context_limit() == 32768)  # as its chat tells it
 
 
 def test_what_is_sent_while_it_works_joins_at_the_next_step(assistant, model, wait):

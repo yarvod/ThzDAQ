@@ -278,6 +278,23 @@ class Unready(Exception):
     for the person."""
 
 
+@dataclass(frozen=True)
+class Offered:
+    """What a chat offers to choose, the ones chosen, whether its models are
+    being found and its context limit, read at one moment (Chat.offered). A
+    chat may change them in a thread of its own; the window shows them as the
+    view model last read them, as it tells that they changed."""
+
+    models: Tuple[Choice, ...] = ()
+    model: Optional[str] = None
+    efforts: Tuple[Choice, ...] = ()
+    effort: Optional[str] = None
+    policies: Tuple[Choice, ...] = ()
+    policy: Optional[str] = None
+    finding: bool = False
+    limit: Optional[int] = None
+
+
 class Chat(ABC):
     """A chat backend: its own conversation, its models, its turns."""
 
@@ -390,6 +407,16 @@ class Chat(ABC):
     @abstractmethod
     def context_limit(self) -> Optional[int]:
         """The tokens the chosen model takes, when known."""
+
+    def offered(self) -> "Offered":
+        """All of the above as it is now: what the view model keeps and shows
+        until it hears changed()."""
+        return Offered(
+            tuple(self.models()), self.model(),
+            tuple(self.efforts()), self.effort(),
+            tuple(self.policies()), self.policy(),
+            self.finding(), self.context_limit(),
+        )  # fmt: skip
 
     @abstractmethod
     def watch(self, changed: Callable[[], None]) -> None:

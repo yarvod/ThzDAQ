@@ -64,6 +64,7 @@ from thzdaq_gui.assistant.chat import (
     Choice,
     Image,
     Kept,
+    Offered,
     Outcome,
     Said,
     Unready,
@@ -594,6 +595,9 @@ class Mode:
         self.listing: Optional[_Listing] = None  # asked last
         self.opening: Optional[_Opening] = None  # a kept one being told again
         self._warmed = False
+        # What its chat offers as last read in the GUI thread: its chat may
+        # change it in a thread of its own, the window learns it with its signal
+        self.offered: Offered = chat.offered()
         chat.watch(_Watch(model, self))
 
     def prepare(self) -> None:
@@ -990,9 +994,10 @@ class AssistantModel(QObject):
     def thinking(self) -> Optional[int]:
         return self.mode.thinking()
 
+    # What the mode shown offers, as its view model last read it (Mode.offered)
     def context_limit(self) -> Optional[int]:
         """The tokens the chosen model takes, when known."""
-        return self.mode.chat.context_limit()
+        return self.mode.offered.limit
 
     def context_share(self) -> Optional[float]:
         """How much of the context the chat fills (0…1), when its limit is
@@ -1000,44 +1005,48 @@ class AssistantModel(QObject):
         return share(self.usage.context, self.context_limit())
 
     def models(self) -> Sequence[Choice]:
-        return self.mode.chat.models()
+        return self.mode.offered.models
 
     def chosen_model(self) -> Optional[str]:
-        return self.mode.chat.model()
+        return self.mode.offered.model
 
     def choose_model(self, model: str) -> None:
         self.mode.chat.choose(model)
+        self._models_changed(self.mode)
 
     def finding_models(self) -> bool:
         """Whether the mode's models are being found and not known yet."""
-        return self.mode.chat.finding()
+        return self.mode.offered.finding
 
     def efforts(self) -> Sequence[Choice]:
         """The reasoning efforts of the chosen model; none without a choice."""
-        return self.mode.chat.efforts()
+        return self.mode.offered.efforts
 
     def chosen_effort(self) -> Optional[str]:
-        return self.mode.chat.effort()
+        return self.mode.offered.effort
 
     def choose_effort(self, effort: str) -> None:
         self.mode.chat.choose_effort(effort)
+        self._models_changed(self.mode)
 
     def policies(self) -> Sequence[Choice]:
         """What the mode's agent may do without asking (its modes); none for
         a chat that never acts on its own."""
-        return self.mode.chat.policies()
+        return self.mode.offered.policies
 
     def chosen_policy(self) -> Optional[str]:
-        return self.mode.chat.policy()
+        return self.mode.offered.policy
 
     def choose_policy(self, policy: str) -> None:
         """At once, a turn running too (what asks first is the dock's)."""
         self.mode.chat.choose_policy(policy)
+        self._models_changed(self.mode)
 
     def prepare(self) -> None:
         """The dock shows the mode: its chat gets ready in the background
         (Codex starts and makes a session, so its models are known); once."""
         self.mode.prepare()
+        self._models_changed(self.mode)
 
     def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
         """The person's message: the model answers it. While a turn runs it
@@ -1052,6 +1061,7 @@ class AssistantModel(QObject):
     def new_chat(self) -> None:
         """Forget the conversation (a turn running is stopped)."""
         self.mode.new_chat()
+        self._models_changed(self.mode)  # its policy may be the settings' again
 
     # The conversations the mode shown keeps, of the window's workspace
     def find_chats(self) -> None:
@@ -1119,6 +1129,9 @@ class AssistantModel(QObject):
             mode.chat.prompt_changed()
 
     def _models_changed(self, mode: Mode) -> None:
+        """Read what the mode's chat offers now, and tell it: in the GUI
+        thread, so what is read and what is told never part."""
+        mode.offered = mode.chat.offered()
         self._emit_shown(mode, self.models_changed)
         self._emit_shown(mode, self.usage_changed)  # its context limit too
 
