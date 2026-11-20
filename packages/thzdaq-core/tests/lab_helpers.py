@@ -12,6 +12,11 @@ from thzdaq_api.events import ApprovalAnswered, ApprovalRequested, UiRequested
 from thzdaq_api.ui import AnswerUi
 
 
+# What a person is asked may come from a script's own process: it starts
+# Python and imports the bench first, seconds on a busy Windows runner
+ASKED_WITHIN = 30.0  # s, a bound: a passing test never waits it out
+
+
 def wait_for(predicate, timeout=3.0):
     deadline = time.monotonic() + timeout
     while not predicate():
@@ -64,7 +69,7 @@ class Window:
 
     def asked(self):
         """The newest request that waits, once it is heard."""
-        wait_for(self.waiting)
+        wait_for(self.waiting, timeout=ASKED_WITHIN)
         return self.waiting()[-1]
 
     def answer(self, **answer):
