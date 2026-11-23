@@ -16,6 +16,8 @@ MONITOR = "monitor"
 
 # "<group>.<what is measured>_vs_<what is changed>"
 CURRENT_VS_VOLTAGE = f"{SIS}.current_vs_voltage"
+# The same curve swept by the bias block itself
+CURRENT_VS_VOLTAGE_FAST = f"{SIS}.current_vs_voltage_fast"
 POWER_VS_VOLTAGE = f"{SIS}.power_vs_voltage"
 NOISE_TEMPERATURE_VS_VOLTAGE = f"{SIS}.noise_temperature_vs_voltage"
 CURRENT_VS_COIL_CURRENT = f"{SIS}.current_vs_coil_current"

@@ -445,6 +445,7 @@ class IFNoise(Procedure):  # добавляется в список BUILTIN (pro
   | Имя | Что делает | Слоты |
   |---|---|---|
   | `sis.current_vs_voltage` | I-V | bias |
+  | `sis.current_vs_voltage_fast` | I-V развёрткой самого блока смещения (`VoltageSweep`): точки потоком | bias |
   | `sis.current_vs_coil_current` | ток SIS от тока катушки (I-CL) | coil, bias |
   | `sis.demagnetization` | размагничивание | coil |
   | `sis.current_vs_grid_angle` | ток SIS от угла сетки | grid, bias |
