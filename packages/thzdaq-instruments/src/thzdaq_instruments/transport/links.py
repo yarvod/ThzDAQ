@@ -84,7 +84,9 @@ class SocketLink(Link):
         return self._socket
 
     def write_line(self, line: str) -> None:
-        data = (line + self.write_termination).encode(self.encoding)
+        self.write_bytes((line + self.write_termination).encode(self.encoding))
+
+    def write_bytes(self, data: bytes) -> None:
         try:
             self._require_socket().sendall(data)
         except socket.timeout as e:
@@ -104,13 +106,20 @@ class SocketLink(Link):
         return chunk
 
     def read_line(self) -> str:
-        if self.read_termination is None:
-            return self._recv().decode(self.encoding).rstrip("\r\n")
+        if self.read_termination is None:  # a chunk: what a frame left first
+            chunk, self._buffer = self._buffer or self._recv(), b""
+            return chunk.decode(self.encoding).rstrip("\r\n")
         terminator = self.read_termination.encode(self.encoding)
         while terminator not in self._buffer:
             self._buffer += self._recv()
         line, self._buffer = self._buffer.split(terminator, 1)
         return line.decode(self.encoding).rstrip("\r")
+
+    def read_bytes(self, count: int) -> bytes:
+        while len(self._buffer) < count:
+            self._buffer += self._recv()
+        data, self._buffer = self._buffer[:count], self._buffer[count:]
+        return data
 
 
 class SerialLink(Link):

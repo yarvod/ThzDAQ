@@ -48,6 +48,7 @@ from thzdaq_instruments.capabilities import (
     VacuumGauge,
     VoltageCurrentMeter,
     VoltageSource,
+    VoltageSweep,
 )
 from thzdaq_instruments.drivers import (
     AgilentE8247C,
@@ -206,6 +207,18 @@ def check_precise_voltage_source(device, voltage=1.5e-3):
     measured = device.set_voltage_precise(voltage, max_iterations=3)
     assert math.isclose(measured, voltage, rel_tol=1e-3)
     assert math.isclose(device.get_voltage(), voltage, rel_tol=1e-6)
+
+
+def check_voltage_sweep(device):
+    readings = list(device.sweep_voltage(0.0, 2e-3, 0.5e-3, 0.001))
+    voltages = [reading.voltage for reading in readings]
+    assert voltages == pytest.approx([0.0, 0.5e-3, 1e-3, 1.5e-3, 2e-3], abs=1e-6)
+    assert math.isclose(device.get_voltage(), 2e-3, rel_tol=1e-6)  # left at stop
+    stopped = device.sweep_voltage(0.0, 2e-3, 0.5e-3, 0.001)
+    next(stopped)
+    stopped.close()  # stopped early: the link takes commands again
+    device.set_voltage(1e-3)
+    assert math.isclose(device.get_voltage(), 1e-3, rel_tol=1e-6)
 
 
 def check_current_source(device):
@@ -393,6 +406,13 @@ CONTRACTS = {
     ),
     PreciseVoltageSource: (
         check_precise_voltage_source,
+        {
+            "sim sis bias": lambda: SimSisBlock().channel("DEV4"),
+            "sis bias": lambda: sis().channel("DEV4"),
+        },
+    ),
+    VoltageSweep: (
+        check_voltage_sweep,
         {
             "sim sis bias": lambda: SimSisBlock().channel("DEV4"),
             "sis bias": lambda: sis().channel("DEV4"),

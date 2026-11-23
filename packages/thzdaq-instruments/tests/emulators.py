@@ -5,7 +5,8 @@ in `errors`, so tests catch misspelled headers.
 """
 
 import re
-from typing import Callable, List, Optional, Tuple
+import struct
+from typing import Callable, Dict, List, Optional, Tuple
 
 from thzdaq_instruments.transport.base import MessageTransport
 from thzdaq_instruments.transport.fake import FakeLink
@@ -317,7 +318,12 @@ class U2000Emulator(ScpiEmulator):
 
 
 class SisEmulator(ScpiEmulator):
-    """Bias source with gain error and offset; `fail` makes the next N answers ERROR."""
+    """Bias source with gain error and offset; `fail` makes the next N answers ERROR.
+
+    Binary frames too, as ControlUnit4_Software's server and module answer them
+    (Libs/StarProtocol): the server's pipe mode, the module's own sweep. Its
+    bytes are written here from the C headers, not taken from the driver.
+    """
 
     def __init__(self, gain: float = 1.0, offset: float = 0.0):
         super().__init__()
@@ -325,6 +331,11 @@ class SisEmulator(ScpiEmulator):
         self.offset = offset
         self.fail = 0
         self.setpoints = {dev: 0.0 for dev in ("DEV1", "DEV2", "DEV3", "DEV4")}
+        self.modes = {dev: "U" for dev in self.setpoints}
+        self.pipe = False  # the server's pipe mode
+        self.sweeps: Dict[str, tuple] = {}  # params a module was given
+        self.sweeping: List[str] = []  # modules started and not stopped
+        self.slipped = b""  # frames sent after the start's reply, before points
         self.ctrl = {dev: 0.0 for dev in self.setpoints}
         self.shorts = {
             f"{kind}:{dev}": "1" for kind in ("BIAS", "CTRL") for dev in self.setpoints
@@ -353,6 +364,63 @@ class SisEmulator(ScpiEmulator):
         self.route(r"GEN:(DEV\d):STAT\?", lambda d: "OK")
         self.eeprom = {}
         self.route(r"BIAS:(DEV\d):EEPR (.+)", self._eeprom)
+
+        def set_mode(dev, mode):
+            self.modes[dev] = mode
+            return "OK"
+
+        self.route(r"BIAS:(DEV\d):MODE\?", lambda d: self.modes[d])
+        self.route(r"BIAS:(DEV\d):MODE ([UI])", set_mode)
+
+    def transport(self) -> Tuple[MessageTransport, FakeLink]:
+        link = FakeLink(self, frames=self.frame)
+        link.open()
+        return MessageTransport(link), link
+
+    @staticmethod
+    def encode(address: int, command: int, data: bytes = b"") -> bytes:
+        return bytes([address, command, len(data)]) + data
+
+    def frame(self, data: bytes) -> Optional[bytes]:
+        """The bytes a frame is answered with."""
+        address, command, length = data[:3]
+        payload = data[3:]
+        if len(payload) != length:
+            self.errors.append(data.hex())
+            return None
+        if address == 0xFF and command in (4, 5):  # pipe mode on, off
+            self.pipe = command == 4
+            return self.encode(address, command)
+        dev = f"DEV{address}"
+        if dev not in self.setpoints:
+            self.errors.append(data.hex())
+            return None
+        if command == 0x30:  # BS_SetSweepParams: <fffIB3x
+            self.sweeps[dev] = struct.unpack("<fffIB3x", payload)
+            return self.encode(address, command)
+        if command == 0x31 and self.pipe and dev in self.sweeps:  # BS_StartSweep
+            self.sweeping.append(dev)
+            return self.encode(address, command) + self.slipped + self._points(dev)
+        if command == 0x32:  # BS_StopSweep
+            if dev in self.sweeping:
+                self.sweeping.remove(dev)
+            return self.encode(address, command)
+        self.errors.append(data.hex())
+        return None
+
+    def _points(self, dev: str) -> bytes:
+        """BS_SweepData (0x33) frames: current, voltage, time (<ffI) at each
+        point, then the end, 4 bytes long."""
+        start, stop, step, dwell_ms, mode = self.sweeps[dev]
+        address = int(dev[3:])
+        count = round((stop - start) / step) + 1
+        frames = b""
+        for index in range(count):
+            self.setpoints[dev] = start + index * step
+            voltage = self.actual(dev)
+            point = struct.pack("<ffI", voltage / 20, voltage, index * dwell_ms)
+            frames += self.encode(address, 0x33, point)
+        return frames + self.encode(address, 0x33, struct.pack("<I", count))
 
     def _eeprom(self, dev, payload):
         import json

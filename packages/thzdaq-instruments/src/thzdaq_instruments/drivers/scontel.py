@@ -1,12 +1,29 @@
 import json
 import logging
 import time
-from typing import Dict, Optional
+from contextlib import contextmanager
+from typing import Dict, Iterator, Optional
 
 from thzdaq_instruments.capabilities import (
     CurrentSource,
     PreciseVoltageSource,
     VoltageCurrentMeter,
+    VoltageSweep,
+)
+from thzdaq_instruments.drivers.scontel_frames import (
+    BS_SET_SWEEP_PARAMS,
+    BS_START_SWEEP,
+    BS_STOP_SWEEP,
+    BS_SWEEP_DATA,
+    CMD_SERVER_PIPE_MODE_OFF,
+    CMD_SERVER_PIPE_MODE_ON,
+    SERVER_ADDRESS,
+    SWEEP_END_LENGTH,
+    SWEEP_POINT,
+    Frame,
+    exchange,
+    read_frame,
+    sweep_params,
 )
 from thzdaq_instruments.errors import (
     ConfigurationError,
@@ -22,9 +39,19 @@ from thzdaq_instruments.transport.base import SOCKET, ConnectionSpec, Transport
 
 logger = logging.getLogger(__name__)
 
+# The bias modes the block answers to MODE?
+VOLTAGE_MODE, CURRENT_MODE = "U", "I"
+# s at a point of the block's own sweep: it counts whole milliseconds. A point
+# must come well within the read timeout of the block's connection (2 s
+# recommended): a read that times out drops the link, and a server a dropped
+# link left in pipe mode takes commands from no other connection until it is
+# restarted
+MAX_DWELL = 1.0
 
-class SisBiasChannel(Channel, PreciseVoltageSource, VoltageCurrentMeter):
-    """Voltage bias of one SIS device: PreciseVoltageSource + VoltageCurrentMeter.
+
+class SisBiasChannel(Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrentMeter):
+    """Voltage bias of one SIS device: PreciseVoltageSource + VoltageSweep +
+    VoltageCurrentMeter.
 
     Offsets compensate the bias circuit: the instrument gets voltage - offset,
     readings come back + offset.
@@ -99,6 +126,91 @@ class SisBiasChannel(Channel, PreciseVoltageSource, VoltageCurrentMeter):
             f"{self.name}: {voltage * 1e3:.3f} mV not reached in {max_iterations} "
             f"iterations, measured {measured * 1e3:.3f} mV"
         )
+
+    @property
+    def address(self) -> int:
+        """Its address in frames: N of DEVn."""
+        return int(self.key.removeprefix("DEV"))
+
+    def sweep_voltage(
+        self, start: float, stop: float, step: float, dwell: float
+    ) -> Iterator[ChannelReading]:
+        """The block's own sweep (VoltageSweep), in frames: its text commands
+        have none. It holds the link from the first point to its end: iterate
+        and close it in one thread."""
+        dwell_ms = round(dwell * 1e3)
+        if dwell_ms < 1 or dwell > MAX_DWELL:
+            raise ConfigurationError(
+                f"{self.name}: {dwell:g} s at a point is not within 1 ms…{MAX_DWELL:g} s"
+            )
+        return self._sweep(start, stop, step, dwell_ms)
+
+    def _sweep(
+        self, start: float, stop: float, step: float, dwell_ms: int
+    ) -> Iterator[ChannelReading]:
+        transport = self.instrument.transport
+        with transport.transaction(), self._voltage_mode():
+            self.set_voltage(start)
+            params = sweep_params(
+                start - self.offset_voltage,
+                stop - self.offset_voltage,
+                abs(step),
+                dwell_ms,
+            )
+            exchange(transport, Frame(self.address, BS_SET_SWEEP_PARAMS, params))
+            exchange(transport, Frame(SERVER_ADDRESS, CMD_SERVER_PIPE_MODE_ON))
+            self._setpoint = None  # where it is while it sweeps nobody knows
+            try:
+                transport.write_bytes(Frame(self.address, BS_START_SWEEP).encode())
+                yield from self._points()
+            finally:
+                # Stopped early or failed too: a server in pipe mode takes
+                # commands from this connection alone
+                points = (BS_SWEEP_DATA,)
+                exchange(transport, Frame(self.address, BS_STOP_SWEEP), points)
+                pipe_off = Frame(SERVER_ADDRESS, CMD_SERVER_PIPE_MODE_OFF)
+                exchange(transport, pipe_off, points)
+            self.set_voltage(stop)
+
+    def _points(self) -> Iterator[ChannelReading]:
+        """The sweep's points up to its end frame; frames of anything else
+        (the start's reply) are passed over."""
+        while True:
+            frame = read_frame(self.instrument.transport)
+            if (frame.address, frame.command) != (self.address, BS_SWEEP_DATA):
+                continue
+            if len(frame.data) == SWEEP_END_LENGTH:
+                return
+            if len(frame.data) != SWEEP_POINT.size:
+                raise InstrumentResponseError(
+                    f"{self.name}: a sweep point of {len(frame.data)} bytes"
+                )
+            current, voltage, _ = SWEEP_POINT.unpack(frame.data)
+            yield ChannelReading(
+                voltage + self.offset_voltage, current + self.offset_current
+            )
+
+    @contextmanager
+    def _voltage_mode(self) -> Iterator[None]:
+        """In the voltage mode, the mode before set back after."""
+        mode = self.instrument.command(f"BIAS:{self.key}:MODE?")
+        if mode not in (VOLTAGE_MODE, CURRENT_MODE):
+            raise InstrumentResponseError(f"{self.name}: unknown bias mode {mode!r}")
+        if mode == VOLTAGE_MODE:
+            yield
+            return
+        self._set_mode(VOLTAGE_MODE)
+        try:
+            yield
+        finally:
+            self._set_mode(mode)
+
+    def _set_mode(self, mode: str) -> None:
+        response = self.instrument.command(f"BIAS:{self.key}:MODE {mode}")
+        if response != "OK":
+            raise InstrumentResponseError(
+                f"{self.name}: setting mode {mode} answered {response!r}"
+            )
 
     def get_short(self) -> bool:
         return self.instrument.command(f"BIAS:{self.key}:SHOR?") == "1"

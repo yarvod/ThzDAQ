@@ -1,10 +1,12 @@
 import math
-from typing import Optional
+import time
+from typing import Iterator, Optional
 
 from thzdaq_instruments.capabilities import (
     CurrentSource,
     PreciseVoltageSource,
     VoltageCurrentMeter,
+    VoltageSweep,
 )
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.instrument import Channel
@@ -16,7 +18,9 @@ from thzdaq_instruments.sim.lively import Wobble, still
 from thzdaq_instruments.sim.base import SimInstrument
 
 
-class SimSisBiasChannel(Channel, PreciseVoltageSource, VoltageCurrentMeter):
+class SimSisBiasChannel(
+    Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrentMeter
+):
     """SIS junction biased by voltage: smooth current step at the gap."""
 
     instrument: "SimSisBlock"
@@ -64,6 +68,17 @@ class SimSisBiasChannel(Channel, PreciseVoltageSource, VoltageCurrentMeter):
     def set_voltage_precise(self, voltage: float, **kwargs) -> float:
         self.set_voltage(voltage)
         return self._voltage
+
+    def sweep_voltage(
+        self, start: float, stop: float, step: float, dwell: float
+    ) -> Iterator[ChannelReading]:
+        """The block's own sweep: start, start ± step, ... stop, a point every
+        dwell seconds; the voltage stays at stop."""
+        count = round(abs(stop - start) / abs(step)) + 1 if step else 1
+        for index in range(count):
+            self.set_voltage(start + (stop - start) * index / max(count - 1, 1))
+            time.sleep(dwell)
+            yield self.measure()
 
 
 class SimSisCtrlChannel(Channel, CurrentSource):

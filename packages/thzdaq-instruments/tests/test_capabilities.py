@@ -43,7 +43,9 @@ CAPABILITIES = {
     "RohdeSchwarzNRX": {"Identifiable", "PowerDetector", "RawCommands"},
     "KeysightU2002H": {"Identifiable", "PowerDetector", "RawCommands"},
     "ScontelSisBlock": {"Identifiable", "RawCommands"},
-    "SisBiasChannel": {"PreciseVoltageSource", "VoltageCurrentMeter", "VoltageSource"},
+    "SisBiasChannel": {
+        "PreciseVoltageSource", "VoltageCurrentMeter", "VoltageSource", "VoltageSweep",
+    },
     "SisCtrlChannel": {"CurrentSource"},
     "NiYigFilter": {"Identifiable"},
     "YigChannel": {"TunableFilter"},
@@ -76,7 +78,9 @@ CAPABILITIES = {
     "SimPowerMeter": {"Identifiable", "PowerDetector", "RawCommands"},
     "SimU2000": {"Identifiable", "PowerDetector", "RawCommands"},
     "SimSisBlock": {"Identifiable", "RawCommands"},
-    "SimSisBiasChannel": {"PreciseVoltageSource", "VoltageCurrentMeter", "VoltageSource"},
+    "SimSisBiasChannel": {
+        "PreciseVoltageSource", "VoltageCurrentMeter", "VoltageSource", "VoltageSweep",
+    },
     "SimSisCtrlChannel": {"CurrentSource"},
     "SimYigFilter": {"Identifiable", "RawCommands"},
     "SimYigChannel": {"TunableFilter"},

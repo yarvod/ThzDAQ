@@ -308,6 +308,14 @@ class Link(ABC):
     def read_line(self) -> str:
         ...
 
+    # Binary frames beside the text lines (the Scontel control unit's own
+    # protocol on its socket); a link that carries none refuses them
+    def write_bytes(self, data: bytes) -> None:
+        raise InstrumentConnectionError(f"{self!r} carries text lines, no frames")
+
+    def read_bytes(self, count: int) -> bytes:
+        raise InstrumentConnectionError(f"{self!r} carries text lines, no frames")
+
 
 class Transport(ABC):
     """Command level access to one instrument over a (possibly shared) link.
@@ -377,6 +385,18 @@ class Transport(ABC):
                 time.sleep(self.read_delay)
             return self._read()
 
+    def write_bytes(self, data: bytes) -> None:
+        """A binary frame, as it is."""
+        with self.link.lock, self._guarded():
+            self._prepare()
+            self._write_bytes(data)
+
+    def read_bytes(self, count: int) -> bytes:
+        """So many bytes of a binary frame, waiting for all of them."""
+        with self.link.lock, self._guarded():
+            self._prepare()
+            return self._read_bytes(count)
+
     @contextmanager
     def transaction(self) -> Iterator["Transport"]:
         """Keep the link for several commands that must not be interleaved."""
@@ -399,6 +419,14 @@ class Transport(ABC):
     def _read(self) -> str:
         ...
 
+    # Frames go only to an instrument the link reaches directly: one behind a
+    # controller (Prologix) is addressed in text
+    def _write_bytes(self, data: bytes) -> None:
+        raise InstrumentConnectionError(f"{self.link!r}: no frames through it")
+
+    def _read_bytes(self, count: int) -> bytes:
+        raise InstrumentConnectionError(f"{self.link!r}: no frames through it")
+
 
 class MessageTransport(Transport):
     """Instrument talking directly over the link."""
@@ -408,3 +436,9 @@ class MessageTransport(Transport):
 
     def _read(self) -> str:
         return self.link.read_line()
+
+    def _write_bytes(self, data: bytes) -> None:
+        self.link.write_bytes(data)
+
+    def _read_bytes(self, count: int) -> bytes:
+        return self.link.read_bytes(count)
