@@ -282,7 +282,7 @@ class TestSisBlock:
         block.ctrl("DEV3").set_current(12.5e-3)
         assert block.ctrl("DEV3").get_current() == 12.5e-3
         block.channel("DEV4").set_short(False)
-        assert block.channel("DEV4").get_short() is False
+        assert block.channel("DEV4").read_data().active
         assert block.test("DEV4")
         with pytest.raises(ConfigurationError):
             block.ctrl("DEV9")

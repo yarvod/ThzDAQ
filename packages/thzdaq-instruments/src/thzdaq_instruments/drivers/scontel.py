@@ -2,7 +2,8 @@ import json
 import logging
 import time
 from contextlib import contextmanager
-from typing import Dict, Iterator, Optional
+from dataclasses import dataclass, replace
+from typing import Any, Collection, Dict, Iterator, Optional
 
 from thzdaq_instruments.capabilities import (
     CurrentSource,
@@ -31,7 +32,7 @@ from thzdaq_instruments.errors import (
     InstrumentResponseError,
 )
 from thzdaq_instruments.instrument import Channel, ScpiInstrument
-from thzdaq_instruments.quantities import COIL_CURRENT, SHORT
+from thzdaq_instruments.quantities import COIL_CURRENT, SHORT, Quantity
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments import sis_block
 from thzdaq_instruments.sis_block import DEVICES
@@ -48,6 +49,40 @@ VOLTAGE_MODE, CURRENT_MODE = "U", "I"
 # restarted
 MAX_DWELL = 1.0
 
+# The keys of a DATA? answer (a JSON object): what the block reads of a bias
+# or a coil in one request, instead of a query each
+CURRENT, VOLTAGE, SHORT_CIRCUIT = "Current", "Voltage", "ShortCircuit"
+
+
+@dataclass(frozen=True)
+class BiasData:
+    """A bias as one DATA? answer tells it, offsets applied."""
+
+    voltage: float  # V
+    current: float  # A
+    active: bool  # not shorted
+
+
+@dataclass(frozen=True)
+class CoilData:
+    """A coil as one DATA? answer tells it."""
+
+    current: float  # A
+    active: bool  # not shorted
+
+
+def _read_data(part: Any) -> Any:
+    return part.read_data()
+
+
+def _from_data(quantity: Quantity, field: str) -> Quantity:
+    """The quantity read from the part's DATA? answer: all such quantities of
+    a part read together are one query (they share the source)."""
+    return replace(quantity, get=None, source=_read_data, field=field)
+
+
+_MEASURED = {q.key: q for q in VoltageCurrentMeter.capability_quantities}
+
 
 class SisBiasChannel(Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrentMeter):
     """Voltage bias of one SIS device: PreciseVoltageSource + VoltageSweep +
@@ -58,7 +93,12 @@ class SisBiasChannel(Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrent
     """
 
     instrument: "ScontelSisBlock"
-    quantities = (SHORT,)
+    # Voltage, current and whether it is active: one DATA? query for all three
+    quantities = (
+        _from_data(_MEASURED["voltage"], "voltage"),
+        _from_data(_MEASURED["current"], "current"),
+        _from_data(SHORT, "active"),
+    )
 
     def __init__(self, instrument: "ScontelSisBlock", key: str):
         super().__init__(instrument, key)
@@ -95,7 +135,20 @@ class SisBiasChannel(Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrent
         )
 
     def measure(self) -> ChannelReading:
-        return ChannelReading(self.read_voltage(), self.read_current())
+        data = self.read_data()
+        return ChannelReading(data.voltage, data.current)
+
+    def read_data(self) -> BiasData:
+        """Voltage, current and whether it is active, in one query: the block
+        reads them in one request of the module."""
+        data = self.instrument.command_json(
+            f"BIAS:{self.key}:DATA?", (VOLTAGE, CURRENT, SHORT_CIRCUIT)
+        )
+        return BiasData(
+            float(data[VOLTAGE]) + self.offset_voltage,
+            float(data[CURRENT]) + self.offset_current,
+            not data[SHORT_CIRCUIT],
+        )
 
     def set_voltage_precise(
         self,
@@ -212,18 +265,12 @@ class SisBiasChannel(Channel, PreciseVoltageSource, VoltageSweep, VoltageCurrent
                 f"{self.name}: setting mode {mode} answered {response!r}"
             )
 
-    def get_short(self) -> bool:
-        return self.instrument.command(f"BIAS:{self.key}:SHOR?") == "1"
-
     def set_short(self, value: bool) -> None:
         self.instrument.command(f"BIAS:{self.key}:SHOR {1 if value else 0}")
 
     def get_resistance(self) -> float:
         """Equivalent resistance of the current measurement circuit, Ohm."""
         return self.instrument.command_float(f"BIAS:{self.key}:CMRE?")
-
-    def get_data(self) -> str:
-        return self.instrument.command(f"BIAS:{self.key}:DATA?")
 
     def write_calibration(self, coefficients: dict) -> str:
         """Store evaluated DAC/ADC coefficients in the device EEPROM."""
@@ -237,26 +284,36 @@ class SisCtrlChannel(Channel, CurrentSource):
     """Magnetic field coil current of one device: CurrentSource."""
 
     instrument: "ScontelSisBlock"
-    quantities = (COIL_CURRENT, SHORT)
+    # The current it reports and whether it is active: one DATA? query for both
+    quantities = (_from_data(COIL_CURRENT, "current"), _from_data(SHORT, "active"))
+
+    def __init__(self, instrument: "ScontelSisBlock", key: str):
+        super().__init__(instrument, key)
+        self._setpoint: Optional[float] = None
 
     def set_current(self, current: float) -> None:
         self.instrument.command(f"CTRL:{self.key}:CURR {current}")
+        self._setpoint = current
 
     def get_current(self) -> float:
-        return self.instrument.command_float(f"CTRL:{self.key}:CURR?")
+        """The current last set; read once when none was set yet."""
+        if self._setpoint is None:
+            return self.read_current()
+        return self._setpoint
 
     def read_current(self) -> float:
         """The current the block reports now (monitors, plots)."""
-        return self.get_current()
+        return self.read_data().current
 
-    def get_short(self) -> bool:
-        return self.instrument.command(f"CTRL:{self.key}:SHOR?") == "1"
+    def read_data(self) -> CoilData:
+        """The current and whether it is active, in one query."""
+        data = self.instrument.command_json(
+            f"CTRL:{self.key}:DATA?", (CURRENT, SHORT_CIRCUIT)
+        )
+        return CoilData(float(data[CURRENT]), not data[SHORT_CIRCUIT])
 
     def set_short(self, value: bool) -> None:
         self.instrument.command(f"CTRL:{self.key}:SHOR {1 if value else 0}")
-
-    def get_data(self) -> str:
-        return self.instrument.command(f"CTRL:{self.key}:DATA?")
 
 
 class ScontelSisBlock(ScpiInstrument):
@@ -328,6 +385,22 @@ class ScontelSisBlock(ScpiInstrument):
                 logger.warning(f"[{self.name}] {command!r} answered {response!r}")
         raise InstrumentResponseError(
             f"{self.name}: no number in answer to {command!r}"
+        )
+
+    def command_json(self, command: str, keys: Collection[str]) -> Dict[str, Any]:
+        """The JSON object a command answers (DATA?), with these keys; an
+        answer that is no such object is asked again."""
+        for attempt in range(1, self.attempts + 1):
+            response = self.command(command)
+            try:
+                data = json.loads(response)
+            except ValueError:
+                data = None
+            if isinstance(data, dict) and all(key in data for key in keys):
+                return data
+            logger.warning(f"[{self.name}] {command!r} answered {response!r}")
+        raise InstrumentResponseError(
+            f"{self.name}: no {', '.join(keys)} in answer to {command!r}"
         )
 
     def identify(self) -> str:

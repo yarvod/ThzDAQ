@@ -4,6 +4,7 @@ Each emulator answers like the device and records commands it doesn't know
 in `errors`, so tests catch misspelled headers.
 """
 
+import json
 import re
 import struct
 from typing import Callable, Dict, List, Optional, Tuple
@@ -318,7 +319,8 @@ class U2000Emulator(ScpiEmulator):
 
 
 class SisEmulator(ScpiEmulator):
-    """Bias source with gain error and offset; `fail` makes the next N answers ERROR.
+    """Bias source with gain error and offset; `fail` makes the next N answers
+    ERROR, `garbled` the next N DATA? answers cut in half.
 
     Binary frames too, as ControlUnit4_Software's server and module answer them
     (Libs/StarProtocol): the server's pipe mode, the module's own sweep. Its
@@ -330,6 +332,7 @@ class SisEmulator(ScpiEmulator):
         self.gain = gain
         self.offset = offset
         self.fail = 0
+        self.garbled = 0
         self.setpoints = {dev: 0.0 for dev in ("DEV1", "DEV2", "DEV3", "DEV4")}
         self.modes = {dev: "U" for dev in self.setpoints}
         self.pipe = False  # the server's pipe mode
@@ -362,6 +365,8 @@ class SisEmulator(ScpiEmulator):
         self.route(r"(BIAS|CTRL):(DEV\d):SHOR ([01])", set_short)
         self.route(r"(BIAS|CTRL):(DEV\d):SHOR\?", lambda k, d: self.shorts[f"{k}:{d}"])
         self.route(r"GEN:(DEV\d):STAT\?", lambda d: "OK")
+        self.route(r"BIAS:(DEV\d):DATA\?", self._bias_data)
+        self.route(r"CTRL:(DEV\d):DATA\?", self._ctrl_data)
         self.eeprom = {}
         self.route(r"BIAS:(DEV\d):EEPR (.+)", self._eeprom)
 
@@ -422,9 +427,31 @@ class SisEmulator(ScpiEmulator):
             frames += self.encode(address, 0x33, point)
         return frames + self.encode(address, 0x33, struct.pack("<I", count))
 
-    def _eeprom(self, dev, payload):
-        import json
+    def _bias_data(self, dev: str) -> str:
+        voltage = self.actual(dev)
+        return self._data(
+            {
+                "Current": voltage / 20,
+                "Voltage": voltage,
+                "ShortCircuit": int(self.shorts[f"BIAS:{dev}"]),  # a char: an int
+                "Mode": self.modes[dev],
+            }
+        )
 
+    def _ctrl_data(self, dev: str) -> str:
+        shorted = float(self.shorts[f"CTRL:{dev}"])
+        return self._data({"Current": self.ctrl[dev], "ShortCircuit": shorted})
+
+    def _data(self, values: dict) -> str:
+        """As the server prints a DATA? answer: QJsonDocument::toJson(),
+        indented, keys in order, then CR LF."""
+        text = json.dumps(values, indent=4, sort_keys=True) + "\n\r\n"
+        if self.garbled > 0:
+            self.garbled -= 1
+            return text[: len(text) // 2]
+        return text
+
+    def _eeprom(self, dev, payload):
         self.eeprom[dev] = json.loads(payload)
         return "OK"
 
