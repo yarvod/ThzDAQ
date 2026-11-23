@@ -77,6 +77,9 @@ class Quantity:
     # Methods of the part that set it, the plain one first (it takes the value
     # alone, write() calls it); used instead of set
     setters: Tuple[str, ...] = ()
+    # Methods of the part that sweep it by themselves, (start, stop, step,
+    # dwell) -> its readings as they come: the instrument steps, not the program
+    sweepers: Tuple[str, ...] = ()
     danger: str = ""  # what may go wrong when it is set, asked first; empty when safe
 
     @property
@@ -132,6 +135,7 @@ VOLTAGE_SET = Quantity(
     "V",
     get=lambda t: t.get_voltage(),
     setters=("set_voltage",),
+    sweepers=("sweep_voltage",),
 )
 CURRENT_SET = Quantity(
     "current_set",

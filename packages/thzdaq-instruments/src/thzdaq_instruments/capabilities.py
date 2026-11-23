@@ -20,7 +20,7 @@ Examples:
 """
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, List, Optional, Tuple
+from typing import ClassVar, Iterator, List, Optional, Tuple
 
 from thzdaq_instruments.actions import (
     CONFIGURE_NETWORK,
@@ -105,6 +105,21 @@ class PreciseVoltageSource(VoltageSource):
     def set_voltage_precise(self, voltage: float, max_iterations: int = 30) -> float:
         """V; returns the voltage measured, raises InstrumentError when it is
         not reached in max_iterations corrections."""
+
+
+class VoltageSweep(Capability):
+    """A voltage source that sweeps by itself: the instrument steps and reads
+    every point, far faster than a set and a read per point from here (the
+    sweep of a SIS bias block). Its part is a VoltageSource too: the station
+    sets the start through the guard as any change (voltage_set's sweepers)."""
+
+    @abstractmethod
+    def sweep_voltage(
+        self, start: float, stop: float, step: float, dwell: float
+    ) -> Iterator[ChannelReading]:
+        """V, V, V, s at each point: yields every point read (voltage, current)
+        as the instrument sends it, and leaves the voltage at stop. Closing the
+        iterator before its end stops the sweep; the voltage is then unknown."""
 
 
 class CurrentSource(Capability):
@@ -352,6 +367,7 @@ ALL_CAPABILITIES: tuple[type, ...] = (
     Switchable,
     VoltageSource,
     PreciseVoltageSource,
+    VoltageSweep,
     CurrentSource,
     OutputProtection,
     VoltageCurrentMeter,

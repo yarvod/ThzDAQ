@@ -124,6 +124,32 @@ class Guard:
         if problem:
             raise LimitError(problem)
 
+    def sweep_problem(
+        self, quantity: Quantity, step: float, dwell: float
+    ) -> Optional[str]:
+        """Why the instrument may not sweep in such steps by itself: one larger
+        than the bench step, or faster than its rate; None when it may."""
+        limit = self.bench.get(quantity.key)
+        if limit is None:
+            return None
+        size = abs(step)
+        shown = format_value(size, quantity.unit)
+        if limit.step is not None and size > limit.step * (1 + 1e-9):
+            bench = format_value(limit.step, quantity.unit)
+            return f"{self.device} {quantity.key}: a sweep step of {shown} is above the bench step {bench}"
+        if limit.rate is not None and size > limit.rate * dwell * (1 + 1e-9):
+            rate = format_value(limit.rate, quantity.unit)
+            return (
+                f"{self.device} {quantity.key}: {shown} every {dwell:g} s is faster"
+                f" than the bench rate {rate}/s"
+            )
+        return None
+
+    def check_sweep(self, quantity: Quantity, step: float, dwell: float) -> None:
+        problem = self.sweep_problem(quantity, step, dwell)
+        if problem:
+            raise LimitError(problem)
+
     def ramps(self, key: str) -> bool:
         limit = self.bench.get(key)
         return limit is not None and limit.step is not None

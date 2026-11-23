@@ -22,11 +22,13 @@ from thzdaq_instruments.capabilities import (
     PowerDetector,
     PreciseVoltageSource,
     VoltageSource,
+    VoltageSweep,
     capabilities_of,
 )
 from thzdaq_instruments.errors import LimitError
 from thzdaq_instruments.parts import actions_of, quantities_of
-from thzdaq_instruments.quantities import AVERAGING, CORRECTION_FREQUENCY
+from thzdaq_instruments.quantities import AVERAGING, CORRECTION_FREQUENCY, VOLTAGE_SET
+from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim import SimPowerMeter
 
 # A device, and the part of its instrument it is
@@ -206,3 +208,86 @@ def test_a_capability_method_may_not_hide_the_port(monkeypatch):
 
 def test_a_port_is_a_guarded_port(station):
     assert all(isinstance(station.device(ref), GuardedPort) for ref in PARTS)
+
+
+class Sweeping(VoltageSource, VoltageSweep):
+    """A bias that sweeps by itself and tells what reaches it."""
+
+    def __init__(self):
+        self.voltage = 0.0
+        self.calls = []
+
+    def set_voltage(self, voltage):
+        self.calls.append(("set", voltage))
+        self.voltage = voltage
+
+    def get_voltage(self):
+        return self.voltage
+
+    def sweep_voltage(self, start, stop, step, dwell):
+        self.calls.append(("sweep", start, stop, step, dwell))
+        count = round((stop - start) / step) + 1
+        for index in range(count):
+            self.voltage = start + index * step
+            yield ChannelReading(self.voltage, self.voltage / 20)
+
+
+def sweeping(**bench):
+    part = Sweeping()
+    limits = {"voltage_set": SafetyLimit(**bench)} if bench else {}
+    told = []
+    device = port_class(Sweeping)(
+        part,
+        Guard("bias", {}, limits),
+        [VOLTAGE_SET],
+        lambda seconds: None,
+        told=lambda key, value: told.append((key, value)),
+    )
+    return device, part, told
+
+
+def test_a_sweep_starts_where_asked_and_leaves_the_setpoint_at_its_end():
+    device, part, told = sweeping(step=1e-3)
+    part.voltage = -2e-3  # the start is reached in bench steps first
+    readings = list(device.sweep_voltage(0.0, 2e-3, 0.5e-3, 0.01))
+    assert [r.voltage for r in readings] == pytest.approx(
+        [0, 0.5e-3, 1e-3, 1.5e-3, 2e-3]
+    )
+    assert part.calls == [
+        ("set", pytest.approx(-1e-3)),
+        ("set", 0.0),
+        ("sweep", 0.0, 2e-3, 0.5e-3, 0.01),
+    ]
+    assert device.setpoints["voltage_set"] == 2e-3
+    assert told == [("voltage_set", 0.0), ("voltage_set", 2e-3)]
+
+
+@pytest.mark.parametrize(
+    "bench, sweep, refused",
+    [
+        ({"maximum": 1e-3}, (0.0, 2e-3, 0.5e-3, 0.01), "above"),  # its end
+        ({"minimum": 0.0}, (-1e-3, 1e-3, 0.5e-3, 0.01), "below"),  # its start
+        ({"step": 0.2e-3}, (0.0, 1e-3, 0.5e-3, 0.01), "bench step"),
+        ({"step": 1e-3, "rate": 10e-3}, (0.0, 1e-3, 0.5e-3, 0.01), "bench rate"),
+    ],
+    ids=["end", "start", "step", "rate"],
+)
+def test_a_sweep_outside_the_bench_never_starts(bench, sweep, refused):
+    device, part, told = sweeping(**bench)
+    with pytest.raises(LimitError, match=refused):
+        device.sweep_voltage(*sweep)
+    assert not any(call[0] == "sweep" for call in part.calls)
+
+
+def test_a_sweep_in_the_bench_step_and_rate_is_taken():
+    device, part, _ = sweeping(step=0.5e-3, rate=50e-3)
+    assert len(list(device.sweep_voltage(0.0, 1e-3, 0.5e-3, 0.01))) == 3
+
+
+def test_a_sweep_stopped_before_its_end_leaves_the_setpoint_unknown():
+    device, part, told = sweeping()
+    sweep = device.sweep_voltage(0.0, 2e-3, 0.5e-3, 0.01)
+    next(sweep)
+    sweep.close()
+    assert "voltage_set" not in device.setpoints
+    assert told == [("voltage_set", 0.0)]

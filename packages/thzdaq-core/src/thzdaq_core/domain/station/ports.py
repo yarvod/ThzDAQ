@@ -14,7 +14,17 @@ set on its part before every call (Attributes).
 """
 
 import functools
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from thzdaq_instruments.actions import Action
 from thzdaq_instruments.capabilities import capabilities_of
@@ -51,20 +61,22 @@ NO_ATTRIBUTES = Attributes(None, {})
 
 class GuardedPort:
     """The base of every port class (port_class). Every call that sets a
-    quantity (its Quantity.setters) is checked by the guard first, so nothing
-    outside the limits reaches the instrument whoever calls; a change larger
-    than the bench step goes in steps, pausing between them for the bench rate.
+        quantity (its Quantity.setters) is checked by the guard first, so nothing
+        outside the limits reaches the instrument whoever calls; a change larger
+        than the bench step goes in steps, pausing between them for the bench rate.
+    A sweep the instrument makes by itself (Quantity.sweepers) is checked whole:
+    both ends within the limits, its steps within the bench step and rate.
 
-    The value before a change is the setpoint last written through the device
-    (read once when there is none yet), so a sweep costs no extra query. The
-    ports of one device share it; each waits with its own pause (a run's stops
-    on cancel), and a run's port tells the values it sets.
+        The value before a change is the setpoint last written through the device
+        (read once when there is none yet), so a sweep costs no extra query. The
+        ports of one device share it; each waits with its own pause (a run's stops
+        on cancel), and a run's port tells the values it sets.
 
-    A run's port also tells, at the first change of each quantity, how to set
-    it back to what it was before (changed): the run does so as it ends, so a
-    measurement leaves the bench as it found it. A quantity whose value is not
-    known before (one that cannot be read, never set yet) stays as the run
-    leaves it.
+        A run's port also tells, at the first change of each quantity, how to set
+        it back to what it was before (changed): the run does so as it ends, so a
+        measurement leaves the bench as it found it. A quantity whose value is not
+        known before (one that cannot be read, never set yet) stays as the run
+        leaves it.
     """
 
     def __init__(
@@ -82,6 +94,7 @@ class GuardedPort:
         self.target = target  # the part
         self.guard = guard
         self.setters = {name: q for q in quantities for name in q.setters}
+        self.sweepers = {name: q for q in quantities for name in q.sweepers}
         self.pause = pause
         self.attributes = attributes
         self.setpoints: Dict[str, float] = {} if setpoints is None else setpoints
@@ -103,7 +116,7 @@ class GuardedPort:
         return type(self)(
             self.target,
             self.guard,
-            set(self.setters.values()),
+            {*self.setters.values(), *self.sweepers.values()},
             pause,
             self.attributes,
             self.setpoints,
@@ -174,6 +187,37 @@ class GuardedPort:
             self.told(key, value)
         return result
 
+    def _sweeper(
+        self, name: str, start: float, stop: float, step: float, dwell: float
+    ) -> Iterator[Any]:
+        """A sweep the instrument makes by itself, checked before it starts:
+        both ends within the limits, its steps within the bench step and rate.
+        The start is set as any change (checked, ramped, set back as the run
+        ends); the setpoint is stop once the sweep ends, unknown if it stops."""
+        quantity = self.sweepers.get(name)
+        if quantity is None:  # a value the guard has no limits for
+            return self._call(name, start, stop, step, dwell)
+        self.guard.check(quantity, stop)
+        self.guard.check_sweep(quantity, step, dwell)
+        self._set(quantity, quantity.setters[0], start, (), {})
+        return self._swept(quantity, name, start, stop, step, dwell)
+
+    def _swept(
+        self,
+        quantity: Quantity,
+        name: str,
+        start: float,
+        stop: float,
+        step: float,
+        dwell: float,
+    ) -> Iterator[Any]:
+        key = quantity.key
+        del self.setpoints[key]  # where it is while it sweeps nobody knows
+        yield from self._call(name, start, stop, step, dwell)
+        self.setpoints[key] = stop
+        if self.told is not None:
+            self.told(key, stop)
+
     def _note_before(self, quantity: Quantity) -> None:
         """Tell changed how to set quantity back to its value now, through
         this port: checked and ramped as any change."""
@@ -207,6 +251,14 @@ def _setting(name: str, doc: Optional[str]) -> Callable[..., Any]:
     return method
 
 
+def _sweeping(name: str, doc: Optional[str]) -> Callable[..., Any]:
+    def method(self, start, stop, step, dwell):
+        return self._sweeper(name, start, stop, step, dwell)
+
+    method.__name__, method.__doc__ = name, doc
+    return method
+
+
 @functools.lru_cache(maxsize=None)
 def port_class(part_class: type) -> type:
     """The class of the ports over parts of this class: a GuardedPort with the
@@ -214,12 +266,9 @@ def port_class(part_class: type) -> type:
     part's own quantities and actions declared as the part's class declares
     them (thzdaq_instruments.parts asks the port as it asks the part)."""
     capabilities = capabilities_of(part_class)
-    setters = {
-        name
-        for capability in capabilities
-        for quantity in capability.capability_quantities
-        for name in quantity.setters
-    }
+    quantities = [q for c in capabilities for q in c.capability_quantities]
+    setters = {name for quantity in quantities for name in quantity.setters}
+    sweepers = {name for quantity in quantities for name in quantity.sweepers}
     namespace: Dict[str, Any] = {
         "__module__": __name__,
         "quantities": declared_by(part_class, "quantities")[1],
@@ -234,7 +283,10 @@ def port_class(part_class: type) -> type:
                 )
         for name in sorted(capability.__abstractmethods__):
             doc = getattr(capability, name).__doc__
-            build = _setting if name in setters else _calling
+            if name in sweepers:
+                build = _sweeping
+            else:
+                build = _setting if name in setters else _calling
             namespace.setdefault(name, build(name, doc))
     # The most refined ones: a capability another one refines comes with it
     bases = tuple(
