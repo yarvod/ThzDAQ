@@ -22,8 +22,41 @@ from thzdaq_instruments.capabilities import (
 from thzdaq_instruments.instrument import Channel, Instrument
 from thzdaq_instruments.readings import ChannelReading
 from thzdaq_instruments.sim import SimPowerSupply
+from thzdaq_instruments.drivers import KeysightU2002H, SumitomoF70
 from thzdaq_instruments.transport import SOCKET, ConnectionSpec, TransportPool
+from thzdaq_instruments.transport.base import SERIAL
 from thzdaq_instruments.transport.fake import FakeLink, fake_transport
+
+
+@pytest.mark.parametrize("info", default_registry().all(), ids=lambda i: i.key)
+def test_every_driver_recommends_a_connection_or_none(info):
+    recommended = info.cls.recommended_connection()
+    assert recommended is None or recommended["kind"]
+
+
+@pytest.mark.parametrize(
+    "cls, where, own",
+    [
+        (
+            KeysightU2002H,
+            {"resource": "USB0::1::2::MY1::0::INSTR"},
+            ("USB0::1::2::MY1::0::INSTR",),
+        ),
+        (SumitomoF70, {"serial_port": "COM3"}, ("COM3",)),
+    ],
+    ids=["visa", "serial"],
+)
+def test_a_recommendation_without_an_address_is_the_drivers_connection(cls, where, own):
+    """Only the bench knows where they are: what Setup is offered, the address
+    filled in, is the connection the driver makes itself."""
+    recommended = cls.recommended_connection()
+    assert not set(where) & set(recommended)
+    assert ConnectionSpec(**recommended, **where) == cls.connection(*own)
+
+
+def test_a_serial_recommendation_keeps_its_line_ends():
+    recommended = SumitomoF70.recommended_connection()
+    assert recommended["kind"] == SERIAL and recommended["read_termination"] == "\r"
 
 
 class DemoChannel(Channel, Switchable, VoltageCurrentMeter):

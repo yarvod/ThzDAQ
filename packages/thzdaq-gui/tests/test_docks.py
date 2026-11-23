@@ -417,6 +417,23 @@ class TestWindow:
         assert "host" in warnings[0]
         wait(lambda: "device:power_meter_2" in window.docks)
 
+    def test_a_driver_without_an_address_still_recommends_its_timeout(
+        self, window, profile, monkeypatch
+    ):
+        def fill(dialog_self):
+            key = "keysight.u2002h"
+            dialog_self.driver.setCurrentIndex(dialog_self.driver.findData(key))
+            editor = dialog_self.connection
+            assert editor.kind.currentData() == "visa" and not editor.resource.text()
+            editor.resource.setText("USB0::0x2A8D::0x2B18::MY1::0::INSTR")
+            dialog_self.accept_values()
+            return dialog_self.result()
+
+        monkeypatch.setattr(InstrumentDialog, "exec", fill)
+        window.setupWidget.add_instrument()
+        spec = load_station(profile).instruments["power_meter_2"].connection
+        assert spec.resource.startswith("USB0::") and spec.timeout == 20.0
+
     def test_a_generic_instrument_is_added_by_its_name_and_gets_a_console(
         self, window, profile, monkeypatch, wait
     ):

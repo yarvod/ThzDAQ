@@ -4,7 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
-from typing import Callable, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 from urllib.parse import quote, unquote
 
 from thzdaq_instruments.errors import (
@@ -222,15 +222,34 @@ def connection_url(spec: ConnectionSpec) -> str:
     return f"{scheme}://{address}" + (f"?{'&'.join(query)}" if query else "")
 
 
+def recommendation(kind: str, **given: Any) -> Dict[str, Any]:
+    """A connection as a profile holds it: its kind and the fields given that
+    differ from the defaults. Where the instrument is may be left out: a driver
+    that cannot know it (a VISA resource, a serial port) recommends the rest."""
+    defaults = {item.name: item.default for item in fields(ConnectionSpec)}
+    return {"kind": kind, **{k: v for k, v in given.items() if v != defaults[k]}}
+
+
+def connection_fields(spec: ConnectionSpec) -> Dict[str, Any]:
+    """The connection as a profile holds it, short: what differs from defaults."""
+    return recommendation(
+        spec.kind,
+        **{f.name: getattr(spec, f.name) for f in fields(spec) if f.name != "kind"},
+    )
+
+
+# A serial line at 9600 baud with CR line ends, of RS-232/RS-485 instruments
+CR_LINE = dict(baudrate=9600, write_termination="\r", read_termination="\r")
+
+
 def serial_or_gateway(
     serial_port: Optional[str], host: Optional[str], port: int
 ) -> ConnectionSpec:
-    """A serial line at 9600 baud with CR line ends: a port of this computer, or a
-    serial-to-Ethernet gateway when a host is given."""
-    common = dict(write_termination="\r", read_termination="\r", timeout=2.0)
+    """A CR_LINE: a port of this computer, or a serial-to-Ethernet gateway when
+    a host is given."""
     if host:
-        return ConnectionSpec(SOCKET, host=host, port=port, **common)
-    return ConnectionSpec(SERIAL, serial_port=serial_port, baudrate=9600, **common)
+        return ConnectionSpec(SOCKET, host=host, port=port, **CR_LINE)
+    return ConnectionSpec(SERIAL, serial_port=serial_port, **CR_LINE)
 
 
 class Link(ABC):

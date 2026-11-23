@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import Any, ClassVar, Dict
 
 from thzdaq_instruments.actions import POWER_SENSOR_ACTIONS
 from thzdaq_instruments.capabilities import PowerDetector
@@ -10,12 +10,15 @@ from thzdaq_instruments.quantities import (
     MEASUREMENT_RATES,
     U2000_QUANTITIES,
 )
-from thzdaq_instruments.transport.base import VISA, ConnectionSpec
+from thzdaq_instruments.transport.base import VISA, ConnectionSpec, recommendation
 from thzdaq_instruments.units import celsius_to_kelvin
 
 # Always dBm and a new, settled measurement, whatever was set before: READ?
 # fails while measuring continuously (INIT:CONT ON), and the unit may be W
 READ_DBM = "UNIT:POW DBM;:INIT:CONT OFF;:READ?"
+# s: READ? answers once the averaging filter is full (auto averaging near the
+# bottom of the range: seconds), a zero once it is done
+TIMEOUT = 20.0
 
 
 class KeysightU2000(ScpiInstrument, PowerDetector):
@@ -36,9 +39,14 @@ class KeysightU2000(ScpiInstrument, PowerDetector):
     actions = POWER_SENSOR_ACTIONS
 
     @staticmethod
-    def connection(resource: str, timeout: float = 20.0) -> ConnectionSpec:
+    def connection(resource: str, timeout: float = TIMEOUT) -> ConnectionSpec:
         """resource: USB0::<vendor>::<product>::<serial>::0::INSTR or a VISA alias."""
         return ConnectionSpec(VISA, resource=resource, timeout=timeout)
+
+    @classmethod
+    def recommended_connection(cls) -> Dict[str, Any]:
+        """Its resource is the bench's own: Setup asks for it."""
+        return recommendation(VISA, timeout=TIMEOUT)
 
     def test(self) -> bool:
         return self.MODEL in self.identify()

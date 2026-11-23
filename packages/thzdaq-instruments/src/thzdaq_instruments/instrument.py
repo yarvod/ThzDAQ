@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     Hashable,
@@ -14,7 +15,11 @@ from typing import (
 from thzdaq_instruments.capabilities import Identifiable, RawCommands
 from thzdaq_instruments.errors import ConfigurationError, InstrumentResponseError
 from thzdaq_instruments.limits import Limit
-from thzdaq_instruments.transport.base import Transport
+from thzdaq_instruments.transport.base import (
+    ConnectionSpec,
+    Transport,
+    connection_fields,
+)
 
 # The device type of an instrument without a driver of its own: it takes raw
 # commands only (drivers/generic.py)
@@ -75,6 +80,15 @@ class Instrument:
     # to it as it opens. False: the program keeps it, and the station writes
     # them on every open (a simulator, a sensor that forgets all when unplugged)
     keeps_settings: ClassVar[bool] = True
+    # How the driver is connected: a static connection(...) -> ConnectionSpec,
+    # its address and options as arguments. None: it opens none of its own
+    connection: ClassVar[Optional[Callable[..., ConnectionSpec]]] = None
+
+    @classmethod
+    def recommended_connection(cls) -> Optional[Dict[str, Any]]:
+        """The connection Setup offers for it, as a profile holds one. A driver
+        whose connection() needs where it is recommends the rest instead."""
+        return None if cls.connection is None else connection_fields(cls.connection())
 
     @classmethod
     def passport(cls, channel: Optional[Hashable] = None) -> Mapping[str, Limit]:

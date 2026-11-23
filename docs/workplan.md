@@ -296,6 +296,8 @@ class RigolChannel(Channel, Switchable, VoltageSource, CurrentSource, OutputProt
 
 - [ ] Датчик в USB заземлённого компьютера (требование на корпусе); ресурс из Connection Expert.
 - [ ] Setup → Add instrument → Keysight U2002H, VISA, ресурс; `thzdaq raw power_meter_2 "*IDN?"`.
+  Setup сам предлагает VISA и таймаут 20 с (`recommended_connection`); датчик, добавленный до
+  этого, держит в профиле 2 с — `READ?` с длинным фильтром по ним падает в таймаут: поставить 20 с.
 - [ ] Сравнить с NRX на одном источнике; внутренний ноль; время чтения при auto/16/64/256.
 - [ ] Проверить, чего мануал не говорит однозначно: `SENS:AVER:COUN? MAX` (1024 или 2048),
   отвечает ли `CAL:ZERO:AUTO?` состоянием авто-нуля (тогда — величина `auto_zero`: авто-ноль

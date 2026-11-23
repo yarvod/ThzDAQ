@@ -9,7 +9,6 @@ from thzdaq_api import measurements, station as station_api
 from thzdaq_api.data import encode_values
 from thzdaq_api.measurement_file import Column, Table
 from thzdaq_instruments.actions import Action, Argument
-from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.quantities import Quantity
 from thzdaq_instruments.readings import ComplexTrace, Trace
 from thzdaq_instruments.registry import DriverInfo as Driver
@@ -24,7 +23,6 @@ from thzdaq_instruments.units import prefixes_for
 from thzdaq_core.domain.measurements.procedure import Procedure
 from thzdaq_core.domain.parameters import Parameter
 from thzdaq_core.domain.station.kinds import instrument_type, kinds_for
-from thzdaq_core.domain.station.profile import connection_to_dict
 from thzdaq_core.domain.station.safety import Guard, SafetyLimit
 from thzdaq_core.domain.station.station import ConnectionInfo, DeviceInfo, Station
 
@@ -270,11 +268,6 @@ def measurement_summary(
 
 def driver_info(driver: Driver) -> station_api.DriverInfo:
     cls = driver.cls
-    recommended = getattr(cls, "connection", None)
-    try:  # drivers that open a connection recommend one; others have none
-        connection = connection_to_dict(recommended()) if recommended else None
-    except (TypeError, ConfigurationError):  # it needs a port or an address
-        connection = None
     return station_api.DriverInfo(
         key=driver.key,
         title=driver.title,
@@ -292,7 +285,7 @@ def driver_info(driver: Driver) -> station_api.DriverInfo:
             for kind in kinds_for(cls).values()
         ),
         channels=tuple(str(k) for k in cls.fixed_channels()),
-        connection=connection,
+        connection=cls.recommended_connection(),
     )
 
 

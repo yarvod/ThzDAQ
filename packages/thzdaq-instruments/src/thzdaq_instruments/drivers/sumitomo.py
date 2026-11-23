@@ -1,11 +1,18 @@
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from thzdaq_instruments.capabilities import Compressor, Identifiable
 from thzdaq_instruments.errors import InstrumentResponseError
 from thzdaq_instruments.instrument import Instrument, ScpiInstrument
-from thzdaq_instruments.transport.base import HTTP, ConnectionSpec, serial_or_gateway
+from thzdaq_instruments.transport.base import (
+    CR_LINE,
+    HTTP,
+    SERIAL,
+    ConnectionSpec,
+    recommendation,
+    serial_or_gateway,
+)
 from thzdaq_instruments.transport.http import JsonClient, JsonHttpClient
 from thzdaq_instruments.units import PSI, celsius_to_kelvin
 
@@ -82,6 +89,11 @@ class SumitomoF70(ScpiInstrument, Compressor):
         serial_port: Optional[str] = None, host: Optional[str] = None, port: int = 23
     ) -> ConnectionSpec:
         return serial_or_gateway(serial_port, host, port)
+
+    @classmethod
+    def recommended_connection(cls) -> Dict[str, Any]:
+        """Its serial port (or gateway) is the bench's own: Setup asks for it."""
+        return recommendation(SERIAL, **CR_LINE)
 
     def command(self, command: str) -> List[str]:
         """Send $CMD with checksum, return the reply fields without the command and CRC."""

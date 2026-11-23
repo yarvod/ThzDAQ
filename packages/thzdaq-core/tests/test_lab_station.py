@@ -97,6 +97,8 @@ def test_drivers_say_what_a_profile_may_hold(lab):
     supply, block = drivers["rigol.dp832a"], drivers["scontel.sis_block"]
     assert supply.type == "power_supply" and supply.channels == ("1", "2", "3")
     assert supply.connection["kind"] == "socket"
+    # Its VISA resource is the bench's own, the timeout its reading needs is not
+    assert drivers["keysight.u2002h"].connection == {"kind": "visa", "timeout": 20.0}
     sis_bias = next(k for k in block.kinds if k.key == "sis_bias")
     assert {s.name for s in sis_bias.settings} == {"offset_voltage", "offset_current"}
     assert drivers["sim.power_supply"].simulated

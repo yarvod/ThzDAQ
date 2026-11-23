@@ -11,7 +11,7 @@ from thzdaq_instruments import default_registry
 from thzdaq_instruments.errors import ConfigurationError
 from thzdaq_instruments.parts import class_quantities
 from thzdaq_instruments.registry import DriverRegistry
-from thzdaq_instruments.transport.base import ConnectionSpec
+from thzdaq_instruments.transport.base import ConnectionSpec, connection_fields
 
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.config import (
@@ -24,18 +24,6 @@ from thzdaq_core.domain.station.safety import Safety, SafetyLimit
 
 FORMAT_VERSION = 2
 logger = logging.getLogger(__name__)
-
-
-def connection_to_dict(spec: ConnectionSpec) -> Dict[str, Any]:
-    """Only the fields that differ from defaults, so files stay short."""
-    data = {"kind": spec.kind}
-    for item in fields(ConnectionSpec):
-        if item.name == "kind":
-            continue
-        value = getattr(spec, item.name)
-        if value != item.default:
-            data[item.name] = value
-    return data
 
 
 def connection_from_dict(data: Dict[str, Any]) -> ConnectionSpec:
@@ -148,7 +136,7 @@ def station_to_dict(config: StationConfig) -> Dict[str, Any]:
         item = {
             "driver": spec.driver,
             "title": spec.title,
-            "connection": connection_to_dict(spec.connection)
+            "connection": connection_fields(spec.connection)
             if spec.connection
             else None,
             "options": spec.options,

@@ -30,6 +30,11 @@ def test_it_is_reached_over_visa():
     assert spec.kind == VISA and spec.timeout == 20.0
 
 
+def test_setup_is_offered_its_timeout_without_a_resource():
+    # A reading waits for the averaging filter: the default 2 s timed it out
+    assert KeysightU2002H.recommended_connection() == {"kind": VISA, "timeout": 20.0}
+
+
 def test_the_constructor_writes_nothing():
     _, _, link = sensor()
     assert link.written == []
