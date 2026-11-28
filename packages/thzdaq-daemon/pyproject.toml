@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq-daemon"
-version = "0.0.6b8"
+version = "0.0.6b9"
 description = "ThzDAQ bench daemon: holds the instruments and serves the thzdaq-api contract"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,9 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "psutil>=5.9",
-    "thzdaq-api==0.0.6b8",
-    "thzdaq-core==0.0.6b8",
-    "thzdaq-instruments[visa]==0.0.6b8",
+    "thzdaq-api==0.0.6b9",
+    "thzdaq-core==0.0.6b9",
+    "thzdaq-instruments[visa]==0.0.6b9",
 ]
 
 [project.urls]

@@ -1,6 +1,6 @@
 [project]
 name = "thzdaq"
-version = "0.0.6b8"
+version = "0.0.6b9"
 description = "ThzDAQ: SIS mixer bench control and measurements (command, client library, extras)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,8 +17,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "thzdaq-api==0.0.6b8",
-    "thzdaq-cli==0.0.6b8",
+    "thzdaq-api==0.0.6b9",
+    "thzdaq-cli==0.0.6b9",
 ]
 
 # The command of thzdaq-cli, declared here too: uv tool install links only the
@@ -33,15 +33,15 @@ Issues = "https://github.com/yarvod/ThzDAQ/issues"
 Releases = "https://github.com/yarvod/ThzDAQ/releases"
 
 [project.optional-dependencies]
-analysis = ["thzdaq-analysis==0.0.6b8"]
-daemon = ["thzdaq-daemon==0.0.6b8"]
-gui = ["thzdaq-gui==0.0.6b8"]
-mcp = ["thzdaq-mcp==0.0.6b8"]
+analysis = ["thzdaq-analysis==0.0.6b9"]
+daemon = ["thzdaq-daemon==0.0.6b9"]
+gui = ["thzdaq-gui==0.0.6b9"]
+mcp = ["thzdaq-mcp==0.0.6b9"]
 all = [
-    "thzdaq-analysis==0.0.6b8",
-    "thzdaq-daemon==0.0.6b8",
-    "thzdaq-gui==0.0.6b8",
-    "thzdaq-mcp==0.0.6b8",
+    "thzdaq-analysis==0.0.6b9",
+    "thzdaq-daemon==0.0.6b9",
+    "thzdaq-gui==0.0.6b9",
+    "thzdaq-mcp==0.0.6b9",
 ]
 
 [tool.uv.sources]
