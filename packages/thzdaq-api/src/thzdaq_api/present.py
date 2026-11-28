@@ -12,7 +12,7 @@ from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from thzdaq_api.analysis import MeasurementIv
 from thzdaq_api.approvals import UserAnswer
-from thzdaq_api.custom import CustomCheck, CustomLibrary, CustomText
+from thzdaq_api.custom import CustomCheck, CustomInfo, CustomLibrary, CustomText
 from thzdaq_api.daemon import DaemonStatus
 from thzdaq_api.data import decode_values
 from thzdaq_api.devices import (
@@ -40,7 +40,7 @@ from thzdaq_api.measurements import (
     RunInfo,
 )
 from thzdaq_api.station import ConnectionInfo
-from thzdaq_api.ui import FieldState, FormState, WindowState
+from thzdaq_api.ui import FieldState, FormState, GraphsCleared, WindowState
 
 NOTHING = "none"
 MILLI, MICRO = 1e-3, 1e-6  # an I-V curve is read in mV and µA
@@ -210,6 +210,14 @@ def library(found: CustomLibrary) -> str:
 
 def custom_text(found: CustomText) -> str:
     return f"{found.info.path} ({found.info.procedure}):\n{found.text}"
+
+
+def renamed(found: CustomInfo) -> str:
+    return f"now {found.procedure}: {found.path}"
+
+
+def deleted(found: CustomInfo) -> str:
+    return f"{found.procedure} is deleted; its script is kept at {found.path}"
 
 
 def check(found: CustomCheck) -> str:
@@ -462,3 +470,9 @@ def opened(place: str) -> str:
 
 def highlighted(anchor: str) -> str:
     return f"{anchor} is highlighted; it goes when the person acts there"
+
+
+def cleared(found: GraphsCleared) -> str:
+    if not found.graphs:
+        return "no graph had anything to clear"
+    return "cleared: " + ", ".join(found.graphs)

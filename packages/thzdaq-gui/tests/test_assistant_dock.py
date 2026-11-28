@@ -332,6 +332,23 @@ def test_a_folded_cards_body_is_made_when_it_is_unfolded(app):
     assert card.thought.text() == "first second third"
 
 
+def test_a_card_of_a_command_of_many_lines_folds_to_one_line(app):
+    """A command of many lines (a script in a here-string) as a card's line:
+    as tall as one, running and when done, never as tall as all of them."""
+    from thzdaq_gui.docks.assistant import CallCard
+    from thzdaq_gui.models.assistant import Item
+
+    command = "@'\nimport glob, json\n" + "x = 1\n" * 40 + "'@ | python -"
+    short = CallCard(Item(Kind.CALL, name="rg --files", state=State.RUNNING))
+    item = Item(Kind.CALL, name=command, state=State.RUNNING)
+    card = CallCard(item)
+    assert card.sizeHint().height() == short.sizeHint().height()
+    item.state = State.DONE
+    card.show_item(item)
+    assert card.sizeHint().height() == short.sizeHint().height()
+    assert card.title().startswith(command)  # whole, in its tooltip
+
+
 def test_the_dialog_saves_a_server_and_tests_it(providers, instructions, model, wait):
     from thzdaq_gui.docks.assistant_settings import AssistantSettings
 
@@ -582,6 +599,8 @@ class FakeChat(Chat):
         self.changed = None
         self.kept: List[Kept] = []  # what chats() finds, for any workspace
         self.listed: List[Path] = []  # the workspaces asked for
+        self.holds = False  # chats() answers once the test calls held
+        self.held = None  # the found of the listing held
         self.shown: Optional[Kept] = None  # current()
         self.replay = None  # the replay of the chat opened last
         self.renamed: List[tuple] = []
@@ -605,7 +624,10 @@ class FakeChat(Chat):
 
     def chats(self, workspace, found):
         self.listed.append(workspace)
-        found(list(self.kept))
+        if self.holds:  # answered later by the test
+            self.held = found
+        else:
+            found(list(self.kept), True)
 
     def open(self, chat, replay):
         self.shown, self.replay = chat, replay

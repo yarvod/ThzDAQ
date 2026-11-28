@@ -1,8 +1,8 @@
 """A simulator offers what its driver does: a measurement, a dock or a script
 checked on the simulator works the same on the instrument.
 
-Compared part by part (the instrument, its channels and their keys, each
-sub-device part):
+Compared part by part (the instrument, its channels and their keys, a
+channel of a class of its own, each sub-device part):
 capabilities, quantity keys, action keys. How an instrument is reached (ACCESS:
 Identifiable, RawCommands) may be more on the simulator: one simulator serves
 several drivers (SimCompressor the F-70 over RS-232 and over REST), and the
@@ -23,6 +23,8 @@ def parts(cls):
     found = {"instrument": cls}
     if cls.channel_class is not None:
         found["channel"] = cls.channel_class
+    for key, part in cls.extra_channels.items():
+        found[f"channel {key}"] = part
     for key, sub in cls.subdevices.items():
         if sub.part_class is not None:
             found[f"subdevice {key}"] = sub.part_class

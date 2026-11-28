@@ -210,6 +210,27 @@ class WriteCustom(Operation[CustomCheck]):
     text: str
 
 
+class RenameCustom(Operation[CustomInfo]):
+    """Rename a script of the library: custom.<script> becomes custom.<to>
+    (letters, digits and _, from a letter; not one the library has). Refused
+    while it runs. Measurements made with it keep its old name. A person sees
+    it first when an agent asks."""
+
+    rights = Rights.LIBRARY
+    script: str
+    to: str
+
+
+class DeleteCustom(Operation[CustomInfo]):
+    """Delete a script of the library: custom.<script> leaves the catalog,
+    its file is kept in .history/ of the library (moved back, it returns).
+    Refused while it runs. Answers the script as it was, its path where it
+    is kept. A person sees it first when an agent asks."""
+
+    rights = Rights.LIBRARY
+    script: str
+
+
 class ParseValue(Operation[Given]):
     """A declared value's default as people type it (in its unit; a sweep
     "start:stop:points"), parsed as a run of the measurement takes it: SI,

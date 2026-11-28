@@ -92,6 +92,49 @@ def test_data_shows_the_workspaces_own_and_others_on_asking(
     assert Path(chosen.metadata["path"]).parents[1] == elsewhere.resolve() / "data"
 
 
+def test_data_resolves_no_folder_as_it_draws(session, tmp_path, monkeypatch):
+    """Whose a measurement is gets known as it is listed and when the
+    workspace changes, never as the table draws: resolving a folder asks the
+    disk (slow on Windows), and the table asks every cell many times a
+    second."""
+    from PySide6.QtCore import Qt
+    from thzdaq_api.measurement_file import Measurement
+
+    from thzdaq_gui.docks.data import DataWidget
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    model = session.measurements
+    for n in range(40):
+        measurement = Measurement(CURRENT_VS_VOLTAGE, title="SIS I-V curve")
+        model.add(measurement, str(tmp_path if n % 2 else elsewhere))
+    data = DataWidget(session)
+    data.show()
+    resolved = []
+    resolve = Path.resolve
+    monkeypatch.setattr(
+        Path, "resolve", lambda path, *a: resolved.append(path) or resolve(path, *a)
+    )
+    roles = (Qt.DisplayRole, Qt.ToolTipRole, Qt.ForegroundRole, Qt.DecorationRole)
+    for row in range(model.rowCount()):
+        for column in range(model.columnCount()):
+            for role in roles:
+                model.data(model.index(row, column), role)
+    data.othersButton.setChecked(True)
+    data.othersButton.setChecked(False)
+    data.table.viewport().repaint()
+    assert resolved == []
+    assert data.shown.rowCount() == 20
+    session.workspace.open(elsewhere)
+    assert len(resolved) < 10  # the folders, not each measurement's
+    assert data.shown.rowCount() == 20
+    assert {
+        data.shown.mapToSource(data.shown.index(r, 0)).row() % 2 for r in range(20)
+    } == {1}
+    data.close()
+    data.deleteLater()
+
+
 def test_runs_that_ended_before_the_window_are_remembered(
     connect, new_session, tmp_path
 ):

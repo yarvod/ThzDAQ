@@ -648,6 +648,7 @@ class LakeShoreEmulator(ScpiEmulator):
         self.manual = {1: 0.0, 2: 0.0}
         self.heater_setup = {1: "1,2,0.000,1", 2: "1,2,0.000,1"}
         self.out_mode = {1: "1,1,0", 2: "0,0,0"}
+        self.pid = {1: "+0050.0,+0020.0,+000.0", 2: "+0050.0,+0020.0,+000.0"}
         self.mode = 1
 
         def store(target):
@@ -675,6 +676,8 @@ class LakeShoreEmulator(ScpiEmulator):
             r"OUTMODE (\d),(\S+)", lambda o, v: self.out_mode.__setitem__(int(o), v)
         )
         self.route(r"OUTMODE\? (\d)", lambda o: self.out_mode[int(o)])
+        self.route(r"PID (\d),(\S+)", lambda o, v: self.pid.__setitem__(int(o), v))
+        self.route(r"PID\? (\d)", lambda o: self.pid[int(o)])
         self.route(r"MODE ([0-2])", lambda v: setattr(self, "mode", int(v)))
         self.route(r"MODE\?", lambda: str(self.mode))
 

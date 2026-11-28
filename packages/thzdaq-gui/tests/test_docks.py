@@ -333,6 +333,34 @@ class TestWindow:
         assert hub.custom_graphs() == []
         assert not hasattr(hub.graph("I-V"), "btnDelete")  # built-in graphs stay
 
+    def test_own_graphs_deleted_dropped_and_remembered(
+        self, window, session, monkeypatch
+    ):
+        from thzdaq_api.measurements import PlotInfo, ProcedureSummary
+        from thzdaq_gui.main_window import MainWindow
+
+        plots = tuple(
+            PlotInfo(key, title, "t", "x", "y")
+            for key, title in (("a", "Mine A"), ("b", "Mine B"))
+        )
+        catalog = list(session.procedures())
+        hub = window.hub
+        hub.set_procedures(catalog + [ProcedureSummary("custom.mine", "", "", plots)])
+        assert {"graph:Mine A", "graph:Mine B"} <= set(window.docks)
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+        hub.graph("Mine A").btnDelete.click()
+        assert "graph:Mine A" not in window.docks
+        window.save_state()
+        again = MainWindow(session, window.settings.fileName(), check_updates=False)
+        again.hub.set_procedures(
+            catalog + [ProcedureSummary("custom.mine", "", "", plots)]
+        )
+        assert "graph:Mine A" not in again.docks and "graph:Mine B" in again.docks
+        again.confirm_exit = False
+        again.close()
+        hub.set_procedures(catalog)  # the script declares no plot now
+        assert "graph:Mine B" not in window.docks
+
     def test_a_graph_is_built_when_shown_or_fed(self, window):
         from thzdaq_gui.graph_docks import DEFAULT_GRAPHS
 
@@ -1104,7 +1132,7 @@ class TestMeasureAndData:
         assert voltages == kept.tables["iv"].data["voltage"]
         dialog.close()
 
-    def test_data_dock_opens_plots_and_exports(
+    def test_data_dock_opens_and_plots(
         self, window, session, wait, tmp_path, monkeypatch
     ):
         from thzdaq_api.measurement_file import Measurement
@@ -1126,18 +1154,6 @@ class TestMeasureAndData:
         data.open_files()
         assert session.measurements.rowCount() == 1
         assert len(window.hub.graph("I-V").items) == 1
-        data.table.selectRow(0)
-        csv_path = tmp_path / "iv.csv"
-        monkeypatch.setattr(
-            "thzdaq_gui.folders.QFileDialog.getSaveFileName",
-            lambda *a, **k: (str(csv_path), ""),
-        )
-        data.export()
-        assert (
-            csv_path.read_text(encoding="utf-8")
-            .splitlines()[0]
-            .startswith('"Voltage, V"')
-        )
 
     def test_a_file_of_an_old_name_shows_and_draws_as_now(
         self, window, session, tmp_path, monkeypatch
@@ -1195,9 +1211,8 @@ class TestMeasureAndData:
         assert starts[0] == session.data_root.resolve()
         assert (results / f"{measurement.id}_sis_current_vs_voltage.json").exists()
         # Then where the last file went, also after a restart
-        window.dataWidget.export()
+        window.dataWidget.save_as()
         assert starts[1] == results.resolve()
-        assert (results / f"{measurement.id}_iv.csv").exists()
         later = Folders({MEASUREMENTS: lambda: tmp_path / "data"})
         assert later.folder(MEASUREMENTS) == results.resolve()
         # A folder that is gone (a removed USB stick): the default again
@@ -2113,6 +2128,35 @@ class TestRunBar:
         assert again.runBar.chosen_name() == "sis.power_vs_voltage"
         assert again.runBar.controls.run is again.measures.run("sis.power_vs_voltage")
         again.close()
+
+    def test_a_device_list_clicked_right_after_a_value_typed_stays(self, window, app):
+        # On the bench: a value typed in the form, then a click on a device
+        # list. The value's editing finished as focus left it, inside that
+        # click, and the form built its device lists anew: the list clicked
+        # was deleted under the click and the program crashed.
+        from PySide6.QtWidgets import QDoubleSpinBox
+        from shiboken6 import isValid
+        from thzdaq_api.procedures import CURRENT_VS_COIL_CURRENT
+
+        bar = window.runBar
+        bar.choose(CURRENT_VS_COIL_CURRENT)
+        bar.btnParameters.click()
+        app.processEvents()
+        box = window.measures.form(CURRENT_VS_COIL_CURRENT).box
+        combo = box.devices.combos["coil"]
+        sweep = box.form.editors["coil_current"].widget
+        start, stop = sweep.findChildren(QDoubleSpinBox)
+        stop.setValue(20)
+        stop.editingFinished.emit()  # as focus leaves it
+        app.processEvents()
+        assert isValid(combo) and box.devices.combos["coil"] is combo
+        stop.setFocus()
+        stop.setValue(25)  # turned with the wheel
+        QTest.mouseClick(combo, Qt.LeftButton)
+        app.processEvents()
+        assert isValid(combo) and box.devices.combos["coil"] is combo
+        combo.hidePopup()
+        assert box.form.values()["coil_current"]["stop"] == pytest.approx(0.025)
 
 
 class TestDaemon:

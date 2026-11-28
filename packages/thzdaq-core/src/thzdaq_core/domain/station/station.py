@@ -397,7 +397,7 @@ class Station:
                         DeviceInfo(
                             channel_ref(instrument_id, key), channel_title(title, key),
                             instrument_id, CHANNEL, key,
-                            capabilities_of(cls.channel_class),
+                            capabilities_of(cls.channel_class_of(key)),
                         )
                     )  # fmt: skip
             kinds = kinds_for(cls) if cls is not None else {}
@@ -495,7 +495,7 @@ class Station:
         if info.kind == INSTRUMENT:
             return cls
         if info.kind == CHANNEL:
-            return cls.channel_class
+            return cls.channel_class_of(info.channel)
         kind = self.kinds(info.instrument).get(info.kind)
         if kind and kind.part_class:
             return kind.part_class

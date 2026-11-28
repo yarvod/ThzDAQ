@@ -1,6 +1,7 @@
 """The chats the assistant keeps, a page of its dock: a search by title over
 the chats of the window's workspace for the mode shown, the newest first,
-each with how long ago it was spoken in last. A click (or Enter) opens one;
+each with how long ago it was spoken in last, those found so far while they
+are being listed (Loading…, not an empty list). A click (or Enter) opens one;
 F2 or its menu renames it in place, in a mode whose chats take another
 title. A view of AssistantModel."""
 
@@ -27,6 +28,7 @@ from thzdaq_gui.models.assistant import AssistantModel, ago
 
 SEARCH = "Search by title"
 NONE_KEPT = "No chats in this workspace yet"
+LOADING = "Loading chats…"
 NONE_FOUND = "No chat's title holds that"
 ID = Qt.UserRole  # of a row: its chat's id
 
@@ -88,6 +90,9 @@ class HistoryPage(QWidget):
             if renames
             else QAbstractItemView.NoEditTriggers
         )
+        self.list.setVisible(bool(chats))
+        self.empty.setText(self._none())
+        self.empty.setVisible(not chats)
         if [chat.id for chat in chats] == self.ids():
             for row, chat in enumerate(chats):
                 self._show(self.list.topLevelItem(row), chat, now, current)
@@ -103,9 +108,12 @@ class HistoryPage(QWidget):
             rows.append(item)
         self.list.clear()
         self.list.addTopLevelItems(rows)
-        self.list.setVisible(bool(rows))
-        self.empty.setText(NONE_FOUND if self.search.text().strip() else NONE_KEPT)
-        self.empty.setVisible(not rows)
+
+    def _none(self) -> str:
+        """What stands for the list while it shows no chat."""
+        if self.model.finding_chats():
+            return LOADING
+        return NONE_FOUND if self.search.text().strip() else NONE_KEPT
 
     @staticmethod
     def _show(

@@ -7,7 +7,7 @@ The owner (CodeDocks) makes the widgets of the tabs, names them and decides
 whether one closes; this only shows them.
 """
 
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
@@ -114,10 +114,13 @@ class TabbedDock(QStackedWidget):
     def title(self, widget: QWidget) -> str:
         return self.tabs.tabText(self.tabs.indexOf(widget))
 
-    def retitle(self, widget: QWidget, title: str) -> None:
+    def retitle(self, widget: QWidget, title: str, tip: Optional[str] = None) -> None:
+        """Its title, and its tip when given (a file renamed)."""
         index = self.tabs.indexOf(widget)
         if index >= 0:
             self.tabs.setTabText(index, title)
+            if tip is not None:
+                self.tabs.setTabToolTip(index, tip)
 
     def request_close(self, widget: QWidget) -> bool:
         """As its close button does: closed if its owner says so."""

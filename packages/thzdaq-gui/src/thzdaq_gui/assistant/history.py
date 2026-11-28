@@ -18,8 +18,9 @@ copy within the line.
 A turn is kept once it ended or was stopped (Recorder), never piece by piece.
 One thread of the shelf reads and writes, in the order asked: a conversation
 listed or opened right after a turn of it ended, or it was renamed, is read
-as it is kept now. The thread ends once nothing waits, and the program's exit
-waits for it. No Qt.
+as it is kept now. A job that fails is logged and the next one goes on: the
+shelf never stops keeping and listing for the rest of the program's run. The
+thread ends once nothing waits, and the program's exit waits for it. No Qt.
 """
 
 import hashlib
@@ -40,6 +41,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 from thzdaq_gui.assistant.attachments import Attachment, Kind
 from thzdaq_gui.assistant.chat import (
     Call,
+    Found,
     Image,
     Kept,
     Listener,
@@ -410,9 +412,10 @@ class Shelf:
     def rename(self, chat: Kept, title: str) -> None:
         self._do(lambda: self._retitle(chat, title))
 
-    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
-        """The workspace's conversations, the newest first, told to found."""
-        self._do(lambda: found(self._chats(workspace)))
+    def chats(self, workspace: Path, found: Found) -> None:
+        """The workspace's conversations, the newest first, told to found
+        whole."""
+        self._do(lambda: found(self._chats(workspace), True))
 
     def open(self, chat: Kept, restore: Restore, replay: Replay) -> None:
         """Read a conversation: its messages for the model go to restore,
@@ -436,7 +439,10 @@ class Shelf:
                     self._working = False
                     return
                 job = self._jobs.popleft()
-            job()
+            try:
+                job()
+            except Exception:  # the next job still goes: a dead thread keeps nothing
+                logger.exception("A job of the assistant's chats failed")
 
     def _begin(self, chat: Kept) -> None:
         folder = self.folder(chat)
@@ -485,9 +491,12 @@ class Shelf:
             try:
                 meta = json.loads(path.read_text(encoding="utf-8"))
                 found.append(
-                    Kept(meta["id"], meta["title"], meta["updated"], workspace)
-                )
-            except (OSError, ValueError, KeyError) as e:
+                    Kept(
+                        str(meta["id"]), str(meta["title"]),
+                        float(meta["updated"]), workspace,
+                    )
+                )  # fmt: skip
+            except (OSError, ValueError, KeyError, TypeError) as e:
                 logger.warning(f"{path} does not read: {e}")
         return sorted(found, key=lambda chat: chat.updated, reverse=True)
 

@@ -16,6 +16,8 @@ from thzdaq_api.ui import (
     AnswerUi,
     FieldState,
     FormState,
+    GraphsCleared,
+    UiClearGraphs,
     UiFillMeasurement,
     UiHighlight,
     UiOpen,
@@ -234,5 +236,25 @@ def test_an_agents_tools_show_in_the_window_the_person_was_at(lab_as, screens):
         tool = found["ui_state"]
         text = tool.call(reach, tool.arguments({}), None)
         assert text.startswith("window 2-1: 2-1 (other windows: 1-1)")
+    finally:
+        reach.close()
+
+
+def test_graphs_are_cleared_by_the_window_and_told_shortly(lab_as, screens):
+    def shown(operation):
+        if isinstance(operation, UiClearGraphs):
+            return GraphsCleared(operation.graphs or ("I-V", "P-V"))
+
+    screen = screens("1-1", shown)
+    agent = lab_as("mcp:claude-code")
+    found = agent.call(UiClearGraphs(graphs=("graph:I-V",), measurement=7))
+    assert found == GraphsCleared(("graph:I-V",))
+    assert screen.asked[-1] == UiClearGraphs(
+        graphs=("graph:I-V",), measurement=7, window="1-1"
+    )
+    reach = Reach(agent)
+    try:
+        tool = by_name(tools(lambda: None))["ui_clear_graphs"]
+        assert tool.call(reach, tool.arguments({}), None) == "cleared: I-V, P-V"
     finally:
         reach.close()

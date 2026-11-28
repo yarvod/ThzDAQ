@@ -34,6 +34,7 @@ class RunGraphs(QObject):
             )
         )
         model.resetting.connect(self.hub.clear_measurement)
+        model.finished.connect(self.hub.end_measurement)
         if model.measurement is not None:
             self.started(model)
             self.hub.show_measurement(model.measurement, self.plots(model))

@@ -1,9 +1,9 @@
 """Data dock: measurements of the session and opened files, as the old table.
 
 Every measurement is saved to data/<date>/ of its workspace as it runs; here
-it can be commented, plotted again, saved elsewhere as JSON or exported to
-CSV. Measurements of other workspaces show on asking (Others). The file
-dialogs start in the folder used last (Session.folders).
+it can be commented, plotted again or saved elsewhere as JSON. Measurements
+of other workspaces show on asking (Others). The file dialogs start in the
+folder used last (Session.folders).
 """
 
 import json
@@ -19,14 +19,13 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
     QHeaderView,
-    QInputDialog,
     QMessageBox,
     QTableView,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
-from thzdaq_api.measurement_file import SCRIPT, RUNNING, dumps, export_csv
+from thzdaq_api.measurement_file import SCRIPT, RUNNING, dumps
 from thzdaq_api.sessions import ScriptSource
 
 from thzdaq_gui import theme
@@ -62,7 +61,7 @@ class Shown(QSortFilterProxyModel):
         super().__init__(parent)
         self.others = False
         self.setSourceModel(model)
-        model.session.workspace.changed.connect(self.invalidateFilter)
+        model.placed.connect(self.invalidateFilter)
 
     def show_others(self, on: bool) -> None:
         self.others = on
@@ -87,7 +86,6 @@ class DataWidget(QWidget):
             ("folder-open-outline", "Open measurement files", self.open_files),
             ("chart-line", "Plot in its graphs", self.plot_selected),
             ("content-save-outline", "Save as JSON…", self.save_as),
-            ("file-delimited-outline", "Export a table to CSV…", self.export),
             ("information-outline", "Details", self.details),
             ("language-python", "The script that measured it", self.script),
             ("folder-outline", "Show the data folder", self.open_folder),
@@ -158,25 +156,6 @@ class DataWidget(QWidget):
             )
             if path:
                 self.model.save_copy(row, path)
-
-    def export(self) -> None:
-        for measurement in self.selected():
-            tables = list(measurement.tables)
-            if not tables:
-                continue
-            table = tables[0]
-            if len(tables) > 1:
-                table, ok = QInputDialog.getItem(
-                    self, "Export CSV", "Table", tables, 0, False
-                )
-                if not ok:
-                    continue
-            name = f"{measurement.id}_{table}.csv"
-            path = self.session.folders.save_path(
-                self, MEASUREMENTS, "Export CSV", name, "CSV (*.csv)"
-            )
-            if path:
-                export_csv(measurement, table, path)
 
     def script(self) -> None:
         """The text it ran as it was then, in the editor: titled by the

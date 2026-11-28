@@ -198,6 +198,58 @@ def test_tabs_close_by_their_button_or_a_middle_click(window, library, monkeypat
     assert tabs.currentWidget() is not tabs.tabs
 
 
+def test_its_form_renames_and_deletes_a_measurement_its_tab_follows(
+    window, wait, named, library, monkeypatch
+):
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    bar, told = window.runBar, library / "told.py"
+    told.write_text(TOLD, encoding="utf-8")
+    form = appears(window, wait, "custom.told")
+    window.code.open(told)
+    widget = tab_of(window, told)
+    widget.editor.insertPlainText("# not saved\n")
+    # Renamed: its tab follows with what was typed, the bar chooses it
+    named["name"] = "told_again"
+    form.btnRename.click()
+    again = library / "told_again.py"
+    assert again.exists() and not told.exists()
+    assert tab_of(window, again) is widget and titles(window) == ["told_again.py ●"]
+    tabs = window.code.tabs.tabs
+    assert tabs.tabToolTip(tabs.indexOf(widget)) == str(again.resolve())
+    assert widget.model.procedure == "custom.told_again"
+    wait(lambda: bar.chosen_name() == "custom.told_again", timeout=10)
+    assert "custom.told" not in bar.items
+    widget.save()  # into its new file
+    wait(lambda: "# not saved" in again.read_text(encoding="utf-8"), timeout=10)
+    # A name taken or no name is refused, told
+    (library / "other.py").write_text(TOLD, encoding="utf-8")
+    form = appears(window, wait, "custom.told_again")
+    appears(window, wait, "custom.other")
+    for name in ("other", "2bad"):
+        named["name"] = name
+        form.btnRename.click()
+    assert "custom.other exists" in warned[0] and "'2bad'" in warned[1]
+    assert again.exists()
+    # Deleted: kept in the library's history, its tab closes, out of the bar
+    form.btnDelete.click()
+    assert not again.exists()
+    (kept,) = (library / ".history").iterdir()
+    assert "# not saved" in kept.read_text(encoding="utf-8")
+    assert titles(window) == []
+    wait(lambda: "custom.told_again" not in bar.items, timeout=10)
+    # A tab with changes not saved stays, told: Save writes the script back
+    other = library / "other.py"
+    window.code.open(other)
+    tab_of(window, other).editor.insertPlainText("# mine\n")
+    window.measures.form("custom.other").btnDelete.click()
+    assert not other.exists() and titles(window) == ["other.py ●"]
+    assert "custom.other is deleted" in warned[-1]
+    tab_of(window, other).save()
+    wait(lambda: other.exists() and "# mine" in other.read_text(), timeout=10)
+
+
 def test_an_example_goes_into_the_library_under_a_free_name(
     window, wait, named, library
 ):

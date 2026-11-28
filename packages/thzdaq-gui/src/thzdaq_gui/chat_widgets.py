@@ -275,20 +275,32 @@ class MessageView(QTextBrowser):
         event.ignore()  # it has nothing to scroll: the chat scrolls
 
 
+def one_line(text: str) -> str:
+    """Text of many lines (a command with a script in it) in one: its lines
+    joined by a space, each without its indent."""
+    return " ".join(line.strip() for line in text.splitlines() if line.strip())
+
+
 class ElidedLabel(QLabel):
     """A line cut with … to the width it is given; the whole of it in its
-    tooltip."""
+    tooltip. Text of many lines shows as one: QLabel would be as tall as all
+    of them while the cut shows a few, centred in blank space."""
 
     def __init__(self, text: str = "", parent=None, mode=Qt.ElideRight):
-        super().__init__(text, parent)
+        super().__init__(parent)
         self.mode = mode  # where the cut is: Qt.ElideMiddle keeps a path's end
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.setMinimumWidth(0)
-        self.setToolTip(text)
+        self.setText(text)
 
     def setText(self, text: str) -> None:  # type: ignore[override]
-        super().setText(text)
+        self._whole = text
+        super().setText(one_line(text))  # what QLabel sizes and paints
         self.setToolTip(text)
+
+    def text(self) -> str:  # type: ignore[override]
+        """The whole text, as it was given."""
+        return self._whole
 
     def set_color(self, color: str) -> None:
         palette = self.palette()
@@ -301,7 +313,8 @@ class ElidedLabel(QLabel):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         rect = self.contentsRect()
-        shown = self.fontMetrics().elidedText(self.text(), self.mode, rect.width())
+        line = super().text()
+        shown = self.fontMetrics().elidedText(line, self.mode, rect.width())
         self.style().drawItemText(
             painter, rect, int(self.alignment()), self.palette(), self.isEnabled(),
             shown, self.foregroundRole(),

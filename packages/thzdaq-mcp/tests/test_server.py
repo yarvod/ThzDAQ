@@ -296,3 +296,15 @@ async def test_an_agent_writes_checks_and_lists_the_benchs_own_measurements(
         assert read.endswith(SCAN)
         procedures = text(await client.call_tool("list_procedures", {}))
         assert "custom.scan: Scan. A short bias sweep." in procedures
+        renamed = await answering(
+            window,
+            client.call_tool("rename_custom", {"script": "scan", "to": "sweep"}),
+            allowed=True,
+        )
+        assert text(renamed).startswith("now custom.sweep: ")
+        deleted = await answering(
+            window, client.call_tool("delete_custom", {"script": "sweep"}), allowed=True
+        )
+        assert text(deleted).startswith("custom.sweep is deleted; its script is kept")
+        empty = text(await client.call_tool("list_custom", {}))
+        assert "no measurement of its own yet" in empty

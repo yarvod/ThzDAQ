@@ -5,13 +5,18 @@ made in: Data shows the window's own, and the others on asking, marked with
 where they are from.
 
 A comment goes to the daemon (set_comment): it writes the file, or keeps the
-comment of a running measurement with its data."""
+comment of a running measurement with its data.
+
+The table asks every cell many times a second: whose a measurement is gets
+decided as it is listed and when the workspace changes (resolving a folder
+asks the disk), never as it is drawn."""
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtGui import QColor
 from thzdaq_api.measurement_file import (
     CANCELLED,
     COMPLETED,
@@ -56,19 +61,23 @@ class Row:
     measurement: Measurement
     workspace: Optional[str]  # where it was made; None: a file opened here
     run: Optional[RunInfo] = None  # a run the daemon remembers, its file unread
+    here: bool = True  # made in the window's workspace, or opened here
 
 
 class MeasurementsModel(QAbstractTableModel):
     """Newest first; comments are editable and saved to the file at once."""
 
     measurement_added = Signal(object)
+    placed = Signal()  # which are the workspace's, decided again
 
     def __init__(self, session, parent=None):
         super().__init__(parent)
         # Its lab writes comments, its worker calls it, its workspace is here
         self.session = session
         self.rows: List[Row] = []
-        session.workspace.changed.connect(self.refresh)
+        # Folders made in -> whether the workspace holds them, each asked once
+        self.held: Dict[str, bool] = {}
+        session.workspace.changed.connect(self.place)
 
     @property
     def items(self) -> List[Measurement]:
@@ -80,8 +89,24 @@ class MeasurementsModel(QAbstractTableModel):
 
     def here(self, row: int) -> bool:
         """Made in the window's workspace, or opened here."""
-        workspace = self.rows[row].workspace
-        return workspace is None or self.session.workspace.holds(workspace)
+        return self.rows[row].here
+
+    def holds(self, workspace: Optional[str]) -> bool:
+        """Whether the window's workspace holds the folder it was made in
+        (None: a file opened here); each folder asked once."""
+        if workspace is None:
+            return True
+        if workspace not in self.held:
+            self.held[workspace] = self.session.workspace.holds(workspace)
+        return self.held[workspace]
+
+    def place(self) -> None:
+        """Another workspace: which are its own, each folder asked once."""
+        self.held.clear()
+        for row in self.rows:
+            row.here = self.holds(row.workspace)
+        self.refresh()
+        self.placed.emit()
 
     # Qt model
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -107,18 +132,9 @@ class MeasurementsModel(QAbstractTableModel):
         row = self.rows[index.row()]
         item = row.measurement
         column = index.column()
-        elsewhere = not self.here(index.row())
+        elsewhere = not row.here
         if role in (Qt.DisplayRole, Qt.EditRole):
-            title = self.title(item)
-            return (
-                item.id,
-                f"{title} · from {Path(row.workspace).name}" if elsewhere else title,
-                item.comment,
-                short_time(item.started),
-                short_time(item.finished),
-                item.status,
-                row.run.done if row.run is not None else item.size,
-            )[column]
+            return self.cell(row, column)
         if role == Qt.ToolTipRole and column == 1:
             told = [f"Measured in {row.workspace}"] if elsewhere else []
             if self.title(item) != (item.title or item.procedure):
@@ -127,8 +143,6 @@ class MeasurementsModel(QAbstractTableModel):
                 return "\n".join(told)
         conflicts = item.metadata.get(CONFLICTS) or ()
         if role == Qt.ForegroundRole and column == 5:
-            from PySide6.QtGui import QColor
-
             return QColor(STATUS_COLORS.get(item.status, theme.TEXT))
         if role == Qt.DecorationRole and column == 5 and conflicts:
             return theme.icon("alert-outline", theme.ACCENT)
@@ -137,6 +151,24 @@ class MeasurementsModel(QAbstractTableModel):
                 return conflicts_text(conflicts)
             return item.metadata.get("path") or item.error or None
         return None
+
+    def cell(self, row: Row, column: int):
+        """What a cell shows: only that column's value is made."""
+        item = row.measurement
+        if column == 0:
+            return item.id
+        if column == 1:
+            title = self.title(item)
+            return title if row.here else f"{title} · from {Path(row.workspace).name}"
+        if column == 2:
+            return item.comment
+        if column == 3:
+            return short_time(item.started)
+        if column == 4:
+            return short_time(item.finished)
+        if column == 5:
+            return item.status
+        return row.run.done if row.run is not None else item.size
 
     def title(self, item: Measurement) -> str:
         """The title its procedure has now; the one it was measured with
@@ -187,6 +219,7 @@ class MeasurementsModel(QAbstractTableModel):
         )
 
     def _insert(self, row: Row) -> None:
+        row.here = self.holds(row.workspace)
         self.beginInsertRows(QModelIndex(), 0, 0)
         self.rows.insert(0, row)
         self.endInsertRows()

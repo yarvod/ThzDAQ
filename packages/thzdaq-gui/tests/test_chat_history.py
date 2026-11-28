@@ -14,8 +14,9 @@ from test_assistant_dock import FakeChat, built_in, kinds
 from thzdaq_gui.assistant import builtin
 from thzdaq_gui.assistant.attachments import Attachment, content
 from thzdaq_gui.assistant.chat import Call, Kept, Outcome, Said, Used
-from thzdaq_gui.assistant.history import CHAT, Recorder, Shelf, title_of
+from thzdaq_gui.assistant.history import CHAT, META, Recorder, Shelf, title_of
 from thzdaq_gui.assistant.provider import Provider
+from thzdaq_gui.docks.chat_history import LOADING, NONE_KEPT
 from thzdaq_gui.models.assistant import (
     THINKING,
     AssistantModel,
@@ -122,7 +123,7 @@ class Told:
 def listed(shelf: Shelf, workspace) -> List[Kept]:
     """The chats of a workspace, once all asked of the shelf before is done."""
     found, done = [], threading.Event()
-    shelf.chats(workspace, lambda chats: found.extend(chats) or done.set())
+    shelf.chats(workspace, lambda chats, whole: found.extend(chats) or done.set())
     assert done.wait(5)
     return found
 
@@ -203,6 +204,78 @@ def test_chats_are_listed_by_workspace_the_newest_first(tmp_path, monkeypatch):
     assert [chat.title for chat in listed(shelf, bench)] == ["first", "Renamed"]
     assert [chat.title for chat in listed(shelf, other)] == ["pasted.png"]
     assert listed(shelf, tmp_path / "none") == []
+
+
+def test_a_job_that_fails_never_stops_the_shelf(tmp_path):
+    """A job that raised ended the shelf's thread and left it marked working:
+    nothing was listed or kept again for the rest of the program's run."""
+    shelf = Shelf(tmp_path / "chats")
+    bench = tmp_path / "bench"
+    shelf.new(bench, Said("kept"))
+
+    def fails(chats, whole):
+        raise RuntimeError("a listener that fails")
+
+    shelf.chats(bench, fails)
+    assert [chat.title for chat in listed(shelf, bench)] == ["kept"]
+    shelf.new(bench, Said("kept after"))
+    assert len(listed(shelf, bench)) == 2
+
+
+def test_a_chat_whose_file_does_not_read_is_passed_by(tmp_path):
+    shelf = Shelf(tmp_path / "chats")
+    bench = tmp_path / "bench"
+    broken = shelf.new(bench, Said("broken"))
+    shelf.new(bench, Said("fine"))
+    listed(shelf, bench)  # both written
+    meta = shelf.folder(broken) / META
+    meta.write_text(json.dumps({"id": "x", "title": "broken", "updated": None}))
+    assert [chat.title for chat in listed(shelf, bench)] == ["fine"]
+
+
+def test_the_history_page_shows_loading_until_the_chats_are_found(fake, session, app):
+    from thzdaq_gui.docks.assistant import AssistantWidget
+
+    chat, assistant = fake
+    chat.holds = True
+    folder = session.workspace.folder
+    widget = AssistantWidget(assistant)
+    widget.historyButton.click()
+    page = widget.historyPage
+    assert assistant.finding_chats()
+    assert page.list.isHidden() and page.empty.text() == LOADING
+    first = Kept("k1", "Bias sweep", time.time(), folder)
+    chat.held([first], False)  # a page of them
+    app.processEvents()
+    assert assistant.finding_chats() and [c.id for c in assistant.chats()] == ["k1"]
+    assert not page.list.isHidden() and page.list.topLevelItemCount() == 1
+    chat.held([first], True)
+    app.processEvents()
+    assert not assistant.finding_chats()
+    widget.historyButton.click()  # listed anew: the rows stay meanwhile
+    widget.historyButton.click()
+    chat.held([], True)
+    app.processEvents()
+    assert page.list.isHidden() and page.empty.text() == NONE_KEPT
+    widget.close()
+
+
+def test_a_list_listed_anew_keeps_its_chats_until_all_are_found(fake, session, app):
+    chat, assistant = fake
+    chat.holds = True
+    folder = session.workspace.folder
+    old = Kept("k1", "Old", 1.0, folder)
+    newer = Kept("k2", "Newer", 2.0, folder)
+    assistant.find_chats()
+    chat.held([newer, old], True)
+    app.processEvents()
+    assistant.find_chats()
+    chat.held([Kept("k2", "Newer, renamed", 3.0, folder)], False)
+    app.processEvents()
+    assert [c.title for c in assistant.chats()] == ["Newer, renamed", "Old"]
+    chat.held([Kept("k2", "Newer, renamed", 3.0, folder)], True)
+    app.processEvents()
+    assert [c.title for c in assistant.chats()] == ["Newer, renamed"]
 
 
 def test_titles_and_how_long_ago():
@@ -360,6 +433,7 @@ def test_the_history_page_searches_opens_goes_back_and_renames(
         Kept("k1", "Bias sweep", now - 2 * 86400 - 5, folder),
     ]
     widget = AssistantWidget(assistant)
+    assert chat.listed == [folder]  # as the mode was first shown
     assistant.send("hello")
     chat.turn.text("Hi.")
     chat.turn.ended(Outcome.ANSWERED, "")
@@ -374,7 +448,7 @@ def test_the_history_page_searches_opens_goes_back_and_renames(
         return [(item.text(0), item.text(1)) for item in found]
 
     widget.historyButton.click()
-    assert widget.pages.currentWidget() is page and chat.listed == [folder]
+    assert widget.pages.currentWidget() is page and chat.listed == [folder] * 2
     app.processEvents()
     assert rows() == [("Plot the I-V curve", "2 min ago"), ("Bias sweep", "2 days ago")]
     page.search.setText("BIAS")

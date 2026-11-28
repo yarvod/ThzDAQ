@@ -4,6 +4,8 @@ adapter's command: no Codex, npm or network."""
 
 import json
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -11,8 +13,9 @@ import fake_acp
 import pytest
 from shots import shot
 from thzdaq_api import host
+from thzdaq_gui.assistant import limits
 from thzdaq_gui.assistant.acp import Offer, Options
-from thzdaq_gui.assistant.chat import Change, Choice, Files, Inputs, Run, Used
+from thzdaq_gui.assistant.chat import Change, Choice, Files, Inputs, Limit, Run, Used
 from thzdaq_gui.assistant.codex import (
     ADAPTER,
     CONFIRM_FULL_ACCESS,
@@ -25,6 +28,7 @@ from thzdaq_gui.docks.assistant import AssistantWidget
 from thzdaq_gui.docks.chat_bar import LOADING
 from thzdaq_gui.docks.permission import DETAILS, ChangeCard, PermissionCard
 from thzdaq_gui.docks.assistant_settings import AssistantSettings
+from thzdaq_gui.docks.chat_history import LOADING as LOADING_CHATS
 from thzdaq_gui.docks.chat_history import HistoryPage
 from thzdaq_gui.models.assistant import (
     ASKING,
@@ -70,6 +74,14 @@ def no_settings(app):
     yield
     settings().remove(SESSIONS)
     InstructionsModel().set_instructions("")
+
+
+@pytest.fixture(autouse=True)
+def codex_home(tmp_path, monkeypatch):
+    """Codex's folder of the test: never the person's logs and limits."""
+    home = tmp_path / "codex"
+    monkeypatch.setenv(limits.HOME, str(home))
+    return home
 
 
 @pytest.fixture
@@ -590,6 +602,119 @@ def test_a_chat_is_renamed_when_codex_takes_titles_else_rename_is_hidden(
         {"sessionId": "s1", "title": "Bias sweep"}
     ]
     page.close()
+
+
+def test_codexs_chats_come_page_by_page_as_codex_acp_pages_them(
+    assistant, agent, session, tmp_path, wait
+):
+    """codex-acp pages through all of Codex's sessions and keeps a folder's:
+    the first are shown while the rest are found, not after the last page."""
+    folder = str(session.workspace.folder)
+    gate = tmp_path / "next page"
+    agent(
+        page=2, page_gate=str(gate),
+        sessions=[
+            {"sessionId": "s3", "cwd": folder, "title": "Newest", "updatedAt": "2026-11-03T10:00:00Z"},
+            {"sessionId": "x1", "cwd": "/elsewhere", "title": "Other"},
+            {"sessionId": "x2", "cwd": "/elsewhere", "title": "Other 2"},
+            {"sessionId": "x3", "cwd": "/elsewhere", "title": "Other 3"},
+            {"sessionId": "s1", "cwd": folder, "title": "Old", "updatedAt": "2026-11-01T10:00:00Z"},
+        ],
+    )  # fmt: skip
+    assistant.find_chats()
+    wait(lambda: assistant.chats())
+    assert [c.id for c in assistant.chats()] == ["s3"]
+    assert assistant.finding_chats()
+    gate.write_text("")
+    wait(lambda: not assistant.finding_chats())
+    assert [c.id for c in assistant.chats()] == ["s3", "s1"]
+
+
+def test_codexs_chats_are_listed_as_its_mode_is_first_shown(
+    assistant, agent, session, tmp_path, wait
+):
+    folder = str(session.workspace.folder)
+    up = tmp_path / "adapter up"
+    agent(gate=str(up), sessions=[{"sessionId": "s1", "cwd": folder, "title": "Old"}])
+    widget = AssistantWidget(assistant)
+    widget.historyButton.click()  # before the adapter is up
+    page = widget.historyPage
+    assert page.list.isHidden() and page.empty.text() == LOADING_CHATS
+    up.write_text("")
+    wait(lambda: page.list.topLevelItemCount() == 1)
+    assert page.list.topLevelItem(0).text(0) == "Old"
+    widget.close()
+
+
+def rollout(home: Path, session: str, told: float, used: tuple, **window) -> Path:
+    """A log of a session as Codex writes it, with one snapshot of the
+    limits (used: percent of the 5-hour and the weekly window)."""
+    day = datetime.fromtimestamp(told, timezone.utc)
+    folder = home / "sessions" / f"{day:%Y}" / f"{day:%m}" / f"{day:%d}"
+    folder.mkdir(parents=True, exist_ok=True)
+    log = folder / f"rollout-{day:%Y-%m-%dT%H-%M-%S}-{session}.jsonl"
+    stamp = day.isoformat().replace("+00:00", "Z")
+    windows = {
+        name: {"used_percent": share, "window_minutes": minutes, **window}
+        for name, share, minutes in zip(("primary", "secondary"), used, (300, 10080))
+    }
+    lines = [
+        {"timestamp": stamp, "type": "session_meta", "payload": {"id": session}},
+        {
+            "timestamp": stamp, "type": "event_msg",
+            "payload": {"type": "token_count", "info": None, "rate_limits": windows},
+        },
+        {"timestamp": stamp, "type": "event_msg", "payload": {"type": "agent_message"}},
+    ]  # fmt: skip
+    log.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    return log
+
+
+def test_codexs_usage_limits_are_read_from_its_logs_and_shown_by_the_ring(
+    assistant, agent, codex_home, wait
+):
+    """codex-acp tells the limits only in the words of /status: they are
+    read from Codex's own logs, the newest as the mode is first shown, then
+    the session's after each turn."""
+    home = codex_home
+    now = time.time()
+    resets = {"resets_at": int(now + 3600)}
+    rollout(home, "elsewhere", now - 600, (50.0, 40.0), **resets)
+    agent()
+    widget = AssistantWidget(assistant)
+    wait(lambda: assistant.limits())
+    assert widget.limits.text() == "5h 50% · 7d 60%"
+    assert not widget.limits.isHidden()
+    rollout(home, "new-1", now, (14.0, 12.0), **resets)  # the session warm made
+    assistant.send("hello")
+    wait(lambda: widget.limits.text() == "5h 86% · 7d 88%")
+    widget.ring.clicked.emit()
+    told = widget.ring.view.told_limits()
+    assert [row[:2] for row in told] == [["5 hours", "86% left"], ["Week", "88% left"]]
+    assert all(row[2].startswith("resets ") for row in told)
+    assert "As Codex told them at" in widget.limits.toolTip()
+    widget.resize(320, 600)  # a narrow dock: the line is cut, the dock not widened
+    assert widget.minimumSizeHint().width() <= 320
+    widget.close()
+
+
+def test_limits_are_read_as_codex_writes_them(tmp_path):
+    home = tmp_path / "codex"
+    assert limits.latest(home) == () and limits.latest(home, "none") == ()
+    told = 1_800_000_000.0
+    older = rollout(home, "s1", told, (30.0, 20.0), resets_in_seconds=600)
+    (primary, weekly) = limits.latest(home, "s1")
+    assert primary == Limit(300, 30.0, told + 600, told)
+    assert weekly.minutes == 10080 and weekly.left(told) == 80.0
+    assert primary.left(told + 601) == 100.0  # the window started anew
+    # a long log: the end is read, its first line cut
+    filler = json.dumps({"type": "response_item", "payload": "x" * 1000}) + "\n"
+    text = older.read_text()
+    older.write_text(filler * 400 + text)
+    assert limits.latest(home, "s1")[0].used == 30.0
+    rollout(home, "s2", told + 86400, (1.0, 2.0), resets_at=told + 90000)
+    assert limits.latest(home)[0].used == 1.0  # the newest log, no session named
+    assert limits.home({}) == Path.home() / ".codex"
 
 
 def test_rename_is_hidden_when_codex_takes_no_titles(assistant, agent, session, wait):

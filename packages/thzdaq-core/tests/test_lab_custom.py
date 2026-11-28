@@ -11,9 +11,11 @@ import pytest
 from lab_helpers import Window, bodies, calling, wait_for
 from thzdaq_api.custom import (
     CheckCustom,
+    DeleteCustom,
     ListCustom,
     ParseValue,
     ReadCustom,
+    RenameCustom,
     ValueDeclared,
     WriteCustom,
 )
@@ -267,6 +269,79 @@ def test_the_library_is_listed_read_and_written(lab, newline):
         with pytest.raises(LabError) as caught:
             lab.call(operation)
         assert caught.value.code == code
+
+
+def test_a_script_is_renamed_and_deleted_kept_to_take_back(lab):
+    saved(lab, "told", TOLD)
+    renamed = lab.call(RenameCustom(script="told", to="told_again"))
+    assert (renamed.name, renamed.procedure, renamed.title) == (
+        "told_again", "custom.told_again", "Told",
+    )  # fmt: skip
+    assert renamed.path == str(library(lab) / "told_again.py")
+    assert not (library(lab) / "told.py").exists()
+    listed = lab.call(ListCustom()).measurements
+    assert [m.procedure for m in listed] == ["custom.told_again"]
+    assert summary(lab, "told_again").title == "Told"
+    saved(lab, "pv", PV)
+    for operation, code in (
+        (RenameCustom(script="nothing", to="other"), ErrorCode.NOT_FOUND),
+        (RenameCustom(script="pv", to="told_again"), ErrorCode.INVALID_ARGUMENTS),
+        (RenameCustom(script="pv", to="2bad"), ErrorCode.INVALID_ARGUMENTS),
+        (DeleteCustom(script="nothing"), ErrorCode.NOT_FOUND),
+    ):
+        with pytest.raises(LabError) as caught:
+            lab.call(operation)
+        assert caught.value.code == code, operation
+    assert (library(lab) / "pv.py").exists()
+
+    deleted = lab.call(DeleteCustom(script="told_again"))
+    kept = Path(deleted.path)
+    assert kept.parent == library(lab) / ".history"
+    assert kept.read_text(encoding="utf-8") == TOLD
+    assert (deleted.procedure, deleted.sha256) == (
+        "custom.told_again", renamed.sha256,
+    )  # fmt: skip
+    assert not (library(lab) / "told_again.py").exists()
+    assert [m.name for m in lab.call(ListCustom()).measurements] == ["pv"]
+    assert not any(p.name == "custom.told_again" for p in lab.call(ListProcedures()))
+
+
+def test_a_script_is_not_renamed_or_deleted_while_it_runs(lab):
+    lab.assembled.scripts.grace = 0.2
+    saved(lab, "slow", '"""Slow"""\nimport time\ntime.sleep(60)\n')
+    run = lab.call(StartMeasurement(procedure="custom.slow"))
+    try:
+        for operation in (
+            RenameCustom(script="slow", to="slower"),
+            DeleteCustom(script="slow"),
+        ):
+            with pytest.raises(LabError) as caught:
+                lab.call(operation)
+            assert caught.value.code == ErrorCode.NOT_ALLOWED
+            assert "custom.slow runs now" in caught.value.message
+    finally:
+        lab.call(CancelMeasurement(id=run.id))
+        lab.call(WaitMeasurement(id=run.id, timeout=30))
+    assert lab.call(RenameCustom(script="slow", to="slower")).name == "slower"
+
+
+def test_an_agents_rename_and_delete_are_shown_to_a_person_first(lab_as, lab):
+    saved(lab, "told", TOLD)
+    window = Window(lab_as(GUI))
+    try:
+        for operation, title in (
+            (RenameCustom(script="told", to="other"), "Rename measurement told"),
+            (DeleteCustom(script="told"), "Delete measurement told"),
+        ):
+            thread, done = calling(lab_as("mcp:claude"), operation)
+            approval = window.asked()
+            assert approval.title == title
+            window.answer(allowed=False, text="keep it")
+            thread.join(5)
+            assert done["error"].code == ErrorCode.DENIED
+        assert (library(lab) / "told.py").read_text(encoding="utf-8") == TOLD
+    finally:
+        window.stop()
 
 
 def test_a_check_tells_what_is_wrong_and_where(lab):

@@ -162,7 +162,9 @@ class MainWindow(QMainWindow):
         # What the menus, Ctrl+K and Processes show: docks, measurements, consoles
         self.places = Places(self.docks, self.runBar, self.consoles)
         # What agents ask of this window: its state, places shown, highlights
-        self.guide = WindowGuide(session, self.places, self.runBar, self.docks, self)
+        self.guide = WindowGuide(
+            session, self.places, self.runBar, self.docks, self.hub, self
+        )
 
         self.daemon = DaemonModel(session, self)
         self.approvals = ApprovalsModel(session, self)

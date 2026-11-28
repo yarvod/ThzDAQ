@@ -77,6 +77,9 @@ do is seen in the window, and what you change waits for the person's consent.
     starts nothing: the person checks the form and presses Start, so it needs nobody's
     consent. Then `ui_highlight(anchor="run:start", text="…")` shows them the button.
     Highlight one place at a time with a few words; it goes when the person acts there.
+    `ui_clear_graphs` clears graphs of the window (by their names in `ui_state`, none:
+    all; `measurement`: only its curves) when the person asks or before a run they
+    want to see alone; the files keep every record.
     These go to the window the person was at last, or to the `window` you name (one of
     `windows` in `ui_state`); `no ThzDAQ window is open`: tell the user to open one.
 
@@ -98,10 +101,12 @@ do is seen in the window, and what you change waits for the person's consent.
 | `list_custom`, `read_custom` | the bench's own measurements: their scripts |
 | `check_custom(script, text)` | what is wrong with a script, by line; the form it declares |
 | `write_custom(script, text)` | save a script of the library; a person allows it |
+| `rename_custom(script, to)`, `delete_custom(script)` | rename a script of the library, delete it (kept in `.history/`); a person allows it |
 | `ask_user`, `wait_answer` | a question to the person at the bench |
 | `ui_state` | what the ThzDAQ window shows: docks, the bar on top, the chosen measurement's form |
 | `ui_open(place)`, `ui_highlight(anchor, text)` | show a dock or a measurement; point at a place with a short text |
 | `ui_fill_measurement` | fill a measurement's form in the window for the person to start |
+| `ui_clear_graphs(graphs, measurement)` | clear graphs of the window: all, some, or one measurement's curves |
 | `get_daemon_status` | the daemon, its profile, clients, runs and problems |
 
 Resources: `thzdaq://procedures`, `thzdaq://procedures/<name>`, `thzdaq://station` (the

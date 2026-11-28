@@ -10,7 +10,7 @@ import bisect
 import html
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import msgspec
 import numpy as np
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_api.custom import file_name
 from thzdaq_api.measurement_file import Column, Measurement
 from thzdaq_api.measurements import (
     CAPTION_GAP,
@@ -40,6 +41,7 @@ from thzdaq_api.measurements import (
 from thzdaq_api.procedures import plot_for
 
 from thzdaq_gui import theme
+from thzdaq_gui.dock_names import GRAPH, dock_name
 
 # Live curves are drawn at most this often, however fast records come: a
 # redraw per record (50 a second in a simulated P-V) kept the GUI thread
@@ -95,6 +97,15 @@ def plot_title(text: str) -> str:
     """A graph's name as its plot shows it: the plot's title is HTML, where
     the gap after the symbols of a caption would shrink to one space."""
     return html.escape(text).replace(CAPTION_GAP, "&nbsp;" * len(CAPTION_GAP))
+
+
+def tool_button(icon_name: str, tip: str, slot) -> QToolButton:
+    """A button of a graph's tool bar."""
+    button = QToolButton()
+    button.setIcon(theme.icon(icon_name))
+    button.setToolTip(tip)
+    button.clicked.connect(slot)
+    return button
 
 
 def axis_text(axis: pg.AxisItem, value: float) -> str:
@@ -164,7 +175,9 @@ class GraphWidget(QWidget):
 
     key names its dock and stays when a graph made with New graph… (custom)
     is renamed; graphs of the procedures are keyed by their title, and show
-    their caption (PlotInfo.caption) where people read the name.
+    their caption (PlotInfo.caption) where people read the name. An editable
+    graph (custom, or one of the bench's own measurements) offers Edit and
+    Delete; what they do is the hub's.
     """
 
     icon = "chart-line"  # of its dock
@@ -183,6 +196,7 @@ class GraphWidget(QWidget):
         custom: bool = False,
         call: Optional[Callable[[Any], Any]] = None,
         caption: str = "",
+        editable: bool = False,
         parent=None,
     ):
         """call: how the graph asks the lab (an analysis it offers)."""
@@ -191,36 +205,28 @@ class GraphWidget(QWidget):
         self.caption = caption
         self.key = key or title
         self.custom = custom
+        self.editable = custom or editable
         self.x, self.y = x, y
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         bar = QHBoxLayout()
-        self.btnAdd = self._tool(
+        self.btnAdd = tool_button(
             "plus", "Add a curve from a measurement", self.add_dialog
         )
-        self.btnHidden = self._tool(
+        self.btnHidden = tool_button(
             "eye-off-outline", "Remove hidden curves", self.remove_hidden
         )
-        self.btnClear = self._tool(
+        self.btnClear = tool_button(
             "delete-sweep-outline", "Remove all curves", self.clear
         )
-        self.btnRange = self._tool(
+        self.btnRange = tool_button(
             "fit-to-screen-outline", "Auto range", self.auto_range
         )
         for button in (self.btnAdd, self.btnHidden, self.btnClear, self.btnRange):
             bar.addWidget(button)
         bar.addStretch()
-        if custom:
-            self.btnEdit = self._tool(
-                "pencil-outline", "Rename the graph, axis labels",
-                lambda: self.edit_clicked.emit(self),
-            )  # fmt: skip
-            self.btnDelete = self._tool(
-                "delete-outline", "Delete the graph",
-                lambda: self.delete_clicked.emit(self),
-            )  # fmt: skip
-            bar.addWidget(self.btnEdit)
-            bar.addWidget(self.btnDelete)
+        if self.editable:
+            self.btnEdit, self.btnDelete = edit_buttons(self, bar)
         layout.addLayout(bar)
         self.plot = pg.PlotWidget()
         item = self.plot.getPlotItem()
@@ -248,7 +254,9 @@ class GraphWidget(QWidget):
             layout.addWidget(self.analysis)
 
     @classmethod
-    def of_plot(cls, spec: PlotInfo, call: Callable[[Any], Any]) -> "GraphWidget":
+    def of_plot(
+        cls, spec: PlotInfo, call: Callable[[Any], Any], editable: bool = False
+    ) -> "GraphWidget":
         return cls(
             spec.title,
             Axis(spec.x_label, scale=spec.x_scale),
@@ -256,24 +264,30 @@ class GraphWidget(QWidget):
             analysis=spec.analysis,
             call=call,
             caption=spec.caption,
+            editable=editable,
         )
 
     def shown_title(self) -> str:
         """Its name as people read it."""
         return self.caption or self.title
 
-    def _tool(self, icon_name: str, tip: str, slot) -> QToolButton:
-        button = QToolButton()
-        button.setIcon(theme.icon(icon_name))
-        button.setToolTip(tip)
-        button.clicked.connect(slot)
-        return button
-
     def set_title(self, title: str) -> None:
         self.title = title
+        self._show_title()
+
+    def _show_title(self) -> None:
         self.plot.getPlotItem().setTitle(
             plot_title(self.shown_title()), color=theme.ACCENT, size="11pt"
         )
+
+    def relabel(self, spec: PlotInfo) -> None:
+        """The names a plot's graph is shown with now (edited by a person)."""
+        self.caption = spec.caption
+        self._show_title()
+        self.set_axes(Axis(spec.x_label), Axis(spec.y_label))
+
+    def empty(self) -> bool:
+        return not self.items
 
     def set_axes(self, x: Axis, y: Axis) -> None:
         self.x = Axis(x.label, x.unit, self.x.scale)
@@ -404,6 +418,21 @@ class GraphWidget(QWidget):
         self.add_curve_clicked.emit(self)
 
 
+def edit_buttons(graph, bar: QHBoxLayout) -> Tuple[QToolButton, QToolButton]:
+    """Edit and Delete of an editable graph, at the end of its tool bar: they
+    tell its edit_clicked and delete_clicked."""
+    edit = tool_button(
+        "pencil-outline", "Rename the graph, axis labels",
+        lambda: graph.edit_clicked.emit(graph),
+    )  # fmt: skip
+    delete = tool_button(
+        "delete-outline", "Delete the graph", lambda: graph.delete_clicked.emit(graph)
+    )
+    bar.addWidget(edit)
+    bar.addWidget(delete)
+    return edit, delete
+
+
 def nearest(cells: List[float], value: float) -> Optional[int]:
     """The index of the cell (centred on its value, a step wide) holding
     value; None outside them all."""
@@ -413,36 +442,71 @@ def nearest(cells: List[float], value: float) -> Optional[int]:
 
 
 class MapGraphWidget(QWidget):
-    """z over an x/y grid (2SB bias optimization)."""
+    """z over an x/y grid (2SB bias optimization), with a colour bar of its
+    z scale. While a run fills it, a ring marks the cell it measured last."""
 
     icon = "grid"
+    custom = False  # never made with New graph…
+    edit_clicked = Signal(object)  # this graph
+    delete_clicked = Signal(object)
 
     @classmethod
-    def of_plot(cls, spec: PlotInfo, call=None) -> "MapGraphWidget":
-        return cls(spec)
+    def of_plot(cls, spec: PlotInfo, call=None, editable: bool = False):
+        return cls(spec, editable=editable)
 
-    def __init__(self, spec: PlotInfo, parent=None):
+    def __init__(self, spec: PlotInfo, editable: bool = False, parent=None):
         super().__init__(parent)
         self.title = spec.title
+        self.key = spec.title  # names its dock
         self.spec = spec
+        self.editable = editable
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
+        bar = QHBoxLayout()
+        self.btnClear = tool_button("delete-sweep-outline", "Clear the map", self.clear)
+        self.btnRange = tool_button(
+            "fit-to-screen-outline", "Auto range", self.auto_range
+        )
+        bar.addWidget(self.btnClear)
+        bar.addWidget(self.btnRange)
+        bar.addStretch()
+        if editable:
+            self.btnEdit, self.btnDelete = edit_buttons(self, bar)
+        layout.addLayout(bar)
         self.view = pg.GraphicsLayoutWidget()
-        plot = self.view.addPlot(title=plot_title(spec.shown_title()))
-        plot.setLabel("bottom", spec.x_label)
-        plot.setLabel("left", spec.y_label)
+        self.plot = self.view.addPlot(title=plot_title(spec.shown_title()))
+        self.plot.setLabel("bottom", spec.x_label)
+        self.plot.setLabel("left", spec.y_label)
         self.image = pg.ImageItem()
-        plot.addItem(self.image)
-        self.histogram = pg.HistogramLUTItem()
-        self.histogram.gradient.loadPreset("turbo")
-        self.histogram.setImageItem(self.image)
-        self.view.addItem(self.histogram)
-        layout.addWidget(self.view)
+        self.plot.addItem(self.image)
+        # Only the scale of z: nothing to drag, no histogram beside it
+        self.colors = pg.ColorBarItem(
+            values=(0, 1), width=12, colorMap=pg.colormap.get("turbo"),
+            interactive=False, colorMapMenu=False,
+        )  # fmt: skip
+        self.colors.setImageItem(self.image)
+        self.view.addItem(self.colors)
+        self.current = pg.ScatterPlotItem(
+            size=12, symbol="o", brush=None, pen=pg.mkPen(theme.TEXT, width=2)
+        )
+        self.current.setZValue(1)  # over the image
+        self.plot.addItem(self.current)
+        layout.addWidget(self.view, 1)
         self.values: Dict[Tuple[float, float], float] = {}
-        self.cursor = CursorTag(self.view, plot, self.z_text)
+        self.cursor = CursorTag(self.view, self.plot, self.z_text)
 
     def shown_title(self) -> str:
         return self.spec.shown_title()
+
+    def relabel(self, spec: PlotInfo) -> None:
+        """The names its plot is shown with now (edited by a person)."""
+        self.spec = spec
+        self.plot.setTitle(plot_title(spec.shown_title()))
+        self.plot.setLabel("bottom", spec.x_label)
+        self.plot.setLabel("left", spec.y_label)
+
+    def empty(self) -> bool:
+        return not self.values
 
     def z_text(self, x: float, y: float) -> Optional[str]:
         """z of the cell under a point, with its unit; None off the cells."""
@@ -457,14 +521,25 @@ class MapGraphWidget(QWidget):
     def clear(self) -> None:
         self.values.clear()
         self.image.clear()
+        self.end()
 
-    def add_record(self, record) -> None:
+    def auto_range(self) -> None:
+        self.plot.enableAutoRange()
+
+    def add_record(self, record, live: bool = False) -> None:
+        """A cell; live: of a run going on, marked as the one measured last."""
         point = self.spec.point(record)
         if point is None:
             return
         x, y, z = point
         self.values[x, y] = z
         self.redraw()
+        if live:
+            self.current.setData([x], [y])
+
+    def end(self) -> None:
+        """Its run ended: no cell is measured now."""
+        self.current.clear()
 
     def grid(self):
         xs = sorted({x for x, _ in self.values})
@@ -482,7 +557,8 @@ class MapGraphWidget(QWidget):
         low, high = float(finite.min()), float(finite.max())
         if low == high:
             low, high = low - 0.5, high + 0.5
-        self.image.setImage(data, levels=(low, high), autoLevels=False)
+        self.image.setImage(data, autoLevels=False)
+        self.colors.setLevels((low, high))
         step_x = xs[1] - xs[0] if len(xs) > 1 else 1.0
         step_y = ys[1] - ys[0] if len(ys) > 1 else 1.0
         transform = QtGui.QTransform()
@@ -545,8 +621,17 @@ def graph_type(spec: Optional[PlotInfo]) -> type:
     return MapGraphWidget if spec is not None and spec.kind == "map" else GraphWidget
 
 
-def graph_for_spec(spec: PlotInfo, call: Callable[[Any], Any]):
-    return graph_type(spec).of_plot(spec, call)
+def graph_for_spec(spec: PlotInfo, call: Callable[[Any], Any], editable=False):
+    return graph_type(spec).of_plot(spec, call, editable)
+
+
+class OwnGraphs(msgspec.Struct, frozen=True):
+    """What a person changed of the graphs of the bench's own measurements:
+    the names a graph is shown with (title -> caption, x label, y label; an
+    empty one is the plot's own) and the graphs deleted."""
+
+    names: Dict[str, Tuple[str, str, str]] = {}
+    deleted: Tuple[str, ...] = ()
 
 
 class GraphHub(QObject):
@@ -554,15 +639,23 @@ class GraphHub(QObject):
 
     The main window puts each graph into a dock; graph_created lets it add
     docks for graphs made later (New graph).
+
+    Graphs of the bench's own measurements (the plots of custom.<name>, of a
+    script's m.plot, of a file of one) are a person's to rename and delete,
+    as those made with New graph… are; the built-in procedures' stay. A
+    deleted one comes back when a run draws into it again; one whose plot
+    the catalog declares no more (its script changed) goes when nothing is
+    drawn on it.
     """
 
     graph_created = Signal(object)  # GraphWidget or MapGraphWidget
     raise_requested = Signal(object)  # show this graph's dock in front
     show_requested = Signal(object)  # open this graph's dock if closed
     run_requested = Signal(list)  # graphs of a run starting: all on screen
-    graph_renamed = Signal(object)  # a custom graph, its new title
-    graph_removed = Signal(object)  # a custom graph to delete
-    custom_changed = Signal()  # the custom graphs to remember
+    graph_renamed = Signal(object)  # an editable graph, shown under a new name
+    graph_removed = Signal(object)  # an editable graph a person deletes
+    graphs_dropped = Signal(list)  # titles of graphs gone with their plots
+    custom_changed = Signal()  # custom graphs and OwnGraphs to remember
     titles_added = Signal(list)  # graphs of procedures new to the catalog
 
     def __init__(
@@ -580,19 +673,77 @@ class GraphHub(QObject):
         self.add_curve_request: Optional[Callable[[GraphWidget], None]] = None
         self.plots: Dict[str, Tuple[PlotInfo, ...]] = {}
         self._map_runs = {}  # title -> measurement id shown in this map
+        self.builtin: Set[str] = set()  # graphs of the built-in procedures
+        self.declared: Set[str] = set()  # of the bench's own, in the catalog
+        self.own = OwnGraphs()
         self.set_procedures(procedures)
 
     def set_procedures(self, procedures: Iterable[ProcedureSummary]) -> None:
         """The catalog as it is now (the bench's own measurements come and
-        go): graphs of plots new to it are told."""
+        go): graphs of plots new to it are told, those of plots gone from it
+        with nothing drawn go."""
         before = set(self.titles())
         self.plots = {procedure.name: procedure.plots for procedure in procedures}
-        for plots in self.plots.values():
+        builtin, declared = set(), set()
+        for name, plots in self.plots.items():
             for spec in plots:
                 self.specs.setdefault(spec.title, spec)
+                (declared if file_name(name) else builtin).add(spec.title)
+        self.builtin = builtin
+        gone, self.declared = self.declared - declared - builtin, declared - builtin
+        self._drop(gone)
         added = [title for title in self.titles() if title not in before]
         if added:
             self.titles_added.emit(added)
+
+    def _drop(self, titles: Set[str]) -> None:
+        """Forget plots no longer declared whose graphs show nothing."""
+        dropped = [t for t in sorted(titles) if self.graph_empty(t)]
+        for title in dropped:
+            self.specs.pop(title, None)
+            self.graphs.pop(title, None)
+        if set(dropped) & set(self.own.deleted):
+            self._remember(deleted=set(self.own.deleted) - set(dropped))
+        if dropped:
+            self.graphs_dropped.emit(dropped)
+
+    def graph_empty(self, title: str) -> bool:
+        """Nothing drawn on a graph (one not built has nothing)."""
+        widget = self.graphs.get(title)
+        return widget is None or widget.empty()
+
+    def editable(self, title: str) -> bool:
+        """A graph of the bench's own measurements: a plot the catalog has
+        of no built-in procedure. A hub without the catalog (the plots
+        window) cannot tell, and offers no edits."""
+        return bool(self.plots) and title in self.specs and title not in self.builtin
+
+    def _remember(
+        self,
+        names: Optional[Dict[str, Tuple[str, str, str]]] = None,
+        deleted: Optional[Set[str]] = None,
+    ) -> None:
+        """OwnGraphs changed, told to be remembered."""
+        self.own = OwnGraphs(
+            self.own.names if names is None else names,
+            self.own.deleted if deleted is None else tuple(sorted(deleted)),
+        )
+        self.custom_changed.emit()
+
+    def restore_own(self, own: OwnGraphs) -> None:
+        """What a person changed of the bench's own graphs, as remembered:
+        before the docks are made, so deleted graphs get none."""
+        self.own = own
+
+    def _named(self, spec: PlotInfo) -> PlotInfo:
+        """A plot with the names a person gave its graph."""
+        caption, x, y = self.own.names.get(spec.title, ("", "", ""))
+        return msgspec.structs.replace(
+            spec,
+            caption=caption or spec.caption,
+            x_label=x or spec.x_label,
+            y_label=y or spec.y_label,
+        )
 
     def units_of(self, title: str) -> Optional[Tuple[str, str]]:
         """The units of the axes of a graph of the window, by its title;
@@ -643,33 +794,79 @@ class GraphHub(QObject):
 
     def clear_measurement(self, measurement: Measurement) -> None:
         """Replace a run from a snapshot without appending its points twice."""
-        for widget in self.graphs.values():
-            if isinstance(widget, MapGraphWidget):
-                if self._map_runs.get(widget.title) == measurement.id:
-                    widget.clear()
-            else:
-                for key in list(widget.points):
-                    if key[0] == measurement.id:
-                        widget.remove(key)
+        for title, widget in self.graphs.items():
+            self._clear_run(title, widget, measurement.id)
+
+    def _clear_run(self, title: str, widget: QWidget, measurement: int) -> bool:
+        """Remove what a measurement drew on a graph; whether it drew."""
+        if isinstance(widget, MapGraphWidget):
+            if self._map_runs.get(title) != measurement:
+                return False
+            widget.clear()
+            return True
+        keys = [key for key in widget.points if key[0] == measurement]
+        for key in keys:
+            widget.remove(key)
+        return bool(keys)
+
+    def clear(self, titles: Iterable[str], measurement: Optional[int] = None):
+        """Clear graphs: all they show, or what one measurement drew; the
+        names of those that had it."""
+        cleared = []
+        for title in titles:
+            widget = self.graphs.get(title)
+            if widget is None or widget.empty():
+                continue
+            if measurement is None:
+                widget.clear()
+            elif not self._clear_run(title, widget, measurement):
+                continue
+            cleared.append(self.shown_title(title))
+        return cleared
+
+    def end_measurement(self, measurement: Measurement) -> None:
+        """A run ended: its maps mark no cell measured now."""
+        for title, shown in self._map_runs.items():
+            if shown == measurement.id and title in self.graphs:
+                self.graphs[title].end()
 
     def titles(self) -> List[str]:
-        return list(self.specs) + [t for t in self.graphs if t not in self.specs]
+        """The window's graphs, built or not, but those a person deleted."""
+        listed = list(self.specs) + [t for t in self.graphs if t not in self.specs]
+        deleted = set(self.own.deleted) - self.builtin
+        return [title for title in listed if title not in deleted]
+
+    def graph_named(self, name: str) -> Optional[str]:
+        """The title of a graph by a name people or agents give it: its
+        title, its dock's (graph:I-V, graph:custom1) or the name it is shown
+        under; None: no such graph."""
+        for title in self.titles():
+            key = self.graphs[title].key if title in self.graphs else title
+            if name in (title, dock_name(GRAPH, key), self.shown_title(title)):
+                return title
+        return None
 
     def graph(self, title: str) -> QWidget:
+        """A graph, built when first asked for: a run draws into it, its dock
+        opens. One a person deleted comes back."""
         if title not in self.graphs:
+            if title in self.own.deleted:
+                self._remember(deleted=set(self.own.deleted) - {title})
             spec = self.specs.get(title)
-            if spec is not None:
-                widget = graph_for_spec(spec, self.call)
+            if spec is None:
+                self._add(GraphWidget(title, Axis(), Axis()))
+            elif self.editable(title):
+                editable = graph_for_spec(self._named(spec), self.call, True)
+                self._add(editable, self._rename)
             else:
-                widget = GraphWidget(title, Axis(), Axis())
-            self._add(widget)
+                self._add(graph_for_spec(spec, self.call))
         return self.graphs[title]
 
     def shown_title(self, title: str) -> str:
         """The name people read of a graph, built or not (its caption)."""
         spec = self.specs.get(title)
         if spec is not None:
-            return spec.shown_title()
+            return self._named(spec).shown_title()
         widget = self.graphs.get(title)
         return widget.shown_title() if widget is not None else title
 
@@ -677,9 +874,13 @@ class GraphHub(QObject):
         """What draws a graph, built or not (the icon of its dock)."""
         return graph_type(self.specs.get(title))
 
-    def _add(self, widget) -> None:
+    def _add(self, widget, edit: Optional[Callable[[QWidget], None]] = None) -> None:
+        """A graph built; edit: what its Edit does (an editable graph's)."""
         if isinstance(widget, GraphWidget):
             widget.add_curve_clicked.connect(self._add_curve)
+        if edit is not None:
+            widget.edit_clicked.connect(edit)
+            widget.delete_clicked.connect(self.graph_removed)
         self.graphs[widget.title] = widget
         self.graph_created.emit(widget)
 
@@ -725,9 +926,7 @@ class GraphHub(QObject):
                 f"custom{n}" for n in range(1, 10000) if f"custom{n}" not in used
             )
         widget = GraphWidget(title, Axis(x), Axis(y), key=key, custom=True)
-        widget.edit_clicked.connect(self._edit)
-        widget.delete_clicked.connect(self.graph_removed)
-        self._add(widget)
+        self._add(widget, self._edit)
         self.custom_changed.emit()
         return widget
 
@@ -735,7 +934,7 @@ class GraphHub(QObject):
         return [
             {"key": w.key, "title": w.title, "x": w.x.label, "y": w.y.label}
             for w in self.graphs.values()
-            if getattr(w, "custom", False)
+            if w.custom
         ]
 
     def rename(self, widget: GraphWidget, title: str) -> None:
@@ -747,14 +946,36 @@ class GraphHub(QObject):
             self.graph_renamed.emit(widget)
         self.custom_changed.emit()
 
-    def remove(self, widget: GraphWidget) -> None:
-        """Forget a custom graph; the window deletes its dock."""
-        if self.graphs.get(widget.title) is widget and widget.custom:
-            del self.graphs[widget.title]
+    def remove(self, widget: QWidget) -> None:
+        """Forget a graph a person deletes, a custom one or one of the bench's
+        own measurements (that one stays deleted until a run draws into it
+        again); the window deletes its dock."""
+        if self.graphs.get(widget.title) is not widget or not widget.editable:
+            return
+        del self.graphs[widget.title]
+        if widget.custom:
             self.custom_changed.emit()
+        else:
+            self._remember(deleted={*self.own.deleted, widget.title})
+
+    def _rename(self, widget: QWidget) -> None:
+        """The names a graph of the bench's own measurements is shown with;
+        one left empty is its plot's."""
+        spec = self.specs[widget.title]
+        shown = self._named(spec)
+        dialog = GraphDialog(
+            widget, shown.shown_title(), shown.x_label, shown.y_label,
+            (spec.shown_title(), spec.x_label, spec.y_label),
+        )  # fmt: skip
+        if dialog.exec() != QDialog.Accepted:
+            return
+        names = (dialog.title.text(), dialog.x.text(), dialog.y.text())
+        self._remember(names={**self.own.names, widget.title: names})
+        widget.relabel(self._named(spec))
+        self.graph_renamed.emit(widget)
 
     def _edit(self, widget: GraphWidget) -> None:
-        dialog = GraphDialog(widget)
+        dialog = GraphDialog(widget, widget.title, widget.x.label, widget.y.label)
         while dialog.exec() == QDialog.Accepted:
             try:
                 self.rename(widget, dialog.title.text())
@@ -783,7 +1004,7 @@ class GraphHub(QObject):
             widget = self.graph(spec.title)
             if isinstance(widget, MapGraphWidget):
                 self._map_runs[spec.title] = measurement.id
-                widget.add_record(record)
+                widget.add_record(record, live=True)
                 reached.append(spec.title)
                 continue
             group = spec.group_key(record)
@@ -842,17 +1063,29 @@ class GraphHub(QObject):
 
 
 class GraphDialog(QDialog):
-    """Title and axis labels of a custom graph."""
+    """Title and axis labels of a graph a person names; hints: what an
+    empty field stands for (title, x, y)."""
 
-    def __init__(self, graph: GraphWidget, parent=None):
-        super().__init__(parent or graph)
-        self.setWindowTitle(f"Graph {graph.title}")
+    def __init__(
+        self,
+        parent: QWidget,
+        title: str,
+        x: str,
+        y: str,
+        hints: Tuple[str, str, str] = (
+            "",
+            "from the first curve",
+            "from the first curve",
+        ),
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(f"Graph {title}")
         form = QFormLayout()
-        self.title = QLineEdit(graph.title)
-        self.x = QLineEdit(graph.x.label)
-        self.y = QLineEdit(graph.y.label)
-        self.x.setPlaceholderText("from the first curve")
-        self.y.setPlaceholderText("from the first curve")
+        self.title = QLineEdit(title)
+        self.x = QLineEdit(x)
+        self.y = QLineEdit(y)
+        for field, hint in zip((self.title, self.x, self.y), hints):
+            field.setPlaceholderText(hint)
         form.addRow("Title", self.title)
         form.addRow("X axis", self.x)
         form.addRow("Y axis", self.y)

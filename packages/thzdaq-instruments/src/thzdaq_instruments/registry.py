@@ -24,7 +24,11 @@ class DriverInfo:
 
     @property
     def channel_capabilities(self) -> Tuple[type, ...]:
-        return capabilities_of(self.cls.channel_class)
+        """What its channels can do, those of every class of channel."""
+        found = (
+            c for part in self.cls.channel_classes() for c in capabilities_of(part)
+        )
+        return tuple(dict.fromkeys(found))
 
     def provides(self, capability: type) -> bool:
         return (

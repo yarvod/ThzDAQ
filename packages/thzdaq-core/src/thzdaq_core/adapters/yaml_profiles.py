@@ -3,13 +3,12 @@ read from and written to disk. A profile written over keeps its earlier
 versions in .history/ next to it (stations/.history/lab.20261110-142501-123456.yaml)."""
 
 import re
-import shutil
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 
 import yaml
 
+from thzdaq_core.adapters.history import keep_version
 from thzdaq_core.domain.errors import StationError
 from thzdaq_core.domain.station.config import StationConfig
 from thzdaq_core.domain.station.profile import station_from_dict, station_to_dict
@@ -57,43 +56,6 @@ def dump_station(config: StationConfig) -> str:
 
 def save_station(config: StationConfig, path: PathLike) -> None:
     Path(path).write_text(dump_station(config), encoding="utf-8")
-
-
-HISTORY = ".history"  # the folder next to a profile with its earlier versions
-KEPT = 50  # versions of one profile kept there
-STAMP = "%Y%m%d-%H%M%S-%f"
-
-
-def versions(path: PathLike) -> List[Path]:
-    """The earlier versions of a profile, oldest first."""
-    path = Path(path)
-    name = re.compile(
-        re.escape(path.stem) + r"\.\d{8}-\d{6}-\d{6}" + re.escape(path.suffix)
-    )
-    folder = path.parent / HISTORY
-    if not folder.is_dir():
-        return []
-    return sorted(item for item in folder.iterdir() if name.fullmatch(item.name))
-
-
-def keep_version(path: Path) -> None:
-    """The profile as it is now into .history/; the oldest beyond KEPT go."""
-    folder = path.parent / HISTORY
-    folder.mkdir(exist_ok=True)
-    earlier = versions(path)
-    stamp = datetime.now()
-    if earlier:
-        latest = (
-            earlier[-1].name.removeprefix(f"{path.stem}.").removesuffix(path.suffix)
-        )
-        # The timestamp is a version id: clocks can repeat or move backwards.
-        stamp = max(stamp, datetime.strptime(latest, STAMP) + timedelta(microseconds=1))
-    saved = folder / f"{path.stem}.{stamp.strftime(STAMP)}{path.suffix}"
-    with path.open("rb") as source, saved.open("xb") as target:
-        shutil.copyfileobj(source, target)
-    shutil.copystat(path, saved)
-    for old in (earlier + [saved])[:-KEPT]:
-        old.unlink()
 
 
 class YamlProfiles:

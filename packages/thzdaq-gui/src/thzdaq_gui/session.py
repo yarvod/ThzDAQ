@@ -7,7 +7,9 @@ from thzdaq_api.custom import (
     SUFFIX,
     CustomInfo,
     CustomLibrary,
+    DeleteCustom,
     ListCustom,
+    RenameCustom,
     procedure_name,
 )
 from thzdaq_api.devices import (
@@ -90,6 +92,9 @@ class Session(QObject):
     procedures_changed = Signal()  # the bench's own measurements changed
     config_changed = Signal()  # the profile was edited: devices may differ
     leases_changed = Signal()  # measurements took or gave back devices
+    # One of the bench's own renamed here: its script's file as it was, CustomInfo
+    custom_renamed = Signal(str, object)
+    custom_deleted = Signal(str)  # one deleted here: its script's file as it was
 
     def __init__(self, lab_of: Connect, workspace, parent=None):
         super().__init__(parent)
@@ -211,6 +216,28 @@ class Session(QObject):
         return next(
             (m for m in self.library().measurements if m.procedure == procedure), None
         )
+
+    def rename_custom(self, script: str, to: str) -> CustomInfo:
+        """One of the bench's own under another name (of its script), told
+        (custom_renamed); LabError when the daemon refuses."""
+        was = self._script_file(script)
+        renamed = self.lab.call(RenameCustom(script=script, to=to))
+        self._library = None
+        self.custom_renamed.emit(was, renamed)
+        return renamed
+
+    def delete_custom(self, script: str) -> CustomInfo:
+        """One of the bench's own taken away, told (custom_deleted): as it
+        was, its path where its script is kept; LabError when the daemon
+        refuses."""
+        was = self._script_file(script)
+        deleted = self.lab.call(DeleteCustom(script=script))
+        self._library = None
+        self.custom_deleted.emit(was)
+        return deleted
+
+    def _script_file(self, script: str) -> str:
+        return str(Path(self.library().folder) / f"{script}{SUFFIX}")
 
     def custom_of(self, path: Path) -> Optional[str]:
         """The bench's own measurement a file is the script of: custom.<name>

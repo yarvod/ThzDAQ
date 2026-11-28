@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import (
     IO,
     Any,
+    AsyncIterator,
     Callable,
     Coroutine,
     Dict,
@@ -1094,21 +1095,23 @@ class Agent:
         )
         return options_of(answered.config_options)
 
-    async def sessions(self, folder: Path) -> List[Kept]:
-        """The sessions the agent keeps for a folder, every page of them."""
+    async def sessions(self, folder: Path) -> AsyncIterator[List[Kept]]:
+        """The sessions the agent keeps for a folder, a page at a time as the
+        agent gives them: codex-acp pages all of Codex's sessions, the newest
+        first, and keeps those of the folder, so a page may hold none and the
+        last may come long after the first."""
         if not self._offers().lists:
-            return []
-        found: List[SessionInfo] = []
+            return
         cursor: Optional[str] = None
         while True:
             request = ListSessionsRequest(cwd=str(folder), cursor=cursor)
             page = ListSessionsResponse.model_validate(
                 await self._ask(AGENT_METHODS["session_list"], request)
             )
-            found += page.sessions
+            yield [kept_of(info) for info in page.sessions]
             cursor = page.next_cursor
             if not cursor:
-                return [kept_of(info) for info in found]
+                return
 
     async def prompt(
         self, session: str, said: Sequence[Said], route: Route

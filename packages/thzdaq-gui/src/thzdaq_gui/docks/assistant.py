@@ -38,7 +38,12 @@ from thzdaq_gui import theme
 from thzdaq_gui.assistant.attachments import Attachment, AttachmentError, Kind as Given
 from thzdaq_gui.chat_widgets import Chip, ElidedLabel, Fold, MessageView, Picture
 from thzdaq_gui.docks.assistant_settings import TITLE as SETTINGS, AssistantSettings
-from thzdaq_gui.docks.chat_bar import ModelPicker, PolicyPicker, UsageRing
+from thzdaq_gui.docks.chat_bar import (
+    LimitsLabel,
+    ModelPicker,
+    PolicyPicker,
+    UsageRing,
+)
 from thzdaq_gui.docks.chat_history import HistoryPage
 from thzdaq_gui.docks.permission import PermissionCard
 from thzdaq_gui.folders import ATTACHMENTS
@@ -416,13 +421,14 @@ class AssistantWidget(QWidget):
         self.input.files_given.connect(self.attach_files)
 
         # Under the input: the model that answers and its effort, what the
-        # agent may do without asking, what to attach; the context the chat
-        # fills, Stop, Send
+        # agent may do without asking, what to attach; what is left of the
+        # agent's usage limits, the context the chat fills, Stop, Send
         self.modelPicker = ModelPicker(model)
         self.policyPicker = PolicyPicker(model)
         self.attachButton = self._button(
             "paperclip", "Attach files or images (or paste, or drop them)", self.pick
         )
+        self.limits = LimitsLabel(model)  # of the agent's usage, when it tells them
         self.ring = UsageRing(model)
         self.sendButton = self._button("send", "Send (Enter)", self.send_typed)
         self.stopButton = self._button("stop", "Stop the assistant", model.stop)
@@ -432,6 +438,8 @@ class AssistantWidget(QWidget):
         bottom.addWidget(self.policyPicker)
         bottom.addWidget(self.attachButton)
         bottom.addStretch()
+        bottom.addWidget(self.limits)
+        bottom.addSpacing(4)
         bottom.addWidget(self.ring)
         bottom.addSpacing(4)
         bottom.addWidget(self.stopButton)

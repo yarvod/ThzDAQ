@@ -17,13 +17,15 @@ only the turn it began last).
 A chat also offers its models (Choice), the one chosen, the reasoning
 efforts of that one (when it has some), what the agent may do without asking
 (its policies: Codex's modes; none for the built-in assistant), and how many
-tokens of context the chosen model takes when that is known; watch() hears
-when these change. Shown for the first time, it may get ready in the
+tokens of context the chosen model takes when that is known, and how much of
+an agent's usage limits is left (Limit: Codex's 5-hour and weekly windows);
+watch() hears when these change. Shown for the first time, it may get ready in the
 background (warm: Codex starts its adapter and a session, so its models are
 known before the first message).
 
 A chat keeps its conversations, each under an id, in the workspace it began
-in (Kept): it lists them, opens one to go on with it, and renames one. An
+in (Kept): it lists them (as they are found: an agent that keeps them in
+pages tells each page), opens one to go on with it, and renames one. An
 opened one is told again the way its turns told it (Replay, a Listener with
 the turns' beginnings and the person's messages), so it comes back into the
 view model by the path a live turn takes. The built-in chat keeps them as
@@ -195,6 +197,25 @@ class Asked:
 
 
 @dataclass(frozen=True)
+class Limit:
+    """A window of an agent's usage limits as the agent last told it: how
+    long the window is (minutes: 300 for five hours, 10080 for a week), how
+    much of it is used (percent), when it starts anew (seconds since the
+    epoch; None: not told) and when it was told."""
+
+    minutes: int
+    used: float
+    resets: Optional[float]
+    told: float
+
+    def left(self, now: float) -> float:
+        """Percent left now: all of it once the window started anew."""
+        if self.resets is not None and self.resets <= now:
+            return 100.0
+        return max(0.0, 100.0 - self.used)
+
+
+@dataclass(frozen=True)
 class Kept:
     """A conversation a chat keeps: its id, its title, when a turn of it
     ended last (seconds since the epoch), and the workspace it is kept for."""
@@ -273,6 +294,14 @@ class Replay(Listener, Protocol):
         """All of it was told; why: what of it could not be read."""
 
 
+class Found(Protocol):
+    """Who hears the conversations a chat lists (Chat.chats), from its
+    thread."""
+
+    def __call__(self, chats: Sequence[Kept], whole: bool) -> None:
+        """Those found so far, the newest first; whole: all of them."""
+
+
 class Unready(Exception):
     """A chat cannot start a turn now (no model's server yet): why, in words
     for the person."""
@@ -281,7 +310,8 @@ class Unready(Exception):
 @dataclass(frozen=True)
 class Offered:
     """What a chat offers to choose, the ones chosen, whether its models are
-    being found and its context limit, read at one moment (Chat.offered). A
+    being found, its context limit and its usage limits, read at one moment
+    (Chat.offered). A
     chat may change them in a thread of its own; the window shows them as the
     view model last read them, as it tells that they changed."""
 
@@ -293,6 +323,7 @@ class Offered:
     policy: Optional[str] = None
     finding: bool = False
     limit: Optional[int] = None
+    limits: Tuple[Limit, ...] = ()
 
 
 class Chat(ABC):
@@ -326,9 +357,10 @@ class Chat(ABC):
         """The conversation going on, as kept; None before its first message."""
 
     @abstractmethod
-    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
-        """The conversations kept for a workspace, the newest first, told to
-        found from a thread of the chat. Never waits."""
+    def chats(self, workspace: Path, found: "Found") -> None:
+        """The conversations kept for a workspace, told to found from a thread
+        of the chat as they are found: those found so far, the newest first,
+        whole once all of them are (once at least). Never waits."""
 
     @abstractmethod
     def open(self, chat: Kept, replay: Replay) -> None:
@@ -408,6 +440,11 @@ class Chat(ABC):
     def context_limit(self) -> Optional[int]:
         """The tokens the chosen model takes, when known."""
 
+    def limits(self) -> Sequence[Limit]:
+        """How much of its usage limits is left, as the agent last told it;
+        none when it tells none (a model's server of one's own)."""
+        return ()
+
     def offered(self) -> "Offered":
         """All of the above as it is now: what the view model keeps and shows
         until it hears changed()."""
@@ -415,11 +452,11 @@ class Chat(ABC):
             tuple(self.models()), self.model(),
             tuple(self.efforts()), self.effort(),
             tuple(self.policies()), self.policy(),
-            self.finding(), self.context_limit(),
+            self.finding(), self.context_limit(), tuple(self.limits()),
         )  # fmt: skip
 
     @abstractmethod
     def watch(self, changed: Callable[[], None]) -> None:
         """changed() is called, from any thread, once the models, efforts or
-        policies, the ones chosen, whether models are being found or the
-        context limit changed."""
+        policies, the ones chosen, whether models are being found, the context
+        limit or the usage limits changed."""

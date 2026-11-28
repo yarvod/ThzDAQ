@@ -62,6 +62,7 @@ WINDOW_GEOMETRY = "window/geometry"
 CHOSEN_MEASUREMENT = "ui/measurement"  # the one the run bar on top shows
 LAYOUT = "window/docks"  # the docks as ADS saves them
 CUSTOM_GRAPHS = "graphs/custom"
+OWN_GRAPHS = "graphs/own"  # what a person changed of the bench's own graphs
 NAVIGATOR_EXPANDED = "navigator/expanded"
 IV_ANALYSIS = "iv_analysis"
 PRERELEASES = "updates/prereleases"

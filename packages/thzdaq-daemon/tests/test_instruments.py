@@ -13,7 +13,8 @@ from thzdaq_api.measurements import ListRuns
 from thzdaq_api.origins import GUI
 from thzdaq_api.remote import RemoteLab
 from thzdaq_api.scripts import ListScripts, StartScript
-from thzdaq_core.adapters.yaml_profiles import load_station, versions
+from thzdaq_core.adapters.history import versions
+from thzdaq_core.adapters.yaml_profiles import load_station
 
 DEGAS = """\
 from thzdaq import LabError, connect, instrument, reading, setting

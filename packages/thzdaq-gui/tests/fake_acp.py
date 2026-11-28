@@ -13,6 +13,9 @@ The config (JSON) chooses what it is and does:
   line: method, params), as it came: the tests read what the window sent;
 - sessions, history: what session/list answers and session/load tells again
   (by session id: [kind, ...] entries, as answer() tells them);
+- page, page_gate: session/list pages as codex-acp 2.7.0 does: page sessions
+  of all of them (newest first) at a time, those of the folder kept, so a page
+  may hold none; a page after the first waits for the file page_gate;
 - picture, saved: image files of this computer an image turn names (one
   Codex looked at, one it saved without sending its bytes).
 
@@ -292,8 +295,18 @@ class Fake:
         )
 
     async def list_sessions(self, cwd=None, cursor=None, **_):
-        found = [s for s in self.config.get("sessions", []) if s["cwd"] == cwd]
-        return ListSessionsResponse(sessions=[SessionInfo(**s) for s in found])
+        listed = self.config.get("sessions", [])
+        size = self.config.get("page", len(listed) or 1)
+        start = int(cursor or 0)
+        gate = self.config.get("page_gate")
+        while start and gate and not Path(gate).exists():
+            await asyncio.sleep(0.01)
+        found = [s for s in listed[start : start + size] if s["cwd"] == cwd]
+        more = start + size < len(listed)
+        return ListSessionsResponse(
+            sessions=[SessionInfo(**s) for s in found],
+            next_cursor=str(start + size) if more else None,
+        )
 
     async def load_session(self, cwd, session_id, mcp_servers=None, **_):
         self.known(session_id)

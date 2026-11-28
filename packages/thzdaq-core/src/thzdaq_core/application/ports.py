@@ -144,6 +144,13 @@ class Library(Protocol):
     def write(self, name: str, text: str) -> LibraryFile:
         """The script saved: a new one, or over the one of that name."""
 
+    def rename(self, name: str, to: str) -> LibraryFile:
+        """The script of that name under another (none has it)."""
+
+    def remove(self, name: str) -> Path:
+        """The script of that name out of the library, kept where it can be
+        taken back from: that file."""
+
     def describe(self, file: LibraryFile) -> Declarations:
         """What the script's text declares at its top, as its process tells
         when it runs described (next to the scripts, as they run);

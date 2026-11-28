@@ -35,9 +35,11 @@ starts its adapter and a session in the background, so its models are known
 before the first message).
 
 A mode's chat keeps its conversations (Chat.chats, open, rename): the
-model lists those of the window's workspace for the mode shown (history,
-searched by title), opens one in place of the one shown (a turn running is
-stopped first) and renames one. An opened conversation comes back as its
+model lists those of the window's workspace as the mode is first shown and
+again as History opens (history, searched by title; while they are being
+found, finding_chats, those found so far: Codex's come page by page), opens
+one in place of the one shown (a turn running is stopped first) and renames
+one. An opened conversation comes back as its
 chat tells it again (chat.Replay), gathered in the chat's thread and handed
 to the GUI thread whole through the same queue: one take, the items made by
 the handlers that make a live turn's. What the person sends meanwhile waits
@@ -64,6 +66,7 @@ from thzdaq_gui.assistant.chat import (
     Choice,
     Image,
     Kept,
+    Limit,
     Offered,
     Outcome,
     Said,
@@ -565,8 +568,8 @@ class _Listing:
     def heard(self) -> bool:
         return self.mode.listing is self
 
-    def __call__(self, chats: Sequence[Kept]) -> None:
-        self.model._tell(self, self.mode._found, tuple(chats))
+    def __call__(self, chats: Sequence[Kept], whole: bool) -> None:
+        self.model._tell(self, self.mode._found, tuple(chats), whole)
 
 
 class Mode:
@@ -593,6 +596,7 @@ class Mode:
         self._queued: List[int] = []  # the person's items that wait, in order
         self.history: Tuple[Kept, ...] = ()  # of the workspace, as listed last
         self.listing: Optional[_Listing] = None  # asked last
+        self.finding_chats = False  # the last listing is not whole yet
         self.opening: Optional[_Opening] = None  # a kept one being told again
         self._warmed = False
         # What its chat offers as last read in the GUI thread: its chat may
@@ -600,11 +604,13 @@ class Mode:
         self.offered: Offered = chat.offered()
         chat.watch(_Watch(model, self))
 
-    def prepare(self) -> None:
-        """Shown: its chat gets ready in the background, the first time."""
+    def prepare(self, workspace) -> None:
+        """Shown: its chat gets ready in the background and its conversations
+        of the workspace are listed, the first time."""
         if not self._warmed:
             self._warmed = True
             self.chat.warm()
+            self.find_chats(workspace)
 
     def busy(self) -> bool:
         return self.turn is not None
@@ -671,6 +677,8 @@ class Mode:
         """List the conversations kept for the workspace (history, told by
         history_changed once found)."""
         self.listing = _Listing(self.model, self)
+        self.finding_chats = True
+        self.model._emit_shown(self, self.model.history_changed)
         self.chat.chats(workspace, self.listing)
 
     def open(self, chat: Kept) -> None:
@@ -703,8 +711,14 @@ class Mode:
         self.model._emit_shown(self, self.model.cleared)
         self.model._emit_shown(self, self.model.usage_changed)
 
-    def _found(self, chats: Tuple[Kept, ...]) -> None:
-        self.history = chats
+    def _found(self, chats: Tuple[Kept, ...], whole: bool) -> None:
+        """Those found so far join those listed before until all are found:
+        a list listed anew never shrinks to its first page meanwhile."""
+        if not whole:
+            ids = {chat.id for chat in chats}
+            chats += tuple(kept for kept in self.history if kept.id not in ids)
+            chats = tuple(sorted(chats, key=lambda chat: chat.updated, reverse=True))
+        self.history, self.finding_chats = chats, not whole
         self.model._emit_shown(self, self.model.history_changed)
 
     def close(self) -> None:
@@ -1004,6 +1018,11 @@ class AssistantModel(QObject):
         known."""
         return share(self.usage.context, self.context_limit())
 
+    def limits(self) -> Tuple[Limit, ...]:
+        """How much of its agent's usage limits is left (Codex's windows);
+        none for a chat whose agent tells none."""
+        return self.mode.offered.limits
+
     def models(self) -> Sequence[Choice]:
         return self.mode.offered.models
 
@@ -1044,8 +1063,9 @@ class AssistantModel(QObject):
 
     def prepare(self) -> None:
         """The dock shows the mode: its chat gets ready in the background
-        (Codex starts and makes a session, so its models are known); once."""
-        self.mode.prepare()
+        (Codex starts and makes a session, so its models are known) and its
+        conversations of the workspace are listed; once."""
+        self.mode.prepare(self.session.workspace.folder)
         self._models_changed(self.mode)
 
     def send(self, text: str, attachments: Sequence[Attachment] = ()) -> None:
@@ -1071,6 +1091,10 @@ class AssistantModel(QObject):
     def chats(self, search: str = "") -> List[Kept]:
         """As listed last, the newest first; those whose title holds search."""
         return matching(self.mode.history, search)
+
+    def finding_chats(self) -> bool:
+        """Whether they are being listed and not all found yet."""
+        return self.mode.finding_chats
 
     def current_chat(self) -> Optional[str]:
         """The id of the conversation shown; None before its first message."""

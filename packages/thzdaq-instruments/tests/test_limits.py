@@ -34,7 +34,7 @@ def test_a_channel_may_differ_from_the_others():
     "cls", [cls for cls, _, _ in DRIVERS], ids=lambda c: c.__name__
 )
 def test_a_passport_names_settable_numbers_of_the_driver(cls):
-    parts = [cls] + ([cls.channel_class] if cls.channel_class else [])
+    parts = [cls, *cls.channel_classes()]
     settable = {
         q.key
         for part in parts

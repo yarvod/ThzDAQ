@@ -438,6 +438,20 @@ def saved_or_told(dialog: QDialog, title: str, save: Callable[[], None]) -> None
     dialog.accept()
 
 
+def fill_devices(combo: QComboBox, devices: Sequence[DeviceInfo]) -> None:
+    """The devices a list offers, by title with their ref; a list that offers
+    them already is left as it is, its choice too."""
+    wanted = [(info.title, info.ref) for info in devices]
+    if wanted == [(combo.itemText(i), combo.itemData(i)) for i in range(combo.count())]:
+        return
+    blocked = combo.blockSignals(True)  # its choice is made by the caller
+    combo.clear()
+    for title, ref in wanted:
+        combo.addItem(title, ref)
+        combo.setItemData(combo.count() - 1, ref, Qt.ToolTipRole)
+    combo.blockSignals(blocked)
+
+
 class DeviceSlotsForm(QWidget):
     """Which device of the bench plays each procedure slot; only suitable devices are listed."""
 
@@ -455,18 +469,27 @@ class DeviceSlotsForm(QWidget):
         devices: Sequence[DeviceInfo],
         preferred: Optional[Mapping[str, str]] = None,
     ) -> None:
+        """The lists of slots that stay are kept, filled again only when
+        their devices changed; those of slots gone are deleted later. The
+        form asks this after every value typed, and a value's editing ends as
+        focus leaves it, inside the click on a list: deleting that list at
+        once deleted it under the click, a crash."""
         current = {**(preferred or {}), **self.mapping()}
+        old = dict(self.combos)
         while self.layout_.rowCount():
-            self.layout_.removeRow(0)
-        self.combos.clear()
+            label = self.layout_.takeRow(0).labelItem
+            if label is not None:
+                label.widget().deleteLater()
+        self.combos = {}
         self.slots = {slot.name: slot for slot in slots}
         # Devices chosen before are kept; free slots take the next unused device
         taken = {current[name] for name in self.slots if current.get(name)}
         for slot in slots:
-            combo = compact_combo(QComboBox(), 14)
-            for info in slot.candidates(devices):
-                combo.addItem(info.title, info.ref)
-                combo.setItemData(combo.count() - 1, info.ref, Qt.ToolTipRole)
+            combo = old.pop(slot.name, None)
+            if combo is None:
+                combo = compact_combo(QComboBox(), 14)
+                combo.currentIndexChanged.connect(self.changed)
+            fill_devices(combo, slot.candidates(devices))
             wanted = current.get(slot.name, slot.name)
             index = combo.findData(wanted)
             if index < 0:
@@ -479,9 +502,11 @@ class DeviceSlotsForm(QWidget):
             if combo.currentData():
                 taken.add(combo.currentData())
             combo.setToolTip(" + ".join(slot.capabilities) or "any device")
-            combo.currentIndexChanged.connect(self.changed)
             self.layout_.addRow(slot.title, combo)
             self.combos[slot.name] = combo
+        for combo in old.values():  # of slots the parameters use no more
+            combo.hide()
+            combo.deleteLater()
         self.changed.emit()
 
     def mapping(self) -> Dict[str, str]:

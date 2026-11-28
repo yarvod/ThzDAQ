@@ -6,7 +6,8 @@ looked at when the catalog is asked and every POLL_S: a script new or changed
 since it was described is described again (its text checked, then its
 process run described up to its last declaration; cached by its hash); one
 that cannot be stays in the catalog with its error. Any change is told to
-those listening (the catalog, application.procedures, tells clients).
+those listening (the catalog, application.procedures, tells clients). A
+script renamed, or deleted (kept where the library keeps it), is told alike.
 
 A run of one (start_measurement custom.<name>) is a session made before its
 script starts (CustomRun): the daemon starts the script's process as the
@@ -24,6 +25,7 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type
 
+import msgspec
 from thzdaq_api.custom import (
     CustomInfo,
     CustomLibrary,
@@ -81,6 +83,17 @@ def info(found: Described) -> CustomInfo:
     return CustomInfo(
         file.name, summary.name, summary.title, file.path, file.sha256, found.error
     )
+
+
+def named(name: str) -> str:
+    """name, when a file of the library takes it; LabError else."""
+    if not valid_name(name):
+        raise LabError(
+            ErrorCode.INVALID_ARGUMENTS,
+            f"{name!r} is no name of a measurement",
+            "letters, digits and _, from a letter: pv_hot_cold",
+        )
+    return name
 
 
 def described(file: LibraryFile, library: Library) -> Described:
@@ -186,14 +199,29 @@ class CustomMeasurements:
     def write(self, name: str, text: str) -> Described:
         """The script saved and described; LabError for a name no file
         takes."""
-        if not valid_name(name):
+        self.library.write(named(name), text)
+        return self.refresh()[name]
+
+    def rename(self, name: str, to: str) -> CustomInfo:
+        """The script under another name, described; LabError for a script
+        the library has not, a name no file takes or one taken."""
+        self.text(name)
+        if to in self.refresh():
             raise LabError(
                 ErrorCode.INVALID_ARGUMENTS,
-                f"{name!r} is no name of a measurement",
-                "letters, digits and _, from a letter: pv_hot_cold",
+                f"custom.{to} exists",
+                "another name, or delete_custom it first",
             )
-        self.library.write(name, text)
-        return self.refresh()[name]
+        self.library.rename(name, named(to))
+        return info(self.refresh()[to])
+
+    def remove(self, name: str) -> CustomInfo:
+        """The script out of the library, as it was, with the file it is
+        kept in; LabError for a script the library has not."""
+        found = self.text(name).info
+        kept = self.library.remove(name)
+        self.refresh()
+        return msgspec.structs.replace(found, path=str(kept))
 
     def of_text(self, name: str, text: str) -> Described:
         """A text described as the script name, saved or not (a check)."""

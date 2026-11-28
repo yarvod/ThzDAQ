@@ -21,7 +21,8 @@ from thzdaq_instruments.drivers import (
     SumitomoF70Rest,
 )
 from thzdaq_instruments.angle import AngleUnknown
-from thzdaq_instruments.drivers.lakeshore import HeaterSetup, OutputMode
+from thzdaq_instruments.drivers.lakeshore import HeaterSetup
+from thzdaq_instruments.temperature_controller import OutputMode, Pid
 from thzdaq_instruments.drivers.pfeiffer import (  # disabled driver, tests skipped
     PfeifferGauge,
     PfeifferTurboPump,
@@ -117,26 +118,46 @@ class TestLakeShore:
         controller, _ = make(LakeShore336, emulator)
         assert controller.channel("A").read_temperature() == pytest.approx(4.215)
         heater = controller.heater(1)
+        assert heater is controller.channel("heater1")
         heater.set_setpoint(10.5)
-        heater.set_range(2)
+        heater.set_range("medium")
         heater.set_manual_output(25)
-        assert heater.get_setpoint() == 10.5 and heater.get_range() == 2
+        assert heater.get_setpoint() == 10.5 and heater.get_range() == "medium"
+        assert emulator.ranges[1] == 2
         assert heater.get_manual_output() == 25 and heater.get_output() == 12.5
-        assert heater.get_status() == 0
+        assert heater.get_status() == "ok"
         assert controller.test()
         assert emulator.errors == []
 
-    def test_setup_and_mode_roundtrip(self):
-        controller, _ = make(LakeShore336, LakeShoreEmulator())
+    def test_setup_mode_and_pid_roundtrip(self):
+        emulator = LakeShoreEmulator()
+        controller, _ = make(LakeShore336, emulator)
         heater = controller.heater(2)
         heater.setup(HeaterSetup(2, 0, 1.5, 2))
         assert heater.get_setup() == HeaterSetup(2, 0, 1.5, 2)
-        heater.set_mode(OutputMode(1, 3, True))
-        assert heater.get_mode() == OutputMode(1, 3, True)
+        heater.set_mode(OutputMode("closed loop PID", "C", True))
+        assert emulator.out_mode[2] == "1,3,1"
+        assert heater.get_mode() == OutputMode("closed loop PID", "C", True)
+        heater.set_pid(Pid(80.0, 15.5, 10.0))
+        assert heater.get_pid() == Pid(80.0, 15.5, 10.0)
+        assert emulator.errors == []
         with pytest.raises(ConfigurationError):
-            heater.set_mode(OutputMode(9, 1, False))
+            heater.set_mode(OutputMode("warmup supply", "A"))
         with pytest.raises(ConfigurationError):
-            controller.heater(5)
+            heater.set_range("max")
+        for output in (3, 5):
+            with pytest.raises(ConfigurationError):
+                controller.heater(output)
+
+    def test_an_answer_out_of_the_names_is_an_error(self):
+        emulator = LakeShoreEmulator()
+        controller, _ = make(LakeShore336, emulator)
+        emulator.ranges[1] = 7
+        emulator.out_mode[1] = "1,1"
+        with pytest.raises(InstrumentResponseError):
+            controller.heater(1).get_range()
+        with pytest.raises(InstrumentResponseError):
+            controller.heater(1).get_mode()
 
 
 class TestSr830:

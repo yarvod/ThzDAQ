@@ -65,6 +65,16 @@ class UiHighlight(Handler[api.UiHighlight, None]):
         self.windows.ask(args, origin)
 
 
+class UiClearGraphs(Handler[api.UiClearGraphs, api.GraphsCleared]):
+    operation = api.UiClearGraphs
+
+    def __init__(self, windows: Windows):
+        self.windows = windows
+
+    def handle(self, args, origin):
+        return self.windows.ask(args, origin)
+
+
 class WindowActive(Handler[api.WindowActive, None]):
     operation = api.WindowActive
 

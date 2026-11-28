@@ -3,9 +3,10 @@
 An agent reads a window's structure (ui_state: names and values, no pixels),
 shows a dock or a measurement (ui_open), fills the form of a measurement in
 the bar on top (ui_fill_measurement: it starts nothing, the person presses
-Start) and highlights a place with a short text (ui_highlight). Each goes to
-one window: the one named by window, else the one a person was at last. The
-assistant of a window always goes to its own.
+Start), highlights a place with a short text (ui_highlight) and clears
+graphs (ui_clear_graphs). Each goes to one window: the one named by window,
+else the one a person was at last. The assistant of a window always goes to
+its own.
 
 The daemon asks the window with an event (ui_requested) and the window
 answers with answer_ui: what a window shows lives in the window, and is
@@ -132,6 +133,24 @@ class UiHighlight(Operation[None]):
 
     anchor: str
     text: str = ""
+    window: Optional[str] = None
+
+
+class GraphsCleared(msgspec.Struct, frozen=True):
+    """The graphs a window cleared, by their names as people read them."""
+
+    graphs: Tuple[str, ...]
+
+
+class UiClearGraphs(Operation[GraphsCleared]):
+    """Clear graphs of a ThzDAQ window for the person: the curves on them and
+    the cells of maps, by their names as ui_state lists them (graph:I-V) or
+    their titles; none: every graph. measurement: only what that measurement
+    (its number) drew. Nothing measured is lost: the files keep their
+    records, and Data draws them again."""
+
+    graphs: Tuple[str, ...] = ()
+    measurement: Optional[int] = None
     window: Optional[str] = None
 
 

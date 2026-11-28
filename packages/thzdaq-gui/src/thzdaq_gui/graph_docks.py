@@ -4,13 +4,15 @@ A graph of the procedures is built when its dock first opens or it gets
 data: most never do in a session. A graph made later (New graph…, a new
 unit of a monitor) opens with the graphs; the graphs of a starting run all
 come on screen, as a 2 x 2 grid at most; custom graphs are kept in the
-settings.
+settings, and what a person changed of the bench's own (OwnGraphs). A graph
+gone with its plot loses its dock.
 """
 
 import json
 import logging
 from typing import List
 
+import msgspec
 import PySide6QtAds as QtAds
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
@@ -20,8 +22,8 @@ from thzdaq_gui import theme
 from thzdaq_gui.dock_names import GRAPH, dock_name
 from thzdaq_gui.docking import DockSpace, even_out
 from thzdaq_gui.docks.body import DockBody
-from thzdaq_gui.graphs import AddCurveDialog, GraphHub
-from thzdaq_gui.settings import CUSTOM_GRAPHS
+from thzdaq_gui.graphs import AddCurveDialog, GraphHub, OwnGraphs
+from thzdaq_gui.settings import CUSTOM_GRAPHS, OWN_GRAPHS
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ GRID_SPLITS = {
 
 
 def graph_dock(widget) -> str:
-    return dock_name(GRAPH, getattr(widget, "key", widget.title))
+    return dock_name(GRAPH, widget.key)
 
 
 class GraphDocks:
@@ -62,11 +64,13 @@ class GraphDocks:
         hub.run_requested.connect(self.show_run)
         hub.graph_renamed.connect(self.rename)
         hub.graph_removed.connect(self.delete)
+        hub.graphs_dropped.connect(self.drop)
         hub.titles_added.connect(self.add_titles)
 
     def add_all(self) -> None:
         """Docks of the graphs of the procedures, not built yet, and of the
         custom ones."""
+        self.load_own()
         self.add_titles(self.hub.titles())
         self.load_custom()
         self.hub.custom_changed.connect(self.save_custom)
@@ -90,13 +94,12 @@ class GraphDocks:
         graph…, a monitor's new unit), whose dock is added now."""
         name = graph_dock(widget)
         if name not in self.docks:
-            custom = getattr(widget, "custom", False)
             self.add_dock(
                 name,
                 widget.shown_title(),
                 lambda: widget,
                 widget.icon,
-                group="Custom" if custom else "",
+                group="Custom" if widget.custom else "",
             )
         self.docks[name].widget().hold(widget)
 
@@ -169,12 +172,19 @@ class GraphDocks:
         answer = QMessageBox.question(
             self.window,
             "Delete graph",
-            f"Delete the graph {widget.title!r} and its curves?",
+            f"Delete the graph {widget.shown_title()!r} and what it shows?",
         )
         if answer != QMessageBox.Yes:
             return
         self.hub.remove(widget)
         self.docks.remove(graph_dock(widget))
+
+    def drop(self, titles) -> None:
+        """Docks of graphs gone with their plots (a script changed)."""
+        for title in titles:
+            name = dock_name(GRAPH, title)
+            if name in self.docks:
+                self.docks.remove(name)
 
     def new(self) -> None:
         title, ok = QInputDialog.getText(self.window, "New graph", "Title")
@@ -214,5 +224,15 @@ class GraphDocks:
             except (KeyError, ValueError, TypeError):
                 continue
 
+    def load_own(self) -> None:
+        try:
+            own = msgspec.json.decode(
+                self.settings.value(OWN_GRAPHS) or "{}", type=OwnGraphs
+            )
+        except (TypeError, msgspec.DecodeError, msgspec.ValidationError):
+            own = OwnGraphs()
+        self.hub.restore_own(own)
+
     def save_custom(self) -> None:
         self.settings.setValue(CUSTOM_GRAPHS, json.dumps(self.hub.custom_graphs()))
+        self.settings.setValue(OWN_GRAPHS, msgspec.json.encode(self.hub.own).decode())

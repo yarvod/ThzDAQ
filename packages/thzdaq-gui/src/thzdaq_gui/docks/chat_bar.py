@@ -3,16 +3,28 @@ the model that answers and how hard it thinks (ModelPicker: a compact button,
 a popup of the models with a line each, the chosen one checked, its reasoning
 efforts in a row under them); what the agent may do without asking
 (PolicyPicker: Codex's modes, full access confirmed first; hidden for a chat
-that never acts on its own); and how much of the context the chat fills
-(UsageRing: a ring, hovered or clicked, a card of the tokens, UsageView)."""
+that never acts on its own); how much of the agent's usage limits is left
+(LimitsLabel: Codex's 5-hour and weekly windows in a few letters, hidden for
+a chat whose agent tells none); and how much of the context the chat fills
+(UsageRing: a ring, hovered or clicked, a card of the tokens and the limits,
+UsageView)."""
 
+import time
+from datetime import datetime
 from typing import Dict, List, Optional, Sequence
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QGridLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QMessageBox,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from thzdaq_gui import theme
-from thzdaq_gui.assistant.chat import Choice
+from thzdaq_gui.assistant.chat import Choice, Limit
 from thzdaq_gui.chat_widgets import (
     ContextRing,
     ElidedLabel,
@@ -34,6 +46,10 @@ SUMMED = (
     "In and out are summed over the model's requests: each reads the whole"
     " chat again, so in grows faster than the context."
 )
+LIMITS = "Limits"  # of the agent's usage, in the card
+LOW = 20.0  # percent left of a window shown in the accent colour
+HOUR, DAY = 60, 24 * 60  # minutes
+WINDOWS = {5 * HOUR: "5 hours", 7 * DAY: "Week"}  # Codex's, by their length
 
 
 class ChoicesPopup(Popup):
@@ -185,10 +201,66 @@ def context_text(used: int, limit: Optional[int]) -> str:
     return f"{grouped(used)} / {grouped(limit)} · {round(100 * share(used, limit))}%"
 
 
+def window_name(minutes: int) -> str:
+    """ "5 hours", "Week"; another window by its length."""
+    if minutes in WINDOWS:
+        return WINDOWS[minutes]
+    if minutes % DAY == 0:
+        return f"{minutes // DAY} days"
+    return f"{minutes / HOUR:g} hours"
+
+
+def short_name(minutes: int) -> str:
+    """ "5h", "7d": a window in a few letters."""
+    if minutes % DAY == 0:
+        return f"{minutes // DAY}d"
+    return f"{minutes / HOUR:g}h"
+
+
+def moment(when: float, now: float) -> str:
+    """ "14:30" today, "3 Dec 14:30" on another day."""
+    at, today = datetime.fromtimestamp(when), datetime.fromtimestamp(now)
+    shown = at.strftime("%H:%M")
+    return shown if at.date() == today.date() else f"{at.day} {at:%b} {shown}"
+
+
+def left_text(limit: Limit, now: float) -> str:
+    """ "86% left" (all of it once the window started anew)."""
+    return f"{round(limit.left(now))}% left"
+
+
+def resets_text(limit: Limit, now: float) -> str:
+    """ "resets 14:30"; "" when not told or past."""
+    if limit.resets is None or limit.resets <= now:
+        return ""
+    return f"resets {moment(limit.resets, now)}"
+
+
+def limits_line(limits: Sequence[Limit], now: float) -> str:
+    """ "5h 86% · 7d 88%": what is left of each window, in a few letters."""
+    return " · ".join(
+        f"{short_name(limit.minutes)} {round(limit.left(now))}%" for limit in limits
+    )
+
+
+def limits_tip(limits: Sequence[Limit], now: float) -> str:
+    """Each window in words, and when the agent told them."""
+    lines = [
+        f"{window_name(limit.minutes)}: {left_text(limit, now)}"
+        + (f", {resets_text(limit, now)}" if resets_text(limit, now) else "")
+        for limit in limits
+    ]
+    told = max(limit.told for limit in limits)
+    if told:
+        lines.append(f"As Codex told them at {moment(told, now)}")
+    return "\n".join(lines)
+
+
 class UsageView(QWidget):
     """The tokens as told: how much of the context the chat fills; in (of it
     cached) and out (of it reasoning) of the last answer and of the chat;
-    — where nothing was told."""
+    — where nothing was told. Under them, how much of the agent's usage
+    limits is left, when it tells them."""
 
     ROWS = ("This answer", "This chat")
     COLUMNS = ("In", "Cached", "Out", "Reasoning")
@@ -213,6 +285,16 @@ class UsageView(QWidget):
         summed = self._label(SUMMED, theme.MUTED)
         summed.setWordWrap(True)
         grid.addWidget(summed, len(self.ROWS) + 2, 0, 1, len(self.COLUMNS) + 1)
+        # The agent's limits: a title, then a row per window (name, left, resets)
+        self.limits = QWidget()
+        self.limitsGrid = QGridLayout(self.limits)
+        self.limitsGrid.setContentsMargins(0, 6, 0, 0)
+        self.limitsGrid.setHorizontalSpacing(14)
+        self.limitsGrid.setVerticalSpacing(4)
+        self.limitsGrid.addWidget(self._label(LIMITS, theme.MUTED), 0, 0)
+        self.limitRows: List[List[QLabel]] = []
+        grid.addWidget(self.limits, len(self.ROWS) + 3, 0, 1, len(self.COLUMNS) + 1)
+        self.limits.hide()
         self.setMaximumWidth(380)
 
     @staticmethod
@@ -238,6 +320,40 @@ class UsageView(QWidget):
             )
             for column, text in enumerate(told, 1):
                 self.cells[row, column].setText(text)
+
+    def show_limits(self, limits: Sequence[Limit], now: float) -> None:
+        """A row per window, the same rows kept; none: hidden."""
+        while len(self.limitRows) < len(limits):
+            row = [self._label("", theme.MUTED), self._label("", theme.TEXT)]
+            row.append(self._label("", theme.MUTED))
+            for column, label in enumerate(row):
+                self.limitsGrid.addWidget(
+                    label, len(self.limitRows) + 1, column,
+                    Qt.AlignRight if column else Qt.AlignLeft,
+                )  # fmt: skip
+            self.limitRows.append(row)
+        for index, row in enumerate(self.limitRows):
+            shown = index < len(limits)
+            for label in row:
+                label.setVisible(shown)
+            if shown:
+                limit = limits[index]
+                row[0].setText(window_name(limit.minutes))
+                row[1].setText(left_text(limit, now))
+                low = limit.left(now) < LOW
+                row[1].setStyleSheet(f"color: {theme.ACCENT if low else theme.TEXT};")
+                row[2].setText(resets_text(limit, now))
+        self.limits.setVisible(bool(limits))
+
+    def told_limits(self) -> List[List[str]]:
+        """As shown: each window's name, what is left, when it resets."""
+        if not self.limits.isVisibleTo(self):
+            return []
+        return [
+            [label.text() for label in row]
+            for row in self.limitRows
+            if row[0].isVisibleTo(self)
+        ]
 
     def told(self) -> List[List[str]]:
         """As shown: the context, then each row's title and numbers."""
@@ -282,6 +398,7 @@ class UsageRing(ContextRing):
         self.view.show_usage(
             model.usage.context, model.context_limit(), model.last_usage, model.usage
         )
+        self.view.show_limits(model.limits(), time.time())
 
     def _hovered(self, on: bool) -> None:
         if on:
@@ -295,3 +412,29 @@ class UsageRing(ContextRing):
         leaves, until a click elsewhere."""
         self._show_tokens()
         self.card.pop(self)
+
+
+class LimitsLabel(ElidedLabel):
+    """What is left of the agent's usage limits, by the ring: "5h 86% · 7d
+    88%", in the accent colour when a window runs low, each in words with
+    when it resets as its tip; cut as the bar narrows, never widening the
+    dock. Hidden for a chat whose agent tells none."""
+
+    def __init__(self, model: AssistantModel, parent=None):
+        super().__init__(parent=parent)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.model = model
+        model.usage_changed.connect(self.show_limits)
+        model.mode_changed.connect(self.show_limits)
+        self.show_limits()
+
+    def show_limits(self) -> None:
+        limits, now = self.model.limits(), time.time()
+        self.setVisible(bool(limits))
+        if not limits:
+            return
+        low = min(limit.left(now) for limit in limits) < LOW
+        self.set_color(theme.ACCENT if low else theme.MUTED)
+        self.setText(limits_line(limits, now))
+        self.setToolTip(limits_tip(limits, now))  # in place of the text
+        self.setAccessibleName(f"Usage limits {self.text()}")

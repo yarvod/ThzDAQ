@@ -22,6 +22,7 @@ from thzdaq_api.ui import (
     BEHIND,
     CLOSED,
     FRONT,
+    UiClearGraphs,
     UiFillMeasurement,
     UiHighlight,
     UiOpen,
@@ -185,3 +186,20 @@ def test_an_overlay_goes_with_its_anchor(window):
     shown = OverlayGuide(window.runBar.controls.btnCheck, "here")
     window.runBar.controls.btnCheck.hide()
     assert shown.ended
+
+
+def test_an_agent_clears_graphs_by_their_names_or_all(window, ask):
+    hub = window.hub
+    for number in (7, 8):
+        hub.graph("I-V").append((number, "iv", "v", "i", ()), f"#{number}", 1.0, 2.0)
+    hub.graph("P-V").append((7, "pv", "v", "p", ()), "#7", 1.0, -30.0)
+    shown = hub.shown_title("I-V")
+    found = ask(UiClearGraphs(graphs=("graph:I-V",), measurement=8))
+    assert found.graphs == (shown,)
+    assert [key[0] for key in hub.graphs["I-V"].items] == [7]
+    found = ask(UiClearGraphs())
+    assert set(found.graphs) == {shown, hub.shown_title("P-V")}
+    assert hub.graphs["I-V"].empty() and hub.graphs["P-V"].empty()
+    assert ask(UiClearGraphs()).graphs == ()
+    error = refused(ask, UiClearGraphs(graphs=("graph:nothing",)))
+    assert error.code == ErrorCode.NOT_FOUND and "graph:nothing" in error.message

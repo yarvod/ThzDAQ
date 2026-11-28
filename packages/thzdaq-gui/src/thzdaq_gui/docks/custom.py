@@ -1,13 +1,16 @@
 """The form of one of the bench's own measurements (custom.<name>): as a
-built-in one's (devices, parameters), with its script a click away (Code)
-and where each plot it declares is drawn (Graphs: a graph of its own or one
-of the window's, into= of the script first). What the script prints during a
-run goes to the Log tab, line by line, marked with the measurement.
+built-in one's (devices, parameters), with its script a click away (Code),
+Rename and Delete (its script kept in the library's history; neither while
+it runs) and where each plot it declares is drawn (Graphs: a graph of its
+own or one of the window's, into= of the script first). What the script
+prints during a run goes to the Log tab, line by line, marked with the
+measurement.
 
 Saving the script describes it anew: the form follows (after the run, when
 one goes on); a script that cannot be described shows why, and its Code.
 """
 
+import logging
 from typing import Callable, Dict, Optional, Tuple
 
 import msgspec
@@ -15,11 +18,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
+from thzdaq_api.custom import file_name
 from thzdaq_api.errors import LabError
 from thzdaq_api.measurements import PlotInfo, ProcedureInfo, ProcedureSummary
 
@@ -28,8 +34,12 @@ from thzdaq_gui.collapsible import Collapsible
 from thzdaq_gui.docks.measure import MeasureForm, ProcedureBox
 from thzdaq_gui.settings import graph_choice_key, settings
 
+logger = logging.getLogger(__name__)
+
 # Opens the script of a measurement (its procedure) at a line (0: where it was)
 OpenCode = Callable[[str, int], None]
+RENAME, DELETE = "Rename", "Delete"
+NAME_ASKED = "Name (custom.<name>):"  # of a measurement of the library
 
 
 def last_line(error: str) -> str:
@@ -118,6 +128,7 @@ class CustomMeasureForm(MeasureForm):
         scripts.printed.connect(self._printed)
         self.box.runner.started.connect(self._run_started)
         self.box.runner.running_changed.connect(self._running)
+        self._changeable(self.box.runner.running)
         session.procedures_changed.connect(self._described)
         self.show_about()
         self.show_graphs()
@@ -142,6 +153,14 @@ class CustomMeasureForm(MeasureForm):
         self.btnCode.setToolTip("Its script, in the editor")
         self.btnCode.clicked.connect(lambda: self.open_code(self.procedure_name, 0))
         row.addWidget(self.btnCode)
+        self.btnRename = QPushButton(theme.icon("pencil-outline"), f"{RENAME}…")
+        self.btnRename.setToolTip("Another name of the measurement and its script")
+        self.btnRename.clicked.connect(self.rename)
+        row.addWidget(self.btnRename)
+        self.btnDelete = QPushButton(theme.icon("delete-outline"), f"{DELETE}…")
+        self.btnDelete.setToolTip("Out of the list; its script is kept")
+        self.btnDelete.clicked.connect(self.delete)
+        row.addWidget(self.btnDelete)
         row.addStretch()
         column.addLayout(row)
         self.errorLabel = QLabel()
@@ -183,7 +202,48 @@ class CustomMeasureForm(MeasureForm):
         self.box.reload()
         self.show_graphs()
 
+    # Renamed or deleted (not while it runs: the daemon refuses)
+    @property
+    def script(self) -> str:
+        return file_name(self.procedure_name)
+
+    def rename(self) -> None:
+        to, ok = QInputDialog.getText(
+            self, f"{RENAME} {self.procedure_name}", NAME_ASKED,
+            text=self.script,
+        )  # fmt: skip
+        to = to.strip()
+        if not ok or not to or to == self.script:
+            return
+        try:
+            self.session.rename_custom(self.script, to)
+        except LabError as e:
+            QMessageBox.warning(self, RENAME, str(e))
+
+    def delete(self) -> None:
+        title = self.about.title if self.about else self.procedure_name
+        answer = QMessageBox.question(
+            self, f"{DELETE} {self.procedure_name}",
+            f"Delete the measurement {title}? It leaves the list; its script"
+            " goes into the history of the library, to be moved back from there.",
+        )  # fmt: skip
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            deleted = self.session.delete_custom(self.script)
+        except LabError as e:
+            QMessageBox.warning(self, DELETE, str(e))
+            return
+        logger.info(
+            "%s deleted, its script kept in %s", deleted.procedure, deleted.path
+        )
+
+    def _changeable(self, running: bool) -> None:
+        for button in (self.btnRename, self.btnDelete):
+            button.setEnabled(not running)
+
     def _running(self, running: bool) -> None:
+        self._changeable(running)
         if not running:
             self._flush()
             if self.stale:

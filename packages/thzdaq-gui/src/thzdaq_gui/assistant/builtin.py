@@ -27,6 +27,7 @@ from thzdaq_gui.assistant.attachments import content
 from thzdaq_gui.assistant.chat import (
     Chat,
     Choice,
+    Found,
     Kept,
     Listener,
     Outcome,
@@ -166,7 +167,7 @@ class BuiltInChat(Chat):
     def current(self) -> Optional[Kept]:
         return self._kept
 
-    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
+    def chats(self, workspace: Path, found: Found) -> None:
         self.shelf.chats(workspace, found)
 
     def open(self, chat: Kept, replay: Replay) -> None:

@@ -17,6 +17,7 @@ from thzdaq_instruments.sim.sis_block import (
     SimSisCtrlChannel,
 )
 from thzdaq_instruments.sim.temperature import (
+    SimHeaterOutput,
     SimTemperatureController,
     SimTemperatureInput,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "SimNetworkAnalyzer",
     "SimRotator",
     "SimSpectrumAnalyzer",
+    "SimHeaterOutput",
     "SimTemperatureController",
     "SimTemperatureInput",
     "SimVacuumGauge",

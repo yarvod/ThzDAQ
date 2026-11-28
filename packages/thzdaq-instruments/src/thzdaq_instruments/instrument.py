@@ -62,14 +62,17 @@ class Instrument:
     """Base of every driver and simulator: name, channels, lifecycle.
 
     channel_keys are physical channels fixed by the model (supply outputs);
-    subdevices are the kinds of functional devices a user adds (SIS bias,
-    coil, heater output).
+    extra_channels are fixed channels of another class (the heater outputs of
+    a temperature controller beside its inputs); subdevices are the kinds of
+    functional devices a user adds (SIS bias, coil).
     """
 
     driver_key: ClassVar[str] = ""  # its id in profiles and the registry: rigol.dp832a
     device_type: ClassVar[str] = ""  # the kind of device it is: power_supply
     channel_class: ClassVar[Optional[Type[Channel]]] = None
     channel_keys: ClassVar[Tuple[Hashable, ...]] = ()
+    # Fixed channels of a class of their own, by key, after channel_keys
+    extra_channels: ClassVar[Mapping[Hashable, Type[Channel]]] = {}
     subdevices: ClassVar[Dict[str, SubdeviceType]] = {}
     # The passport: what the instrument accepts at all, by quantity key, of
     # itself or of every channel; channel_limits for channels that differ
@@ -97,10 +100,22 @@ class Instrument:
 
     @classmethod
     def fixed_channels(cls) -> Tuple[Hashable, ...]:
+        extra = tuple(cls.extra_channels)
         # Channels reinterpreted as sub-devices (SIS DEVs) are not shown on their own
         if any(kind.accessor == "channel" for kind in cls.subdevices.values()):
-            return ()
-        return tuple(cls.channel_keys)
+            return extra
+        return tuple(cls.channel_keys) + extra
+
+    @classmethod
+    def channel_class_of(cls, key: Hashable) -> Optional[Type[Channel]]:
+        """The class of the channel of this key, known without one."""
+        return cls.extra_channels.get(key, cls.channel_class)
+
+    @classmethod
+    def channel_classes(cls) -> Tuple[Type[Channel], ...]:
+        """Every class its channels are of, once each."""
+        found = (cls.channel_class, *cls.extra_channels.values())
+        return tuple(dict.fromkeys(c for c in found if c is not None))
 
     def __init__(self, *, name: Optional[str] = None):
         self.name = name or self.__class__.__name__
@@ -110,19 +125,22 @@ class Instrument:
         return f"{self.__class__.__name__}({self.name!r})"
 
     def channel(self, key: Hashable) -> Channel:
-        if self.channel_class is None:
-            raise ConfigurationError(f"{self.name} has no channels")
-        if self.channel_keys and key not in self.channel_keys:
-            raise ConfigurationError(
-                f"{self.name} has no channel {key!r}, available: {self.channel_keys}"
-            )
+        if key not in self.extra_channels:
+            if self.channel_class is None:
+                raise ConfigurationError(f"{self.name} has no channels")
+            if self.channel_keys and key not in self.channel_keys:
+                known = (*self.channel_keys, *self.extra_channels)
+                raise ConfigurationError(
+                    f"{self.name} has no channel {key!r}, available: {known}"
+                )
         if key not in self._channels:
-            self._channels[key] = self.channel_class(self, key)
+            self._channels[key] = self.channel_class_of(key)(self, key)
         return self._channels[key]
 
     @property
     def channels(self) -> Tuple[Channel, ...]:
-        return tuple(self.channel(key) for key in self.channel_keys)
+        keys = (*self.channel_keys, *self.extra_channels)
+        return tuple(self.channel(key) for key in keys)
 
     def part(self, accessor: str, key: Hashable) -> Any:
         """The part a channel or sub-device refers to: channel(key), ctrl(key), ..."""

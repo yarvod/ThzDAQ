@@ -127,3 +127,19 @@ def test_buttons_flow_into_rows_and_wrap_their_words_within_the_width(app):
     assert long.y() > yes.y() and long.width() == 300  # a row of its own, wrapped
     assert long.height() > 2 * long.fontMetrics().lineSpacing()
     assert all(b.geometry().right() < 300 for b in short + [long])
+
+
+# A command an agent runs: a PowerShell here-string with a script in it
+COMMAND = "@'\nimport glob, json\n" + "x = 1\n" * 40 + "'@ | python -"
+
+
+def test_a_cut_line_of_text_of_many_lines_is_one_line(app):
+    from thzdaq_gui.chat_widgets import ElidedLabel
+
+    label = ElidedLabel(COMMAND)
+    one = ElidedLabel("one line")
+    assert label.sizeHint().height() == one.sizeHint().height()
+    assert label.minimumSizeHint().height() == one.minimumSizeHint().height()
+    assert label.text() == COMMAND and label.toolTip() == COMMAND  # whole
+    label.setText("short")
+    assert label.text() == "short"

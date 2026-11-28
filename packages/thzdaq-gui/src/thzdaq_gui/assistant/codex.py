@@ -27,8 +27,15 @@ another process, or with another workspace, server or instructions than the
 window's now, is resumed with the window's at the next turn (session/resume).
 
 Codex keeps its sessions itself: History lists those of the workspace
-(session/list), one opens as Codex tells it again (session/load, a Replay),
-and takes another title (session/set_title) when the adapter offers that.
+(session/list, told page by page: codex-acp pages through all of Codex's
+sessions to find a folder's), one opens as Codex tells it again
+(session/load, a Replay), and takes another title (session/set_title) when
+the adapter offers that.
+
+How much of Codex's usage limits is left (its 5-hour and weekly windows) is
+read from Codex's own log of the session after each turn, and of its newest
+logs as the chat is first shown (limits.py): codex-acp tells them over ACP
+only in the words of /status.
 
 Whatever waits (the process, its answers, the person's answer to what Codex
 asks) waits in the agent's loop; the GUI thread only hands requests over and
@@ -63,11 +70,14 @@ from thzdaq_gui.assistant.acp import (
     server,
     used_of,
 )
+from thzdaq_gui.assistant import limits
 from thzdaq_gui.assistant.builtin import Instructions
 from thzdaq_gui.assistant.chat import (
     Chat,
     Choice,
+    Found,
     Kept,
+    Limit,
     Listener,
     Outcome,
     Replay,
@@ -212,6 +222,7 @@ class CodexChat(Chat):
         self._policy: Optional[str] = None  # chosen for the next new session
         self._options = self._unmade()  # as shown: the session's once it told them
         self._limit: Optional[int] = None
+        self._limits: Tuple[Limit, ...] = ()  # as Codex's log told them last
         self._titles = False
         self._finding = False  # warm() makes a session that tells its options
         # In the loop
@@ -261,6 +272,8 @@ class CodexChat(Chat):
             self._finding = True
         self._changed()
         self.agent.soon(self._warm(setup))
+        # The account's limits as Codex's newest logs tell them, meanwhile
+        self.agent.soon(self._read_limits(setup.command, None))
 
     def finding(self) -> bool:
         with self._lock:
@@ -291,7 +304,7 @@ class CodexChat(Chat):
         with self._lock:
             return self._kept
 
-    def chats(self, workspace: Path, found: Callable[[Sequence[Kept]], None]) -> None:
+    def chats(self, workspace: Path, found: Found) -> None:
         self.agent.soon(self._list(command(self.settings), workspace, found))
 
     def open(self, chat: Kept, replay: Replay) -> None:
@@ -380,6 +393,10 @@ class CodexChat(Chat):
         with self._lock:
             return self._limit
 
+    def limits(self) -> Sequence[Limit]:
+        with self._lock:
+            return self._limits
+
     def watch(self, changed: Callable[[], None]) -> None:
         self._changed = changed
 
@@ -438,6 +455,7 @@ class CodexChat(Chat):
             if used is not None:
                 listener.usage(used)
             listener.ended(*ENDINGS[answered.stop_reason])
+        await self._read_limits(setup.command, session)
 
     async def _warm(self, setup: Setup) -> None:
         """A session made before the first message, so its options are
@@ -449,6 +467,21 @@ class CodexChat(Chat):
                 logger.warning("Codex's session was not made: %s", e)
             with self._lock:
                 self._finding = False
+            self._changed()
+
+    async def _read_limits(self, command: Command, session: Optional[str]) -> None:
+        """The usage limits as Codex's log of the session (None: its newest
+        logs) tells them last, read in a thread of its own; those shown stay
+        while it tells none, or older ones."""
+        found = await asyncio.to_thread(
+            limits.latest, limits.home(dict(command.environment)), session
+        )
+        with self._lock:
+            known = self._limits
+            if not found or (known and found[0].told < known[0].told):
+                return
+            self._limits = found
+        if known != found:
             self._changed()
 
     async def _session(self, setup: Setup) -> str:
@@ -506,16 +539,22 @@ class CodexChat(Chat):
         async with self._prompting:  # after the turn or the opening going on
             self._id = self._made = None
 
-    async def _list(
-        self, command: Command, folder: Path, found: Callable[[Sequence[Kept]], None]
-    ) -> None:
+    async def _list(self, command: Command, folder: Path, found: Found) -> None:
+        """Told page by page as the adapter finds them, then whole."""
+        kept: List[Kept] = []
+
+        def newest() -> List[Kept]:
+            return sorted(kept, key=lambda chat: chat.updated, reverse=True)
+
         try:
             await self._reach(command)
-            kept = await self.agent.sessions(folder)
+            async for page in self.agent.sessions(folder):
+                if page:
+                    kept += page
+                    found(newest(), False)
         except Problem as e:
             logger.warning("Codex's chats were not listed: %s", e)
-            kept = []
-        found(sorted(kept, key=lambda chat: chat.updated, reverse=True))
+        found(newest(), True)
 
     async def _load(self, chat: Kept, replay: Replay, setup: Setup) -> None:
         async with self._prompting:

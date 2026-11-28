@@ -4,6 +4,7 @@ described by running it with DESCRIBE_ENV: its declarations go to a file,
 and it ends after the last one, before it touches the bench
 (thzdaq_api.custom). The text runs from a hidden copy next to the scripts:
 it imports what they import, and a text not saved yet is described alike.
+A script deleted is kept in .history/ next to them, as a profile's versions.
 """
 
 import hashlib
@@ -18,6 +19,7 @@ from thzdaq_api.custom import DESCRIBE_ENV, INPUTS_ENV, SUFFIX, Declarations
 from thzdaq_api.host import apart, script_python
 from thzdaq_api.scripts import OUTPUT_ENV
 
+from thzdaq_core.adapters.history import keep_version
 from thzdaq_core.application.ports import DescribeFailed, LibraryFile
 
 DESCRIBE_S = 15.0  # a script describes itself within this, or is ended
@@ -75,6 +77,17 @@ class FolderLibrary:
         data = text.encode("utf-8")
         path.write_bytes(data)
         return self._file(path, data)
+
+    def rename(self, name: str, to: str) -> LibraryFile:
+        path = (self.folder / f"{name}{SUFFIX}").rename(self.folder / f"{to}{SUFFIX}")
+        return self._file(path, path.read_bytes())
+
+    def remove(self, name: str) -> Path:
+        """Kept in .history/ as earlier versions of a profile are."""
+        path = self.folder / f"{name}{SUFFIX}"
+        kept = keep_version(path)
+        path.unlink()
+        return kept
 
     def describe(self, file: LibraryFile) -> Declarations:
         self.folder.mkdir(parents=True, exist_ok=True)

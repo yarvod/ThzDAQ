@@ -266,12 +266,15 @@ def tools(
         Plain(custom.ReadCustom, present.custom_text),
         Plain(custom.CheckCustom, present.check),
         Plain(custom.WriteCustom, present.check),
+        Plain(custom.RenameCustom, present.renamed),
+        Plain(custom.DeleteCustom, present.deleted),
         Plain(approvals.AskUser, present.answer),
         Plain(approvals.WaitAnswer, present.answer),
         Shown(ui.UiState, lambda args, found: present.window(found), window),
         Shown(ui.UiOpen, lambda args, _: present.opened(args.place), window),
         Shown(ui.UiFillMeasurement, lambda args, found: present.form(found), window),
         Shown(ui.UiHighlight, lambda args, _: present.highlighted(args.anchor), window),
+        Shown(ui.UiClearGraphs, lambda args, found: present.cleared(found), window),
         Plain(daemon.GetDaemonStatus, present.status),
     )
 

@@ -131,6 +131,7 @@ class ProcedureBox(QWidget):
         self.runner.failed.connect(self.on_failed)
         self.runner.conflict.connect(self.on_conflict)
         self.runner.finished.connect(self.on_finished)
+        self.runner.finished.connect(self.hub.end_measurement)
         self.runner.running_changed.connect(self.on_running)
         self.status_changed.connect(self.show_process_status)
         # A device dock rebuilt during a scan: no process left behind

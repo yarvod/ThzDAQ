@@ -56,6 +56,8 @@ CAPABILITIES = {
     "RohdeSchwarzFSEK30": {"Identifiable", "RawCommands", "SpectrumAnalyzer"},
     "LakeShore336": {"Identifiable", "RawCommands"},
     "TemperatureInput": {"Thermometer"},
+    # Its heater outputs: quantities of their own, no capability
+    "HeaterOutput": set(),
     "StanfordSR830": {"Identifiable", "RawCommands"},
     "SumitomoF70": {"Compressor", "Identifiable", "RawCommands"},
     "SumitomoF70Rest": {"Compressor", "Identifiable"},
@@ -87,6 +89,7 @@ CAPABILITIES = {
     "SimChopper": {"Identifiable", "LoadSwitch", "RawCommands"},
     "SimTemperatureController": {"Identifiable", "RawCommands"},
     "SimTemperatureInput": {"Thermometer"},
+    "SimHeaterOutput": set(),
     "SimSpectrumAnalyzer": {"Identifiable", "RawCommands", "SpectrumAnalyzer"},
     "SimNetworkAnalyzer": {
         "Identifiable", "NetworkAnalyzer", "PowerLevel", "RawCommands",
@@ -103,7 +106,7 @@ def registry_classes():
     found = {}
     for info in default_registry().all():
         for instrument in filter(None, (info.cls, info.sim)):
-            parts = (instrument, instrument.channel_class) + tuple(
+            parts = (instrument, *instrument.channel_classes()) + tuple(
                 sub.part_class for sub in instrument.subdevices.values()
             )
             for cls in parts:

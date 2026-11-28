@@ -31,7 +31,8 @@ from thzdaq_api.station import (
     SetSisCalibration,
     UpdateStation,
 )
-from thzdaq_core.adapters.yaml_profiles import load_station, versions
+from thzdaq_core.adapters.history import versions
+from thzdaq_core.adapters.yaml_profiles import load_station
 
 
 def titles(lab):
@@ -238,15 +239,15 @@ def test_what_the_profile_cannot_take_is_refused_before_asking(
 
 
 def test_a_profile_keeps_its_earlier_versions(lab, monkeypatch):
-    from thzdaq_core.adapters import yaml_profiles
+    from thzdaq_core.adapters import history
 
     class FrozenClock(datetime):
         @classmethod
         def now(cls):
             return cls(2026, 11, 13, 12, 0, 0)
 
-    monkeypatch.setattr(yaml_profiles, "datetime", FrozenClock)
-    monkeypatch.setattr(yaml_profiles, "KEPT", 2)
+    monkeypatch.setattr(history, "datetime", FrozenClock)
+    monkeypatch.setattr(history, "KEPT", 2)
     station = lab.call(GetStation())
     for title in ("one", "two", "three"):
         profile = copy.deepcopy(station.profile)

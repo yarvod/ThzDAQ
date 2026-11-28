@@ -5,7 +5,8 @@ output, and changes made to its file from outside (VS Code, an agent).
 A script of the bench's library (one of its own measurements, custom.<name>)
 is saved through the daemon (write_custom), which describes it at once and
 tells every client; a script of the workspace is written as a file. A text
-without a file is saved into the library under a name.
+without a file is saved into the library under a name. Renamed in the
+window, a script of the library is followed to its new file.
 
 A change of its file on disk (an agent, the assistant's write_custom, VS
 Code) is looked at hunk by hunk (thzdaq_gui.review): made already when
@@ -84,6 +85,16 @@ class CodeModel(QObject):
     def of_file(cls, session, path: Path, parent=None) -> "CodeModel":
         """OSError when it cannot be read."""
         return cls(session, path, path.read_text(encoding="utf-8"), path.name, parent)
+
+    def moved(self, path: Path) -> None:
+        """Its file is this one from now on (its script renamed): watched,
+        titled and saved as it; a text not saved stays."""
+        if self.path is not None:
+            self.watcher.removePath(str(self.path))
+        self.path = path
+        self.title = path.name
+        self.script = self._library_name()
+        self.watcher.addPath(str(path))
 
     def _library_name(self) -> Optional[str]:
         """Its name in the bench's library, when it is one of its scripts."""

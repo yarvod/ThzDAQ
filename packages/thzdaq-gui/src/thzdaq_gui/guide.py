@@ -1,13 +1,14 @@
 """What agents ask of this window (thzdaq_api.ui): its state, a place shown,
-the form of a measurement filled, a place highlighted.
+the form of a measurement filled, a place highlighted, graphs cleared.
 
 WindowGuide is the one owner of these requests in a window. It hears those
 addressed to this window (ui_requested, by the session's window id), asks
 the owners of what the window shows and answers through the daemon
 (answer_ui): Places shows a dock, a measurement, a field of its form or a
 control of the run bar and gives the widget to point at; the run bar tells
-and fills the chosen measurement's form; the docks tell where they are. A
-highlight is an OverlayGuide, one at a time. It also tells the daemon when
+and fills the chosen measurement's form; the docks tell where they are; the
+graph hub finds and clears graphs. A highlight is an OverlayGuide, one at a
+time. It also tells the daemon when
 the person comes to the window: agents that name no window ask this one.
 """
 
@@ -23,6 +24,7 @@ from thzdaq_api.events import UiRequested
 from thzdaq_api.operation import Operation
 
 from thzdaq_gui.docking import DockSpace
+from thzdaq_gui.graphs import GraphHub
 from thzdaq_gui.navigator import Places
 from thzdaq_gui.overlay import OverlayGuide
 from thzdaq_gui.runbar import RunBar
@@ -37,6 +39,7 @@ class WindowGuide(QObject):
         places: Places,
         run_bar: RunBar,
         docks: DockSpace,
+        graphs: GraphHub,
         window: QWidget,
     ):
         super().__init__(window)
@@ -44,12 +47,14 @@ class WindowGuide(QObject):
         self.places = places
         self.run_bar = run_bar
         self.docks = docks
+        self.graphs = graphs
         self.overlay: Optional[OverlayGuide] = None
         self.answers = {
             ui.UiState: self.state,
             ui.UiOpen: self.open,
             ui.UiFillMeasurement: self.fill,
             ui.UiHighlight: self.highlight,
+            ui.UiClearGraphs: self.clear_graphs,
         }
         session.bridge.ui_requested.connect(self.asked)
         window.installEventFilter(self)
@@ -107,6 +112,20 @@ class WindowGuide(QObject):
             self.overlay.dismiss()
         overlay = self.overlay = OverlayGuide(anchor, args.text)
         overlay.gone.connect(lambda: self.forget(overlay))
+
+    def clear_graphs(self, args: ui.UiClearGraphs) -> ui.GraphsCleared:
+        hub = self.graphs
+        titles = [hub.graph_named(name) for name in args.graphs]
+        unknown = [name for name, title in zip(args.graphs, titles) if title is None]
+        if unknown:
+            raise LabError(
+                ErrorCode.NOT_FOUND,
+                f"No graph {', '.join(unknown)} in the window",
+                "ui_state names the graphs: graph:<title>",
+            )
+        return ui.GraphsCleared(
+            tuple(hub.clear(titles or hub.titles(), args.measurement))
+        )
 
     def forget(self, overlay: OverlayGuide) -> None:
         if self.overlay is overlay:

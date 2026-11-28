@@ -11,7 +11,8 @@ console): the window's ConsoleDocks takes it.
 The bench's own measurements are made here: New measurement (a blank one)
 and From an example go into the library (write_custom) and open. The script
 a measurement kept opens as its text (titled by the measurement), to be saved
-into the library under a name.
+into the library under a name. One renamed in the window (its form) is
+followed by its tab and chosen in the bar; one deleted closes its tab.
 """
 
 from pathlib import Path
@@ -19,13 +20,14 @@ from typing import Callable, Dict, Optional
 
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 from thzdaq_api import examples
-from thzdaq_api.custom import WriteCustom, valid_name
+from thzdaq_api.custom import CustomInfo, WriteCustom, valid_name
 from thzdaq_api.errors import LabError
 
 from thzdaq_gui import theme
 from thzdaq_gui.dock_names import CODE, EDITOR, dock_name
 from thzdaq_gui.docking import DockSpace
 from thzdaq_gui.docks.code import SAVE_TO_LIBRARY, CodeWidget
+from thzdaq_gui.docks.custom import NAME_ASKED
 from thzdaq_gui.docks.tabbed import TabbedDock
 from thzdaq_gui.folders import SCRIPTS
 from thzdaq_gui.models.code import CodeModel
@@ -92,6 +94,8 @@ class CodeDocks:
         )
         self.tabs.closed.connect(self.forget)
         self.tabs.current_changed.connect(self.current_changed)
+        session.custom_renamed.connect(self.renamed)
+        session.custom_deleted.connect(self.deleted)
         # A script run from a file is shown by its tab (its Processes entry)
         docks.show_inside(CODE, lambda key: self.open_place(Path(key), 0))
 
@@ -157,6 +161,32 @@ class CodeDocks:
         if procedure is not None:
             self.choose(procedure)
 
+    def renamed(self, was: str, now: CustomInfo) -> None:
+        """One of the bench's own renamed in the window: the tab of its
+        script follows it, and the bar chooses it once it is listed."""
+        widget = self.widgets.pop(str(Path(was).resolve()), None)
+        if widget is not None:
+            key = str(Path(now.path).resolve())
+            widget.model.moved(Path(key))
+            self.widgets[key] = widget
+            self.tabs.retitle(widget, widget.title(), key)
+        self.choose(now.procedure)
+
+    def deleted(self, was: str) -> None:
+        """One of the bench's own deleted in the window: the tab of its
+        script closes; with changes not saved it stays, told, and Save
+        writes the script back."""
+        widget = self.widgets.get(str(Path(was).resolve()))
+        if widget is None:
+            return
+        if widget.unsaved():
+            widget.tell(
+                f"{widget.model.procedure} is deleted. Its changes here are not"
+                " saved: Save writes its script back into the library."
+            )
+        else:
+            self.tabs.request_close(widget)
+
     def closing(self, widget: CodeWidget) -> bool:
         """A tab with changes not saved asks first."""
         return widget.may_close()
@@ -209,7 +239,7 @@ class CodeDocks:
         """A name of the library (custom.<name>), asked; None when cancelled.
         One taken is replaced only when the person says so."""
         name, ok = QInputDialog.getText(
-            self.window, title, "Name (custom.<name>):", text=self.free_name(suggested)
+            self.window, title, NAME_ASKED, text=self.free_name(suggested)
         )
         name = name.strip()
         if not ok or not name:
